@@ -1,0 +1,17 @@
+===== START 16-tag 2026-10-04T02:09:45Z =====
+CMD: git tag -a v0.3.0 e65dbaf && git push origin v0.3.0
+annotated-tag-object: ef131b38ec162daccb3878a99bc38d9cd5559009
+peeled-commit:        e65dbaf804beacf4faa9e0354077e97d8c53b717
+object-type:          tag
+origin/main:          e65dbaf804beacf4faa9e0354077e97d8c53b717
+TAG_POINTS_AT_MAIN=yes
+TAG_PUSH_EXIT:0
+git ls-remote --tags origin v0.3.0*:
+ef131b38ec162daccb3878a99bc38d9cd5559009	refs/tags/v0.3.0
+e65dbaf804beacf4faa9e0354077e97d8c53b717	refs/tags/v0.3.0^{}
+
+tag message:
+v0.3.0
+
+skillgate-ai 0.3.0 — local skillgate check (exit 0/1), no account.
+Secret scan PASS 2026-10-04 (gitleaks 8.30.1, trufflehog 3.97.9, git grep).

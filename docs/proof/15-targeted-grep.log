@@ -1,0 +1,39 @@
+===== START 15-targeted-grep 2026-10-04T02:07:47Z =====
+HEAD=e65dbaf804beacf4faa9e0354077e97d8c53b717
+
+### pattern: SKILLGATE_SECRETS_KEY= ###
+e65dbaf:docs/proof/MATRIX.md:49:**Not found:** `neon.tech` hostnames, `postgres://` connection strings, `SKILLGATE_SECRETS_KEY=` assignments, JWT-like blobs.
+
+### pattern: postgres:// ###
+e65dbaf:docs/plans/2026-10-03-skillgate-oss-extract.md:291:7. Scan the first tag (`gitleaks` / `trufflehog` / `git grep` for `sk-`, `postgres://`, `SKILLGATE_SECRETS_KEY`, `VERCEL_APP_CLIENT`).
+e65dbaf:docs/proof/10-leak-scan.log:41:./docs/plans/2026-10-03-skillgate-oss-extract.md:291:7. Scan the first tag (`gitleaks` / `trufflehog` / `git grep` for `sk-`, `postgres://`, `SKILLGATE_SECRETS_KEY`, `VERCEL_APP_CLIENT`).
+e65dbaf:docs/proof/10-leak-scan.log:45:./docs/plans/2026-10-03-skillgate-oss-extract.md:291:7. Scan the first tag (`gitleaks` / `trufflehog` / `git grep` for `sk-`, `postgres://`, `SKILLGATE_SECRETS_KEY`, `VERCEL_APP_CLIENT`).
+e65dbaf:docs/proof/MATRIX.md:49:**Not found:** `neon.tech` hostnames, `postgres://` connection strings, `SKILLGATE_SECRETS_KEY=` assignments, JWT-like blobs.
+
+### pattern: postgresql:// ###
+(no matches)
+
+### pattern: neon.tech ###
+e65dbaf:docs/proof/10-leak-scan.log:48:CLASSIFICATION: deny-list/docs mentions of SIWV/auth_siwv/Dockerfile.vercel/SKILLGATE_SECRETS_KEY are expected; no hosted modules, no neon.tech URLs, no secret values.
+e65dbaf:docs/proof/MATRIX.md:49:**Not found:** `neon.tech` hostnames, `postgres://` connection strings, `SKILLGATE_SECRETS_KEY=` assignments, JWT-like blobs.
+
+### pattern: VERCEL_APP_CLIENT ###
+e65dbaf:docs/plans/2026-10-03-skillgate-oss-extract.md:119:`VERCEL_APP_CLIENT_ID`, `VERCEL_APP_CLIENT_SECRET`, `SKILLGATE_SIWV_ALLOWLIST`, `SKILLGATE_OWNER_EMAIL`, `SKILLGATE_AUTH_OPEN`, `SKILLGATE_SECRETS_KEY`, `DATABASE_URL` / `POSTGRES_*`, `db-creds.env`, `VERCEL_TOKEN` / `VERCEL_OIDC_TOKEN`, `SKILLGATE_SKILLS_GITHUB_TOKEN`, production `SENTRY_DSN`, any ciphertext.
+e65dbaf:docs/plans/2026-10-03-skillgate-oss-extract.md:291:7. Scan the first tag (`gitleaks` / `trufflehog` / `git grep` for `sk-`, `postgres://`, `SKILLGATE_SECRETS_KEY`, `VERCEL_APP_CLIENT`).
+e65dbaf:docs/proof/10-leak-scan.log:35:./docs/plans/2026-10-03-skillgate-oss-extract.md:119:`VERCEL_APP_CLIENT_ID`, `VERCEL_APP_CLIENT_SECRET`, `SKILLGATE_SIWV_ALLOWLIST`, `SKILLGATE_OWNER_EMAIL`, `SKILLGATE_AUTH_OPEN`, `SKILLGATE_SECRETS_KEY`, `DATABASE_URL` / `POSTGRES_*`, `db-creds.env`, `VERCEL_TOKEN` / `VERCEL_OIDC_TOKEN`, `SKILLGATE_SKILLS_GITHUB_TOKEN`, production `SENTRY_DSN`, any ciphertext.
+e65dbaf:docs/proof/10-leak-scan.log:41:./docs/plans/2026-10-03-skillgate-oss-extract.md:291:7. Scan the first tag (`gitleaks` / `trufflehog` / `git grep` for `sk-`, `postgres://`, `SKILLGATE_SECRETS_KEY`, `VERCEL_APP_CLIENT`).
+e65dbaf:docs/proof/10-leak-scan.log:45:./docs/plans/2026-10-03-skillgate-oss-extract.md:291:7. Scan the first tag (`gitleaks` / `trufflehog` / `git grep` for `sk-`, `postgres://`, `SKILLGATE_SECRETS_KEY`, `VERCEL_APP_CLIENT`).
+
+### pattern: sk- ###
+e65dbaf:docs/plans/2026-10-03-skillgate-oss-extract.md:291:7. Scan the first tag (`gitleaks` / `trufflehog` / `git grep` for `sk-`, `postgres://`, `SKILLGATE_SECRETS_KEY`, `VERCEL_APP_CLIENT`).
+e65dbaf:docs/proof/10-leak-scan.log:41:./docs/plans/2026-10-03-skillgate-oss-extract.md:291:7. Scan the first tag (`gitleaks` / `trufflehog` / `git grep` for `sk-`, `postgres://`, `SKILLGATE_SECRETS_KEY`, `VERCEL_APP_CLIENT`).
+e65dbaf:docs/proof/10-leak-scan.log:45:./docs/plans/2026-10-03-skillgate-oss-extract.md:291:7. Scan the first tag (`gitleaks` / `trufflehog` / `git grep` for `sk-`, `postgres://`, `SKILLGATE_SECRETS_KEY`, `VERCEL_APP_CLIENT`).
+
+### OpenAI-style sk-<20+> ###
+(no matches)
+
+### gitleaks on main ancestry only ###
+GITLEAKS_MAIN_EXIT:0
+main-report:[]
+
+### existing tags ###
