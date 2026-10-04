@@ -47,6 +47,6 @@ def test_invalid_cases_yaml_is_suite_error(tmp_path: Path) -> None:
     dest = create_pack(tmp_path, "bad-yaml")
     cases = dest / "evals" / "cases.yaml"
     cases.parent.mkdir(parents=True, exist_ok=True)
-    cases.write_text(":: not yaml {", encoding="utf-8")
+    cases.write_text("{[ definitely not yaml", encoding="utf-8")
     with pytest.raises(SuiteError, match="not valid YAML"):
         load_case_pack(dest)

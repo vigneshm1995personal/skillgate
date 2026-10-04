@@ -32,29 +32,29 @@ def _static_bytes(name: str) -> tuple[bytes, str] | None:
 
 def make_handler(state: UiState):
     class Handler(BaseHTTPRequestHandler):
-        def log_message(self, format: str, *args) -> None:  # noqa: A003
+        def log_message(self, format: str, *args) -> None:
             return
 
         def _cors(self) -> None:
             host = self.headers.get("Host", f"127.0.0.1:{self.server.server_address[1]}")
             origin = self.headers.get("Origin") or f"http://{host}"
-            if origin.startswith("http://127.0.0.1") or origin.startswith("http://localhost"):
+            if origin.startswith(("http://127.0.0.1", "http://localhost")):
                 self.send_header("Access-Control-Allow-Origin", origin)
             self.send_header("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS")
             self.send_header("Access-Control-Allow-Headers", "Content-Type")
 
-        def do_OPTIONS(self) -> None:  # noqa: N802
+        def do_OPTIONS(self) -> None:
             self.send_response(204)
             self._cors()
             self.end_headers()
 
-        def do_GET(self) -> None:  # noqa: N802
+        def do_GET(self) -> None:
             self._handle()
 
-        def do_POST(self) -> None:  # noqa: N802
+        def do_POST(self) -> None:
             self._handle()
 
-        def do_PUT(self) -> None:  # noqa: N802
+        def do_PUT(self) -> None:
             self._handle()
 
         def _read_json(self) -> dict | None:
@@ -71,7 +71,7 @@ def make_handler(state: UiState):
             if data is None:
                 return None
             if not isinstance(data, dict):
-                raise ValueError("JSON body must be an object.")
+                raise TypeError("JSON body must be an object.")
             return data
 
         def _send(self, status: int, body: bytes, content_type: str) -> None:
@@ -105,7 +105,7 @@ def make_handler(state: UiState):
                 return
             try:
                 body = self._read_json() if self.command in {"POST", "PUT"} else None
-            except ValueError as exc:
+            except (ValueError, TypeError) as exc:
                 payload = json.dumps({"error": str(exc)}).encode("utf-8")
                 self._send(400, payload, "application/json")
                 return

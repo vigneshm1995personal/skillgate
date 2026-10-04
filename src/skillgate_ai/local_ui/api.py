@@ -11,7 +11,11 @@ from typing import Any
 from urllib.parse import parse_qs
 
 from skillgate_ai import __version__
-from skillgate_ai.advice import description_from_paste, description_is_usable, rewrite_skill_description
+from skillgate_ai.advice import (
+    description_from_paste,
+    description_is_usable,
+    rewrite_skill_description,
+)
 from skillgate_ai.case_pack import CasePack, dataset_view, save_case_pack
 from skillgate_ai.config import ROOT_ENV_NAMES, get_llm_config, load_env
 from skillgate_ai.demo_files import ensure_demo_pdfs

@@ -9,7 +9,6 @@ import yaml
 
 from skillgate_ai.ingest import Skill, ingest_skill
 
-
 DEFAULT_BODY = """# {name}
 
 ## When to use
