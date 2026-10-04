@@ -7,7 +7,7 @@
   --red: #b42318;
   --card: #fffdf8;
   --ease: cubic-bezier(0.22, 1, 0.36, 1);
-  --motion: 300ms;
+  --motion: 350ms;
 }
 * { box-sizing: border-box; }
 html, body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.45 system-ui, sans-serif; }
@@ -139,20 +139,20 @@ pre { background: #f0ece3; padding: 0.75rem; overflow: auto; border-radius: 4px;
 .wiz-panel.panel-leave { animation: panel-out var(--motion) var(--ease) both; }
 .wiz-panel.panel-leave-back { animation: panel-out-back var(--motion) var(--ease) both; }
 @keyframes panel-in {
-  from { opacity: 0; transform: translateX(40px); }
+  from { opacity: 0; transform: translateX(48px); }
   to { opacity: 1; transform: none; }
 }
 @keyframes panel-out {
   from { opacity: 1; transform: none; }
-  to { opacity: 0; transform: translateX(-40px); }
+  to { opacity: 0; transform: translateX(-48px); }
 }
 @keyframes panel-in-back {
-  from { opacity: 0; transform: translateX(-40px); }
+  from { opacity: 0; transform: translateX(-48px); }
   to { opacity: 1; transform: none; }
 }
 @keyframes panel-out-back {
   from { opacity: 1; transform: none; }
-  to { opacity: 0; transform: translateX(40px); }
+  to { opacity: 0; transform: translateX(48px); }
 }
 
 .progress {
@@ -190,12 +190,18 @@ pre { background: #f0ece3; padding: 0.75rem; overflow: auto; border-radius: 4px;
 .check-pop svg { width: 100%; height: 100%; display: block; overflow: visible; }
 .check-pop circle {
   transform-origin: 36px 36px;
-  animation: check-ring 420ms var(--ease) both;
+  opacity: 0;
+  transform: scale(0.45);
 }
 .check-pop path {
   stroke-dasharray: 48;
   stroke-dashoffset: 48;
-  animation: check-stroke 450ms var(--ease) 120ms forwards;
+}
+.check-pop.play circle {
+  animation: check-ring 480ms var(--ease) both;
+}
+.check-pop.play path {
+  animation: check-stroke 560ms var(--ease) 140ms forwards;
 }
 @keyframes check-ring {
   from { opacity: 0; transform: scale(0.55); }
@@ -217,9 +223,10 @@ details.keys .stack { margin-top: 0.75rem; }
   .wiz-panel.panel-enter-back,
   .wiz-panel.panel-leave,
   .wiz-panel.panel-leave-back,
-  .check-pop circle,
-  .check-pop path,
+  .check-pop.play circle,
+  .check-pop.play path,
   .progress.busy > i { animation: none; }
+  .check-pop circle { opacity: 1; transform: none; }
   .check-pop path { stroke-dashoffset: 0; }
   .progress.busy > i { width: 50%; transform: none; }
 }

@@ -159,7 +159,7 @@ def test_ui_wizard_motion_is_wired_not_just_class_names(project_root: Path) -> N
     assert packs, "wizard must POST /api/packs"
     assert "scaffold" not in packs.group(1)
     assert 'api("POST", "/api/check", { path: wizard.path, live: false })' in js
-    assert "--motion: 300ms" in css
+    assert "--motion: 350ms" in css
     assert "@keyframes panel-out" in css
     assert "@keyframes check-stroke" in css
     assert "@keyframes bar-slide" in css

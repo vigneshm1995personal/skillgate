@@ -1,8 +1,8 @@
 const app = document.getElementById("app");
 const banner = document.getElementById("banner");
 const NAME_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
-const MOTION_MS = 300;
-const CHECKING_MIN_MS = 900;
+const MOTION_MS = 350;
+const CHECKING_MIN_MS = 1400;
 let meta = { account: false, demo_default: true, packs: [] };
 let wizard = blankWizard();
 let lastRoutePath = "";
@@ -393,6 +393,14 @@ async function paintWizard() {
   ensureWizardShell();
   updateStepper(wizard.step);
   await swapPanel(buildWizardPanel());
+  const pop = document.querySelector("#wiz-stage .check-pop");
+  if (pop && !prefersReducedMotion()) {
+    pop.classList.remove("play");
+    void pop.offsetWidth;
+    pop.classList.add("play");
+  } else if (pop) {
+    pop.classList.add("play");
+  }
 }
 
 async function renderSetup(params) {
