@@ -125,8 +125,12 @@ def check_pack(
     pack: Path = typer.Argument(..., help="Skill pack directory (SKILL.md + evals/)"),
     harness: str = typer.Option("auto", "--harness", help=_HARNESS_HELP),
     sandbox: str = typer.Option("local", "--sandbox", help=_SANDBOX_HELP),
-    demo: bool = typer.Option(False, "--demo", help="Use the demo harness (no API key)"),
-    live: bool = typer.Option(False, "--live", help="Require a BYOLLM key; do not fall back"),
+    demo: bool = typer.Option(
+        False, "--demo", help="Force the built-in checker. This is not a live model."
+    ),
+    live: bool = typer.Option(
+        False, "--live", help="Require your API key; do not fall back to the built-in checker"
+    ),
     expect_fail: bool = typer.Option(
         False,
         "--expect-fail",
@@ -165,8 +169,12 @@ def run_suite(
     skill: Path | None = typer.Option(None, "--skill", help="Override the skill folder"),
     harness: str = typer.Option("auto", "--harness", help=_HARNESS_HELP),
     sandbox: str = typer.Option("local", "--sandbox", help=_SANDBOX_HELP),
-    demo: bool = typer.Option(False, "--demo", help="Use the demo harness (no API key)"),
-    live: bool = typer.Option(False, "--live", help="Require a BYOLLM key; do not fall back"),
+    demo: bool = typer.Option(
+        False, "--demo", help="Force the built-in checker. This is not a live model."
+    ),
+    live: bool = typer.Option(
+        False, "--live", help="Require your API key; do not fall back to the built-in checker"
+    ),
     expect_fail: bool = typer.Option(
         False,
         "--expect-fail",
@@ -248,7 +256,7 @@ def ui_cmd(
     open_browser: bool = typer.Option(False, "--open", help="Open the loopback URL in a browser"),
     no_browser: bool = typer.Option(False, "--no-browser", help="Do not open a browser"),
 ) -> None:
-    """Local setup wizard + check UI. No account. Built-in checker by default. Not hosted serve."""
+    """Local setup + skill page. No account. Run live uses your API key. Not hosted serve."""
     from skillgate_ai.local_ui.server import serve_ui
 
     workspace = (root or project_root()).expanduser().resolve()
@@ -260,7 +268,7 @@ def ui_cmd(
             "not the hosted Skill Gate app."
         )
     console.print(
-        "Local Skill Gate UI — no account. Run check uses the built-in checker. "
+        "Local Skill Gate UI — no account. Run live uses your API key. "
         "CI/Docker still use `skillgate check`."
     )
     try:

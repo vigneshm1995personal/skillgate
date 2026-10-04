@@ -121,23 +121,25 @@ def test_ui_copy_has_no_internal_jargon(project_root: Path) -> None:
         css = bodies["/static/app.css"]
         assert "Name your skill" in js
         assert "What should it do?" in js
-        assert "Create and run check" in js
-        assert "See the checks" in js
-        assert "Built-in checker. No API key needed." in js
+        assert "Create skill" in js
+        assert "Want to add your first skill?" in js
+        assert "This is local" in js
+        assert "No Skill Gate account" in js
         assert "Create a skill" in js
         assert "Try an example" in js
         assert "See a failing check" in js
-        assert "Use your own API key (optional)" in js
-        assert "live: false" in js
+        assert "Run live" in js
+        assert "Skip — use the built-in checker" in js
+        assert "Built-in checker. This is not a live model." in js
+        assert "Create and run check" not in js
+        assert "Checking…" not in js
         assert "New skill" in html
         assert "Setup wizard" not in html
         assert "skillgate check" not in html.lower()
         assert "docker" not in html.lower()
         assert "SKILL.md frontmatter" not in js
-        assert "Optional API key" not in js
-        assert "Your API key (optional)" in js
-        assert "Add a key for live checks" in js
-        assert "You already have a key. Run live uses it." in js
+        assert "Your API key (optional)" not in js
+        assert "Add a key for live checks" not in js
         assert "function keyFieldsHtml" in js
         assert "function keyPayloadFrom" in js
         assert "<code>${esc(t.id)}</code>" not in js
@@ -157,59 +159,79 @@ def test_ui_wizard_motion_is_wired_not_just_class_names(project_root: Path) -> N
     assert "panel-enter" in js
     assert "void current.offsetWidth" in js
     assert "return sleep(MOTION_MS)" in js
-    assert 'wizard.step = "checking"' in js
-    create = js.split("async function createAndRun")[1].split("async function pollWizard")[0]
-    assert create.index('wizard.step = "checking"') < create.index('"/api/packs"')
-    assert create.index("await paintWizard()") < create.index('"/api/packs"')
-    assert "const CHECKING_MIN_MS = 700" in js
-    assert "checkingShownAt" in create
-    assert create.index("await paintWizard()") < create.index("checkingShownAt")
-    assert create.index("checkingShownAt") < create.index('"/api/packs"')
-    assert create.index("CHECKING_MIN_MS") < create.index('wizard.step = (wizard.result')
-    packs = __import__("re").search(r'api\("POST", "/api/packs", \{([^}]+)\}', js)
-    assert packs, "wizard must POST /api/packs"
-    assert "scaffold" not in packs.group(1)
-    assert 'api("POST", "/api/check", { path: wizard.path, live: false })' in js
+    assert 'step: "local"' in js
+    assert 'wizard.step = "keys"' in js
+    assert 'wizard.step = "firstSkill"' in js
+    create = js.split("async function createSkill")[1].split("function checksFromPack")[0]
+    assert "/api/check" not in create
+    assert 'api("POST", "/api/packs"' in create
+    assert "location.hash = packHref(wizard.path)" in create
+    keys = js.split('if (step === "keys")')[1].split('if (step === "firstSkill")')[0]
+    assert "/api/check" not in keys
+    assert 'id="skip"' in keys
+    assert "PUT" in keys and "/api/env" in keys
     assert "--motion: 350ms" in css
     assert "@keyframes panel-out" in css
-    assert "@keyframes check-stroke" in css
-    assert "check-stroke 400ms linear" in css
-    assert "check-pop-in 400ms linear" in css
-    assert "@keyframes bar-slide" in css
     assert "prefers-reduced-motion" in css
     assert "min-height: 1.4em" in css
 
 
-def test_ui_wizard_optional_key_is_after_result(project_root: Path) -> None:
+def test_ui_wizard_is_setup_only_then_skill_page(project_root: Path) -> None:
     js = (project_root / "src/skillgate_ai/local_ui/static/app.js").read_text(encoding="utf-8")
     assert "function keyFieldsHtml" in js
     assert "function keyPayloadFrom" in js
-    assert "Your API key (optional)" in js
-    assert "Add a key for live checks" in js
-    assert "You already have a key. Run live uses it." in js
-    assert "Skip this. The check you just ran used the built-in checker." in js
-    assert 'id="skip">Skip' in js
+    assert "Your API key" in js
+    assert "Want to add your first skill?" in js
+    assert "Skip — use the built-in checker" in js
+    assert "You already have an API key. Live checks will use it." in js
+    assert "This is not a live model." in js
     assert "<label>OPENAI_API_KEY" not in js
     assert "<label>CURSOR_API_KEY" not in js
-    assert "Optional API key" not in js
-    assert "<span class=\"label\">Name</span>" in js
-    assert "<span class=\"label\">Describe</span>" in js
+    assert "Your API key (optional)" not in js
+    assert "<span class=\"label\">Local</span>" in js
+    assert "<span class=\"label\">Key</span>" in js
     assert "data-node=\"3\"" not in js
-    step2 = js.split("if (step === 2)")[1].split('if (step === "checking")')[0]
-    assert "Create and run check" in step2
-    assert "Skip" not in step2
-    assert 'id="add-key"' not in step2
-    create = js.split("async function createAndRun")[1].split("async function pollWizard")[0]
-    assert 'api("POST", "/api/check", { path: wizard.path, live: false })' in create
-    assert "live: true" not in create
-    assert "if (value) body[name] = value" in js
-    saved = js.split('if (step === "keySaved")')[1].split("const snap = wizard.result")[0]
-    assert "See the checks" in saved
-    assert "Run live" in saved
-    assert "/api/check" not in saved
-    assert 'wizard.step = "keys"' in js
-    paint = js.split("async function paintWizard")[1].split("function buildWizardPanel")[0]
-    assert 'wizard.step === 1 || wizard.step === 2 || wizard.step === "checking"' in paint
+    assert 'wizard.step = "checking"' not in js
+    assert "Create and run check" not in js
+    setup = js.split("async function renderSetup")[1].split("async function renderNew")[0]
+    assert "/api/check" not in setup
+    create = js.split("async function createSkill")[1].split("function checksFromPack")[0]
+    assert "/api/check" not in create
+    assert 'id="live">Run live' in js
+    assert "live: true" in js
+    assert "function checksFromPack" in js
+    assert "function checkHeadline" in js
+    pack = js.split("async function renderPack")[1].split("async function startCheck")[0]
+    assert "params.get(\"run\")" not in pack
+    assert "params.get(\"live\")" not in pack
+    assert "checksTable(checksFromPack(pack))" in pack
+    assert 'id="live">Run live' in pack
+    assert "SETUP_DONE_KEY" in js
+    assert "skillgate-setup-done" in js
+    paint = js.split("async function paintWizard")[1].split("function goFirstSkill")[0]
+    assert 'wizard.step === "local" || wizard.step === "keys"' in paint
+
+
+def test_ui_only_start_check_posts_check(project_root: Path) -> None:
+    js = (project_root / "src/skillgate_ai/local_ui/static/app.js").read_text(encoding="utf-8")
+    assert js.count('api("POST", "/api/check"') == 1
+    start = js.split("async function startCheck")[1].split("async function pollRun")[0]
+    assert 'api("POST", "/api/check"' in start
+    assert "live: !!opts.live" in start
+    assert "startCheck(" not in start
+    keys = js.split('if (step === "keys")')[1].split('if (step === "firstSkill")')[0]
+    assert "/api/check" not in keys
+    assert 'id="skip"' in keys
+    first = js.split('if (step === "firstSkill")')[1].split('if (step === "name")')[0]
+    assert "/api/check" not in first
+    assert "location.hash = packHref(pdf)" in first
+    pack = js.split("async function renderPack")[1].split("async function startCheck")[0]
+    assert "/api/check" not in pack
+    assert "startCheck(path, { live: true })" in pack
+    paint = js.split("function paintResult")[1]
+    error_branch = paint.split("if (snap.error && !snap.report)")[1].split("const gate")[0]
+    assert "startCheck" not in error_branch
+    assert "demo: true" not in error_branch
 
 
 def test_ui_env_writes_only_supplied_keys(tmp_path: Path) -> None:
@@ -231,7 +253,9 @@ def test_ui_env_writes_only_supplied_keys(tmp_path: Path) -> None:
         server.server_close()
 
 
-def test_ui_wizard_first_run_sequence_is_green(project_root: Path, tmp_path: Path) -> None:
+def test_ui_wizard_first_run_opens_skill_page_without_check(
+    project_root: Path, tmp_path: Path
+) -> None:
     server, base, _state = start_background(root=project_root, host="127.0.0.1", port=0)
     try:
         status, created = _request(
@@ -251,16 +275,14 @@ def test_ui_wizard_first_run_sequence_is_green(project_root: Path, tmp_path: Pat
         assert "scaffold" not in created.get("skill", {})
         pack_path = Path(created["path"])
         assert (pack_path / "evals" / "cases.yaml").is_file()
-        status, started = _request(
-            "POST", f"{base}/api/check", {"path": created["path"], "live": False}
-        )
-        assert status == 202, started
-        done = _poll_run(base, started["run_id"])
-        assert done["exit_code"] == 0, done
-        assert done["report"]["gate"] == "green"
-        assert done["report"]["harness"] == "demo"
-        notice = (done.get("demo_notice") or "").lower()
-        assert "built-in checker" in notice
+        cases = (created.get("dataset") or {}).get("cases") or []
+        assert cases, created
+        assert all("id" in row and "prompt" in row for row in cases)
+        js = (
+            project_root / "src" / "skillgate_ai" / "local_ui" / "static" / "app.js"
+        ).read_text(encoding="utf-8")
+        create = js.split("async function createSkill")[1].split("function checksFromPack")[0]
+        assert "/api/check" not in create
     finally:
         server.shutdown()
         server.server_close()
@@ -387,7 +409,61 @@ def test_ui_apply_fix_then_green(project_root: Path, tmp_path: Path) -> None:
         server.server_close()
 
 
-def test_ui_default_check_pdf_green_with_gateway_and_openai_keys(
+def test_ui_live_without_key_is_409(project_root: Path) -> None:
+    server, base, _state = start_background(root=project_root, host="127.0.0.1", port=0)
+    try:
+        status, payload = _request(
+            "POST", f"{base}/api/check", {"path": "skills/pdf", "live": True}
+        )
+        assert status == 409, payload
+        blob = json.dumps(payload).lower()
+        assert "api key" in blob
+        assert status != 202
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_ui_live_with_key_does_not_use_builtin(
+    project_root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test-not-a-real-key")
+    dest = tmp_path / "pdf"
+    shutil.copytree(project_root / "skills" / "pdf", dest)
+    ensure_demo_pdfs(dest / "evals" / "fixtures")
+
+    class LiveStub:
+        name = "llm"
+
+        def run(self, *args, **kwargs):
+            from skillgate_ai.errors import HarnessError
+
+            raise HarnessError("live stub")
+
+    monkeypatch.setattr(
+        "skillgate_ai.gate.live_harness_or_error", lambda *a, **k: LiveStub()
+    )
+    server, base, _state = start_background(root=project_root, host="127.0.0.1", port=0)
+    try:
+        status, started = _request(
+            "POST",
+            f"{base}/api/check",
+            {"path": str(dest), "live": True, "demo": True},
+        )
+        assert status == 202, started
+        done = _poll_run(base, started["run_id"])
+        assert done.get("report") is None
+        assert done.get("demo_notice") is None
+        assert done["exit_code"] == 1
+        err = json.dumps(done.get("error") or {}).lower()
+        assert "built-in" not in err
+        assert "demo" not in err
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_ui_builtin_demo_stays_demo_when_keys_set(
     project_root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv("OPENAI_API_KEY", "sk-test-not-a-real-key")
@@ -397,17 +473,17 @@ def test_ui_default_check_pdf_green_with_gateway_and_openai_keys(
     ensure_demo_pdfs(dest / "evals" / "fixtures")
     server, base, _state = start_background(root=project_root, host="127.0.0.1", port=0)
     try:
-        status, started = _request("POST", f"{base}/api/check", {"path": str(dest)})
+        status, started = _request(
+            "POST", f"{base}/api/check", {"path": str(dest), "live": False, "demo": True}
+        )
         assert status == 202, started
         done = _poll_run(base, started["run_id"])
         report = done["report"] or {}
         assert done["exit_code"] == 0, done
-        assert report.get("gate") == "green"
         assert report.get("harness") == "demo"
-        assert report.get("task_count") == 8
-        assert report.get("passed_count") == 8
         notice = (done.get("demo_notice") or "").lower()
         assert "built-in checker" in notice
+        assert "not a live model" in notice
     finally:
         server.shutdown()
         server.server_close()

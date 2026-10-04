@@ -66,4 +66,4 @@ Until the first PyPI release, CI in this repo uses `pip install -e .`.
 - [`docs/ui.md`](docs/ui.md) — start the local UI, red path, Docker stays `check /pack`
 - [`docs/proof/PUBLISH.md`](docs/proof/PUBLISH.md) — secret scan, tag, PyPI Trusted Publishing, GHCR (owner UI; do not flip public from CI)
 
-BYO keys (Cursor / Codex / OpenAI-compatible / Anthropic) are optional and only for a **live** harness. See `.env.example`.
+BYO keys (Cursor / Codex / OpenAI-compatible / Anthropic) run the **live** check. Skip them for the built-in checker (not a live model). See `.env.example`.

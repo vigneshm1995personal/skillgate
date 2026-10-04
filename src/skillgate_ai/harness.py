@@ -611,7 +611,7 @@ def resolve_harness(kind: str, cfg: LLMConfig, *, demo: bool = False) -> Harness
             f"Unknown harness {kind!r}",
             hint="Use auto, cursor-agent, codex, llm, or demo.",
         )
-    # auto = built-in checker. Live models are `--live` / Run live only.
+    # auto = built-in checker unless Gate sees a key (`run_check` / `--live`).
     return DemoHarness()
 
 
