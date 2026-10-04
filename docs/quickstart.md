@@ -38,6 +38,14 @@ echo $?    # 0
 
 No `AI_GATEWAY_API_KEY`, no Jev, no Docker required for this path.
 
+## Optional local UI
+
+```bash
+skillgate ui                 # http://127.0.0.1:8765 — no account
+```
+
+Same `run_check` engine as the CLI. See [`docs/ui.md`](ui.md). The Docker image still runs `skillgate check /pack`; do not treat the UI as `serve`.
+
 ## Docker (optional)
 
 Follows **docker-project-foundations** + **docker-build-strategies**: multi-stage, slim pin+digest, non-root UID 1001, `.dockerignore`, `ENTRYPOINT ["skillgate"]`, `CMD ["check", "/pack"]`.

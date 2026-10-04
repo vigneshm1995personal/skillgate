@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Skill Gate — local UI</title>
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+  <header class="top">
+    <div>
+      <strong>Skill Gate</strong>
+      <span class="muted">local UI · no account</span>
+    </div>
+    <nav>
+      <a href="#/">Packs</a>
+      <a href="#/setup">Setup wizard</a>
+    </nav>
+  </header>
+  <p id="banner" class="banner hidden"></p>
+  <main id="app"></main>
+  <footer class="foot">
+    Deterministic checks need no API key. CI and Docker still run
+    <code>skillgate check</code> (image <code>CMD check /pack</code>).
+  </footer>
+  <script src="/static/app.js"></script>
+</body>
+</html>

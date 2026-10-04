@@ -28,3 +28,12 @@ def test_compose_and_dockerignore_exist() -> None:
     assert ".env" in ignore
     assert "db-creds.env" in ignore
     assert "**/.npmrc" in ignore
+
+
+def test_compose_has_no_ui_ports() -> None:
+    text = (ROOT / "compose.yaml").read_text(encoding="utf-8")
+    assert "ports:" not in text
+    assert "check /pack" in text
+    assert "8477" not in text
+    assert "8765" not in text
+

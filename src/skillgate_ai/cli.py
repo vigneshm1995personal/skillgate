@@ -3,34 +3,16 @@
 from __future__ import annotations
 
 import os
-import uuid
 from pathlib import Path
 
 import typer
 from rich.console import Console
 
 from skillgate_ai import __version__
-from skillgate_ai.config import get_llm_config, load_env
-from skillgate_ai.demo_files import ensure_demo_pdfs
-from skillgate_ai.engine import run_eval
+from skillgate_ai.config import load_env
 from skillgate_ai.errors import SkillGateError
-from skillgate_ai.eval_config import (
-    EvalConfigError,
-    EvalRunConfig,
-    apply_eval_config,
-    resolve_eval_config,
-    stamp_resolved,
-    with_timeout_effective,
-)
-from skillgate_ai.harness import live_harness_or_error, resolve_harness
-from skillgate_ai.history import append_eval
+from skillgate_ai.gate import run_check
 from skillgate_ai.ingest import ingest_skill
-from skillgate_ai.observability import (
-    capture_run_failure,
-    eval_transaction,
-    log_eval_finished,
-    set_eval_passed,
-)
 from skillgate_ai.paths import is_skill_pack, project_root
 from skillgate_ai.report import format_cli, format_github, report_to_dict
 from skillgate_ai.suite import discover_suites
@@ -74,53 +56,6 @@ def ingest(
     console.print(loaded.description)
 
 
-def _persist_cli_eval(
-    *,
-    pack_root: Path | None,
-    run_id: str,
-    passed: bool,
-    report: dict | None = None,
-    error: dict | None = None,
-    config: EvalRunConfig | dict | None = None,
-) -> None:
-    if pack_root is None or not pack_root.is_dir():
-        return
-    cfg = config.to_dict() if isinstance(config, EvalRunConfig) else config
-    append_eval(
-        pack_root,
-        run_id=run_id,
-        passed=passed,
-        report=report,
-        error=error,
-        config=cfg,
-    )
-
-
-def _prepare_pack_fixtures(pack: Path) -> None:
-    fixtures = pack / "evals" / "fixtures"
-    if (pack / "SKILL.md").is_file():
-        ensure_demo_pdfs(fixtures)
-
-
-def _resolve_pack_and_spec(target: Path, root: Path):
-    """Return (spec, skill_path, pack_root) for a pack dir or a suite YAML."""
-    from skillgate_ai.case_pack import expand_from_pack
-
-    path = target if target.is_absolute() else (root / target)
-    if path.is_dir() and (path / "SKILL.md").is_file():
-        _prepare_pack_fixtures(path)
-        return expand_from_pack(path), path, path
-    if path.is_file() and path.suffix in {".yaml", ".yml"}:
-        return None, None, None
-    if is_skill_pack(path):
-        _prepare_pack_fixtures(path)
-        return expand_from_pack(path), path, path
-    raise SkillGateError(
-        f"Not a skill pack or suite: {target}",
-        hint="Pass a folder with SKILL.md + evals/cases.yaml, or a suite YAML.",
-    )
-
-
 def _run_gate(
     *,
     target: Path,
@@ -137,105 +72,31 @@ def _run_gate(
     temperature: float | None,
     reasoning_effort: str | None,
 ) -> None:
-    root = _boot()
-    cfg = get_llm_config()
-    sandbox_kind = sandbox or cfg.sandbox_pref
-    spec = None
-    suite_path = target if target.is_absolute() else root / target
-    pack_root: Path | None = None
-    skill_path = skill
-    try:
-        spec, skill_from_pack, pack_root = _resolve_pack_and_spec(target, root)
-        if skill_from_pack is not None:
-            skill_path = skill or skill_from_pack
-    except SkillGateError as exc:
-        if suite_path.is_file():
-            spec = None
-            pack_root = None
-        else:
-            console.print(exc.render())
-            raise typer.Exit(exc.exit_code) from exc
-
-    run_id = uuid.uuid4().hex[:12]
-    skill_label = skill_path.name if skill_path else suite_path.stem
-    run_cfg: EvalRunConfig | None = None
-    resolved = None
-    try:
-        run_cfg = resolve_eval_config(
-            harness_pref=harness,
-            incoming={
-                "model": model,
-                "timeout_sec": timeout,
-                "temperature": temperature,
-                "reasoning_effort": reasoning_effort,
-            },
-            cfg=cfg,
-            source="cli",
-        )
-        cfg = apply_eval_config(cfg, run_cfg)
-        if live:
-            resolved = live_harness_or_error(harness, cfg)
-        else:
-            resolved = resolve_harness(harness, cfg, demo=demo)
-            if resolved.name == "demo" and not demo and harness == "auto" and not cfg.has_any_key:
-                console.print(
-                    "[dim]No BYOLLM key in .env — using demo harness (same scorers). "
-                    "Set CURSOR_API_KEY, CODEX_API_KEY, OPENAI_API_KEY, or ANTHROPIC_API_KEY "
-                    "for a live run. See .env.example.[/dim]\n"
-                )
-        run_cfg = stamp_resolved(run_cfg, resolved.name, cfg)
-        mode = "live" if live else ("demo" if resolved.name == "demo" else "live")
-        with eval_transaction(
-            run_id=run_id,
-            skill=skill_label,
-            harness=resolved.name,
-            mode=mode,
-            suite=suite_path.stem,
-            sandbox=sandbox_kind,
-        ):
-            report = run_eval(
-                None if spec is not None else suite_path,
-                spec=spec,
-                harness=resolved,
-                sandbox_kind=sandbox_kind,
-                docker_image=cfg.docker_image,
-                project_root=root,
-                skill_override=skill_path or (suite_path if spec is not None else None),
-                run_id=run_id,
-                timeout_override=run_cfg.timeout_sec,
-                config=run_cfg.to_dict(),
-            )
-            run_cfg = with_timeout_effective(run_cfg, report.timeout_effective)
-            report.config = run_cfg.to_dict()
-            set_eval_passed(report.passed)
-            log_eval_finished(
-                run_id=run_id,
-                skill=report.skill,
-                harness=report.harness,
-                passed=report.passed,
-            )
-            persist_root = Path(report.skill_path) if report.skill_path else pack_root
-            _persist_cli_eval(
-                pack_root=persist_root,
-                run_id=run_id,
-                passed=report.passed,
-                report=report_to_dict(report),
-                config=run_cfg,
-            )
-    except SkillGateError as exc:
-        capture_run_failure(exc)
-        persist_root = skill_path or pack_root
-        if run_cfg is not None and not isinstance(exc, EvalConfigError) and persist_root:
-            _persist_cli_eval(
-                pack_root=persist_root,
-                run_id=run_id,
-                passed=False,
-                error={"message": exc.message, "hint": exc.hint},
-                config=run_cfg,
-            )
-        console.print(exc.render())
-        raise typer.Exit(exc.exit_code) from exc
-
+    result = run_check(
+        target,
+        skill=skill,
+        harness=harness,
+        sandbox=sandbox,
+        demo=demo,
+        live=live,
+        expect_fail=expect_fail,
+        model=model,
+        timeout=timeout,
+        temperature=temperature,
+        reasoning_effort=reasoning_effort,
+        source="cli",
+    )
+    if result.demo_notice:
+        console.print(f"[dim]{result.demo_notice}[/dim]\n")
+    if result.error:
+        console.print(result.error["message"])
+        hint = result.error.get("hint")
+        if hint:
+            console.print(hint)
+        raise typer.Exit(result.exit_code)
+    report = result.report
+    if report is None:
+        raise typer.Exit(result.exit_code)
     if json_out or summary == "json":
         import json as _json
 
@@ -250,15 +111,9 @@ def _run_gate(
             path.write_text(prev + text, encoding="utf-8")
     else:
         console.print(format_cli(report))
-
-    red = not report.passed
-    if expect_fail:
-        if red:
-            console.print("Suite failed as expected (intentional fail).")
-            raise typer.Exit(0)
-        console.print("Expected this suite to fail, but the gate was green.")
-        raise typer.Exit(1)
-    raise typer.Exit(0 if report.passed else 1)
+    if result.expect_fail_notice:
+        console.print(result.expect_fail_notice)
+    raise typer.Exit(result.exit_code)
 
 
 _HARNESS_HELP = "auto | cursor-agent | codex | llm | demo"
@@ -382,6 +237,43 @@ def list_assets() -> None:
         console.print("evals/")
         for suite in discover_suites(evals_root):
             console.print(f"  {suite.name}")
+
+
+@app.command("ui")
+def ui_cmd(
+    host: str = typer.Option("127.0.0.1", "--host", help="Bind address (default loopback)"),
+    port: int = typer.Option(8765, "--port", help="Port (default 8765, not hosted 8477)"),
+    root: Path | None = typer.Option(None, "--root", help="Workspace root for browse/create"),
+    pack: Path | None = typer.Option(None, "--pack", help="Open this pack instead of the picker"),
+    open_browser: bool = typer.Option(False, "--open", help="Open the loopback URL in a browser"),
+    no_browser: bool = typer.Option(False, "--no-browser", help="Do not open a browser"),
+) -> None:
+    """Local setup wizard + check UI. No account. Not hosted serve. Docker check /pack unchanged."""
+    from skillgate_ai.local_ui.server import serve_ui
+
+    workspace = (root or project_root()).expanduser().resolve()
+    load_env(workspace)
+    should_open = open_browser and not no_browser
+    if host not in {"127.0.0.1", "localhost", "::1"}:
+        console.print(
+            "Warning: binding off loopback. This is still a local process with no auth — "
+            "not the hosted Skill Gate app."
+        )
+    console.print(
+        "Local Skill Gate UI — no account, demo harness if no key. "
+        "CI/Docker still use `skillgate check` (image CMD check /pack)."
+    )
+    try:
+        serve_ui(
+            root=workspace,
+            host=host,
+            port=port,
+            pack=pack,
+            open_browser=should_open,
+        )
+    except OSError as exc:
+        console.print(f"Could not bind {host}:{port}: {exc}")
+        raise typer.Exit(1) from exc
 
 
 if __name__ == "__main__":

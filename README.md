@@ -16,6 +16,8 @@ skillgate check skills/pdf-sabotaged    # exit 1 — description never matches P
 skillgate check skills/pdf              # exit 0
 ```
 
+Optional local UI (same engine, no account): `skillgate ui` → http://127.0.0.1:8765. See [`docs/ui.md`](docs/ui.md). Docker still runs `skillgate check /pack`.
+
 `--expect-fail` inverts the exit code (CI for the sabotaged twin):
 
 ```bash
@@ -60,7 +62,8 @@ Until the first PyPI release, CI in this repo uses `pip install -e .`.
 - [`docs/quickstart.md`](docs/quickstart.md) — red sabotaged → green pdf
 - [`docs/pack.md`](docs/pack.md) — `evals/cases.yaml` schema 1, fixtures, goldens, history
 - [Extract plan](docs/plans/2026-10-03-skillgate-oss-extract.md) — allowlist / deny-list
-- [Local UI + setup wizard plan](docs/plans/2026-10-04-local-ui-setup-wizard.md) — `skillgate ui` (not implemented yet; not hosted `serve`)
+- [Local UI + setup wizard plan](docs/plans/2026-10-04-local-ui-setup-wizard.md) — `skillgate ui` (local stdlib UI; not hosted `serve`)
+- [`docs/ui.md`](docs/ui.md) — start the local UI, red path, Docker stays `check /pack`
 - [`docs/proof/PUBLISH.md`](docs/proof/PUBLISH.md) — secret scan, tag, PyPI Trusted Publishing, GHCR (owner UI; do not flip public from CI)
 
 BYO keys (Cursor / Codex / OpenAI-compatible / Anthropic) are optional and only for a **live** harness. See `.env.example`.
