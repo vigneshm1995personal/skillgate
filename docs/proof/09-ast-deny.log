@@ -1,0 +1,18 @@
+===== START 09-ast-deny 2026-10-04T01:56:44Z =====
+CMD: pytest -q tests/test_oss_surface.py tests/test_dockerfile.py -vv
+============================= test session starts ==============================
+platform linux -- Python 3.12.3, pytest-9.1.1, pluggy-1.6.0 -- /usr/bin/python3
+cachedir: .pytest_cache
+rootdir: /workspace
+configfile: pyproject.toml
+plugins: anyio-4.15.1
+collecting ... collected 5 items
+
+tests/test_oss_surface.py::test_denied_modules_are_absent_on_disk PASSED [ 20%]
+tests/test_oss_surface.py::test_no_denied_imports PASSED                 [ 40%]
+tests/test_oss_surface.py::test_cli_imports_without_hosted PASSED        [ 60%]
+tests/test_dockerfile.py::test_dockerfile_is_cli_not_serve PASSED        [ 80%]
+tests/test_dockerfile.py::test_compose_and_dockerignore_exist PASSED     [100%]
+
+============================== 5 passed in 0.25s ===============================
+EXIT:0

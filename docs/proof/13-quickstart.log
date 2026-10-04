@@ -1,0 +1,279 @@
+===== START 13-quickstart-fresh 2026-10-04T01:58:58Z =====
+Following docs/quickstart.md Install + Red→green literally
+Host python3-venv was missing; installed python3.12-venv so the documented command works.
+which python: /workspace/.venv/bin/python
+which pip: /workspace/.venv/bin/pip
+----- pip install -e . -----
+Obtaining file:///workspace
+  Installing build dependencies: started
+  Installing build dependencies: finished with status 'done'
+  Checking if build backend supports build_editable: started
+  Checking if build backend supports build_editable: finished with status 'done'
+  Getting requirements to build editable: started
+  Getting requirements to build editable: finished with status 'done'
+  Preparing editable metadata (pyproject.toml): started
+  Preparing editable metadata (pyproject.toml): finished with status 'done'
+Collecting typer>=0.12 (from skillgate-ai==0.3.0)
+  Using cached typer-0.27.2-py3-none-any.whl.metadata (16 kB)
+Collecting rich>=13.7 (from skillgate-ai==0.3.0)
+  Using cached rich-15.0.0-py3-none-any.whl.metadata (18 kB)
+Collecting pyyaml>=6.0 (from skillgate-ai==0.3.0)
+  Downloading pyyaml-6.0.3-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (2.4 kB)
+Collecting pydantic>=2.7 (from skillgate-ai==0.3.0)
+  Using cached pydantic-2.13.5-py3-none-any.whl.metadata (110 kB)
+Collecting httpx>=0.27 (from skillgate-ai==0.3.0)
+  Using cached httpx-0.28.1-py3-none-any.whl.metadata (7.1 kB)
+Collecting python-dotenv>=1.0 (from skillgate-ai==0.3.0)
+  Using cached python_dotenv-1.2.4-py3-none-any.whl.metadata (29 kB)
+Collecting pypdf>=4.2 (from skillgate-ai==0.3.0)
+  Using cached pypdf-6.19.0-py3-none-any.whl.metadata (7.5 kB)
+Collecting reportlab>=4.2 (from skillgate-ai==0.3.0)
+  Using cached reportlab-5.0.1-py3-none-any.whl.metadata (1.6 kB)
+Collecting anyio (from httpx>=0.27->skillgate-ai==0.3.0)
+  Using cached anyio-4.15.1-py3-none-any.whl.metadata (4.7 kB)
+Collecting certifi (from httpx>=0.27->skillgate-ai==0.3.0)
+  Downloading certifi-2026.7.22-py3-none-any.whl.metadata (2.5 kB)
+Collecting httpcore==1.* (from httpx>=0.27->skillgate-ai==0.3.0)
+  Using cached httpcore-1.0.9-py3-none-any.whl.metadata (21 kB)
+Collecting idna (from httpx>=0.27->skillgate-ai==0.3.0)
+  Downloading idna-3.20-py3-none-any.whl.metadata (7.2 kB)
+Collecting h11>=0.16 (from httpcore==1.*->httpx>=0.27->skillgate-ai==0.3.0)
+  Using cached h11-0.16.0-py3-none-any.whl.metadata (8.3 kB)
+Collecting annotated-types>=0.6.0 (from pydantic>=2.7->skillgate-ai==0.3.0)
+  Using cached annotated_types-0.8.0-py3-none-any.whl.metadata (15 kB)
+Collecting pydantic-core==2.46.5 (from pydantic>=2.7->skillgate-ai==0.3.0)
+  Using cached pydantic_core-2.46.5-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (6.6 kB)
+Collecting typing-extensions>=4.14.1 (from pydantic>=2.7->skillgate-ai==0.3.0)
+  Using cached typing_extensions-4.16.0-py3-none-any.whl.metadata (3.3 kB)
+Collecting typing-inspection>=0.4.2 (from pydantic>=2.7->skillgate-ai==0.3.0)
+  Using cached typing_inspection-0.4.4-py3-none-any.whl.metadata (2.6 kB)
+Collecting pillow>=9.0.0 (from reportlab>=4.2->skillgate-ai==0.3.0)
+  Using cached pillow-12.3.0-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl.metadata (9.1 kB)
+Collecting charset-normalizer (from reportlab>=4.2->skillgate-ai==0.3.0)
+  Downloading charset_normalizer-3.5.2-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (46 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 46.4/46.4 kB 297.7 kB/s eta 0:00:00
+
+Collecting markdown-it-py>=2.2.0 (from rich>=13.7->skillgate-ai==0.3.0)
+  Using cached markdown_it_py-4.2.0-py3-none-any.whl.metadata (7.4 kB)
+Collecting pygments<3.0.0,>=2.13.0 (from rich>=13.7->skillgate-ai==0.3.0)
+  Using cached pygments-2.21.0-py3-none-any.whl.metadata (2.5 kB)
+Collecting shellingham>=1.3.0 (from typer>=0.12->skillgate-ai==0.3.0)
+  Using cached shellingham-1.5.4-py2.py3-none-any.whl.metadata (3.5 kB)
+Collecting annotated-doc>=0.0.2 (from typer>=0.12->skillgate-ai==0.3.0)
+  Using cached annotated_doc-0.0.5-py3-none-any.whl.metadata (6.5 kB)
+Collecting mdurl~=0.1 (from markdown-it-py>=2.2.0->rich>=13.7->skillgate-ai==0.3.0)
+  Using cached mdurl-0.1.2-py3-none-any.whl.metadata (1.6 kB)
+Using cached httpx-0.28.1-py3-none-any.whl (73 kB)
+Using cached httpcore-1.0.9-py3-none-any.whl (78 kB)
+Using cached pydantic-2.13.5-py3-none-any.whl (472 kB)
+Using cached pydantic_core-2.46.5-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (2.1 MB)
+Using cached pypdf-6.19.0-py3-none-any.whl (395 kB)
+Using cached python_dotenv-1.2.4-py3-none-any.whl (23 kB)
+Downloading pyyaml-6.0.3-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (807 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 807.9/807.9 kB 14.1 MB/s eta 0:00:00
+
+Using cached reportlab-5.0.1-py3-none-any.whl (2.0 MB)
+Using cached rich-15.0.0-py3-none-any.whl (310 kB)
+Using cached typer-0.27.2-py3-none-any.whl (123 kB)
+Using cached annotated_doc-0.0.5-py3-none-any.whl (5.3 kB)
+Using cached annotated_types-0.8.0-py3-none-any.whl (13 kB)
+Using cached markdown_it_py-4.2.0-py3-none-any.whl (91 kB)
+Using cached pillow-12.3.0-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl (6.9 MB)
+Using cached pygments-2.21.0-py3-none-any.whl (1.3 MB)
+Using cached shellingham-1.5.4-py2.py3-none-any.whl (9.8 kB)
+Using cached typing_extensions-4.16.0-py3-none-any.whl (45 kB)
+Using cached typing_inspection-0.4.4-py3-none-any.whl (14 kB)
+Using cached anyio-4.15.1-py3-none-any.whl (132 kB)
+Downloading idna-3.20-py3-none-any.whl (69 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 69.6/69.6 kB 10.1 MB/s eta 0:00:00
+
+Downloading certifi-2026.7.22-py3-none-any.whl (136 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 137.0/137.0 kB 28.3 MB/s eta 0:00:00
+
+Downloading charset_normalizer-3.5.2-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (257 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 257.6/257.6 kB 67.4 MB/s eta 0:00:00
+
+Using cached h11-0.16.0-py3-none-any.whl (37 kB)
+Using cached mdurl-0.1.2-py3-none-any.whl (10.0 kB)
+Building wheels for collected packages: skillgate-ai
+  Building editable for skillgate-ai (pyproject.toml): started
+  Building editable for skillgate-ai (pyproject.toml): finished with status 'done'
+  Created wheel for skillgate-ai: filename=skillgate_ai-0.3.0-0.editable-py3-none-any.whl size=6784 sha256=30995e7ec1f356ebae6e611c4b1076d3cb67255b272cbf94a22fdfa30b16e616
+  Stored in directory: /tmp/pip-ephem-wheel-cache-8e16vrw0/wheels/b0/41/ab/4e04a8678980f3355548f1261923479fbf2a713a7393a7dea8
+Successfully built skillgate-ai
+Installing collected packages: typing-extensions, shellingham, pyyaml, python-dotenv, pypdf, pygments, pillow, mdurl, idna, h11, charset-normalizer, certifi, annotated-types, annotated-doc, typing-inspection, reportlab, pydantic-core, markdown-it-py, httpcore, anyio, rich, pydantic, httpx, typer, skillgate-ai
+Successfully installed annotated-doc-0.0.5 annotated-types-0.8.0 anyio-4.15.1 certifi-2026.7.22 charset-normalizer-3.5.2 h11-0.16.0 httpcore-1.0.9 httpx-0.28.1 idna-3.20 markdown-it-py-4.2.0 mdurl-0.1.2 pillow-12.3.0 pydantic-2.13.5 pydantic-core-2.46.5 pygments-2.21.0 pypdf-6.19.0 python-dotenv-1.2.4 pyyaml-6.0.3 reportlab-5.0.1 rich-15.0.0 shellingham-1.5.4 skillgate-ai-0.3.0 typer-0.27.2 typing-extensions-4.16.0 typing-inspection-0.4.4
+PIP_INSTALL_EXIT:0
+----- skillgate version -----
+0.3.0
+QS_VERSION_EXIT:0
+----- skillgate check skills/pdf-sabotaged -----
+No BYOLLM key in .env — using demo harness (same scorers). Set CURSOR_API_KEY, 
+CODEX_API_KEY, OPENAI_API_KEY, or ANTHROPIC_API_KEY for a live run. See 
+.env.example.
+
+Skill Gate  ·  pdf-sabotaged Dataset  ·  RED
+skill `pdf-sabotaged`  ·  1/8 tasks passed
+config  demo · 300s
+
+  FAIL  extract-hello — Skill didn’t trigger
+       why:  The agent only sees name + description before opening SKILL.md. 
+This request was: “Extract the text from hello.pdf and save it to 
+output/extracted.txt” — and `pdf-sabotaged`’s current description never matched 
+(it talks about something else).
+       fix:  Replace the `description:` in SKILL.md with the block below, then 
+run `skillgate check` on this same skill.
+  FAIL  merge-alpha-beta — Skill didn’t trigger
+       why:  The agent only sees name + description before opening SKILL.md. 
+This request was: “Extract the text from hello.pdf and save it to 
+output/extracted.txt” — and `pdf-sabotaged`’s current description never matched 
+(it talks about something else).
+       fix:  Replace the `description:` in SKILL.md with the block below, then 
+run `skillgate check` on this same skill.
+  FAIL  create-status — Skill didn’t trigger
+       why:  The agent only sees name + description before opening SKILL.md. 
+This request was: “Extract the text from hello.pdf and save it to 
+output/extracted.txt” — and `pdf-sabotaged`’s current description never matched 
+(it talks about something else).
+       fix:  Replace the `description:` in SKILL.md with the block below, then 
+run `skillgate check` on this same skill.
+  FAIL  trigger-notes-pdf — Skill didn’t trigger
+       why:  The agent only sees name + description before opening SKILL.md. 
+This request was: “Extract the text from hello.pdf and save it to 
+output/extracted.txt” — and `pdf-sabotaged`’s current description never matched 
+(it talks about something else).
+       fix:  Replace the `description:` in SKILL.md with the block below, then 
+run `skillgate check` on this same skill.
+  FAIL  trigger-combine-decks — Skill didn’t trigger
+       why:  The agent only sees name + description before opening SKILL.md. 
+This request was: “Extract the text from hello.pdf and save it to 
+output/extracted.txt” — and `pdf-sabotaged`’s current description never matched 
+(it talks about something else).
+       fix:  Replace the `description:` in SKILL.md with the block below, then 
+run `skillgate check` on this same skill.
+  PASS  no-trigger-unrelated
+  FAIL  extract-invoice — Skill didn’t trigger
+       why:  The agent only sees name + description before opening SKILL.md. 
+This request was: “Extract the text from hello.pdf and save it to 
+output/extracted.txt” — and `pdf-sabotaged`’s current description never matched 
+(it talks about something else).
+       fix:  Replace the `description:` in SKILL.md with the block below, then 
+run `skillgate check` on this same skill.
+  FAIL  rotate-hello — Skill didn’t trigger
+       why:  The agent only sees name + description before opening SKILL.md. 
+This request was: “Extract the text from hello.pdf and save it to 
+output/extracted.txt” — and `pdf-sabotaged`’s current description never matched 
+(it talks about something else).
+       fix:  Replace the `description:` in SKILL.md with the block below, then 
+run `skillgate check` on this same skill.
+
+Gate is red. Failed tasks: extract-hello, merge-alpha-beta, create-status, 
+trigger-notes-pdf, trigger-combine-decks, extract-invoice, rotate-hello
+Copy this into SKILL.md below, then run `skillgate check` on this same skill — 
+don’t switch to the good pdf twin.
+Corrected SKILL.md description (not the current one):
+---
+name: pdf-sabotaged
+description: Process PDF files — extract text, merge or split documents, rotate 
+pages, and create new PDFs with Python (pypdf, reportlab). Use this skill 
+whenever the user mentions a .pdf file, invoices, combining documents, 
+extracting text from a PDF, or asking to produce a PDF.
+---
+QS_SABOTAGED_EXIT:1
+----- skillgate check skills/pdf -----
+No BYOLLM key in .env — using demo harness (same scorers). Set CURSOR_API_KEY, 
+CODEX_API_KEY, OPENAI_API_KEY, or ANTHROPIC_API_KEY for a live run. See 
+.env.example.
+
+Skill Gate  ·  pdf Dataset  ·  GREEN
+skill `pdf`  ·  8/8 tasks passed
+config  demo · 300s
+
+  PASS  extract-hello
+  PASS  merge-alpha-beta
+  PASS  create-status
+  PASS  trigger-notes-pdf
+  PASS  trigger-combine-decks
+  PASS  no-trigger-unrelated
+  PASS  extract-invoice
+  PASS  rotate-hello
+
+Gate is green.
+QS_PDF_EXIT:0
+----- skillgate check skills/pdf-sabotaged --expect-fail -----
+No BYOLLM key in .env — using demo harness (same scorers). Set CURSOR_API_KEY, 
+CODEX_API_KEY, OPENAI_API_KEY, or ANTHROPIC_API_KEY for a live run. See 
+.env.example.
+
+Skill Gate  ·  pdf-sabotaged Dataset  ·  RED
+skill `pdf-sabotaged`  ·  1/8 tasks passed
+config  demo · 300s
+
+  FAIL  extract-hello — Skill didn’t trigger
+       why:  The agent only sees name + description before opening SKILL.md. 
+This request was: “Extract the text from hello.pdf and save it to 
+output/extracted.txt” — and `pdf-sabotaged`’s current description never matched 
+(it talks about something else).
+       fix:  Replace the `description:` in SKILL.md with the block below, then 
+run `skillgate check` on this same skill.
+  FAIL  merge-alpha-beta — Skill didn’t trigger
+       why:  The agent only sees name + description before opening SKILL.md. 
+This request was: “Extract the text from hello.pdf and save it to 
+output/extracted.txt” — and `pdf-sabotaged`’s current description never matched 
+(it talks about something else).
+       fix:  Replace the `description:` in SKILL.md with the block below, then 
+run `skillgate check` on this same skill.
+  FAIL  create-status — Skill didn’t trigger
+       why:  The agent only sees name + description before opening SKILL.md. 
+This request was: “Extract the text from hello.pdf and save it to 
+output/extracted.txt” — and `pdf-sabotaged`’s current description never matched 
+(it talks about something else).
+       fix:  Replace the `description:` in SKILL.md with the block below, then 
+run `skillgate check` on this same skill.
+  FAIL  trigger-notes-pdf — Skill didn’t trigger
+       why:  The agent only sees name + description before opening SKILL.md. 
+This request was: “Extract the text from hello.pdf and save it to 
+output/extracted.txt” — and `pdf-sabotaged`’s current description never matched 
+(it talks about something else).
+       fix:  Replace the `description:` in SKILL.md with the block below, then 
+run `skillgate check` on this same skill.
+  FAIL  trigger-combine-decks — Skill didn’t trigger
+       why:  The agent only sees name + description before opening SKILL.md. 
+This request was: “Extract the text from hello.pdf and save it to 
+output/extracted.txt” — and `pdf-sabotaged`’s current description never matched 
+(it talks about something else).
+       fix:  Replace the `description:` in SKILL.md with the block below, then 
+run `skillgate check` on this same skill.
+  PASS  no-trigger-unrelated
+  FAIL  extract-invoice — Skill didn’t trigger
+       why:  The agent only sees name + description before opening SKILL.md. 
+This request was: “Extract the text from hello.pdf and save it to 
+output/extracted.txt” — and `pdf-sabotaged`’s current description never matched 
+(it talks about something else).
+       fix:  Replace the `description:` in SKILL.md with the block below, then 
+run `skillgate check` on this same skill.
+  FAIL  rotate-hello — Skill didn’t trigger
+       why:  The agent only sees name + description before opening SKILL.md. 
+This request was: “Extract the text from hello.pdf and save it to 
+output/extracted.txt” — and `pdf-sabotaged`’s current description never matched 
+(it talks about something else).
+       fix:  Replace the `description:` in SKILL.md with the block below, then 
+run `skillgate check` on this same skill.
+
+Gate is red. Failed tasks: extract-hello, merge-alpha-beta, create-status, 
+trigger-notes-pdf, trigger-combine-decks, extract-invoice, rotate-hello
+Copy this into SKILL.md below, then run `skillgate check` on this same skill — 
+don’t switch to the good pdf twin.
+Corrected SKILL.md description (not the current one):
+---
+name: pdf-sabotaged
+description: Process PDF files — extract text, merge or split documents, rotate 
+pages, and create new PDFs with Python (pypdf, reportlab). Use this skill 
+whenever the user mentions a .pdf file, invoices, combining documents, 
+extracting text from a PDF, or asking to produce a PDF.
+---
+Suite failed as expected (intentional fail).
+QS_EXPECT_FAIL_EXIT:0
+which skillgate: /workspace/.venv/bin/skillgate
+QUICKSTART_PASS
+EXIT:0

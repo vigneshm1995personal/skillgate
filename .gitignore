@@ -12,6 +12,7 @@ build/
 .skillgate/
 uploads/
 *.log
+!docs/proof/*.log
 .DS_Store
 
 # Pack-local history (keep .gitkeep)

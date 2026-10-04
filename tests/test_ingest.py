@@ -25,6 +25,19 @@ def test_name_must_match_folder(tmp_path: Path) -> None:
         ingest_skill(folder)
 
 
+def test_generic_pack_mount_allows_skill_name(tmp_path: Path) -> None:
+    """Docker/Compose bind-mount the skill at /pack; name stays the SKILL.md name."""
+    folder = tmp_path / "pack"
+    folder.mkdir()
+    (folder / "SKILL.md").write_text(
+        "---\nname: pdf\ndescription: Process PDF files for extract/merge/rotate.\n---\n",
+        encoding="utf-8",
+    )
+    skill = ingest_skill(folder)
+    assert skill.name == "pdf"
+    assert skill.path == folder.resolve()
+
+
 def test_missing_frontmatter(tmp_path: Path) -> None:
     folder = tmp_path / "nope"
     folder.mkdir()

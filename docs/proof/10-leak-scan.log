@@ -1,0 +1,49 @@
+===== START 10-leak-scan 2026-10-04T01:58:17Z =====
+Needles: SIWV, DATABASE_URL, neon, SKILLGATE_SECRETS_KEY, vercel sandbox, Dockerfile.vercel, auth_siwv
+
+### file-existence (must be ABSENT) ###
+absent: src/skillgate_ai/auth_siwv.py
+absent: src/skillgate_ai/vault.py
+absent: src/skillgate_ai/store.py
+absent: src/skillgate_ai/store_postgres.py
+absent: src/skillgate_ai/web.py
+absent: src/skillgate_ai/eval_slice.py
+absent: src/skillgate_ai/remote_harness
+absent: src/skillgate_ai/web
+absent: Dockerfile.vercel
+absent: docs/vercel-hosting.md
+absent: docs/neon-store.md
+absent: db-creds.env
+
+### ripgrep (tracked + source; skip .venv .git docs/proof) ###
+./tests/test_dockerfile.py:18:    for needle in ("TOKEN", "SECRET", "PASSWORD", "SKILLGATE_SECRETS_KEY"):
+./tests/test_oss_surface.py:11:    "skillgate_ai.auth_siwv",
+./README.md:7:Hosted product (SIWV, vault, Neon, dashboard) stays private at [`vigneshm1995personal/skillgate-ai`](https://github.com/vigneshm1995personal/skillgate-ai) and will never be made public.
+./scripts/extract-from-skillgate-ai.sh:15:  src/skillgate_ai/auth_siwv.py
+./src/skillgate_ai/sandbox.py:288:        "SKILLGATE_SECRETS_KEY",
+./docs/quickstart.md:3:Skill Gate’s public CLI is a **local gate**. You do not sign up, you do not need Neon, SIWV, or a Skill Gate account. Deterministic fixtures use the demo harness.
+./docs/quickstart.md:72:No hosted dashboard, Sign in with Vercel, vault, Neon store, Vercel Sandbox, or generated-check drafts. Those stay in the private `skillgate-ai` app.
+./docs/plans/2026-10-03-skillgate-oss-extract.md:35:| Private GitHub repo | `vigneshm1995personal/skillgate-ai` | Hosted app; SIWV / vault / Neon / Vercel Sandbox. |
+./docs/plans/2026-10-03-skillgate-oss-extract.md:79:Docs: one public `README` + `docs/quickstart.md` (10 minutes, no sign-up, no Neon, no SIWV). BYO key / local model only if they want a **judge** beyond deterministic fixtures.
+./docs/plans/2026-10-03-skillgate-oss-extract.md:81:Out of this milestone: Marketplace `action.yml`, bundled model weights, hosted free-tier, pack viewer SPA, generated-check drafts, Vercel Sandbox, making `skillgate-ai` public.
+./docs/plans/2026-10-03-skillgate-oss-extract.md:93:| `src/skillgate_ai/auth_siwv.py` | Sign in with Vercel |
+./docs/plans/2026-10-03-skillgate-oss-extract.md:94:| `src/skillgate_ai/vault.py` | Fernet `user_secrets`; `SKILLGATE_SECRETS_KEY` |
+./docs/plans/2026-10-03-skillgate-oss-extract.md:96:| `src/skillgate_ai/store.py` | Mini SQLite **or** Neon when `DATABASE_URL` is set. OSS SoR is pack `evals/history/` JSONL, not this module. |
+./docs/plans/2026-10-03-skillgate-oss-extract.md:107:| `.env.example` **as-is** | Documents SIWV, vault, Neon, `VERCEL_TOKEN`, git-publish. Rewrite a stripped OSS file instead. |
+./docs/plans/2026-10-03-skillgate-oss-extract.md:109:| `docs/plans/2026-10-01-settings-neon-siwv-vault.md` and other hosted-only plans | Private product |
+./docs/plans/2026-10-03-skillgate-oss-extract.md:115:`tests/test_auth_siwv.py`, `test_author.py`, `test_deploy_git.py`, `test_eval_slice.py`, `test_jev_qa.py`, `test_sandbox_queue_poller.py`, `test_settings_vault.py`, `test_store.py`, `test_store_postgres.py`, `test_remote_harness.py`, `test_vercel_sandbox_harness.py`, `test_vercel_dockerfile.py`, `test_web.py`, `test_web_eval_slice.py`, `test_wizard.py`, `test_stage_b.py`, `test_suggest_skill.py`, `test_orphan_sandbox_reaper.py`, `test_durable_live_snapshot.py`, `test_run_fencing.py`, `test_preselect_skill.py`, `test_pack_inherit_ui.py`, `test_model_catalog.py`.
+./docs/plans/2026-10-03-skillgate-oss-extract.md:119:`VERCEL_APP_CLIENT_ID`, `VERCEL_APP_CLIENT_SECRET`, `SKILLGATE_SIWV_ALLOWLIST`, `SKILLGATE_OWNER_EMAIL`, `SKILLGATE_AUTH_OPEN`, `SKILLGATE_SECRETS_KEY`, `DATABASE_URL` / `POSTGRES_*`, `db-creds.env`, `VERCEL_TOKEN` / `VERCEL_OIDC_TOKEN`, `SKILLGATE_SKILLS_GITHUB_TOKEN`, production `SENTRY_DSN`, any ciphertext.
+./docs/plans/2026-10-03-skillgate-oss-extract.md:161:| `sandbox.py` | Tempdir default; `--sandbox docker` optional. Drop `SKILLGATE_SECRETS_KEY` from the blocked-env set only if vault is gone (harmless to leave the name). |
+./docs/plans/2026-10-03-skillgate-oss-extract.md:176:| `cli.py` | Today: `version`, `ingest`, `run`, **`serve`**, `list`. **Delete `serve`** (it `uvicorn.run("skillgate_ai.web:app")`). **Add `check`** as the 0/1 command (alias of today’s `run` semantics: `typer.Exit(0 if report.passed else 1)` + `--expect-fail`). `_persist_cli_eval` must **not** call `store.record_eval`; write pack `evals/history/` via new `history.py`. Drop `init_sentry` as a required boot (optional extra). Do not mention Settings / SIWV in help text. |
+./docs/plans/2026-10-03-skillgate-oss-extract.md:228:| `.env.example` | **Only** `CURSOR_API_KEY`, `CODEX_API_KEY` / `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, optional `AI_GATEWAY_API_KEY` as BYO, `SKILLGATE_SANDBOX`, `SKILLGATE_DOCKER_IMAGE`. No SIWV/Neon/vault. |
+./docs/plans/2026-10-03-skillgate-oss-extract.md:263:`skillgate_ai.auth_siwv`, `.vault`, `.store`, `.store_postgres`, `.web`, `.eval_slice`, `.jev_qa`, `.author`, `.wizard`, `.stage_b`, `.deploy_git`, `.remote_harness`.
+./docs/plans/2026-10-03-skillgate-oss-extract.md:277:Do **not** run `git filter-repo` on `skillgate-ai`. Private history contains SIWV, vault, Neon URLs in diffs, `Dockerfile.vercel`, ops scripts. A clone of a publicized private repo includes **all versions of every file**.
+./docs/plans/2026-10-03-skillgate-oss-extract.md:291:7. Scan the first tag (`gitleaks` / `trufflehog` / `git grep` for `sk-`, `postgres://`, `SKILLGATE_SECRETS_KEY`, `VERCEL_APP_CLIENT`).
+./docs/plans/2026-10-03-skillgate-oss-extract.md:404:No SIWV, Neon, or Vercel Sandbox secrets. Live Cursor/Codex keys optional and **never** required for merge (det/demo).
+
+### neon connection-string / secret-value hunt ###
+./docs/plans/2026-10-03-skillgate-oss-extract.md:291:7. Scan the first tag (`gitleaks` / `trufflehog` / `git grep` for `sk-`, `postgres://`, `SKILLGATE_SECRETS_KEY`, `VERCEL_APP_CLIENT`).
+secretish-hits: NONE
+hosted-files-present: False
+CLASSIFICATION: deny-list/docs mentions of SIWV/auth_siwv/Dockerfile.vercel/SKILLGATE_SECRETS_KEY are expected; no hosted modules, no neon.tech URLs, no secret values.
+EXIT:0

@@ -1,0 +1,76 @@
+===== START 11-docker-build-after-fix 2026-10-04T02:01:06Z =====
+#0 building with "default" instance using docker driver
+
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile: 1.97kB done
+#1 DONE 0.0s
+
+#2 resolve image config for docker-image://docker.io/docker/dockerfile:1
+#2 DONE 0.3s
+
+#3 docker-image://docker.io/docker/dockerfile:1@sha256:4edf897a3ffa55b89f906fc8cc78afdb3f1834cc9c7083565e611a8a7d5fe99e
+#3 CACHED
+
+#4 [internal] load metadata for docker.io/library/python:3.12-slim-bookworm@sha256:54c85f3c47607a77f32adec749d3c81d1348bf25833671f512b26a9b6d778cb3
+#4 DONE 0.0s
+
+#5 [internal] load .dockerignore
+#5 transferring context: 722B done
+#5 DONE 0.0s
+
+#6 [build 1/7] FROM docker.io/library/python:3.12-slim-bookworm@sha256:54c85f3c47607a77f32adec749d3c81d1348bf25833671f512b26a9b6d778cb3
+#6 DONE 0.0s
+
+#7 [internal] load build context
+#7 transferring context: 19.29kB done
+#7 DONE 0.0s
+
+#8 [build 2/7] WORKDIR /src
+#8 CACHED
+
+#9 [build 3/7] RUN python -m venv /opt/venv
+#9 CACHED
+
+#10 [build 4/7] RUN --mount=type=bind,source=pyproject.toml,target=/tmp/pyproject.toml     --mount=type=cache,target=/root/.cache/pip     python -c "import tomllib, pathlib, subprocess; deps=tomllib.loads(pathlib.Path('/tmp/pyproject.toml').read_text())['project']['dependencies']; subprocess.check_call(['pip','install','--upgrade','pip']); subprocess.check_call(['pip','install','--no-compile',*deps])"
+#10 CACHED
+
+#11 [build 5/7] COPY src ./src
+#11 DONE 0.5s
+
+#12 [build 6/7] COPY pyproject.toml README.md LICENSE ./
+#12 DONE 0.5s
+
+#13 [build 7/7] RUN --mount=type=cache,target=/root/.cache/pip     pip install --no-deps --no-compile .
+#13 1.012 Processing ./.
+#13 1.013   Installing build dependencies: started
+#13 1.473   Installing build dependencies: finished with status 'done'
+#13 1.473   Getting requirements to build wheel: started
+#13 1.834   Getting requirements to build wheel: finished with status 'done'
+#13 1.835   Preparing metadata (pyproject.toml): started
+#13 1.969   Preparing metadata (pyproject.toml): finished with status 'done'
+#13 1.971 Building wheels for collected packages: skillgate-ai
+#13 1.972   Building wheel for skillgate-ai (pyproject.toml): started
+#13 2.130   Building wheel for skillgate-ai (pyproject.toml): finished with status 'done'
+#13 2.130   Created wheel for skillgate-ai: filename=skillgate_ai-0.3.0-py3-none-any.whl size=86164 sha256=bf75d83160dad05c4fe3b2072e0a8dde89f9b13ed2a049dbfa9018e0814b5211
+#13 2.130   Stored in directory: /tmp/pip-ephem-wheel-cache-vsgh3hpc/wheels/be/16/c1/367c544384017c548a18cd5b8ec9d158b60362a7ae1a22dff3
+#13 2.132 Successfully built skillgate-ai
+#13 2.141 Installing collected packages: skillgate-ai
+#13 2.215 Successfully installed skillgate-ai-0.3.0
+#13 DONE 2.3s
+
+#14 [runtime 2/4] WORKDIR /app
+#14 CACHED
+
+#15 [runtime 3/4] RUN addgroup --system --gid 1001 appgroup &&     adduser --system --uid 1001 --ingroup appgroup appuser
+#15 CACHED
+
+#16 [runtime 4/4] COPY --from=build --link --chown=1001:1001 /opt/venv /opt/venv
+#16 DONE 0.7s
+
+#17 exporting to image
+#17 exporting layers
+#17 exporting layers 0.6s done
+#17 writing image sha256:71baccece84239b2f5f4b7d1f9af098d82b0688368d8e4659979f842dbb4ba98 done
+#17 naming to docker.io/library/skillgate:test done
+#17 DONE 0.6s
+EXIT:0

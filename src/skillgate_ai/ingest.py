@@ -13,6 +13,9 @@ from skillgate_ai.errors import IngestError
 
 NAME_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 FRONTMATTER_RE = re.compile(r"\A---[ \t]*\n(.*?\n)---[ \t]*(?:\n|$)", re.DOTALL)
+# Dockerfile CMD is `check /pack`; Compose bind-mounts the skill at that path.
+# The agentskills name==folder rule still applies to the source pack on disk.
+_GENERIC_MOUNT_NAMES = frozenset({"pack"})
 OPTIONAL_STRING_FIELDS = ("license", "compatibility", "allowed-tools")
 KNOWN_FIELDS = {
     "name",
@@ -145,7 +148,7 @@ def _require_name(value: Any, folder: Path) -> str:
             f"{folder.name}: name {name!r} is invalid",
             hint="Use lowercase letters, numbers, and single hyphens; no leading/trailing/double hyphens.",
         )
-    if name != folder.name:
+    if name != folder.name and folder.name not in _GENERIC_MOUNT_NAMES:
         raise IngestError(
             f"Skill name {name!r} must match the folder name {folder.name!r}",
             hint="Rename the folder or the `name` field so they match.",

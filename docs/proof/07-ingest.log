@@ -1,0 +1,8 @@
+===== START 07-ingest 2026-10-04T01:56:37Z =====
+CMD: skillgate ingest skills/pdf
+OK  pdf
+Process PDF files — extract text, merge or split documents, rotate pages, and 
+create new PDFs with Python (pypdf, reportlab). Use this skill whenever the user
+mentions a .pdf file, invoices, combining documents, extracting text from a PDF,
+or asking to produce a PDF.
+EXIT:0

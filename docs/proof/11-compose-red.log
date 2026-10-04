@@ -1,0 +1,139 @@
+===== START 11-compose-red 2026-10-04T02:01:29Z =====
+CMD: PACK=./skills/pdf-sabotaged docker compose run --rm --no-TTY skillgate
+#1 [internal] load local bake definitions
+#1 reading from stdin 512B done
+#1 DONE 0.0s
+
+#2 [internal] load build definition from Dockerfile
+#2 transferring dockerfile: 1.97kB done
+#2 DONE 0.0s
+
+#3 resolve image config for docker-image://docker.io/docker/dockerfile:1
+#3 DONE 0.1s
+
+#4 docker-image://docker.io/docker/dockerfile:1@sha256:4edf897a3ffa55b89f906fc8cc78afdb3f1834cc9c7083565e611a8a7d5fe99e
+#4 CACHED
+
+#5 [internal] load metadata for docker.io/library/python:3.12-slim-bookworm@sha256:54c85f3c47607a77f32adec749d3c81d1348bf25833671f512b26a9b6d778cb3
+#5 DONE 0.0s
+
+#6 [internal] load .dockerignore
+#6 transferring context: 722B done
+#6 DONE 0.0s
+
+#7 [build 1/7] FROM docker.io/library/python:3.12-slim-bookworm@sha256:54c85f3c47607a77f32adec749d3c81d1348bf25833671f512b26a9b6d778cb3
+#7 DONE 0.0s
+
+#8 [internal] load build context
+#8 transferring context: 3.61kB done
+#8 DONE 0.0s
+
+#9 [build 4/7] RUN --mount=type=bind,source=pyproject.toml,target=/tmp/pyproject.toml     --mount=type=cache,target=/root/.cache/pip     python -c "import tomllib, pathlib, subprocess; deps=tomllib.loads(pathlib.Path('/tmp/pyproject.toml').read_text())['project']['dependencies']; subprocess.check_call(['pip','install','--upgrade','pip']); subprocess.check_call(['pip','install','--no-compile',*deps])"
+#9 CACHED
+
+#10 [runtime 2/4] WORKDIR /app
+#10 CACHED
+
+#11 [build 3/7] RUN python -m venv /opt/venv
+#11 CACHED
+
+#12 [runtime 3/4] RUN addgroup --system --gid 1001 appgroup &&     adduser --system --uid 1001 --ingroup appgroup appuser
+#12 CACHED
+
+#13 [build 7/7] RUN --mount=type=cache,target=/root/.cache/pip     pip install --no-deps --no-compile .
+#13 CACHED
+
+#14 [build 2/7] WORKDIR /src
+#14 CACHED
+
+#15 [build 5/7] COPY src ./src
+#15 CACHED
+
+#16 [build 6/7] COPY pyproject.toml README.md LICENSE ./
+#16 CACHED
+
+#17 [runtime 4/4] COPY --from=build --link --chown=1001:1001 /opt/venv /opt/venv
+#17 CACHED
+
+#18 exporting to image
+#18 exporting layers done
+#18 writing image sha256:b26a520d27d0978698c0d273f12c732ae51645a1b4e6622b1c55a30819f3e3d3 done
+#18 naming to docker.io/library/skillgate:local done
+#18 DONE 0.0s
+
+#19 resolving provenance for metadata file
+#19 DONE 0.0s
+No BYOLLM key in .env — using demo harness (same scorers). Set CURSOR_API_KEY, 
+CODEX_API_KEY, OPENAI_API_KEY, or ANTHROPIC_API_KEY for a live run. See 
+.env.example.
+
+Skill Gate  ·  pdf-sabotaged Dataset  ·  RED
+skill `pdf-sabotaged`  ·  1/8 tasks passed
+config  demo · 300s
+
+  FAIL  extract-hello — Skill didn’t trigger
+       why:  The agent only sees name + description before opening SKILL.md. 
+This request was: “Extract the text from hello.pdf and save it to 
+output/extracted.txt” — and `pdf-sabotaged`’s current description never matched 
+(it talks about something else).
+       fix:  Replace the `description:` in SKILL.md with the block below, then 
+run `skillgate check` on this same skill.
+  FAIL  merge-alpha-beta — Skill didn’t trigger
+       why:  The agent only sees name + description before opening SKILL.md. 
+This request was: “Extract the text from hello.pdf and save it to 
+output/extracted.txt” — and `pdf-sabotaged`’s current description never matched 
+(it talks about something else).
+       fix:  Replace the `description:` in SKILL.md with the block below, then 
+run `skillgate check` on this same skill.
+  FAIL  create-status — Skill didn’t trigger
+       why:  The agent only sees name + description before opening SKILL.md. 
+This request was: “Extract the text from hello.pdf and save it to 
+output/extracted.txt” — and `pdf-sabotaged`’s current description never matched 
+(it talks about something else).
+       fix:  Replace the `description:` in SKILL.md with the block below, then 
+run `skillgate check` on this same skill.
+  FAIL  trigger-notes-pdf — Skill didn’t trigger
+       why:  The agent only sees name + description before opening SKILL.md. 
+This request was: “Extract the text from hello.pdf and save it to 
+output/extracted.txt” — and `pdf-sabotaged`’s current description never matched 
+(it talks about something else).
+       fix:  Replace the `description:` in SKILL.md with the block below, then 
+run `skillgate check` on this same skill.
+  FAIL  trigger-combine-decks — Skill didn’t trigger
+       why:  The agent only sees name + description before opening SKILL.md. 
+This request was: “Extract the text from hello.pdf and save it to 
+output/extracted.txt” — and `pdf-sabotaged`’s current description never matched 
+(it talks about something else).
+       fix:  Replace the `description:` in SKILL.md with the block below, then 
+run `skillgate check` on this same skill.
+  PASS  no-trigger-unrelated
+  FAIL  extract-invoice — Skill didn’t trigger
+       why:  The agent only sees name + description before opening SKILL.md. 
+This request was: “Extract the text from hello.pdf and save it to 
+output/extracted.txt” — and `pdf-sabotaged`’s current description never matched 
+(it talks about something else).
+       fix:  Replace the `description:` in SKILL.md with the block below, then 
+run `skillgate check` on this same skill.
+  FAIL  rotate-hello — Skill didn’t trigger
+       why:  The agent only sees name + description before opening SKILL.md. 
+This request was: “Extract the text from hello.pdf and save it to 
+output/extracted.txt” — and `pdf-sabotaged`’s current description never matched 
+(it talks about something else).
+       fix:  Replace the `description:` in SKILL.md with the block below, then 
+run `skillgate check` on this same skill.
+
+Gate is red. Failed tasks: extract-hello, merge-alpha-beta, create-status, 
+trigger-notes-pdf, trigger-combine-decks, extract-invoice, rotate-hello
+Copy this into SKILL.md below, then run `skillgate check` on this same skill — 
+don’t switch to the good pdf twin.
+Corrected SKILL.md description (not the current one):
+---
+name: pdf-sabotaged
+description: Extract, merge, combine, create pdf, deck, decks, invoice. Use this
+skill whenever the user asks to extract the text from hello.pdf and save it to 
+output/extracted.txt, or merge alpha.pdf and beta.pdf into output/merged.pdf, or
+create a PDF at output/status.pdf titled Q3 Status that contains the sentence 
+"All.
+---
+
+EXIT:1

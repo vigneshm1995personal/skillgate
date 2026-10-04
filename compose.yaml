@@ -5,6 +5,7 @@ services:
       dockerfile: Dockerfile
       target: runtime
     image: skillgate:local
+    pull_policy: build
     user: "1001:1001"
     volumes:
       - ${PACK:-./skills/pdf}:/pack
@@ -16,6 +17,7 @@ services:
       dockerfile: Dockerfile
       target: dev
     image: skillgate:dev
+    pull_policy: build
     user: "1001:1001"
     volumes:
       - ./src:/src:ro

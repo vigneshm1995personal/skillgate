@@ -1,0 +1,21 @@
+===== START 05-check-pdf 2026-10-04T01:56:36Z =====
+CMD: skillgate check skills/pdf
+No BYOLLM key in .env — using demo harness (same scorers). Set CURSOR_API_KEY, 
+CODEX_API_KEY, OPENAI_API_KEY, or ANTHROPIC_API_KEY for a live run. See 
+.env.example.
+
+Skill Gate  ·  pdf Dataset  ·  GREEN
+skill `pdf`  ·  8/8 tasks passed
+config  demo · 300s
+
+  PASS  extract-hello
+  PASS  merge-alpha-beta
+  PASS  create-status
+  PASS  trigger-notes-pdf
+  PASS  trigger-combine-decks
+  PASS  no-trigger-unrelated
+  PASS  extract-invoice
+  PASS  rotate-hello
+
+Gate is green.
+EXIT:0
