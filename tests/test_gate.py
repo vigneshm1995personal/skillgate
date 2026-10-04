@@ -35,7 +35,10 @@ def test_gate_matches_cli_exits(project_root: Path) -> None:
     assert "No model key" in (live.error.get("message") or "")
 
 
-def test_auto_is_demo_even_when_keys_are_set(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_resolve_harness_auto_stays_demo_when_keys_are_set(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """resolve_harness('auto') is demo. Gate uses live_harness_or_error when a key is present."""
     monkeypatch.setenv("OPENAI_API_KEY", "sk-test-not-a-real-key")
     monkeypatch.setenv("AI_GATEWAY_API_KEY", "gw-test-not-a-real-key")
     monkeypatch.setenv("CODEX_API_KEY", "sk-codex-not-a-real-key")
@@ -97,6 +100,47 @@ def test_live_auto_uses_gateway_key(monkeypatch: pytest.MonkeyPatch) -> None:
     cfg = get_llm_config()
     harness = live_harness_or_error("auto", cfg)
     assert harness.name == "llm"
+
+
+def test_live_flag_does_not_fall_back_to_demo(
+    project_root: Path, tmp_path: Path
+) -> None:
+    dest = tmp_path / "pdf"
+    shutil.copytree(project_root / "skills" / "pdf", dest)
+    ensure_demo_pdfs(dest / "evals" / "fixtures")
+
+    result = run_check(dest, live=True, demo=True, source="test", root=project_root)
+    assert result.exit_code == 2
+    assert result.report is None
+    assert result.demo_notice is None
+    assert result.error is not None
+
+
+def test_live_flag_with_key_ignores_demo(
+    project_root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test-not-a-real-key")
+    dest = tmp_path / "pdf"
+    shutil.copytree(project_root / "skills" / "pdf", dest)
+    ensure_demo_pdfs(dest / "evals" / "fixtures")
+
+    class LiveStub:
+        name = "llm"
+
+        def run(self, *args, **kwargs):
+            from skillgate_ai.errors import HarnessError
+
+            raise HarnessError("live stub")
+
+    monkeypatch.setattr(
+        "skillgate_ai.gate.live_harness_or_error", lambda *a, **k: LiveStub()
+    )
+    result = run_check(dest, live=True, demo=True, source="test", root=project_root)
+    assert result.exit_code == 1
+    assert result.report is None
+    assert result.demo_notice is None
+    assert result.error is not None
+    assert "live stub" in (result.error.get("message") or "")
 
 
 def test_live_without_key_still_errors(

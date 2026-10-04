@@ -156,11 +156,11 @@ def run_check(
         )
         cfg = apply_eval_config(cfg, run_cfg)
         pref = (harness or "auto").strip().lower() or "auto"
-        if demo or pref in {"demo", "fixture", "offline"}:
+        if live:
+            resolved = live_harness_or_error(harness, cfg)
+        elif demo or pref in {"demo", "fixture", "offline"}:
             resolved = DemoHarness()
             demo_notice = DEMO_NOTICE
-        elif live:
-            resolved = live_harness_or_error(harness, cfg)
         elif pref == "auto" and cfg.has_any_key:
             resolved = live_harness_or_error("auto", cfg)
         elif pref == "auto":

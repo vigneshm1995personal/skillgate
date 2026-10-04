@@ -212,6 +212,28 @@ def test_ui_wizard_is_setup_only_then_skill_page(project_root: Path) -> None:
     assert 'wizard.step === "local" || wizard.step === "keys"' in paint
 
 
+def test_ui_only_start_check_posts_check(project_root: Path) -> None:
+    js = (project_root / "src/skillgate_ai/local_ui/static/app.js").read_text(encoding="utf-8")
+    assert js.count('api("POST", "/api/check"') == 1
+    start = js.split("async function startCheck")[1].split("async function pollRun")[0]
+    assert 'api("POST", "/api/check"' in start
+    assert "live: !!opts.live" in start
+    assert "startCheck(" not in start
+    keys = js.split('if (step === "keys")')[1].split('if (step === "firstSkill")')[0]
+    assert "/api/check" not in keys
+    assert 'id="skip"' in keys
+    first = js.split('if (step === "firstSkill")')[1].split('if (step === "name")')[0]
+    assert "/api/check" not in first
+    assert "location.hash = packHref(pdf)" in first
+    pack = js.split("async function renderPack")[1].split("async function startCheck")[0]
+    assert "/api/check" not in pack
+    assert "startCheck(path, { live: true })" in pack
+    paint = js.split("function paintResult")[1]
+    error_branch = paint.split("if (snap.error && !snap.report)")[1].split("const gate")[0]
+    assert "startCheck" not in error_branch
+    assert "demo: true" not in error_branch
+
+
 def test_ui_env_writes_only_supplied_keys(tmp_path: Path) -> None:
     server, base, _state = start_background(root=tmp_path, host="127.0.0.1", port=0)
     try:
@@ -396,6 +418,46 @@ def test_ui_live_without_key_is_409(project_root: Path) -> None:
         assert status == 409, payload
         blob = json.dumps(payload).lower()
         assert "api key" in blob
+        assert status != 202
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_ui_live_with_key_does_not_use_builtin(
+    project_root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test-not-a-real-key")
+    dest = tmp_path / "pdf"
+    shutil.copytree(project_root / "skills" / "pdf", dest)
+    ensure_demo_pdfs(dest / "evals" / "fixtures")
+
+    class LiveStub:
+        name = "llm"
+
+        def run(self, *args, **kwargs):
+            from skillgate_ai.errors import HarnessError
+
+            raise HarnessError("live stub")
+
+    monkeypatch.setattr(
+        "skillgate_ai.gate.live_harness_or_error", lambda *a, **k: LiveStub()
+    )
+    server, base, _state = start_background(root=project_root, host="127.0.0.1", port=0)
+    try:
+        status, started = _request(
+            "POST",
+            f"{base}/api/check",
+            {"path": str(dest), "live": True, "demo": True},
+        )
+        assert status == 202, started
+        done = _poll_run(base, started["run_id"])
+        assert done.get("report") is None
+        assert done.get("demo_notice") is None
+        assert done["exit_code"] == 1
+        err = json.dumps(done.get("error") or {}).lower()
+        assert "built-in" not in err
+        assert "demo" not in err
     finally:
         server.shutdown()
         server.server_close()

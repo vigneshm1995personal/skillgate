@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import shutil
 from pathlib import Path
 
+import pytest
 from typer.testing import CliRunner
 
 from skillgate_ai.cli import app
@@ -52,6 +54,47 @@ def test_check_live_without_key_errors(project_root: Path) -> None:
     )
     assert result.exit_code == 2
     assert "No model key" in result.stdout
+    assert "built-in checker" not in result.stdout.lower()
+
+
+def test_check_with_key_runs_live(
+    project_root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test-not-a-real-key")
+    dest = tmp_path / "pdf"
+    shutil.copytree(project_root / "skills" / "pdf", dest)
+    ensure_demo_pdfs(dest / "evals" / "fixtures")
+
+    class LiveStub:
+        name = "llm"
+
+        def run(self, *args, **kwargs):
+            from skillgate_ai.errors import HarnessError
+
+            raise HarnessError("live stub")
+
+    monkeypatch.setattr(
+        "skillgate_ai.gate.live_harness_or_error", lambda *a, **k: LiveStub()
+    )
+    result = runner.invoke(app, ["check", str(dest)])
+    assert result.exit_code == 1, result.stdout
+    assert "live stub" in result.stdout
+    assert "built-in checker" not in result.stdout.lower()
+    assert "GREEN" not in result.stdout
+
+
+def test_check_demo_flag_forces_builtin_when_keys_set(
+    project_root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test-not-a-real-key")
+    dest = tmp_path / "pdf"
+    shutil.copytree(project_root / "skills" / "pdf", dest)
+    ensure_demo_pdfs(dest / "evals" / "fixtures")
+    result = runner.invoke(app, ["check", str(dest), "--demo"])
+    assert result.exit_code == 0, result.stdout
+    assert "GREEN" in result.stdout
+    assert "built-in checker" in result.stdout.lower()
+    assert "not a live model" in result.stdout.lower()
 
 
 def test_no_serve_command() -> None:

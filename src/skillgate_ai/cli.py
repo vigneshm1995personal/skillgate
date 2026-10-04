@@ -125,8 +125,12 @@ def check_pack(
     pack: Path = typer.Argument(..., help="Skill pack directory (SKILL.md + evals/)"),
     harness: str = typer.Option("auto", "--harness", help=_HARNESS_HELP),
     sandbox: str = typer.Option("local", "--sandbox", help=_SANDBOX_HELP),
-    demo: bool = typer.Option(False, "--demo", help="Use the demo harness (no API key)"),
-    live: bool = typer.Option(False, "--live", help="Require a BYOLLM key; do not fall back"),
+    demo: bool = typer.Option(
+        False, "--demo", help="Force the built-in checker. This is not a live model."
+    ),
+    live: bool = typer.Option(
+        False, "--live", help="Require your API key; do not fall back to the built-in checker"
+    ),
     expect_fail: bool = typer.Option(
         False,
         "--expect-fail",
@@ -165,8 +169,12 @@ def run_suite(
     skill: Path | None = typer.Option(None, "--skill", help="Override the skill folder"),
     harness: str = typer.Option("auto", "--harness", help=_HARNESS_HELP),
     sandbox: str = typer.Option("local", "--sandbox", help=_SANDBOX_HELP),
-    demo: bool = typer.Option(False, "--demo", help="Use the demo harness (no API key)"),
-    live: bool = typer.Option(False, "--live", help="Require a BYOLLM key; do not fall back"),
+    demo: bool = typer.Option(
+        False, "--demo", help="Force the built-in checker. This is not a live model."
+    ),
+    live: bool = typer.Option(
+        False, "--live", help="Require your API key; do not fall back to the built-in checker"
+    ),
     expect_fail: bool = typer.Option(
         False,
         "--expect-fail",
