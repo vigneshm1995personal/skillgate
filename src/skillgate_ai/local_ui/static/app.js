@@ -243,6 +243,7 @@ async function renderSetup(params) {
     };
     card.querySelector("#next").onclick = go;
     nameInput.addEventListener("keydown", (e) => { if (e.key === "Enter") go(); });
+    nameInput.addEventListener("input", () => { err.innerHTML = ""; });
     app.appendChild(card);
     nameInput.focus();
     return;

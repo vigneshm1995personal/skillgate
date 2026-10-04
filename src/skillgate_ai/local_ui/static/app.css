@@ -12,7 +12,7 @@
 * { box-sizing: border-box; }
 html, body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.45 system-ui, sans-serif; }
 .top, .foot { padding: 0.75rem 1.25rem; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; gap: 1rem; align-items: center; }
-.foot { border-bottom: 0; border-top: 1px solid var(--line); color: var(--muted); font-size: 0.9rem; }
+.foot { border-bottom: 0; border-top: 1px solid var(--line); color: var(--muted); font-size: 0.9rem; display: block; }
 .muted { color: var(--muted); font-weight: 400; }
 .top .muted { margin-left: 0.5rem; }
 nav a { margin-left: 1rem; color: var(--ink); }
