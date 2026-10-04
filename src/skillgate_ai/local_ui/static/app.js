@@ -1,7 +1,26 @@
 const app = document.getElementById("app");
 const banner = document.getElementById("banner");
+const NAME_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 let meta = { account: false, demo_default: true, packs: [] };
-let wizard = { step: 1, path: "", name: "", parent: "", description: "", body: "", license: "", evalMode: "scaffold" };
+let wizard = blankWizard();
+let lastRoutePath = "";
+let lastRun = { path: "", snap: null };
+
+function blankWizard() {
+  return {
+    step: 1,
+    dir: 1,
+    path: "",
+    name: "",
+    description: "",
+    body: "",
+    license: "",
+    stubFrom: "",
+    existing: false,
+    progress: { completed: 0, total: 0 },
+    result: null,
+  };
+}
 
 function $(html) {
   const wrap = document.createElement("div");
@@ -45,6 +64,11 @@ function packHref(packOrPath) {
   return `#/pack?path=${encodeURIComponent(value)}`;
 }
 
+function defaultDescription(name) {
+  const n = name || "skill";
+  return `Produce ${n} notes, extracts, and local file outputs. Use when the user asks for ${n}, mentions invoices or documents, or wants the documented ${n} workflow.`;
+}
+
 function checkerLabel(report, snap) {
   const name = String((report && report.harness) || "").toLowerCase();
   if (name === "demo" || (snap && snap.demo_notice)) return "Built-in checker";
@@ -52,6 +76,14 @@ function checkerLabel(report, snap) {
   if (name === "codex") return "Codex (your API key)";
   if (name === "cursor-agent") return "Cursor (your API key)";
   if (snap && snap.error) return "Your API key";
+  return "";
+}
+
+function validateName(name) {
+  const value = (name || "").trim();
+  if (!value) return "Name your skill to continue.";
+  if (value.length > 64) return "Use 1–64 characters.";
+  if (!NAME_RE.test(value)) return "Use lowercase letters, numbers, and single hyphens.";
   return "";
 }
 
@@ -72,6 +104,12 @@ async function boot() {
 
 function render() {
   const { path, params } = route();
+  if (path !== "/setup") {
+    wizard = blankWizard();
+  } else if (lastRoutePath !== "/setup" && !params.get("path")) {
+    wizard = blankWizard();
+  }
+  lastRoutePath = path;
   if (path === "/setup") return renderSetup(params);
   if (path === "/pack") return renderPack(params);
   return renderPicker();
@@ -80,38 +118,52 @@ function render() {
 async function renderPicker() {
   const data = await api("GET", "/api/packs");
   const packs = data.packs || [];
+  const example = packs.find((p) => p.green_demo);
   const red = packs.find((p) => p.red_demo);
   app.innerHTML = "";
   app.appendChild($(`<section>
-    <h1>Pick or create a skill pack</h1>
+    <h1>Create a skill or open one you have</h1>
     <p class="muted">No Skill Gate account. Run check uses the built-in checker — no API key needed.</p>
   </section>`));
-  if (red) {
-    const card = $(`<div class="card">
-      <h2>See a red gate (no account)</h2>
-      <p>Open <code>pdf-sabotaged</code>, run check, then apply the corrected description on <strong>this same pack</strong>.</p>
-      <button type="button" id="red-path">Open sabotaged pack</button>
-    </div>`);
-    card.querySelector("#red-path").onclick = () => {
-      location.hash = `${packHref(red)}&run=1`;
-    };
-    app.appendChild(card);
+  const choices = $(`<div class="choices"></div>`);
+  const create = $(`<button type="button" class="choice" id="new-btn">
+    <strong>Create a skill</strong>
+    <span>Name it, describe it, and run a check. About two minutes. No API key.</span>
+  </button>`);
+  create.onclick = () => { wizard = blankWizard(); location.hash = "#/setup"; };
+  choices.appendChild(create);
+  if (example) {
+    const tryEx = $(`<button type="button" class="choice" id="example-btn">
+      <strong>Try an example</strong>
+      <span>Open the pdf skill and run check. You should see a pass.</span>
+    </button>`);
+    tryEx.onclick = () => { location.hash = `${packHref(example)}&run=1`; };
+    choices.appendChild(tryEx);
   }
-  const list = $(`<div class="card"><h2>Your packs</h2><div class="list"></div></div>`);
+  app.appendChild(choices);
+  if (red) {
+    const quiet = $(`<button type="button" class="choice quiet" id="red-path">
+      <strong>See a failing check</strong>
+      <span>Open a broken example, run check, then apply the suggested description on this same skill.</span>
+    </button>`);
+    quiet.onclick = () => { location.hash = `${packHref(red)}&run=1`; };
+    app.appendChild(quiet);
+  }
+  const list = $(`<div class="card"><h2>Your skills</h2><div class="list"></div></div>`);
   const box = list.querySelector(".list");
   packs.forEach((p) => {
-    const btn = $(`<button type="button" class="secondary">${esc(p.name)}${p.red_demo ? " · red demo" : ""}${p.green_demo ? " · green demo" : ""}</button>`);
+    const extra = p.red_demo ? " · example (fail)" : p.green_demo ? " · example (pass)" : "";
+    const btn = $(`<button type="button" class="secondary">${esc(p.name)}${extra}</button>`);
     btn.onclick = () => { location.hash = packHref(p); };
     box.appendChild(btn);
   });
-  if (!packs.length) box.innerHTML = "<p class='muted'>No SKILL.md folders yet.</p>";
+  if (!packs.length) box.innerHTML = "<p class='muted'>No skills yet.</p>";
   app.appendChild(list);
   const open = $(`<div class="card">
     <h2>Open a folder</h2>
     <label for="open-path">Path</label>
     <input id="open-path" placeholder="skills/pdf">
-    <p><button type="button" id="open-btn">Open</button>
-    <button type="button" class="secondary" id="new-btn">Create a new pack</button></p>
+    <p><button type="button" id="open-btn">Open</button></p>
     <div id="open-err"></div>
   </div>`);
   open.querySelector("#open-btn").onclick = () => {
@@ -119,167 +171,227 @@ async function renderPicker() {
     if (!value) return;
     location.hash = `#/pack?path=${encodeURIComponent(value)}`;
   };
-  open.querySelector("#new-btn").onclick = () => { location.hash = "#/setup"; };
   app.appendChild(open);
 }
 
+function stepperHtml(step) {
+  const oneDone = step !== 1;
+  const twoCurrent = step === 2;
+  const twoDone = step === "checking" || step === "success" || step === "fail";
+  const one = oneDone ? "done" : "current";
+  const two = twoDone ? "done" : twoCurrent ? "current" : "";
+  const mark1 = oneDone ? "✓" : "1";
+  const mark2 = twoDone ? "✓" : "2";
+  return `<div class="stepper" aria-label="Setup steps">
+    <span class="node ${one}">${mark1}</span>
+    <span class="label">Name</span>
+    <span class="rail ${oneDone ? "filled" : ""}"><i></i></span>
+    <span class="node ${two}">${mark2}</span>
+    <span class="label">Describe</span>
+  </div>`;
+}
+
 async function renderSetup(params) {
-  if (params.get("path")) wizard.path = params.get("path");
-  if (wizard.path && !wizard.name) {
-    try {
-      const pack = await api("GET", `/api/pack?path=${encodeURIComponent(wizard.path)}`);
-      wizard.name = pack.skill.name;
-      wizard.description = pack.skill.description;
-      wizard.body = pack.skill.body || "";
-      wizard.license = pack.skill.license || "";
-    } catch (e) { /* keep going; step 1 can still create */ }
+  const incoming = params.get("path");
+  if (incoming) {
+    wizard.existing = true;
+    if (incoming !== wizard.path || !wizard.name) {
+      wizard.path = incoming;
+      try {
+        const pack = await api("GET", `/api/pack?path=${encodeURIComponent(wizard.path)}`);
+        wizard.name = pack.skill.name;
+        wizard.description = pack.skill.description;
+        wizard.body = pack.skill.body || "";
+        wizard.license = pack.skill.license || "";
+      } catch (e) { /* keep going; step 1 can still create */ }
+    }
+    if (wizard.step === 1) wizard.step = 2;
   }
   const step = wizard.step;
+  const dirClass = wizard.dir < 0 ? "panel back" : "panel";
   app.innerHTML = "";
-  app.appendChild($(`<div class="steps">
-    <span class="${step === 1 ? "on" : ""}">1 Folder</span>
-    <span class="${step === 2 ? "on" : ""}">2 SKILL.md</span>
-    <span class="${step === 3 ? "on" : ""}">3 Evals</span>
-    <span class="${step === 4 ? "on" : ""}">4 Optional key</span>
-  </div>`));
+  if (step === 1 || step === 2) app.appendChild($(stepperHtml(step)));
   const err = $(`<div id="wiz-err"></div>`);
   app.appendChild(err);
+
   if (step === 1) {
-    const card = $(`<div class="card">
-      <h2>Folder name = skill name</h2>
-      <label>Parent directory</label>
-      <input id="parent" value="${esc(wizard.parent || "skills")}">
-      <label>Name (lowercase, hyphens)</label>
-      <input id="name" value="${esc(wizard.name)}">
-      <p class="muted">Rename the folder or the <code>name</code> field so they match.</p>
-      <button type="button" id="next">Create / continue</button>
+    const card = $(`<div class="card ${dirClass}">
+      <h2>Name your skill</h2>
+      <label for="name">Name</label>
+      <input id="name" value="${esc(wizard.name)}" autocomplete="off" autofocus>
+      <p class="muted">Lowercase letters, numbers, and hyphens.</p>
+      <p><button type="button" id="next">Continue</button></p>
     </div>`);
-    card.querySelector("#next").onclick = async () => {
-      wizard.parent = card.querySelector("#parent").value.trim();
-      wizard.name = card.querySelector("#name").value.trim();
-      try {
-        if (!wizard.path) {
-          const created = await api("POST", "/api/packs", {
-            parent: wizard.parent,
-            name: wizard.name,
-            scaffold: false,
-          });
-          wizard.path = created.display_path || created.path;
-          wizard.description = created.skill.description;
-          wizard.body = created.skill.body;
-        }
-        wizard.step = 2;
-        render();
-      } catch (e) { err.innerHTML = showError(e); }
+    const nameInput = card.querySelector("#name");
+    const go = () => {
+      const name = nameInput.value.trim();
+      const problem = validateName(name);
+      if (problem) {
+        err.innerHTML = `<p class="err">${esc(problem)}</p>`;
+        nameInput.focus();
+        return;
+      }
+      const prevStub = wizard.stubFrom ? defaultDescription(wizard.stubFrom) : "";
+      if (!wizard.existing && (!wizard.description || wizard.description === prevStub)) {
+        wizard.description = defaultDescription(name);
+        wizard.stubFrom = name;
+      }
+      wizard.name = name;
+      wizard.dir = 1;
+      wizard.step = 2;
+      render();
+    };
+    card.querySelector("#next").onclick = go;
+    nameInput.addEventListener("keydown", (e) => { if (e.key === "Enter") go(); });
+    app.appendChild(card);
+    nameInput.focus();
+    return;
+  }
+
+  if (step === 2) {
+    const primary = wizard.existing ? "Save and run check" : "Create and run check";
+    const card = $(`<div class="card ${dirClass}">
+      <h2>What should it do?</h2>
+      <p class="muted">${esc(wizard.name)}</p>
+      <label for="sk-desc">Description</label>
+      <textarea id="sk-desc">${esc(wizard.description || defaultDescription(wizard.name))}</textarea>
+      <p><button type="button" class="secondary" id="back">Back</button>
+      <button type="button" id="next">${primary}</button></p>
+    </div>`);
+    card.querySelector("#back").onclick = () => {
+      wizard.description = card.querySelector("#sk-desc").value;
+      if (wizard.existing && wizard.path) {
+        location.hash = packHref(wizard.path);
+        return;
+      }
+      wizard.dir = -1;
+      wizard.step = 1;
+      render();
+    };
+    card.querySelector("#next").onclick = () => {
+      wizard.description = card.querySelector("#sk-desc").value.trim();
+      if (!wizard.description) {
+        err.innerHTML = `<p class="err">Add a short description of what the skill does.</p>`;
+        return;
+      }
+      createAndRun(err, card.querySelector("#next"));
     };
     app.appendChild(card);
     return;
   }
-  if (step === 2) {
-    const card = $(`<div class="card">
-      <h2>SKILL.md frontmatter</h2>
-      <label>Name (locked to folder)</label>
-      <input id="sk-name" value="${esc(wizard.name)}" readonly>
-      <label>Description</label>
-      <textarea id="sk-desc">${esc(wizard.description)}</textarea>
-      <label>Body (markdown)</label>
-      <textarea id="sk-body">${esc(wizard.body)}</textarea>
-      <label>License (optional)</label>
-      <input id="sk-lic" value="${esc(wizard.license)}">
-      <p><button type="button" class="secondary" id="back">Back</button>
-      <button type="button" id="next">Save and next</button></p>
-    </div>`);
-    card.querySelector("#back").onclick = () => { wizard.step = 1; render(); };
-    card.querySelector("#next").onclick = async () => {
-      wizard.description = card.querySelector("#sk-desc").value;
-      wizard.body = card.querySelector("#sk-body").value;
-      wizard.license = card.querySelector("#sk-lic").value;
-      try {
-        const saved = await api("PUT", "/api/pack/skill-md", {
+
+  if (step === "checking") {
+    const total = wizard.progress.total || 0;
+    const done = wizard.progress.completed || 0;
+    const pct = total ? Math.round((done / total) * 100) : 8;
+    app.appendChild($(stepperHtml(step)));
+    app.appendChild($(`<div class="card ${dirClass}">
+      <h2>Checking…</h2>
+      <div class="progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}"><i style="width:${pct}%"></i></div>
+      <p class="muted" id="wiz-prog-label">${esc(done)}/${esc(total || "…")} checks</p>
+    </div>`));
+    return;
+  }
+
+  const snap = wizard.result || {};
+  const report = snap.report || {};
+  const passed = report.passed_count ?? 0;
+  const total = report.task_count ?? (report.tasks || []).length;
+  const ok = step === "success" || (snap.exit_code === 0);
+  if (ok) {
+    app.appendChild($(`<div class="card success ${dirClass}">
+      <div class="check-pop" aria-hidden="true">
+        <svg viewBox="0 0 72 72" role="img" aria-label="Passed">
+          <circle cx="36" cy="36" r="32" fill="none" stroke="currentColor" stroke-width="3"></circle>
+          <path d="M22 37 l10 10 18-22" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"></path>
+        </svg>
+      </div>
+      <h1 class="gate green">Passed</h1>
+      <p>${esc(passed)}/${esc(total)} checks</p>
+      <p class="muted">Built-in checker. No API key needed.</p>
+      <p><button type="button" class="secondary" id="see">See the checks</button></p>
+    </div>`));
+  } else {
+    app.appendChild($(`<div class="card ${dirClass}">
+      <h1 class="gate red">Failed</h1>
+      <p>${esc(passed)}/${esc(total)} checks</p>
+      <p class="muted">Built-in checker. No API key needed.</p>
+      <p><button type="button" id="see">See the checks</button></p>
+    </div>`));
+  }
+  const see = document.getElementById("see");
+  if (see) see.onclick = () => { location.hash = packHref(wizard.path); };
+}
+
+async function createAndRun(err, button) {
+  button.disabled = true;
+  try {
+    if (!wizard.path) {
+      const created = await api("POST", "/api/packs", {
+        parent: "skills",
+        name: wizard.name,
+        description: wizard.description,
+      });
+      wizard.path = created.display_path || created.path;
+      wizard.body = created.skill.body || "";
+      if (wizard.description !== (created.skill.description || "")) {
+        await api("PUT", "/api/pack/skill-md", {
           path: wizard.path,
           name: wizard.name,
           description: wizard.description,
           body: wizard.body,
-          license: wizard.license,
         });
-        if (!saved.description_usable && saved.description_hint) {
-          err.innerHTML = `<p class="muted">${esc(saved.description_hint)}</p>`;
-        }
-        wizard.step = 3;
-        render();
-      } catch (e) { err.innerHTML = showError(e); }
-    };
-    app.appendChild(card);
+      }
+    } else {
+      await api("PUT", "/api/pack/skill-md", {
+        path: wizard.path,
+        name: wizard.name,
+        description: wizard.description,
+        body: wizard.body,
+        license: wizard.license,
+      });
+    }
+    wizard.dir = 1;
+    wizard.step = "checking";
+    wizard.progress = { completed: 0, total: 0 };
+    render();
+    const started = await api("POST", "/api/check", { path: wizard.path, live: false });
+    await pollWizard(started.run_id);
+  } catch (e) {
+    button.disabled = false;
+    wizard.step = 2;
+    render();
+    const box = document.getElementById("wiz-err");
+    if (box) box.innerHTML = showError(e);
+    else err.innerHTML = showError(e);
+  }
+}
+
+async function pollWizard(runId) {
+  for (;;) {
+    const snap = await api("GET", `/api/runs/${runId}`);
+    if (snap.exit_code === null || snap.exit_code === undefined) {
+      const prog = snap.progress || {};
+      wizard.progress = {
+        completed: prog.completed_count || 0,
+        total: prog.task_count || 0,
+      };
+      const bar = document.querySelector(".progress > i");
+      const label = document.getElementById("wiz-prog-label");
+      const total = wizard.progress.total || 0;
+      const done = wizard.progress.completed || 0;
+      const pct = total ? Math.round((done / total) * 100) : 8;
+      if (bar) bar.style.width = `${pct}%`;
+      if (label) label.textContent = `${done}/${total || "…"} checks`;
+      await new Promise((r) => setTimeout(r, 400));
+      continue;
+    }
+    wizard.result = snap;
+    wizard.step = snap.exit_code === 0 ? "success" : "fail";
+    lastRun = { path: wizard.path, snap };
+    render();
     return;
   }
-  if (step === 3) {
-    const clone = meta.pdf_path
-      ? `<label><input type="radio" name="eval" value="clone"> Clone pdf demo layout (needs scripts for completion checks)</label>`
-      : "";
-    const card = $(`<div class="card">
-      <h2>Evals</h2>
-      <label><input type="radio" name="eval" value="existing"> Use existing evals/cases.yaml</label>
-      <label><input type="radio" name="eval" value="scaffold" checked> Scaffold trigger-only checks (no API key, no scripts required)</label>
-      ${clone}
-      <p><button type="button" class="secondary" id="pdfs">Ensure demo PDFs</button></p>
-      <p><button type="button" class="secondary" id="back">Back</button>
-      <button type="button" id="next">Save evals</button></p>
-    </div>`);
-    card.querySelector("#back").onclick = () => { wizard.step = 2; render(); };
-    card.querySelector("#pdfs").onclick = async () => {
-      try {
-        await api("POST", "/api/pack/fixtures", { path: wizard.path, ensure_demo_pdfs: true });
-        err.innerHTML = "<p class='muted'>Wrote demo PDFs under evals/fixtures/ if missing.</p>";
-      } catch (e) { err.innerHTML = showError(e); }
-    };
-    card.querySelector("#next").onclick = async () => {
-      const mode = card.querySelector("input[name=eval]:checked").value;
-      try {
-        if (mode === "scaffold") {
-          await api("POST", "/api/pack/scaffold", { path: wizard.path });
-        } else if (mode === "clone") {
-          const name = wizard.name || wizard.path.split("/").pop();
-          const created = await api("POST", "/api/packs", {
-            parent: wizard.parent || "skills",
-            name,
-            clone_pdf: true,
-          });
-          wizard.path = created.display_path || created.path;
-        }
-        wizard.step = 4;
-        render();
-      } catch (e) { err.innerHTML = showError(e); }
-    };
-    app.appendChild(card);
-    return;
-  }
-  const card = $(`<div class="card">
-    <h2>Optional API key</h2>
-    <p class="muted">Leave blank. Run check uses the built-in checker and does not need a key. Run live uses a key if you add one.</p>
-    <label>OPENAI_API_KEY</label><input id="k-openai" type="password" autocomplete="off">
-    <label>CURSOR_API_KEY</label><input id="k-cursor" type="password" autocomplete="off">
-    <label>CODEX_API_KEY</label><input id="k-codex" type="password" autocomplete="off">
-    <label>ANTHROPIC_API_KEY</label><input id="k-ant" type="password" autocomplete="off">
-    <label>AI_GATEWAY_API_KEY</label><input id="k-gw" type="password" autocomplete="off">
-    <p><button type="button" class="secondary" id="back">Back</button>
-    <button type="button" id="skip">Skip — continue without a key</button>
-    <button type="button" id="save">Save key and open pack</button></p>
-  </div>`);
-  card.querySelector("#back").onclick = () => { wizard.step = 3; render(); };
-  const go = () => { location.hash = packHref(wizard.path); };
-  card.querySelector("#skip").onclick = go;
-  card.querySelector("#save").onclick = async () => {
-    const body = {
-      OPENAI_API_KEY: card.querySelector("#k-openai").value,
-      CURSOR_API_KEY: card.querySelector("#k-cursor").value,
-      CODEX_API_KEY: card.querySelector("#k-codex").value,
-      ANTHROPIC_API_KEY: card.querySelector("#k-ant").value,
-      AI_GATEWAY_API_KEY: card.querySelector("#k-gw").value,
-    };
-    try { await api("PUT", "/api/env", body); go(); }
-    catch (e) { err.innerHTML = showError(e); }
-  };
-  app.appendChild(card);
 }
 
 async function renderPack(params) {
@@ -303,20 +415,48 @@ async function renderPack(params) {
       <button type="button" class="secondary" id="live">Run live</button>
       <a class="btn secondary" href="#/setup?path=${encodeURIComponent(path)}">Edit in wizard</a>
     </p>
+    <details class="keys">
+      <summary>Use your own API key (optional)</summary>
+      <div class="stack">
+        <p class="muted">Leave this closed. Run check does not need a key. A key is only for Run live.</p>
+        <label>OpenAI</label><input id="k-openai" type="password" autocomplete="off">
+        <label>Cursor</label><input id="k-cursor" type="password" autocomplete="off">
+        <label>Codex</label><input id="k-codex" type="password" autocomplete="off">
+        <label>Anthropic</label><input id="k-ant" type="password" autocomplete="off">
+        <label>AI Gateway</label><input id="k-gw" type="password" autocomplete="off">
+        <p><button type="button" class="secondary" id="save-key">Save key</button></p>
+        <div id="key-err"></div>
+      </div>
+    </details>
     <div id="run-err"></div>
     <div id="results"></div>
   </section>`);
   head.querySelector("#run").onclick = () => startCheck(path, false);
   head.querySelector("#live").onclick = () => startCheck(path, true);
+  head.querySelector("#save-key").onclick = async () => {
+    const keyErr = head.querySelector("#key-err");
+    const body = {
+      OPENAI_API_KEY: head.querySelector("#k-openai").value,
+      CURSOR_API_KEY: head.querySelector("#k-cursor").value,
+      CODEX_API_KEY: head.querySelector("#k-codex").value,
+      ANTHROPIC_API_KEY: head.querySelector("#k-ant").value,
+      AI_GATEWAY_API_KEY: head.querySelector("#k-gw").value,
+    };
+    try {
+      await api("PUT", "/api/env", body);
+      keyErr.innerHTML = "<p class='muted'>Saved for Run live. Run check still uses the built-in checker.</p>";
+    } catch (e) { keyErr.innerHTML = showError(e); }
+  };
   app.appendChild(head);
   if (params.get("run") === "1") startCheck(path, false);
+  else if (lastRun.path === path && lastRun.snap) paintResult(lastRun.snap, path);
 }
 
 async function startCheck(path, live) {
   const box = document.getElementById("results");
   const err = document.getElementById("run-err");
   err.innerHTML = "";
-  box.innerHTML = "<p class='muted'>Running check…</p>";
+  box.innerHTML = `<div class="progress"><i style="width:8%"></i></div><p class="muted">Running check…</p>`;
   banner.classList.add("hidden");
   try {
     const started = await api("POST", "/api/check", { path, live });
@@ -333,11 +473,16 @@ async function pollRun(runId, path) {
     const snap = await api("GET", `/api/runs/${runId}`);
     if (snap.exit_code === null || snap.exit_code === undefined) {
       const prog = snap.progress || {};
-      box.innerHTML = `<p class="muted">Running ${esc(prog.current_task_id || "…")} (${prog.completed_count || 0}/${prog.task_count || "?"})</p>`;
+      const total = prog.task_count || 0;
+      const done = prog.completed_count || 0;
+      const pct = total ? Math.round((done / total) * 100) : 8;
+      box.innerHTML = `<div class="progress"><i style="width:${pct}%"></i></div>
+        <p class="muted">Running ${esc(prog.current_task_id || "…")} (${esc(done)}/${esc(total || "?")})</p>`;
       await new Promise((r) => setTimeout(r, 400));
       continue;
     }
     paintResult(snap, path);
+    lastRun = { path, snap };
     return;
   }
 }
@@ -378,12 +523,16 @@ function paintResult(snap, path) {
       <p class="muted">CI still uses <code>skillgate check</code>.</p>
     </div>`;
   }
+  const headline = gate === "green" ? "Passed" : "Failed";
+  const checker = checkerLabel(report, snap);
+  const checkerLine = checker === "Built-in checker"
+    ? "Built-in checker. No API key needed."
+    : checker;
   box.innerHTML = `
-    <p><span class="gate ${esc(gate)}">${esc(gate.toUpperCase())}</span>
-      · ${esc(report.passed_count ?? 0)}/${esc(report.task_count ?? tasks.length)} tasks
-      · exit ${esc(snap.exit_code)}</p>
-    <p class="muted">${esc(checkerLabel(report, snap))}</p>
-    <table><thead><tr><th>Result</th><th>Task</th><th>What happened</th></tr></thead><tbody>${rows}</tbody></table>
+    <p><span class="gate ${esc(gate)}">${headline}</span>
+      · ${esc(report.passed_count ?? 0)}/${esc(report.task_count ?? tasks.length)} checks</p>
+    <p class="muted">${esc(checkerLine)}</p>
+    <table><thead><tr><th>Result</th><th>Check</th><th>What happened</th></tr></thead><tbody>${rows}</tbody></table>
     ${adviceHtml}
   `;
   const apply = document.getElementById("apply");
@@ -403,5 +552,5 @@ function paintResult(snap, path) {
   }
 }
 
-window.addEventListener("hashchange", () => { wizard.step = 1; render(); });
+window.addEventListener("hashchange", () => { render(); });
 boot().catch((e) => { app.innerHTML = showError(e); });

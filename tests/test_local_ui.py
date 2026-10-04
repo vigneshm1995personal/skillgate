@@ -99,14 +99,43 @@ def test_ui_pack_display_path_is_relative(project_root: Path) -> None:
 def test_ui_copy_has_no_internal_jargon(project_root: Path) -> None:
     server, base, _state = start_background(root=project_root, host="127.0.0.1", port=0)
     try:
-        for name in ("/", "/static/app.js", "/static/index.html"):
+        bodies: dict[str, str] = {}
+        for name in ("/", "/static/app.js", "/static/index.html", "/static/app.css"):
             req = urllib.request.Request(base + name)
             with urllib.request.urlopen(req, timeout=10) as resp:
                 text = resp.read().decode("utf-8")
+            bodies[name] = text
             lower = text.lower()
             assert "byollm" not in lower, name
             assert "oss-qa" not in lower, name
             assert "demo harness" not in lower, name
+            assert "frontmatter" not in lower, name
+            assert "evals/cases.yaml" not in lower, name
+            assert "trigger-only" not in lower, name
+            assert "/workspace" not in lower, name
+            assert "pack schema" not in lower, name
+            assert "jev" not in lower.split(), name
+            assert "scaffold: false" not in lower, name
+        js = bodies["/static/app.js"]
+        html = bodies["/static/index.html"]
+        css = bodies["/static/app.css"]
+        assert "Name your skill" in js
+        assert "What should it do?" in js
+        assert "Create and run check" in js
+        assert "See the checks" in js
+        assert "Built-in checker. No API key needed." in js
+        assert "Create a skill" in js
+        assert "Try an example" in js
+        assert "See a failing check" in js
+        assert "Use your own API key (optional)" in js
+        assert "live: false" in js
+        assert "New skill" in html
+        assert "Setup wizard" not in html
+        assert "SKILL.md frontmatter" not in js
+        assert "Optional API key" not in js
+        assert "prefers-reduced-motion" in css
+        assert "panel-in" in css
+        assert "check-pop" in css
     finally:
         server.shutdown()
         server.server_close()
