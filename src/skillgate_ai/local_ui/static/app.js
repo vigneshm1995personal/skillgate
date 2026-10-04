@@ -2,15 +2,15 @@ const app = document.getElementById("app");
 const banner = document.getElementById("banner");
 const NAME_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const MOTION_MS = 350;
-const CHECKING_MIN_MS = 700;
-let meta = { account: false, demo_default: true, packs: [] };
+const SETUP_DONE_KEY = "skillgate-setup-done";
+let meta = { account: false, demo_default: true, packs: [], has_any_key: false, pdf_path: null };
 let wizard = blankWizard();
 let lastRoutePath = "";
 let lastRun = { path: "", snap: null };
 
 function blankWizard() {
   return {
-    step: 1,
+    step: "local",
     dir: 1,
     path: "",
     name: "",
@@ -18,9 +18,6 @@ function blankWizard() {
     body: "",
     license: "",
     stubFrom: "",
-    existing: false,
-    progress: { completed: 0, total: 0 },
-    result: null,
   };
 }
 
@@ -36,6 +33,14 @@ function sleep(ms) {
 
 function prefersReducedMotion() {
   return !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+}
+
+function setupDone() {
+  try { return localStorage.getItem(SETUP_DONE_KEY) === "1"; } catch { return false; }
+}
+
+function markSetupDone() {
+  try { localStorage.setItem(SETUP_DONE_KEY, "1"); } catch { /* ignore */ }
 }
 
 async function api(method, url, body) {
@@ -99,18 +104,6 @@ function keyPayloadFrom(root) {
   return body;
 }
 
-function goToPack(live) {
-  const href = packHref(wizard.path);
-  location.hash = live ? `${href}&live=1` : href;
-}
-
-async function openKeyPanel() {
-  try { meta = await api("GET", "/api/meta"); } catch (e) { /* keep cached meta */ }
-  wizard.dir = 1;
-  wizard.step = "keys";
-  await paintWizard();
-}
-
 function defaultDescription(name) {
   const n = name || "skill";
   return `Produce ${n} notes, extracts, and local file outputs. Use when the user asks for ${n}, mentions invoices or documents, or wants the documented ${n} workflow.`;
@@ -160,23 +153,33 @@ function route() {
   return { path: path || "/", params };
 }
 
+function onSetupFlow() {
+  return ["local", "keys", "firstSkill", "name", "describe"].includes(wizard.step);
+}
+
 async function boot() {
   meta = await api("GET", "/api/meta");
-  if (meta.pack && !location.hash) {
-    location.hash = `#/pack?path=${encodeURIComponent(meta.pack)}`;
+  if (!location.hash) {
+    if (meta.pack) {
+      location.hash = `#/pack?path=${encodeURIComponent(meta.pack)}`;
+    } else if (!setupDone()) {
+      location.hash = "#/setup";
+    }
   }
   render();
 }
 
 function render() {
   const { path, params } = route();
-  if (path !== "/setup") {
+  if (path !== "/setup" && path !== "/new") {
     wizard = blankWizard();
-  } else if (lastRoutePath !== "/setup" && !params.get("path")) {
+  } else if (lastRoutePath !== path && lastRoutePath !== "/setup" && lastRoutePath !== "/new") {
     wizard = blankWizard();
+    if (path === "/new") wizard.step = "name";
   }
   lastRoutePath = path;
   if (path === "/setup") return renderSetup(params);
+  if (path === "/new") return renderNew();
   if (path === "/pack") return renderPack(params);
   return renderPicker();
 }
@@ -189,30 +192,30 @@ async function renderPicker() {
   app.innerHTML = "";
   app.appendChild($(`<section>
     <h1>Create a skill or open one you have</h1>
-    <p class="muted">No Skill Gate account. Run check uses the built-in checker — no API key needed.</p>
+    <p class="muted">No Skill Gate account. Run live uses your API key.</p>
   </section>`));
   const choices = $(`<div class="choices"></div>`);
   const create = $(`<button type="button" class="choice" id="new-btn">
     <strong>Create a skill</strong>
-    <span>Name it, describe it, and run a check. About two minutes. No API key.</span>
+    <span>Name it, describe it, then run live on the skill page.</span>
   </button>`);
-  create.onclick = () => { wizard = blankWizard(); location.hash = "#/setup"; };
+  create.onclick = () => { wizard = blankWizard(); wizard.step = "name"; location.hash = "#/new"; };
   choices.appendChild(create);
   if (example) {
     const tryEx = $(`<button type="button" class="choice" id="example-btn">
       <strong>Try an example</strong>
-      <span>Open the pdf skill and run check. You should see a pass.</span>
+      <span>Open the pdf skill. Run live from the skill page.</span>
     </button>`);
-    tryEx.onclick = () => { location.hash = `${packHref(example)}&run=1`; };
+    tryEx.onclick = () => { location.hash = packHref(example); };
     choices.appendChild(tryEx);
   }
   app.appendChild(choices);
   if (red) {
     const quiet = $(`<button type="button" class="choice quiet" id="red-path">
       <strong>See a failing check</strong>
-      <span>Open a broken example, run check, then apply the suggested description on this same skill.</span>
+      <span>Open a broken example, then run live on that skill page.</span>
     </button>`);
-    quiet.onclick = () => { location.hash = `${packHref(red)}&run=1`; };
+    quiet.onclick = () => { location.hash = packHref(red); };
     app.appendChild(quiet);
   }
   const list = $(`<div class="card"><h2>Your skills</h2><div class="list"></div></div>`);
@@ -278,20 +281,19 @@ function updateStepper(step) {
   if (!wrap.querySelector(".stepper")) {
     wrap.innerHTML = `<div class="stepper" aria-label="Setup steps">
       <span class="node current" data-node="1">1</span>
-      <span class="label">Name</span>
+      <span class="label">Local</span>
       <span class="rail"><i></i></span>
       <span class="node" data-node="2">2</span>
-      <span class="label">Describe</span>
+      <span class="label">Key</span>
     </div>`;
   }
-  const show = step === 1 || step === 2 || step === "checking";
+  const show = step === "local" || step === "keys";
   const one = wrap.querySelector("[data-node='1']");
   const two = wrap.querySelector("[data-node='2']");
   const rail = wrap.querySelector(".rail");
-  const oneDone = step !== 1;
-  const twoCurrent = step === 2;
-  const twoDone = step === "checking" || step === "success" || step === "fail"
-    || step === "keys" || step === "keySaved";
+  const oneDone = step !== "local";
+  const twoCurrent = step === "keys";
+  const twoDone = step === "firstSkill" || step === "name" || step === "describe";
   one.className = "node " + (oneDone ? "done" : "current");
   one.textContent = oneDone ? "✓" : "1";
   two.className = "node " + (twoDone ? "done" : twoCurrent ? "current" : "");
@@ -303,7 +305,7 @@ function updateStepper(step) {
   } else {
     rail.classList.remove("filled");
   }
-  if (show) wrap.hidden = false;
+  wrap.hidden = !show;
 }
 
 async function paintWizard() {
@@ -311,39 +313,116 @@ async function paintWizard() {
   updateStepper(wizard.step);
   await swapPanel(buildWizardPanel());
   const wrap = document.getElementById("wiz-stepper");
-  const show = wizard.step === 1 || wizard.step === 2 || wizard.step === "checking";
+  const show = wizard.step === "local" || wizard.step === "keys";
   if (wrap) wrap.hidden = !show;
-  const pop = document.querySelector("#wiz-stage .check-pop");
-  if (!pop) return;
-  if (prefersReducedMotion()) {
-    pop.classList.add("play");
-    return;
-  }
-  pop.classList.remove("play");
-  void pop.offsetWidth;
-  await new Promise((resolve) => {
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        pop.classList.add("play");
-        resolve();
-      });
-    });
-  });
+}
+
+function goFirstSkill() {
+  markSetupDone();
+  wizard.dir = 1;
+  wizard.step = "firstSkill";
+  paintWizard();
 }
 
 function buildWizardPanel() {
   const step = wizard.step;
-  if (step === 1) {
+  if (step === "local") {
+    const card = $(`<div class="card">
+      <h2>This is local</h2>
+      <p>Skill Gate runs on this computer. No Skill Gate account.</p>
+      <p class="muted">Your API key is the model that runs live checks. Skip only if you want the built-in checker.</p>
+      <p><button type="button" id="next">Continue</button></p>
+    </div>`);
+    card.querySelector("#next").onclick = () => {
+      wizard.dir = 1;
+      wizard.step = "keys";
+      paintWizard();
+    };
+    return card;
+  }
+
+  if (step === "keys") {
+    if (meta.has_any_key) {
+      const have = $(`<div class="card">
+        <h2>Your API key</h2>
+        <p class="muted">You already have an API key. Live checks will use it.</p>
+        <p><button type="button" id="next">Continue</button></p>
+      </div>`);
+      have.querySelector("#next").onclick = () => goFirstSkill();
+      return have;
+    }
+    const form = $(`<div class="card">
+      <h2>Your API key</h2>
+      <p class="muted">Cursor, Codex, Claude, OpenAI, or AI Gateway. This is the model that runs live checks. No Skill Gate account.</p>
+      ${keyFieldsHtml()}
+      <p class="field-msg" id="step-msg" aria-live="polite"></p>
+      <p><button type="button" id="save-key">Save key</button>
+      <button type="button" class="secondary" id="skip">Skip — use the built-in checker</button></p>
+      <p class="muted">Skip is the only way onto the built-in checker. That is not a live model.</p>
+      <div id="key-err"></div>
+    </div>`);
+    form.querySelector("#skip").onclick = () => goFirstSkill();
+    form.querySelector("#save-key").onclick = async () => {
+      const msg = form.querySelector("#step-msg");
+      const keyErr = form.querySelector("#key-err");
+      const body = keyPayloadFrom(form);
+      if (!Object.keys(body).length) {
+        msg.textContent = "Add a key to save, or skip to use the built-in checker.";
+        return;
+      }
+      try {
+        const saved = await api("PUT", "/api/env", body);
+        meta.has_any_key = !!(saved && saved.has_any_key);
+        goFirstSkill();
+      } catch (e) { keyErr.innerHTML = showError(e); }
+    };
+    return form;
+  }
+
+  if (step === "firstSkill") {
+    const pdf = meta.pdf_path;
+    const card = $(`<div class="card">
+      <h2>Want to add your first skill?</h2>
+      <p class="muted">You run checks on the skill page, not here.</p>
+      <p><button type="button" id="yes">Yes</button>
+      ${pdf ? `<button type="button" class="secondary" id="pdf">Try the pdf example</button>` : ""}
+      <button type="button" class="secondary" id="later">Not now</button></p>
+    </div>`);
+    card.querySelector("#yes").onclick = () => {
+      wizard.dir = 1;
+      wizard.step = "name";
+      paintWizard();
+    };
+    const pdfBtn = card.querySelector("#pdf");
+    if (pdfBtn) {
+      pdfBtn.onclick = () => { location.hash = packHref(pdf); };
+    }
+    card.querySelector("#later").onclick = () => { location.hash = "#/"; };
+    return card;
+  }
+
+  if (step === "name") {
     const card = $(`<div class="card">
       <h2>Name your skill</h2>
       <label for="name">Name</label>
       <input id="name" value="${esc(wizard.name)}" autocomplete="off">
       <p class="field-msg" id="step-msg" aria-live="polite"></p>
       <p class="muted">Lowercase letters, numbers, and hyphens.</p>
-      <p><button type="button" id="next">Continue</button></p>
+      <p><button type="button" class="secondary" id="back">Back</button>
+      <button type="button" id="next">Continue</button></p>
     </div>`);
     const nameInput = card.querySelector("#name");
     const msg = card.querySelector("#step-msg");
+    card.querySelector("#back").onclick = () => {
+      wizard.name = nameInput.value.trim();
+      wizard.dir = -1;
+      if (lastRoutePath === "/new") {
+        location.hash = "#/";
+        return;
+      }
+      wizard.step = "firstSkill";
+      paintWizard();
+    };
     const go = () => {
       const name = nameInput.value.trim();
       const problem = validateName(name);
@@ -353,13 +432,13 @@ function buildWizardPanel() {
         return;
       }
       const prevStub = wizard.stubFrom ? defaultDescription(wizard.stubFrom) : "";
-      if (!wizard.existing && (!wizard.description || wizard.description === prevStub)) {
+      if (!wizard.description || wizard.description === prevStub) {
         wizard.description = defaultDescription(name);
         wizard.stubFrom = name;
       }
       wizard.name = name;
       wizard.dir = 1;
-      wizard.step = 2;
+      wizard.step = "describe";
       paintWizard();
     };
     card.querySelector("#next").onclick = go;
@@ -369,242 +448,104 @@ function buildWizardPanel() {
     return card;
   }
 
-  if (step === 2) {
-    const primary = wizard.existing ? "Save and run check" : "Create and run check";
-    const card = $(`<div class="card">
-      <h2>What should it do?</h2>
-      <p class="muted">${esc(wizard.name)}</p>
-      <label for="sk-desc">Description</label>
-      <textarea id="sk-desc">${esc(wizard.description || defaultDescription(wizard.name))}</textarea>
-      <p class="field-msg" id="step-msg" aria-live="polite"></p>
-      <p><button type="button" class="secondary" id="back">Back</button>
-      <button type="button" id="next">${primary}</button></p>
-    </div>`);
-    const msg = card.querySelector("#step-msg");
-    card.querySelector("#back").onclick = () => {
-      wizard.description = card.querySelector("#sk-desc").value;
-      if (wizard.existing && wizard.path) {
-        location.hash = packHref(wizard.path);
-        return;
-      }
-      wizard.dir = -1;
-      wizard.step = 1;
-      paintWizard();
-    };
-    card.querySelector("#next").onclick = () => {
-      wizard.description = card.querySelector("#sk-desc").value.trim();
-      if (!wizard.description) {
-        msg.textContent = "Add a short description of what the skill does.";
-        return;
-      }
-      createAndRun(card.querySelector("#next"));
-    };
-    return card;
-  }
-
-  if (step === "checking") {
-    return $(`<div class="card">
-      <h2>Checking…</h2>
-      <div class="progress busy" id="wiz-progress"><i></i></div>
-      <p class="muted" id="wiz-prog-label">Running your checks</p>
-    </div>`);
-  }
-
-  if (step === "keys") {
-    if (meta.has_any_key) {
-      const have = $(`<div class="card">
-        <h2>Your API key (optional)</h2>
-        <p class="muted">You already have a key. Run live uses it.</p>
-        <p><button type="button" id="see">See the checks</button>
-        <button type="button" class="secondary" id="live">Run live</button></p>
-      </div>`);
-      have.querySelector("#see").onclick = () => goToPack(false);
-      have.querySelector("#live").onclick = () => goToPack(true);
-      return have;
+  const card = $(`<div class="card">
+    <h2>What should it do?</h2>
+    <p class="muted">${esc(wizard.name)}</p>
+    <label for="sk-desc">Description</label>
+    <textarea id="sk-desc">${esc(wizard.description || defaultDescription(wizard.name))}</textarea>
+    <p class="field-msg" id="step-msg" aria-live="polite"></p>
+    <p><button type="button" class="secondary" id="back">Back</button>
+    <button type="button" id="next">Create skill</button></p>
+  </div>`);
+  const msg = card.querySelector("#step-msg");
+  card.querySelector("#back").onclick = () => {
+    wizard.description = card.querySelector("#sk-desc").value;
+    wizard.dir = -1;
+    wizard.step = "name";
+    paintWizard();
+  };
+  card.querySelector("#next").onclick = () => {
+    wizard.description = card.querySelector("#sk-desc").value.trim();
+    if (!wizard.description) {
+      msg.textContent = "Add a short description of what the skill does.";
+      return;
     }
-    const form = $(`<div class="card">
-      <h2>Your API key (optional)</h2>
-      <p class="muted">Skip this. The check you just ran used the built-in checker. A key is only for Run live.</p>
-      ${keyFieldsHtml()}
-      <p class="field-msg" id="step-msg" aria-live="polite"></p>
-      <p><button type="button" id="save-key">Save key</button>
-      <button type="button" class="secondary" id="skip">Skip</button></p>
-      <div id="key-err"></div>
-    </div>`);
-    form.querySelector("#skip").onclick = () => goToPack(false);
-    form.querySelector("#save-key").onclick = async () => {
-      const msg = form.querySelector("#step-msg");
-      const keyErr = form.querySelector("#key-err");
-      const body = keyPayloadFrom(form);
-      if (!Object.keys(body).length) {
-        msg.textContent = "Add a key to save, or skip.";
-        return;
-      }
-      try {
-        const saved = await api("PUT", "/api/env", body);
-        meta.has_any_key = !!(saved && saved.has_any_key);
-        wizard.dir = 1;
-        wizard.step = "keySaved";
-        await paintWizard();
-      } catch (e) { keyErr.innerHTML = showError(e); }
-    };
-    return form;
-  }
-
-  if (step === "keySaved") {
-    const saved = $(`<div class="card">
-      <h2>Your API key (optional)</h2>
-      <p class="muted">Saved for Run live. Run check still uses the built-in checker.</p>
-      <p><button type="button" id="see">See the checks</button>
-      <button type="button" class="secondary" id="live">Run live</button></p>
-    </div>`);
-    saved.querySelector("#see").onclick = () => goToPack(false);
-    saved.querySelector("#live").onclick = () => goToPack(true);
-    return saved;
-  }
-
-  const snap = wizard.result || {};
-  const report = snap.report || {};
-  const passed = report.passed_count ?? 0;
-  const total = report.task_count ?? (report.tasks || []).length;
-  const ok = step === "success" || snap.exit_code === 0;
-  const card = ok
-    ? $(`<div class="card success">
-      <div class="check-pop" aria-hidden="true">
-        <svg viewBox="0 0 72 72" role="img" aria-label="Passed">
-          <circle cx="36" cy="36" r="32" fill="none" stroke="currentColor" stroke-width="3"></circle>
-          <path d="M22 37 l10 10 18-22" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"></path>
-        </svg>
-      </div>
-      <h1 class="gate green">Passed</h1>
-      <p>${esc(passed)}/${esc(total)} checks</p>
-      <p class="muted">Built-in checker. No API key needed.</p>
-      <p><button type="button" class="secondary" id="see">See the checks</button>
-      <button type="button" class="secondary" id="add-key">Add a key for live checks</button></p>
-    </div>`)
-    : $(`<div class="card">
-      <h1 class="gate red">Failed</h1>
-      <p>${esc(passed)}/${esc(total)} checks</p>
-      <p class="muted">Built-in checker. No API key needed.</p>
-      <p><button type="button" id="see">See the checks</button>
-      <button type="button" class="secondary" id="add-key">Add a key for live checks</button></p>
-    </div>`);
-  const see = card.querySelector("#see");
-  if (see) see.onclick = () => goToPack(false);
-  const addKey = card.querySelector("#add-key");
-  if (addKey) addKey.onclick = () => openKeyPanel();
+    createSkill(card.querySelector("#next"));
+  };
   return card;
 }
 
 async function renderSetup(params) {
   const incoming = params.get("path");
   if (incoming) {
-    wizard.existing = true;
-    if (incoming !== wizard.path || !wizard.name) {
-      wizard.path = incoming;
-      try {
-        const pack = await api("GET", `/api/pack?path=${encodeURIComponent(wizard.path)}`);
-        wizard.name = pack.skill.name;
-        wizard.description = pack.skill.description;
-        wizard.body = pack.skill.body || "";
-        wizard.license = pack.skill.license || "";
-      } catch (e) { /* keep going; step 1 can still create */ }
-    }
-    if (wizard.step === 1) wizard.step = 2;
+    location.hash = packHref(incoming);
+    return;
+  }
+  if (setupDone() && !onSetupFlow()) {
+    location.hash = "#/";
+    return;
+  }
+  if (setupDone() && wizard.step === "local") {
+    location.hash = "#/";
+    return;
   }
   const root = document.getElementById("wiz-root");
   if (root) root.remove();
   await paintWizard();
 }
 
-async function createAndRun(button) {
-  button.disabled = true;
-  wizard.dir = 1;
-  wizard.step = "checking";
-  wizard.progress = { completed: 0, total: 0 };
+async function renderNew() {
+  if (wizard.step !== "name" && wizard.step !== "describe") {
+    wizard = blankWizard();
+    wizard.step = "name";
+  }
+  const root = document.getElementById("wiz-root");
+  if (root) root.remove();
   await paintWizard();
-  const checkingShownAt = Date.now();
+}
+
+async function createSkill(button) {
+  button.disabled = true;
   try {
-    if (!wizard.path) {
-      const created = await api("POST", "/api/packs", {
-        parent: "skills",
-        name: wizard.name,
-        description: wizard.description,
-      });
-      wizard.path = created.display_path || created.path;
-      wizard.body = created.skill.body || "";
-      if (wizard.description !== (created.skill.description || "")) {
-        await api("PUT", "/api/pack/skill-md", {
-          path: wizard.path,
-          name: wizard.name,
-          description: wizard.description,
-          body: wizard.body,
-        });
-      }
-    } else {
+    const created = await api("POST", "/api/packs", {
+      parent: "skills",
+      name: wizard.name,
+      description: wizard.description,
+    });
+    wizard.path = created.display_path || created.path;
+    wizard.body = created.skill.body || "";
+    if (wizard.description !== (created.skill.description || "")) {
       await api("PUT", "/api/pack/skill-md", {
         path: wizard.path,
         name: wizard.name,
         description: wizard.description,
         body: wizard.body,
-        license: wizard.license,
       });
     }
-    const started = await api("POST", "/api/check", { path: wizard.path, live: false });
-    await pollWizard(started.run_id);
-    const wait = CHECKING_MIN_MS - (Date.now() - checkingShownAt);
-    if (wait > 0) await sleep(wait);
-    if (!prefersReducedMotion()) {
-      const bar = document.querySelector("#wiz-progress > i");
-      const wrap = document.getElementById("wiz-progress");
-      if (wrap) wrap.classList.remove("busy");
-      if (bar) bar.style.width = "100%";
-      await sleep(220);
-    }
-    wizard.step = (wizard.result && wizard.result.exit_code === 0) ? "success" : "fail";
-    await paintWizard();
+    location.hash = packHref(wizard.path);
   } catch (e) {
-    wizard.dir = -1;
-    wizard.step = 2;
-    await paintWizard();
+    button.disabled = false;
     const msg = document.getElementById("step-msg");
     if (msg) msg.innerHTML = showError(e);
   }
 }
 
-async function pollWizard(runId) {
-  for (;;) {
-    const snap = await api("GET", `/api/runs/${runId}`);
-    if (snap.exit_code === null || snap.exit_code === undefined) {
-      const prog = snap.progress || {};
-      wizard.progress = {
-        completed: prog.completed_count || 0,
-        total: prog.task_count || 0,
-      };
-      const wrap = document.getElementById("wiz-progress");
-      const bar = wrap && wrap.querySelector("i");
-      const label = document.getElementById("wiz-prog-label");
-      const total = wizard.progress.total || 0;
-      const done = wizard.progress.completed || 0;
-      if (total && wrap) {
-        wrap.classList.remove("busy");
-        const pct = Math.max(12, Math.round((done / total) * 100));
-        if (bar) bar.style.width = `${pct}%`;
-        if (label) label.textContent = `${done}/${total} checks`;
-      }
-      await sleep(400);
-      continue;
-    }
-    wizard.result = snap;
-    lastRun = { path: wizard.path, snap };
-    return;
-  }
+function checksFromPack(pack) {
+  const cases = (pack.dataset && pack.dataset.cases) || [];
+  return cases.map((item) => ({ id: item.id, prompt: item.prompt }));
+}
+
+function checksTable(tasks) {
+  const rows = tasks.map((t) => `<tr><td>${esc(checkHeadline(t))}</td></tr>`).join("");
+  if (!rows) return `<p class="muted">No checks yet.</p>`;
+  return `<table><thead><tr><th>Check</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
 
 async function renderPack(params) {
   const path = params.get("path");
   if (!path) { location.hash = "#/"; return; }
   wizard.path = path;
+  try { meta = await api("GET", "/api/meta"); } catch (e) { /* keep cached meta */ }
   let pack;
   try { pack = await api("GET", `/api/pack?path=${encodeURIComponent(path)}`); }
   catch (e) { app.innerHTML = showError(e); return; }
@@ -612,30 +553,34 @@ async function renderPack(params) {
   wizard.description = pack.skill.description;
   wizard.body = pack.skill.body || "";
   app.innerHTML = "";
+  const hasKey = !!meta.has_any_key;
+  const keyLine = hasKey
+    ? "Run live uses your API key."
+    : "Built-in checker. This is not a live model.";
   const head = $(`<section>
     <h1>${esc(pack.skill.name)}</h1>
     <p class="muted">${esc(pack.display_path || pack.skill.name)}</p>
     <p>${esc(pack.skill.description)}</p>
-    <p class="muted">Run check uses the built-in checker. Run live uses your API key.</p>
+    <p class="muted">${esc(keyLine)}</p>
     <p class="row">
-      <button type="button" id="run">Run check</button>
-      <button type="button" class="secondary" id="live">Run live</button>
-      <a class="btn secondary" href="#/setup?path=${encodeURIComponent(path)}">Edit in wizard</a>
+      <button type="button" id="live">Run live</button>
+      ${hasKey ? "" : `<button type="button" class="secondary" id="builtin">Run with built-in checker</button>`}
     </p>
     <details class="keys">
-      <summary>Use your own API key (optional)</summary>
+      <summary>${hasKey ? "Replace your API key" : "Add your API key"}</summary>
       <div class="stack">
-        <p class="muted">Leave this closed. Run check does not need a key. A key is only for Run live.</p>
         ${keyFieldsHtml()}
         <p><button type="button" class="secondary" id="save-key">Save key</button></p>
         <div id="key-err"></div>
       </div>
     </details>
+    <h2>Checks</h2>
     <div id="run-err"></div>
-    <div id="results"></div>
+    <div id="results">${checksTable(checksFromPack(pack))}</div>
   </section>`);
-  head.querySelector("#run").onclick = () => startCheck(path, false);
-  head.querySelector("#live").onclick = () => startCheck(path, true);
+  head.querySelector("#live").onclick = () => startCheck(path, { live: true });
+  const builtin = head.querySelector("#builtin");
+  if (builtin) builtin.onclick = () => startCheck(path, { live: false, demo: true });
   head.querySelector("#save-key").onclick = async () => {
     const keyErr = head.querySelector("#key-err");
     const body = keyPayloadFrom(head);
@@ -644,24 +589,26 @@ async function renderPack(params) {
       return;
     }
     try {
-      await api("PUT", "/api/env", body);
-      keyErr.innerHTML = "<p class='muted'>Saved for Run live. Run check still uses the built-in checker.</p>";
+      const saved = await api("PUT", "/api/env", body);
+      meta.has_any_key = !!(saved && saved.has_any_key);
+      keyErr.innerHTML = "<p class='muted'>Saved. Run live uses your API key.</p>";
+      renderPack(params);
     } catch (e) { keyErr.innerHTML = showError(e); }
   };
   app.appendChild(head);
-  if (params.get("run") === "1") startCheck(path, false);
-  else if (params.get("live") === "1") startCheck(path, true);
-  else if (lastRun.path === path && lastRun.snap) paintResult(lastRun.snap, path);
+  if (lastRun.path === path && lastRun.snap) paintResult(lastRun.snap, path);
 }
 
-async function startCheck(path, live) {
+async function startCheck(path, opts) {
   const box = document.getElementById("results");
   const err = document.getElementById("run-err");
   err.innerHTML = "";
-  box.innerHTML = `<div class="progress busy" id="run-progress"><i></i></div><p class="muted" id="run-prog-label">Running check…</p>`;
+  box.innerHTML = `<div class="progress busy" id="run-progress"><i></i></div><p class="muted" id="run-prog-label">Evaluating…</p>`;
   banner.classList.add("hidden");
+  const body = { path, live: !!opts.live };
+  if (opts.demo) body.demo = true;
   try {
-    const started = await api("POST", "/api/check", { path, live });
+    const started = await api("POST", "/api/check", body);
     await pollRun(started.run_id, path);
   } catch (e) {
     box.innerHTML = "";
@@ -683,7 +630,7 @@ async function pollRun(runId, path) {
       if (total && wrap) {
         wrap.classList.remove("busy");
         if (bar) bar.style.width = `${Math.max(12, Math.round((done / total) * 100))}%`;
-        if (label) label.textContent = `${done}/${total} checks`;
+        if (label) label.textContent = `Evaluating ${done}/${total}`;
       }
       await sleep(400);
       continue;
@@ -707,6 +654,8 @@ function paintResult(snap, path) {
   if (snap.demo_notice) {
     banner.textContent = snap.demo_notice;
     banner.classList.remove("hidden");
+  } else {
+    banner.classList.add("hidden");
   }
   const tasks = report.tasks || [];
   const rows = tasks.map((t) => {
@@ -732,7 +681,7 @@ function paintResult(snap, path) {
   const headline = gate === "green" ? "Passed" : "Failed";
   const checker = checkerLabel(report, snap);
   const checkerLine = checker === "Built-in checker"
-    ? "Built-in checker. No API key needed."
+    ? "Built-in checker. This is not a live model."
     : checker;
   box.innerHTML = `
     <p><span class="gate ${esc(gate)}">${headline}</span>
@@ -750,7 +699,8 @@ function paintResult(snap, path) {
           path,
           description: advice.description || advice.paste,
         });
-        startCheck(path, false);
+        if (meta.has_any_key) startCheck(path, { live: true });
+        else startCheck(path, { live: false, demo: true });
       } catch (e) {
         box.insertAdjacentHTML("afterbegin", showError(e));
       }

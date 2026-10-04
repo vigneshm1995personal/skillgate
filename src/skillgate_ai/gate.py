@@ -36,7 +36,7 @@ from skillgate_ai.observability import (
 from skillgate_ai.paths import is_skill_pack, project_root
 from skillgate_ai.report import report_to_dict
 
-DEMO_NOTICE = "Using the built-in checker. No API key needed."
+DEMO_NOTICE = "Using the built-in checker. This is not a live model."
 
 
 @dataclass
@@ -156,10 +156,14 @@ def run_check(
         )
         cfg = apply_eval_config(cfg, run_cfg)
         pref = (harness or "auto").strip().lower() or "auto"
-        if live:
+        if demo or pref in {"demo", "fixture", "offline"}:
+            resolved = DemoHarness()
+            demo_notice = DEMO_NOTICE
+        elif live:
             resolved = live_harness_or_error(harness, cfg)
-        elif demo or pref in {"auto", "demo", "fixture", "offline"}:
-            # Default check is always the built-in checker. Keys are --live only.
+        elif pref == "auto" and cfg.has_any_key:
+            resolved = live_harness_or_error("auto", cfg)
+        elif pref == "auto":
             resolved = DemoHarness()
             demo_notice = DEMO_NOTICE
         else:

@@ -371,7 +371,7 @@ def _put_env(state: UiState, payload: dict[str, Any]) -> tuple[int, dict[str, An
     return 200, {"ok": True, "has_any_key": get_llm_config().has_any_key}, "application/json"
 
 
-LIVE_NO_KEY = "No API key found. Run check uses the built-in checker and does not need a key."
+LIVE_NO_KEY = "No API key found. Run live needs your API key."
 LIVE_FAIL = "Your API key could not run this check."
 
 
@@ -389,7 +389,7 @@ def _start_check(state: UiState, payload: dict[str, Any]) -> tuple[int, dict[str
     if live and not get_llm_config().has_any_key:
         raise MissingLLMKeyError(
             LIVE_NO_KEY,
-            hint="Add a key in .env, then click Run live. Or use Run check — no key needed.",
+            hint="Add a key, then click Run live. Or run with the built-in checker — that is not a live model.",
         )
     with state.lock:
         if (

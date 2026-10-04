@@ -21,6 +21,8 @@ def test_check_pdf_green(project_root: Path) -> None:
     result = runner.invoke(app, ["check", str(project_root / "skills" / "pdf")])
     assert result.exit_code == 0, result.stdout
     assert "GREEN" in result.stdout
+    assert "built-in checker" in result.stdout.lower()
+    assert "not a live model" in result.stdout.lower()
 
 
 def test_check_sabotaged_red(project_root: Path) -> None:

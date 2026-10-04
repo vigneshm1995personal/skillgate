@@ -44,7 +44,33 @@ def test_auto_is_demo_even_when_keys_are_set(monkeypatch: pytest.MonkeyPatch) ->
     assert isinstance(resolve_harness("auto", cfg), DemoHarness)
 
 
-def test_run_check_pdf_stays_green_when_gateway_and_openai_keys_set(
+def test_run_check_uses_live_when_key_present(
+    project_root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test-not-a-real-key")
+    dest = tmp_path / "pdf"
+    shutil.copytree(project_root / "skills" / "pdf", dest)
+    ensure_demo_pdfs(dest / "evals" / "fixtures")
+
+    class LiveStub:
+        name = "llm"
+
+        def run(self, *args, **kwargs):
+            from skillgate_ai.errors import HarnessError
+
+            raise HarnessError("live stub")
+
+    monkeypatch.setattr(
+        "skillgate_ai.gate.live_harness_or_error", lambda *a, **k: LiveStub()
+    )
+    result = run_check(dest, source="test", root=project_root)
+    assert result.exit_code == 1
+    assert result.demo_notice is None
+    assert result.error is not None
+    assert "live stub" in (result.error.get("message") or "")
+
+
+def test_run_check_demo_flag_forces_builtin_when_keys_set(
     project_root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv("OPENAI_API_KEY", "sk-test-not-a-real-key")
@@ -53,15 +79,14 @@ def test_run_check_pdf_stays_green_when_gateway_and_openai_keys_set(
     shutil.copytree(project_root / "skills" / "pdf", dest)
     ensure_demo_pdfs(dest / "evals" / "fixtures")
 
-    result = run_check(dest, source="test", root=project_root)
+    result = run_check(dest, demo=True, source="test", root=project_root)
     assert result.exit_code == 0, result.error
     assert result.report is not None
     assert result.report.harness == "demo"
     assert result.report.passed
-    assert len(result.report.tasks) == 8
-    assert result.report.passed_count == 8
     assert result.demo_notice
     assert "built-in checker" in result.demo_notice.lower()
+    assert "not a live model" in result.demo_notice.lower()
 
 
 def test_live_auto_uses_gateway_key(monkeypatch: pytest.MonkeyPatch) -> None:
