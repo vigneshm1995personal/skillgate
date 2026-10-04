@@ -131,11 +131,72 @@ def test_ui_copy_has_no_internal_jargon(project_root: Path) -> None:
         assert "live: false" in js
         assert "New skill" in html
         assert "Setup wizard" not in html
+        assert "skillgate check" not in html.lower()
+        assert "docker" not in html.lower()
         assert "SKILL.md frontmatter" not in js
         assert "Optional API key" not in js
-        assert "prefers-reduced-motion" in css
-        assert "panel-in" in css
-        assert "check-pop" in css
+        assert "<code>${esc(t.id)}</code>" not in js
+        assert "function checkHeadline" in js
+        assert "The skill should run for a matching request." in js
+        assert "The skill should stay off for an unrelated request." in js
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_ui_wizard_motion_is_wired_not_just_class_names(project_root: Path) -> None:
+    js = (project_root / "src/skillgate_ai/local_ui/static/app.js").read_text(encoding="utf-8")
+    css = (project_root / "src/skillgate_ai/local_ui/static/app.css").read_text(encoding="utf-8")
+    assert "function swapPanel" in js
+    assert "panel-leave" in js
+    assert "panel-enter" in js
+    assert "requestAnimationFrame" in js
+    assert 'wizard.step = "checking"' in js
+    create = js.split("async function createAndRun")[1].split("async function pollWizard")[0]
+    assert create.index('wizard.step = "checking"') < create.index('"/api/packs"')
+    assert create.index("await paintWizard()") < create.index('"/api/packs"')
+    packs = __import__("re").search(r'api\("POST", "/api/packs", \{([^}]+)\}', js)
+    assert packs, "wizard must POST /api/packs"
+    assert "scaffold" not in packs.group(1)
+    assert 'api("POST", "/api/check", { path: wizard.path, live: false })' in js
+    assert "--motion: 300ms" in css
+    assert "@keyframes panel-out" in css
+    assert "@keyframes check-stroke" in css
+    assert "@keyframes bar-slide" in css
+    assert "prefers-reduced-motion" in css
+    assert "min-height: 1.4em" in css
+
+
+def test_ui_wizard_first_run_sequence_is_green(project_root: Path, tmp_path: Path) -> None:
+    server, base, _state = start_background(root=project_root, host="127.0.0.1", port=0)
+    try:
+        status, created = _request(
+            "POST",
+            f"{base}/api/packs",
+            {
+                "parent": str(tmp_path),
+                "name": "invoice-notes",
+                "description": (
+                    "Produce invoice-notes notes, extracts, and local file outputs. "
+                    "Use when the user asks for invoice-notes, mentions invoices or documents, "
+                    "or wants the documented invoice-notes workflow."
+                ),
+            },
+        )
+        assert status == 201, created
+        assert "scaffold" not in created.get("skill", {})
+        pack_path = Path(created["path"])
+        assert (pack_path / "evals" / "cases.yaml").is_file()
+        status, started = _request(
+            "POST", f"{base}/api/check", {"path": created["path"], "live": False}
+        )
+        assert status == 202, started
+        done = _poll_run(base, started["run_id"])
+        assert done["exit_code"] == 0, done
+        assert done["report"]["gate"] == "green"
+        assert done["report"]["harness"] == "demo"
+        notice = (done.get("demo_notice") or "").lower()
+        assert "built-in checker" in notice
     finally:
         server.shutdown()
         server.server_close()

@@ -1,6 +1,8 @@
 const app = document.getElementById("app");
 const banner = document.getElementById("banner");
 const NAME_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+const MOTION_MS = 300;
+const CHECKING_MIN_MS = 900;
 let meta = { account: false, demo_default: true, packs: [] };
 let wizard = blankWizard();
 let lastRoutePath = "";
@@ -26,6 +28,14 @@ function $(html) {
   const wrap = document.createElement("div");
   wrap.innerHTML = html.trim();
   return wrap.firstElementChild;
+}
+
+function sleep(ms) {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+function prefersReducedMotion() {
+  return !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
 }
 
 async function api(method, url, body) {
@@ -77,6 +87,25 @@ function checkerLabel(report, snap) {
   if (name === "cursor-agent") return "Cursor (your API key)";
   if (snap && snap.error) return "Your API key";
   return "";
+}
+
+function checkHeadline(task) {
+  const id = String((task && task.id) || "");
+  if (id.includes("no-trigger")) return "The skill should stay off for an unrelated request.";
+  if (id.includes("should-trigger") || id.startsWith("trigger-")) {
+    return "The skill should run for a matching request.";
+  }
+  const prompt = String((task && task.prompt) || "").replace(/\s+/g, " ").trim();
+  if (prompt) {
+    const cut = prompt.match(/^.+?[.?!](?=\s|$)/);
+    let one = (cut && cut[0]) || prompt;
+    if (one.length > 96) one = `${one.slice(0, 93).replace(/\s+\S*$/, "")}…`;
+    if (!/[.?!]$/.test(one)) one += ".";
+    return one;
+  }
+  const words = id.replace(/[-_]+/g, " ").trim();
+  if (!words) return "This check should pass.";
+  return `${words.charAt(0).toUpperCase()}${words.slice(1)}.`;
 }
 
 function validateName(name) {
@@ -152,8 +181,8 @@ async function renderPicker() {
   const list = $(`<div class="card"><h2>Your skills</h2><div class="list"></div></div>`);
   const box = list.querySelector(".list");
   packs.forEach((p) => {
-    const extra = p.red_demo ? " · example (fail)" : p.green_demo ? " · example (pass)" : "";
-    const btn = $(`<button type="button" class="secondary">${esc(p.name)}${extra}</button>`);
+    const label = p.red_demo ? "Failing example" : p.green_demo ? `${p.name} · example` : p.name;
+    const btn = $(`<button type="button" class="secondary">${esc(label)}</button>`);
     btn.onclick = () => { location.hash = packHref(p); };
     box.appendChild(btn);
   });
@@ -174,21 +203,196 @@ async function renderPicker() {
   app.appendChild(open);
 }
 
-function stepperHtml(step) {
+function ensureWizardShell() {
+  let root = document.getElementById("wiz-root");
+  if (root) return root;
+  app.innerHTML = "";
+  root = $(`<div id="wiz-root">
+    <div id="wiz-stepper"></div>
+    <div id="wiz-stage"></div>
+  </div>`);
+  app.appendChild(root);
+  return root;
+}
+
+function updateStepper(step) {
+  const wrap = document.getElementById("wiz-stepper");
+  if (!wrap) return;
+  if (!wrap.querySelector(".stepper")) {
+    wrap.innerHTML = `<div class="stepper" aria-label="Setup steps">
+      <span class="node current" data-node="1">1</span>
+      <span class="label">Name</span>
+      <span class="rail"><i></i></span>
+      <span class="node" data-node="2">2</span>
+      <span class="label">Describe</span>
+    </div>`;
+  }
+  const show = step === 1 || step === 2 || step === "checking";
+  wrap.hidden = !show;
+  if (!show) return;
+  const one = wrap.querySelector("[data-node='1']");
+  const two = wrap.querySelector("[data-node='2']");
+  const rail = wrap.querySelector(".rail");
   const oneDone = step !== 1;
   const twoCurrent = step === 2;
   const twoDone = step === "checking" || step === "success" || step === "fail";
-  const one = oneDone ? "done" : "current";
-  const two = twoDone ? "done" : twoCurrent ? "current" : "";
-  const mark1 = oneDone ? "✓" : "1";
-  const mark2 = twoDone ? "✓" : "2";
-  return `<div class="stepper" aria-label="Setup steps">
-    <span class="node ${one}">${mark1}</span>
-    <span class="label">Name</span>
-    <span class="rail ${oneDone ? "filled" : ""}"><i></i></span>
-    <span class="node ${two}">${mark2}</span>
-    <span class="label">Describe</span>
-  </div>`;
+  one.className = "node " + (oneDone ? "done" : "current");
+  one.textContent = oneDone ? "✓" : "1";
+  two.className = "node " + (twoDone ? "done" : twoCurrent ? "current" : "");
+  two.textContent = twoDone ? "✓" : "2";
+  if (oneDone) {
+    const fill = () => rail.classList.add("filled");
+    if (prefersReducedMotion() || rail.classList.contains("filled")) fill();
+    else requestAnimationFrame(() => requestAnimationFrame(fill));
+  } else {
+    rail.classList.remove("filled");
+  }
+}
+
+function swapPanel(nextEl) {
+  const stage = document.getElementById("wiz-stage");
+  nextEl.classList.add("wiz-panel");
+  const current = stage.querySelector(".wiz-panel:not(.panel-leave):not(.panel-leave-back)");
+  const dirBack = wizard.dir < 0;
+  if (!current || prefersReducedMotion()) {
+    stage.innerHTML = "";
+    if (current && prefersReducedMotion()) {
+      stage.appendChild(nextEl);
+      return Promise.resolve();
+    }
+    if (!prefersReducedMotion()) nextEl.classList.add(dirBack ? "panel-enter-back" : "panel-enter");
+    stage.appendChild(nextEl);
+    return Promise.resolve();
+  }
+  current.classList.remove("panel-enter", "panel-enter-back");
+  current.classList.add(dirBack ? "panel-leave-back" : "panel-leave");
+  nextEl.classList.add(dirBack ? "panel-enter-back" : "panel-enter");
+  stage.appendChild(nextEl);
+  return new Promise((resolve) => {
+    let settled = false;
+    const done = () => {
+      if (settled) return;
+      settled = true;
+      if (current.parentNode) current.remove();
+      resolve();
+    };
+    current.addEventListener("animationend", done, { once: true });
+    setTimeout(done, MOTION_MS + 40);
+  });
+}
+
+function buildWizardPanel() {
+  const step = wizard.step;
+  if (step === 1) {
+    const card = $(`<div class="card">
+      <h2>Name your skill</h2>
+      <label for="name">Name</label>
+      <input id="name" value="${esc(wizard.name)}" autocomplete="off">
+      <p class="field-msg" id="step-msg" aria-live="polite"></p>
+      <p class="muted">Lowercase letters, numbers, and hyphens.</p>
+      <p><button type="button" id="next">Continue</button></p>
+    </div>`);
+    const nameInput = card.querySelector("#name");
+    const msg = card.querySelector("#step-msg");
+    const go = () => {
+      const name = nameInput.value.trim();
+      const problem = validateName(name);
+      if (problem) {
+        msg.textContent = problem;
+        nameInput.focus();
+        return;
+      }
+      const prevStub = wizard.stubFrom ? defaultDescription(wizard.stubFrom) : "";
+      if (!wizard.existing && (!wizard.description || wizard.description === prevStub)) {
+        wizard.description = defaultDescription(name);
+        wizard.stubFrom = name;
+      }
+      wizard.name = name;
+      wizard.dir = 1;
+      wizard.step = 2;
+      paintWizard();
+    };
+    card.querySelector("#next").onclick = go;
+    nameInput.addEventListener("keydown", (e) => { if (e.key === "Enter") go(); });
+    nameInput.addEventListener("input", () => { msg.textContent = ""; });
+    queueMicrotask(() => nameInput.focus());
+    return card;
+  }
+
+  if (step === 2) {
+    const primary = wizard.existing ? "Save and run check" : "Create and run check";
+    const card = $(`<div class="card">
+      <h2>What should it do?</h2>
+      <p class="muted">${esc(wizard.name)}</p>
+      <label for="sk-desc">Description</label>
+      <textarea id="sk-desc">${esc(wizard.description || defaultDescription(wizard.name))}</textarea>
+      <p class="field-msg" id="step-msg" aria-live="polite"></p>
+      <p><button type="button" class="secondary" id="back">Back</button>
+      <button type="button" id="next">${primary}</button></p>
+    </div>`);
+    const msg = card.querySelector("#step-msg");
+    card.querySelector("#back").onclick = () => {
+      wizard.description = card.querySelector("#sk-desc").value;
+      if (wizard.existing && wizard.path) {
+        location.hash = packHref(wizard.path);
+        return;
+      }
+      wizard.dir = -1;
+      wizard.step = 1;
+      paintWizard();
+    };
+    card.querySelector("#next").onclick = () => {
+      wizard.description = card.querySelector("#sk-desc").value.trim();
+      if (!wizard.description) {
+        msg.textContent = "Add a short description of what the skill does.";
+        return;
+      }
+      createAndRun(card.querySelector("#next"));
+    };
+    return card;
+  }
+
+  if (step === "checking") {
+    return $(`<div class="card">
+      <h2>Checking…</h2>
+      <div class="progress busy" id="wiz-progress"><i></i></div>
+      <p class="muted" id="wiz-prog-label">Running your checks</p>
+    </div>`);
+  }
+
+  const snap = wizard.result || {};
+  const report = snap.report || {};
+  const passed = report.passed_count ?? 0;
+  const total = report.task_count ?? (report.tasks || []).length;
+  const ok = step === "success" || snap.exit_code === 0;
+  const card = ok
+    ? $(`<div class="card success">
+      <div class="check-pop" aria-hidden="true">
+        <svg viewBox="0 0 72 72" role="img" aria-label="Passed">
+          <circle cx="36" cy="36" r="32" fill="none" stroke="currentColor" stroke-width="3"></circle>
+          <path d="M22 37 l10 10 18-22" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"></path>
+        </svg>
+      </div>
+      <h1 class="gate green">Passed</h1>
+      <p>${esc(passed)}/${esc(total)} checks</p>
+      <p class="muted">Built-in checker. No API key needed.</p>
+      <p><button type="button" class="secondary" id="see">See the checks</button></p>
+    </div>`)
+    : $(`<div class="card">
+      <h1 class="gate red">Failed</h1>
+      <p>${esc(passed)}/${esc(total)} checks</p>
+      <p class="muted">Built-in checker. No API key needed.</p>
+      <p><button type="button" id="see">See the checks</button></p>
+    </div>`);
+  const see = card.querySelector("#see");
+  if (see) see.onclick = () => { location.hash = packHref(wizard.path); };
+  return card;
+}
+
+async function paintWizard() {
+  ensureWizardShell();
+  updateStepper(wizard.step);
+  await swapPanel(buildWizardPanel());
 }
 
 async function renderSetup(params) {
@@ -207,125 +411,18 @@ async function renderSetup(params) {
     }
     if (wizard.step === 1) wizard.step = 2;
   }
-  const step = wizard.step;
-  const dirClass = wizard.dir < 0 ? "panel back" : "panel";
-  app.innerHTML = "";
-  if (step === 1 || step === 2) app.appendChild($(stepperHtml(step)));
-  const err = $(`<div id="wiz-err"></div>`);
-  app.appendChild(err);
-
-  if (step === 1) {
-    const card = $(`<div class="card ${dirClass}">
-      <h2>Name your skill</h2>
-      <label for="name">Name</label>
-      <input id="name" value="${esc(wizard.name)}" autocomplete="off" autofocus>
-      <p class="muted">Lowercase letters, numbers, and hyphens.</p>
-      <p><button type="button" id="next">Continue</button></p>
-    </div>`);
-    const nameInput = card.querySelector("#name");
-    const go = () => {
-      const name = nameInput.value.trim();
-      const problem = validateName(name);
-      if (problem) {
-        err.innerHTML = `<p class="err">${esc(problem)}</p>`;
-        nameInput.focus();
-        return;
-      }
-      const prevStub = wizard.stubFrom ? defaultDescription(wizard.stubFrom) : "";
-      if (!wizard.existing && (!wizard.description || wizard.description === prevStub)) {
-        wizard.description = defaultDescription(name);
-        wizard.stubFrom = name;
-      }
-      wizard.name = name;
-      wizard.dir = 1;
-      wizard.step = 2;
-      render();
-    };
-    card.querySelector("#next").onclick = go;
-    nameInput.addEventListener("keydown", (e) => { if (e.key === "Enter") go(); });
-    nameInput.addEventListener("input", () => { err.innerHTML = ""; });
-    app.appendChild(card);
-    nameInput.focus();
-    return;
-  }
-
-  if (step === 2) {
-    const primary = wizard.existing ? "Save and run check" : "Create and run check";
-    const card = $(`<div class="card ${dirClass}">
-      <h2>What should it do?</h2>
-      <p class="muted">${esc(wizard.name)}</p>
-      <label for="sk-desc">Description</label>
-      <textarea id="sk-desc">${esc(wizard.description || defaultDescription(wizard.name))}</textarea>
-      <p><button type="button" class="secondary" id="back">Back</button>
-      <button type="button" id="next">${primary}</button></p>
-    </div>`);
-    card.querySelector("#back").onclick = () => {
-      wizard.description = card.querySelector("#sk-desc").value;
-      if (wizard.existing && wizard.path) {
-        location.hash = packHref(wizard.path);
-        return;
-      }
-      wizard.dir = -1;
-      wizard.step = 1;
-      render();
-    };
-    card.querySelector("#next").onclick = () => {
-      wizard.description = card.querySelector("#sk-desc").value.trim();
-      if (!wizard.description) {
-        err.innerHTML = `<p class="err">Add a short description of what the skill does.</p>`;
-        return;
-      }
-      createAndRun(err, card.querySelector("#next"));
-    };
-    app.appendChild(card);
-    return;
-  }
-
-  if (step === "checking") {
-    const total = wizard.progress.total || 0;
-    const done = wizard.progress.completed || 0;
-    const pct = total ? Math.round((done / total) * 100) : 8;
-    app.appendChild($(stepperHtml(step)));
-    app.appendChild($(`<div class="card ${dirClass}">
-      <h2>Checking…</h2>
-      <div class="progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}"><i style="width:${pct}%"></i></div>
-      <p class="muted" id="wiz-prog-label">${esc(done)}/${esc(total || "…")} checks</p>
-    </div>`));
-    return;
-  }
-
-  const snap = wizard.result || {};
-  const report = snap.report || {};
-  const passed = report.passed_count ?? 0;
-  const total = report.task_count ?? (report.tasks || []).length;
-  const ok = step === "success" || (snap.exit_code === 0);
-  if (ok) {
-    app.appendChild($(`<div class="card success ${dirClass}">
-      <div class="check-pop" aria-hidden="true">
-        <svg viewBox="0 0 72 72" role="img" aria-label="Passed">
-          <circle cx="36" cy="36" r="32" fill="none" stroke="currentColor" stroke-width="3"></circle>
-          <path d="M22 37 l10 10 18-22" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"></path>
-        </svg>
-      </div>
-      <h1 class="gate green">Passed</h1>
-      <p>${esc(passed)}/${esc(total)} checks</p>
-      <p class="muted">Built-in checker. No API key needed.</p>
-      <p><button type="button" class="secondary" id="see">See the checks</button></p>
-    </div>`));
-  } else {
-    app.appendChild($(`<div class="card ${dirClass}">
-      <h1 class="gate red">Failed</h1>
-      <p>${esc(passed)}/${esc(total)} checks</p>
-      <p class="muted">Built-in checker. No API key needed.</p>
-      <p><button type="button" id="see">See the checks</button></p>
-    </div>`));
-  }
-  const see = document.getElementById("see");
-  if (see) see.onclick = () => { location.hash = packHref(wizard.path); };
+  const root = document.getElementById("wiz-root");
+  if (root) root.remove();
+  await paintWizard();
 }
 
-async function createAndRun(err, button) {
+async function createAndRun(button) {
   button.disabled = true;
+  wizard.dir = 1;
+  wizard.step = "checking";
+  wizard.progress = { completed: 0, total: 0 };
+  const shownAt = Date.now();
+  await paintWizard();
   try {
     if (!wizard.path) {
       const created = await api("POST", "/api/packs", {
@@ -352,19 +449,25 @@ async function createAndRun(err, button) {
         license: wizard.license,
       });
     }
-    wizard.dir = 1;
-    wizard.step = "checking";
-    wizard.progress = { completed: 0, total: 0 };
-    render();
     const started = await api("POST", "/api/check", { path: wizard.path, live: false });
     await pollWizard(started.run_id);
+    if (!prefersReducedMotion()) {
+      const wait = CHECKING_MIN_MS - (Date.now() - shownAt);
+      if (wait > 0) await sleep(wait);
+      const bar = document.querySelector("#wiz-progress > i");
+      const wrap = document.getElementById("wiz-progress");
+      if (wrap) wrap.classList.remove("busy");
+      if (bar) bar.style.width = "100%";
+      await sleep(220);
+    }
+    wizard.step = (wizard.result && wizard.result.exit_code === 0) ? "success" : "fail";
+    await paintWizard();
   } catch (e) {
-    button.disabled = false;
+    wizard.dir = -1;
     wizard.step = 2;
-    render();
-    const box = document.getElementById("wiz-err");
-    if (box) box.innerHTML = showError(e);
-    else err.innerHTML = showError(e);
+    await paintWizard();
+    const msg = document.getElementById("step-msg");
+    if (msg) msg.innerHTML = showError(e);
   }
 }
 
@@ -377,20 +480,22 @@ async function pollWizard(runId) {
         completed: prog.completed_count || 0,
         total: prog.task_count || 0,
       };
-      const bar = document.querySelector(".progress > i");
+      const wrap = document.getElementById("wiz-progress");
+      const bar = wrap && wrap.querySelector("i");
       const label = document.getElementById("wiz-prog-label");
       const total = wizard.progress.total || 0;
       const done = wizard.progress.completed || 0;
-      const pct = total ? Math.round((done / total) * 100) : 8;
-      if (bar) bar.style.width = `${pct}%`;
-      if (label) label.textContent = `${done}/${total || "…"} checks`;
-      await new Promise((r) => setTimeout(r, 400));
+      if (total && wrap) {
+        wrap.classList.remove("busy");
+        const pct = Math.max(12, Math.round((done / total) * 100));
+        if (bar) bar.style.width = `${pct}%`;
+        if (label) label.textContent = `${done}/${total} checks`;
+      }
+      await sleep(400);
       continue;
     }
     wizard.result = snap;
-    wizard.step = snap.exit_code === 0 ? "success" : "fail";
     lastRun = { path: wizard.path, snap };
-    render();
     return;
   }
 }
@@ -457,7 +562,7 @@ async function startCheck(path, live) {
   const box = document.getElementById("results");
   const err = document.getElementById("run-err");
   err.innerHTML = "";
-  box.innerHTML = `<div class="progress"><i style="width:8%"></i></div><p class="muted">Running check…</p>`;
+  box.innerHTML = `<div class="progress busy" id="run-progress"><i></i></div><p class="muted" id="run-prog-label">Running check…</p>`;
   banner.classList.add("hidden");
   try {
     const started = await api("POST", "/api/check", { path, live });
@@ -476,10 +581,15 @@ async function pollRun(runId, path) {
       const prog = snap.progress || {};
       const total = prog.task_count || 0;
       const done = prog.completed_count || 0;
-      const pct = total ? Math.round((done / total) * 100) : 8;
-      box.innerHTML = `<div class="progress"><i style="width:${pct}%"></i></div>
-        <p class="muted">Running ${esc(prog.current_task_id || "…")} (${esc(done)}/${esc(total || "?")})</p>`;
-      await new Promise((r) => setTimeout(r, 400));
+      const wrap = document.getElementById("run-progress");
+      const bar = wrap && wrap.querySelector("i");
+      const label = document.getElementById("run-prog-label");
+      if (total && wrap) {
+        wrap.classList.remove("busy");
+        if (bar) bar.style.width = `${Math.max(12, Math.round((done / total) * 100))}%`;
+        if (label) label.textContent = `${done}/${total} checks`;
+      }
+      await sleep(400);
       continue;
     }
     paintResult(snap, path);
@@ -508,7 +618,7 @@ function paintResult(snap, path) {
     const cls = t.passed ? "pass" : "fail";
     const why = (t.failures && t.failures[0]) || "";
     const extra = t.advice ? `<div class="muted">${esc(t.advice.why || "")}</div>` : "";
-    return `<tr><td class="${cls}">${mark}</td><td><code>${esc(t.id)}</code>${extra}</td><td>${esc(why)}</td></tr>`;
+    return `<tr><td class="${cls}">${mark}</td><td>${esc(checkHeadline(t))}${extra}</td><td>${esc(why)}</td></tr>`;
   }).join("");
   const advice = report.advice;
   let adviceHtml = "";
@@ -518,10 +628,9 @@ function paintResult(snap, path) {
       <p>${esc(advice.why || "")}</p>
       <p>${esc(advice.change || "")}</p>
       ${advice.demo_note ? `<p class="muted">${esc(advice.demo_note)}</p>` : ""}
-      <p>Corrected SKILL.md description (not the current one):</p>
+      <p>Corrected description (not the current one):</p>
       <pre id="paste">${esc(advice.paste || advice.description || "")}</pre>
       <button type="button" id="apply">Apply description fix on this pack</button>
-      <p class="muted">CI still uses <code>skillgate check</code>.</p>
     </div>`;
   }
   const headline = gate === "green" ? "Passed" : "Failed";
@@ -539,7 +648,7 @@ function paintResult(snap, path) {
   const apply = document.getElementById("apply");
   if (apply && advice) {
     apply.onclick = async () => {
-      if (path.includes("skills/pdf-sabotaged") && !confirm("This edits the seed pack in your checkout. Continue?")) return;
+      if (path.includes("skills/pdf-sabotaged") && !confirm("This edits the example skill in your checkout. Continue?")) return;
       try {
         await api("POST", "/api/pack/apply-advice", {
           path,
