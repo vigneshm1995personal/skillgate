@@ -54,6 +54,8 @@ function checkerLabel(report, snap) {
   if (snap && snap.error) return "Your API key";
   return "";
 }
+
+function route() {
   const hash = location.hash.slice(1) || "/";
   const [path, qs] = hash.split("?");
   const params = new URLSearchParams(qs || "");

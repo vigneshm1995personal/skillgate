@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import shutil
+import subprocess
 import time
 import urllib.error
 import urllib.request
@@ -47,6 +48,23 @@ def _poll_run(base: str, run_id: str, *, timeout: float = 120.0) -> dict:
             return payload
         time.sleep(0.2)
     raise AssertionError(f"run {run_id} did not finish")
+
+
+def test_app_js_is_valid_javascript() -> None:
+    path = (
+        Path(__file__).resolve().parents[1]
+        / "src"
+        / "skillgate_ai"
+        / "local_ui"
+        / "static"
+        / "app.js"
+    )
+    node = shutil.which("node")
+    assert node, "node is required to syntax-check local_ui/static/app.js"
+    proc = subprocess.run([node, "--check", str(path)], capture_output=True, text=True, check=False)
+    assert proc.returncode == 0, proc.stderr or proc.stdout
+    text = path.read_text(encoding="utf-8")
+    assert "function route()" in text
 
 
 def test_ui_meta_no_account(project_root: Path) -> None:
