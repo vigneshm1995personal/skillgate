@@ -611,15 +611,7 @@ def resolve_harness(kind: str, cfg: LLMConfig, *, demo: bool = False) -> Harness
             f"Unknown harness {kind!r}",
             hint="Use auto, cursor-agent, codex, llm, or demo.",
         )
-    if cfg.cursor_api_key and _resolve_agent_bin(cfg.cursor_agent_bin):
-        return CursorAgentHarness(cfg)
-    if cfg.codex_api_key and _resolve_codex_bin(cfg.codex_bin):
-        return CodexCliHarness(cfg)
-    # OPENAI_API_KEY is aliased onto codex_api_key. Do not send auto/default
-    # fixture checks through LLM HTTP when Codex CLI is missing — a dummy key
-    # would 401 and paint the gate 0/0 red. Gateway / Anthropic are HTTP-native.
-    if cfg.gateway_api_key or cfg.anthropic_api_key:
-        return LLMHarness(cfg)
+    # auto = built-in checker. Live models are `--live` / Run live only.
     return DemoHarness()
 
 
@@ -648,14 +640,16 @@ def live_harness_or_error(kind: str, cfg: LLMConfig) -> Harness:
         raise missing_key_error()
     harness = resolve_harness(kind, cfg, demo=False)
     if isinstance(harness, DemoHarness):
-        # auto + CURSOR_API_KEY without the Agent CLI (and without BYOLLM)
-        # used to fall through to DemoHarness. Live must error instead.
+        if cfg.cursor_api_key and _resolve_agent_bin(cfg.cursor_agent_bin):
+            return CursorAgentHarness(cfg)
+        if cfg.codex_api_key and _resolve_codex_bin(cfg.codex_bin):
+            return CodexCliHarness(cfg)
+        if cfg.gateway_api_key or cfg.openai_api_key or cfg.anthropic_api_key:
+            return LLMHarness(cfg)
         if cfg.cursor_api_key:
             return CursorAgentHarness(cfg)
         if cfg.codex_api_key:
             return CodexCliHarness(cfg)
-        if cfg.gateway_api_key or cfg.openai_api_key or cfg.anthropic_api_key:
-            return LLMHarness(cfg)
         raise missing_key_error()
     return harness
 

@@ -8,7 +8,7 @@ import pytest
 from skillgate_ai.config import get_llm_config
 from skillgate_ai.demo_files import ensure_demo_pdfs
 from skillgate_ai.gate import run_check
-from skillgate_ai.harness import DemoHarness, resolve_harness
+from skillgate_ai.harness import DemoHarness, live_harness_or_error, resolve_harness
 
 
 def test_gate_matches_cli_exits(project_root: Path) -> None:
@@ -35,26 +35,20 @@ def test_gate_matches_cli_exits(project_root: Path) -> None:
     assert "No model key" in (live.error.get("message") or "")
 
 
-def _stub_missing_codex(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_auto_is_demo_even_when_keys_are_set(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("OPENAI_API_KEY", "sk-test-not-a-real-key")
+    monkeypatch.setenv("AI_GATEWAY_API_KEY", "gw-test-not-a-real-key")
     monkeypatch.setenv("CODEX_API_KEY", "sk-codex-not-a-real-key")
-    monkeypatch.setattr("skillgate_ai.harness._resolve_codex_bin", lambda _preferred: None)
-
-
-def test_auto_falls_back_to_demo_when_codex_binary_missing(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    _stub_missing_codex(monkeypatch)
     cfg = get_llm_config()
-    assert cfg.codex_api_key
-    harness = resolve_harness("auto", cfg)
-    assert isinstance(harness, DemoHarness)
+    assert cfg.has_any_key
+    assert isinstance(resolve_harness("auto", cfg), DemoHarness)
 
 
-def test_run_check_pdf_stays_green_when_codex_env_but_no_binary(
+def test_run_check_pdf_stays_green_when_gateway_and_openai_keys_set(
     project_root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    _stub_missing_codex(monkeypatch)
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test-not-a-real-key")
+    monkeypatch.setenv("AI_GATEWAY_API_KEY", "gw-test-not-a-real-key")
     dest = tmp_path / "pdf"
     shutil.copytree(project_root / "skills" / "pdf", dest)
     ensure_demo_pdfs(dest / "evals" / "fixtures")
@@ -64,20 +58,31 @@ def test_run_check_pdf_stays_green_when_codex_env_but_no_binary(
     assert result.report is not None
     assert result.report.harness == "demo"
     assert result.report.passed
-    assert len(result.report.tasks) > 0
+    assert len(result.report.tasks) == 8
+    assert result.report.passed_count == 8
     assert result.demo_notice
-    assert "demo harness" in result.demo_notice.lower()
+    assert "built-in checker" in result.demo_notice.lower()
 
 
-def test_live_does_not_demo_fallback_when_codex_missing(
+def test_live_auto_uses_gateway_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("AI_GATEWAY_API_KEY", "gw-test-not-a-real-key")
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test-not-a-real-key")
+    monkeypatch.setattr("skillgate_ai.harness._resolve_codex_bin", lambda _preferred: None)
+    monkeypatch.setattr("skillgate_ai.harness._resolve_agent_bin", lambda _preferred: None)
+    cfg = get_llm_config()
+    harness = live_harness_or_error("auto", cfg)
+    assert harness.name == "llm"
+
+
+def test_live_without_key_still_errors(
     project_root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    _stub_missing_codex(monkeypatch)
+    monkeypatch.setattr("skillgate_ai.harness._resolve_codex_bin", lambda _preferred: None)
     dest = tmp_path / "pdf"
     shutil.copytree(project_root / "skills" / "pdf", dest)
     ensure_demo_pdfs(dest / "evals" / "fixtures")
 
     result = run_check(dest, live=True, source="test", root=project_root)
-    assert result.exit_code != 0
+    assert result.exit_code == 2
     assert result.report is None
     assert result.error is not None

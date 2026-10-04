@@ -77,7 +77,7 @@ def resolve_user_path(raw: str | None, state: UiState, *, must_exist: bool = Fal
         )
     path = Path(text).expanduser()
     if not path.is_absolute():
-        path = (state.root / path)
+        path = state.root / path
     path = path.resolve()
     root = state.root.resolve()
     try:
@@ -114,11 +114,24 @@ def list_packs(state: UiState) -> list[dict[str, Any]]:
             {
                 "name": name,
                 "path": str(resolved),
+                "display_path": display_pack_label(resolved, state.root),
                 "red_demo": name == "pdf-sabotaged",
                 "green_demo": name == "pdf",
             }
         )
     return found
+
+
+def display_pack_label(path: Path, root: Path) -> str:
+    """Short relative label for the UI. Never an absolute machine path."""
+    try:
+        rel = path.resolve().relative_to(root.resolve())
+    except ValueError:
+        return path.name
+    text = str(rel).replace("\\", "/")
+    if text in {"", "."}:
+        return path.name
+    return text
 
 
 def pdf_demo_path(state: UiState) -> Path | None:
@@ -131,16 +144,17 @@ def pdf_demo_path(state: UiState) -> Path | None:
 def meta_payload(state: UiState) -> dict[str, Any]:
     load_env(state.root)
     cfg = get_llm_config()
-    pack = str(state.initial_pack.resolve()) if state.initial_pack else None
+    pack = None
+    if state.initial_pack:
+        pack = display_pack_label(state.initial_pack, state.root)
     pdf = pdf_demo_path(state)
     return {
         "version": __version__,
-        "root": str(state.root.resolve()),
         "has_any_key": cfg.has_any_key,
         "demo_default": True,
         "account": False,
         "pack": pack,
-        "pdf_path": str(pdf) if pdf else None,
+        "pdf_path": display_pack_label(pdf, state.root) if pdf else None,
     }
 
 
@@ -155,6 +169,7 @@ def pack_payload(state: UiState, raw_path: str | None) -> dict[str, Any]:
         dataset = {"error": exc.message, "hint": exc.hint}
     return {
         "path": str(path),
+        "display_path": display_pack_label(path, state.root),
         "skill": skill_to_dict(skill),
         "description_usable": usable,
         "description_hint": hint,
@@ -234,7 +249,11 @@ def _dispatch(
     if method == "POST" and path == "/api/pack/scaffold":
         pack = resolve_user_path(str(payload.get("path") or ""), state, must_exist=True)
         cases = scaffold_trigger_cases(pack)
-        return 200, {"path": str(pack), "skill": cases.skill, "case_count": len(cases.cases)}, "application/json"
+        return (
+            200,
+            {"path": str(pack), "skill": cases.skill, "case_count": len(cases.cases)},
+            "application/json",
+        )
     if method == "POST" and path == "/api/pack/fixtures":
         return _post_fixtures(state, payload)
     if method == "PUT" and path == "/api/env":
@@ -331,7 +350,7 @@ def _put_env(state: UiState, payload: dict[str, Any]) -> tuple[int, dict[str, An
     if unknown:
         raise SkillGateError(
             f"Unknown env names: {', '.join(sorted(unknown))}",
-            hint="Only BYOLLM keys from .env.example are allowed.",
+            hint="Only API keys from .env.example are allowed.",
         )
     updates = {key: str(payload[key]).strip() for key in ALLOWED_ENV if key in payload}
     dest = state.root / ".env"
@@ -340,17 +359,32 @@ def _put_env(state: UiState, payload: dict[str, Any]) -> tuple[int, dict[str, An
     return 200, {"ok": True, "has_any_key": get_llm_config().has_any_key}, "application/json"
 
 
+LIVE_NO_KEY = "No API key found. Run check uses the built-in checker and does not need a key."
+LIVE_FAIL = "Your API key could not run this check."
+
+
+def _customer_live_error(error: dict[str, Any] | None) -> dict[str, Any] | None:
+    if not error:
+        return None
+    hint = error.get("hint") or error.get("message") or LIVE_FAIL
+    return {"message": LIVE_FAIL, "hint": hint}
+
+
 def _start_check(state: UiState, payload: dict[str, Any]) -> tuple[int, dict[str, Any], str]:
     pack = resolve_user_path(str(payload.get("path") or ""), state, must_exist=True)
     live = bool(payload.get("live"))
     load_env(state.root)
     if live and not get_llm_config().has_any_key:
         raise MissingLLMKeyError(
-            "No model key found. Skill Gate is BYOLLM — it does not ship a hosted model.",
-            hint="Add a key in .env or run without live (demo harness).",
+            LIVE_NO_KEY,
+            hint="Add a key in .env, then click Run live. Or use Run check — no key needed.",
         )
     with state.lock:
-        if state.active_run_id and state.runs.get(state.active_run_id) and not state.runs[state.active_run_id].done:
+        if (
+            state.active_run_id
+            and state.runs.get(state.active_run_id)
+            and not state.runs[state.active_run_id].done
+        ):
             return 409, {"error": "A check is already running."}, "application/json"
         run_id = uuid.uuid4().hex[:12]
         record = RunRecord(run_id=run_id)
@@ -377,18 +411,28 @@ def _start_check(state: UiState, payload: dict[str, Any]) -> tuple[int, dict[str
                 source="ui",
                 root=state.root,
             )
+            err = result.error
+            if live and err:
+                err = _customer_live_error(err)
             payload_out: dict[str, Any] = {
                 "run_id": run_id,
                 "exit_code": result.exit_code,
                 "demo_notice": result.demo_notice,
                 "expect_fail_notice": result.expect_fail_notice,
-                "error": result.error,
+                "error": err,
                 "report": report_to_dict(result.report) if result.report is not None else None,
             }
             record.payload = payload_out
         except Exception as exc:  # noqa: BLE001 — surface to the poller
-            record.error = str(exc)
-            record.payload = {"run_id": run_id, "exit_code": 1, "error": {"message": str(exc)}}
+            message = LIVE_FAIL if live else str(exc)
+            if isinstance(exc, SkillGateError):
+                message = LIVE_FAIL if live else exc.message
+            record.error = message
+            record.payload = {
+                "run_id": run_id,
+                "exit_code": 1,
+                "error": {"message": message, "hint": getattr(exc, "hint", None)},
+            }
         finally:
             record.done = True
             drop_control(run_id)

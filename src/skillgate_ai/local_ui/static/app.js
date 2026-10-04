@@ -38,7 +38,22 @@ function esc(value) {
     .replaceAll('"', "&quot;");
 }
 
-function route() {
+function packHref(packOrPath) {
+  const value = typeof packOrPath === "string"
+    ? packOrPath
+    : (packOrPath.display_path || packOrPath.name || packOrPath.path);
+  return `#/pack?path=${encodeURIComponent(value)}`;
+}
+
+function checkerLabel(report, snap) {
+  const name = String((report && report.harness) || "").toLowerCase();
+  if (name === "demo" || (snap && snap.demo_notice)) return "Built-in checker";
+  if (name === "llm") return "Your API key";
+  if (name === "codex") return "Codex (your API key)";
+  if (name === "cursor-agent") return "Cursor (your API key)";
+  if (snap && snap.error) return "Your API key";
+  return "";
+}
   const hash = location.hash.slice(1) || "/";
   const [path, qs] = hash.split("?");
   const params = new URLSearchParams(qs || "");
@@ -67,7 +82,7 @@ async function renderPicker() {
   app.innerHTML = "";
   app.appendChild($(`<section>
     <h1>Pick or create a skill pack</h1>
-    <p class="muted">No Skill Gate account. Demo harness if no key in <code>.env</code>.</p>
+    <p class="muted">No Skill Gate account. Run check uses the built-in checker — no API key needed.</p>
   </section>`));
   if (red) {
     const card = $(`<div class="card">
@@ -76,15 +91,15 @@ async function renderPicker() {
       <button type="button" id="red-path">Open sabotaged pack</button>
     </div>`);
     card.querySelector("#red-path").onclick = () => {
-      location.hash = `#/pack?path=${encodeURIComponent(red.path)}&run=1`;
+      location.hash = `${packHref(red)}&run=1`;
     };
     app.appendChild(card);
   }
-  const list = $(`<div class="card"><h2>Packs under ${esc(meta.root)}</h2><div class="list"></div></div>`);
+  const list = $(`<div class="card"><h2>Your packs</h2><div class="list"></div></div>`);
   const box = list.querySelector(".list");
   packs.forEach((p) => {
     const btn = $(`<button type="button" class="secondary">${esc(p.name)}${p.red_demo ? " · red demo" : ""}${p.green_demo ? " · green demo" : ""}</button>`);
-    btn.onclick = () => { location.hash = `#/pack?path=${encodeURIComponent(p.path)}`; };
+    btn.onclick = () => { location.hash = packHref(p); };
     box.appendChild(btn);
   });
   if (!packs.length) box.innerHTML = "<p class='muted'>No SKILL.md folders yet.</p>";
@@ -92,7 +107,7 @@ async function renderPicker() {
   const open = $(`<div class="card">
     <h2>Open a folder</h2>
     <label for="open-path">Path</label>
-    <input id="open-path" placeholder="skills/pdf or /absolute/path">
+    <input id="open-path" placeholder="skills/pdf">
     <p><button type="button" id="open-btn">Open</button>
     <button type="button" class="secondary" id="new-btn">Create a new pack</button></p>
     <div id="open-err"></div>
@@ -131,7 +146,7 @@ async function renderSetup(params) {
     const card = $(`<div class="card">
       <h2>Folder name = skill name</h2>
       <label>Parent directory</label>
-      <input id="parent" value="${esc(wizard.parent || (meta.root + "/skills"))}">
+      <input id="parent" value="${esc(wizard.parent || "skills")}">
       <label>Name (lowercase, hyphens)</label>
       <input id="name" value="${esc(wizard.name)}">
       <p class="muted">Rename the folder or the <code>name</code> field so they match.</p>
@@ -147,7 +162,7 @@ async function renderSetup(params) {
             name: wizard.name,
             scaffold: false,
           });
-          wizard.path = created.path;
+          wizard.path = created.display_path || created.path;
           wizard.description = created.skill.description;
           wizard.body = created.skill.body;
         }
@@ -202,7 +217,7 @@ async function renderSetup(params) {
     const card = $(`<div class="card">
       <h2>Evals</h2>
       <label><input type="radio" name="eval" value="existing"> Use existing evals/cases.yaml</label>
-      <label><input type="radio" name="eval" value="scaffold" checked> Scaffold trigger-only demo (no API key, no scripts required)</label>
+      <label><input type="radio" name="eval" value="scaffold" checked> Scaffold trigger-only checks (no API key, no scripts required)</label>
       ${clone}
       <p><button type="button" class="secondary" id="pdfs">Ensure demo PDFs</button></p>
       <p><button type="button" class="secondary" id="back">Back</button>
@@ -223,11 +238,11 @@ async function renderSetup(params) {
         } else if (mode === "clone") {
           const name = wizard.name || wizard.path.split("/").pop();
           const created = await api("POST", "/api/packs", {
-            parent: wizard.parent || (meta.root + "/skills"),
+            parent: wizard.parent || "skills",
             name,
             clone_pdf: true,
           });
-          wizard.path = created.path;
+          wizard.path = created.display_path || created.path;
         }
         wizard.step = 4;
         render();
@@ -237,19 +252,19 @@ async function renderSetup(params) {
     return;
   }
   const card = $(`<div class="card">
-    <h2>Optional BYO key</h2>
-    <p class="muted">Leave blank to use the demo harness. Never required for fixture checks.</p>
+    <h2>Optional API key</h2>
+    <p class="muted">Leave blank. Run check uses the built-in checker and does not need a key. Run live uses a key if you add one.</p>
     <label>OPENAI_API_KEY</label><input id="k-openai" type="password" autocomplete="off">
     <label>CURSOR_API_KEY</label><input id="k-cursor" type="password" autocomplete="off">
     <label>CODEX_API_KEY</label><input id="k-codex" type="password" autocomplete="off">
     <label>ANTHROPIC_API_KEY</label><input id="k-ant" type="password" autocomplete="off">
     <label>AI_GATEWAY_API_KEY</label><input id="k-gw" type="password" autocomplete="off">
     <p><button type="button" class="secondary" id="back">Back</button>
-    <button type="button" id="skip">Skip — run with demo</button>
-    <button type="button" id="save">Save keys and open pack</button></p>
+    <button type="button" id="skip">Skip — continue without a key</button>
+    <button type="button" id="save">Save key and open pack</button></p>
   </div>`);
   card.querySelector("#back").onclick = () => { wizard.step = 3; render(); };
-  const go = () => { location.hash = `#/pack?path=${encodeURIComponent(wizard.path)}`; };
+  const go = () => { location.hash = packHref(wizard.path); };
   card.querySelector("#skip").onclick = go;
   card.querySelector("#save").onclick = async () => {
     const body = {
@@ -278,8 +293,9 @@ async function renderPack(params) {
   app.innerHTML = "";
   const head = $(`<section>
     <h1>${esc(pack.skill.name)}</h1>
-    <p class="muted">${esc(pack.path)}</p>
+    <p class="muted">${esc(pack.display_path || pack.skill.name)}</p>
     <p>${esc(pack.skill.description)}</p>
+    <p class="muted">Run check uses the built-in checker. Run live uses your API key.</p>
     <p class="row">
       <button type="button" id="run">Run check</button>
       <button type="button" class="secondary" id="live">Run live</button>
@@ -327,6 +343,12 @@ async function pollRun(runId, path) {
 function paintResult(snap, path) {
   const box = document.getElementById("results");
   const report = snap.report || {};
+  if (snap.error && !snap.report) {
+    const hint = snap.error.hint ? `<p class="muted">${esc(snap.error.hint)}</p>` : "";
+    box.innerHTML = `<p class="err">${esc(snap.error.message || "Your API key could not run this check.")}</p>${hint}`;
+    banner.classList.add("hidden");
+    return;
+  }
   const gate = (report.gate || (snap.exit_code === 0 ? "green" : "red")).toLowerCase();
   if (snap.demo_notice) {
     banner.textContent = snap.demo_notice;
@@ -351,14 +373,14 @@ function paintResult(snap, path) {
       <p>Corrected SKILL.md description (not the current one):</p>
       <pre id="paste">${esc(advice.paste || advice.description || "")}</pre>
       <button type="button" id="apply">Apply description fix on this pack</button>
-      <p class="muted">CI still uses <code>skillgate check</code>; this UI called the same engine.</p>
+      <p class="muted">CI still uses <code>skillgate check</code>.</p>
     </div>`;
   }
   box.innerHTML = `
     <p><span class="gate ${esc(gate)}">${esc(gate.toUpperCase())}</span>
       · ${esc(report.passed_count ?? 0)}/${esc(report.task_count ?? tasks.length)} tasks
       · exit ${esc(snap.exit_code)}</p>
-    <p class="muted">${esc((report.config && report.config.label) || report.harness || "")}</p>
+    <p class="muted">${esc(checkerLabel(report, snap))}</p>
     <table><thead><tr><th>Result</th><th>Task</th><th>What happened</th></tr></thead><tbody>${rows}</tbody></table>
     ${adviceHtml}
   `;

@@ -7,6 +7,8 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
+import pytest
+
 from skillgate_ai.demo_files import ensure_demo_pdfs
 from skillgate_ai.local_ui.server import start_background
 
@@ -55,6 +57,38 @@ def test_ui_meta_no_account(project_root: Path) -> None:
         assert payload["account"] is False
         assert payload["has_any_key"] is False
         assert payload["demo_default"] is True
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_ui_pack_display_path_is_relative(project_root: Path) -> None:
+    server, base, _state = start_background(root=project_root, host="127.0.0.1", port=0)
+    try:
+        status, payload = _request("GET", f"{base}/api/pack?path=skills/pdf")
+        assert status == 200, payload
+        assert payload["display_path"] == "skills/pdf"
+        assert not str(payload["display_path"]).startswith("/")
+        assert "oss-qa" not in payload["display_path"]
+        status, meta = _request("GET", f"{base}/api/meta")
+        assert status == 200
+        assert "root" not in meta or not str(meta.get("root", "")).startswith("/")
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_ui_copy_has_no_internal_jargon(project_root: Path) -> None:
+    server, base, _state = start_background(root=project_root, host="127.0.0.1", port=0)
+    try:
+        for name in ("/", "/static/app.js", "/static/index.html"):
+            req = urllib.request.Request(base + name)
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                text = resp.read().decode("utf-8")
+            lower = text.lower()
+            assert "byollm" not in lower, name
+            assert "oss-qa" not in lower, name
+            assert "demo harness" not in lower, name
     finally:
         server.shutdown()
         server.server_close()
@@ -138,12 +172,11 @@ def test_ui_apply_fix_then_green(project_root: Path, tmp_path: Path) -> None:
         server.server_close()
 
 
-def test_ui_check_pdf_green_when_codex_env_but_no_binary(
-    project_root: Path, tmp_path: Path, monkeypatch
+def test_ui_default_check_pdf_green_with_gateway_and_openai_keys(
+    project_root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv("OPENAI_API_KEY", "sk-test-not-a-real-key")
-    monkeypatch.setenv("CODEX_API_KEY", "sk-codex-not-a-real-key")
-    monkeypatch.setattr("skillgate_ai.harness._resolve_codex_bin", lambda _preferred: None)
+    monkeypatch.setenv("AI_GATEWAY_API_KEY", "gw-test-not-a-real-key")
     dest = tmp_path / "pdf"
     shutil.copytree(project_root / "skills" / "pdf", dest)
     ensure_demo_pdfs(dest / "evals" / "fixtures")
@@ -155,10 +188,11 @@ def test_ui_check_pdf_green_when_codex_env_but_no_binary(
         report = done["report"] or {}
         assert done["exit_code"] == 0, done
         assert report.get("gate") == "green"
-        assert (report.get("task_count") or 0) > 0
         assert report.get("harness") == "demo"
+        assert report.get("task_count") == 8
+        assert report.get("passed_count") == 8
         notice = (done.get("demo_notice") or "").lower()
-        assert "demo harness" in notice
+        assert "built-in checker" in notice
     finally:
         server.shutdown()
         server.server_close()
