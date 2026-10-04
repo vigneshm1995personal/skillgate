@@ -1,0 +1,20 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.3, pytest-9.1.1, pluggy-1.6.0 -- /usr/bin/python3
+cachedir: .pytest_cache
+rootdir: /workspace
+configfile: pyproject.toml
+plugins: anyio-4.15.1
+collecting ... collected 10 items
+
+tests/test_ingest.py::test_good_pdf_skill PASSED                         [ 10%]
+tests/test_ingest.py::test_name_must_match_folder PASSED                 [ 20%]
+tests/test_ingest.py::test_generic_pack_mount_allows_skill_name PASSED   [ 30%]
+tests/test_ingest.py::test_missing_frontmatter PASSED                    [ 40%]
+tests/test_ingest.py::test_bad_name_hyphens PASSED                       [ 50%]
+tests/test_ingest.py::test_discover_missing_dir_raises PASSED            [ 60%]
+tests/test_ingest.py::test_discover_empty_dir_raises PASSED              [ 70%]
+tests/test_oss_surface.py::test_denied_modules_are_absent_on_disk PASSED [ 80%]
+tests/test_oss_surface.py::test_no_denied_imports PASSED                 [ 90%]
+tests/test_oss_surface.py::test_cli_imports_without_hosted PASSED        [100%]
+
+============================== 10 passed in 0.27s ==============================

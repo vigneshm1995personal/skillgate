@@ -1,0 +1,29 @@
+===== START 06-history 2026-10-04T01:56:37Z =====
+listing evals/history after checks
+skills/pdf/evals/history/:
+total 64
+drwxr-xr-x 2 ubuntu ubuntu  4096 Oct  4 01:51 .
+drwxr-xr-x 5 ubuntu ubuntu  4096 Oct  4 01:49 ..
+-rw-r--r-- 1 ubuntu ubuntu 52206 Oct  4 01:56 20261004.jsonl
+-rw-r--r-- 1 ubuntu ubuntu     0 Oct  4 01:49 .gitkeep
+-rw-r--r-- 1 ubuntu ubuntu   219 Oct  4 01:49 README.md
+
+skills/pdf-sabotaged/evals/history/:
+total 200
+drwxr-xr-x 2 ubuntu ubuntu   4096 Oct  4 01:51 .
+drwxr-xr-x 5 ubuntu ubuntu   4096 Oct  4 01:49 ..
+-rw-r--r-- 1 ubuntu ubuntu 191360 Oct  4 01:56 20261004.jsonl
+-rw-r--r-- 1 ubuntu ubuntu      0 Oct  4 01:49 .gitkeep
+-rw-r--r-- 1 ubuntu ubuntu    121 Oct  4 01:49 README.md
+--- pdf jsonl tail ---
+skills/pdf/evals/history/20261004.jsonl
+FILE:skills/pdf/evals/history/20261004.jsonl
+6 skills/pdf/evals/history/20261004.jsonl
+print": "80f73d6d15943f7d", "label": "demo \u00b7 300s"}, "timeout_effective": 300, "usage": null, "metrics": {"budget_fails": [], "status": "info", "path": {"steps": 0, "errors": 0, "had_path": false}}, "pack_fingerprint": "96e1b14fc0cfc7f9", "pack_case_ids": ["extract-hello", "merge-alpha-beta", "create-status", "trigger-notes-pdf", "trigger-combine-decks", "no-trigger-unrelated", "extract-invoice", "rotate-hello"]}, "error": null, "config": {"schema": 1, "harness": "demo", "harness_pref": "auto", "model": null, "timeout_sec": null, "timeout_effective": 300, "temperature": 0.0, "reasoning_effort": null, "source": "cli", "applied": {"harness": true, "model": false, "timeout": true, "temperature": false, "reasoning": false}, "fingerprint": "80f73d6d15943f7d", "label": "demo \u00b7 300s"}}
+
+--- sabotaged jsonl tail ---
+FILE:skills/pdf-sabotaged/evals/history/20261004.jsonl
+8 skills/pdf-sabotaged/evals/history/20261004.jsonl
+print": "80f73d6d15943f7d", "label": "demo \u00b7 300s"}, "timeout_effective": 300, "usage": null, "metrics": {"budget_fails": [], "status": "info", "path": {"steps": 0, "errors": 0, "had_path": false}}, "pack_fingerprint": "96e1b14fc0cfc7f9", "pack_case_ids": ["extract-hello", "merge-alpha-beta", "create-status", "trigger-notes-pdf", "trigger-combine-decks", "no-trigger-unrelated", "extract-invoice", "rotate-hello"]}, "error": null, "config": {"schema": 1, "harness": "demo", "harness_pref": "auto", "model": null, "timeout_sec": null, "timeout_effective": 300, "temperature": 0.0, "reasoning_effort": null, "source": "cli", "applied": {"harness": true, "model": false, "timeout": true, "temperature": false, "reasoning": false}, "fingerprint": "80f73d6d15943f7d", "label": "demo \u00b7 300s"}}
+
+EXIT:0

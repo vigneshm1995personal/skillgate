@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "skillgate-ai"
+version = "0.3.0"
+description = "Local skill gate: pack on disk + skillgate check (exit 0/1), no account"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "Apache-2.0" }
+authors = [{ name = "Skill Gate AI contributors" }]
+keywords = ["skills", "agentskills", "evals", "ci", "sandbox"]
+dependencies = [
+  "typer>=0.12",
+  "rich>=13.7",
+  "pyyaml>=6.0",
+  "pydantic>=2.7",
+  "httpx>=0.27",
+  "python-dotenv>=1.0",
+  "pypdf>=4.2",
+  "reportlab>=4.2",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.2", "ruff>=0.5"]
+
+[project.scripts]
+skillgate-ai = "skillgate_ai.cli:app"
+skillgate = "skillgate_ai.cli:app"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src", "tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"

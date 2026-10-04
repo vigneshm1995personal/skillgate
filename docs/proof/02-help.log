@@ -1,0 +1,22 @@
+===== START 02-help 2026-10-04T01:56:33Z =====
+CMD: skillgate --help
+                                                                                
+ Usage: skillgate [OPTIONS] COMMAND [ARGS]...                                   
+                                                                                
+ Skill Gate — evaluate agent skills. Pack on disk + `skillgate check` (exit     
+ 0/1).                                                                          
+                                                                                
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Commands ───────────────────────────────────────────────────────────────────╮
+│ version  Print the CLI version.                                              │
+│ ingest   Validate a skill folder against the agentskills spec.               │
+│ check    Run pack-local evals/cases.yaml. Exit 0 if green, 1 if red. No      │
+│          account required.                                                   │
+│ run      Run an eval pack or suite YAML. Prefer `skillgate check` for CI.    │
+│ deploy   Copy a skill pack into a local agent skills directory.              │
+│ list     Show skills/ and evals/ (skill-first paths).                        │
+╰──────────────────────────────────────────────────────────────────────────────╯
+
+EXIT:0

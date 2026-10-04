@@ -1,0 +1,56 @@
+===== START 01-pip-install 2026-10-04T01:56:30Z =====
+CMD: python3 -m pip install -e .[dev]
+Defaulting to user installation because normal site-packages is not writeable
+Obtaining file:///workspace
+  Installing build dependencies: started
+  Installing build dependencies: finished with status 'done'
+  Checking if build backend supports build_editable: started
+  Checking if build backend supports build_editable: finished with status 'done'
+  Getting requirements to build editable: started
+  Getting requirements to build editable: finished with status 'done'
+  Preparing editable metadata (pyproject.toml): started
+  Preparing editable metadata (pyproject.toml): finished with status 'done'
+Requirement already satisfied: typer>=0.12 in /home/ubuntu/.local/lib/python3.12/site-packages (from skillgate-ai==0.3.0) (0.27.2)
+Requirement already satisfied: rich>=13.7 in /home/ubuntu/.local/lib/python3.12/site-packages (from skillgate-ai==0.3.0) (15.0.0)
+Requirement already satisfied: pyyaml>=6.0 in /usr/lib/python3/dist-packages (from skillgate-ai==0.3.0) (6.0.1)
+Requirement already satisfied: pydantic>=2.7 in /home/ubuntu/.local/lib/python3.12/site-packages (from skillgate-ai==0.3.0) (2.13.5)
+Requirement already satisfied: httpx>=0.27 in /home/ubuntu/.local/lib/python3.12/site-packages (from skillgate-ai==0.3.0) (0.28.1)
+Requirement already satisfied: python-dotenv>=1.0 in /home/ubuntu/.local/lib/python3.12/site-packages (from skillgate-ai==0.3.0) (1.2.4)
+Requirement already satisfied: pypdf>=4.2 in /home/ubuntu/.local/lib/python3.12/site-packages (from skillgate-ai==0.3.0) (6.19.0)
+Requirement already satisfied: reportlab>=4.2 in /home/ubuntu/.local/lib/python3.12/site-packages (from skillgate-ai==0.3.0) (5.0.1)
+Requirement already satisfied: pytest>=8.2 in /home/ubuntu/.local/lib/python3.12/site-packages (from skillgate-ai==0.3.0) (9.1.1)
+Requirement already satisfied: ruff>=0.5 in /home/ubuntu/.local/lib/python3.12/site-packages (from skillgate-ai==0.3.0) (0.16.10)
+Requirement already satisfied: anyio in /home/ubuntu/.local/lib/python3.12/site-packages (from httpx>=0.27->skillgate-ai==0.3.0) (4.15.1)
+Requirement already satisfied: certifi in /usr/local/lib/python3.12/dist-packages (from httpx>=0.27->skillgate-ai==0.3.0) (2026.4.22)
+Requirement already satisfied: httpcore==1.* in /home/ubuntu/.local/lib/python3.12/site-packages (from httpx>=0.27->skillgate-ai==0.3.0) (1.0.9)
+Requirement already satisfied: idna in /usr/local/lib/python3.12/dist-packages (from httpx>=0.27->skillgate-ai==0.3.0) (3.13)
+Requirement already satisfied: h11>=0.16 in /home/ubuntu/.local/lib/python3.12/site-packages (from httpcore==1.*->httpx>=0.27->skillgate-ai==0.3.0) (0.16.0)
+Requirement already satisfied: annotated-types>=0.6.0 in /home/ubuntu/.local/lib/python3.12/site-packages (from pydantic>=2.7->skillgate-ai==0.3.0) (0.8.0)
+Requirement already satisfied: pydantic-core==2.46.5 in /home/ubuntu/.local/lib/python3.12/site-packages (from pydantic>=2.7->skillgate-ai==0.3.0) (2.46.5)
+Requirement already satisfied: typing-extensions>=4.14.1 in /home/ubuntu/.local/lib/python3.12/site-packages (from pydantic>=2.7->skillgate-ai==0.3.0) (4.16.0)
+Requirement already satisfied: typing-inspection>=0.4.2 in /home/ubuntu/.local/lib/python3.12/site-packages (from pydantic>=2.7->skillgate-ai==0.3.0) (0.4.4)
+Requirement already satisfied: iniconfig>=1.0.1 in /home/ubuntu/.local/lib/python3.12/site-packages (from pytest>=8.2->skillgate-ai==0.3.0) (2.3.0)
+Requirement already satisfied: packaging>=22 in /usr/lib/python3/dist-packages (from pytest>=8.2->skillgate-ai==0.3.0) (24.0)
+Requirement already satisfied: pluggy<2,>=1.5 in /home/ubuntu/.local/lib/python3.12/site-packages (from pytest>=8.2->skillgate-ai==0.3.0) (1.6.0)
+Requirement already satisfied: pygments>=2.7.2 in /home/ubuntu/.local/lib/python3.12/site-packages (from pytest>=8.2->skillgate-ai==0.3.0) (2.21.0)
+Requirement already satisfied: pillow>=9.0.0 in /home/ubuntu/.local/lib/python3.12/site-packages (from reportlab>=4.2->skillgate-ai==0.3.0) (12.3.0)
+Requirement already satisfied: charset-normalizer in /usr/local/lib/python3.12/dist-packages (from reportlab>=4.2->skillgate-ai==0.3.0) (3.4.7)
+Requirement already satisfied: markdown-it-py>=2.2.0 in /home/ubuntu/.local/lib/python3.12/site-packages (from rich>=13.7->skillgate-ai==0.3.0) (4.2.0)
+Requirement already satisfied: shellingham>=1.3.0 in /home/ubuntu/.local/lib/python3.12/site-packages (from typer>=0.12->skillgate-ai==0.3.0) (1.5.4)
+Requirement already satisfied: annotated-doc>=0.0.2 in /home/ubuntu/.local/lib/python3.12/site-packages (from typer>=0.12->skillgate-ai==0.3.0) (0.0.5)
+Requirement already satisfied: mdurl~=0.1 in /home/ubuntu/.local/lib/python3.12/site-packages (from markdown-it-py>=2.2.0->rich>=13.7->skillgate-ai==0.3.0) (0.1.2)
+Checking if build backend supports build_editable: started
+Checking if build backend supports build_editable: finished with status 'done'
+Building wheels for collected packages: skillgate-ai
+  Building editable for skillgate-ai (pyproject.toml): started
+  Building editable for skillgate-ai (pyproject.toml): finished with status 'done'
+  Created wheel for skillgate-ai: filename=skillgate_ai-0.3.0-0.editable-py3-none-any.whl size=6784 sha256=a21984a53fc6ec6f326afadf1934e4a26110cea14aead45bb0fa59e9a82eef90
+  Stored in directory: /tmp/pip-ephem-wheel-cache-66t41ge9/wheels/b0/41/ab/4e04a8678980f3355548f1261923479fbf2a713a7393a7dea8
+Successfully built skillgate-ai
+Installing collected packages: skillgate-ai
+  Attempting uninstall: skillgate-ai
+    Found existing installation: skillgate-ai 0.3.0
+    Uninstalling skillgate-ai-0.3.0:
+      Successfully uninstalled skillgate-ai-0.3.0
+Successfully installed skillgate-ai-0.3.0
+EXIT:0

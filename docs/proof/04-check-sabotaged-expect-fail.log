@@ -1,0 +1,75 @@
+===== START 04-check-sabotaged-expect-fail 2026-10-04T01:56:35Z =====
+CMD: skillgate check skills/pdf-sabotaged --expect-fail
+No BYOLLM key in .env — using demo harness (same scorers). Set CURSOR_API_KEY, 
+CODEX_API_KEY, OPENAI_API_KEY, or ANTHROPIC_API_KEY for a live run. See 
+.env.example.
+
+Skill Gate  ·  pdf-sabotaged Dataset  ·  RED
+skill `pdf-sabotaged`  ·  1/8 tasks passed
+config  demo · 300s
+
+  FAIL  extract-hello — Skill didn’t trigger
+       why:  The agent only sees name + description before opening SKILL.md. 
+This request was: “Extract the text from hello.pdf and save it to 
+output/extracted.txt” — and `pdf-sabotaged`’s current description never matched 
+(it talks about something else).
+       fix:  Replace the `description:` in SKILL.md with the block below, then 
+run `skillgate check` on this same skill.
+  FAIL  merge-alpha-beta — Skill didn’t trigger
+       why:  The agent only sees name + description before opening SKILL.md. 
+This request was: “Extract the text from hello.pdf and save it to 
+output/extracted.txt” — and `pdf-sabotaged`’s current description never matched 
+(it talks about something else).
+       fix:  Replace the `description:` in SKILL.md with the block below, then 
+run `skillgate check` on this same skill.
+  FAIL  create-status — Skill didn’t trigger
+       why:  The agent only sees name + description before opening SKILL.md. 
+This request was: “Extract the text from hello.pdf and save it to 
+output/extracted.txt” — and `pdf-sabotaged`’s current description never matched 
+(it talks about something else).
+       fix:  Replace the `description:` in SKILL.md with the block below, then 
+run `skillgate check` on this same skill.
+  FAIL  trigger-notes-pdf — Skill didn’t trigger
+       why:  The agent only sees name + description before opening SKILL.md. 
+This request was: “Extract the text from hello.pdf and save it to 
+output/extracted.txt” — and `pdf-sabotaged`’s current description never matched 
+(it talks about something else).
+       fix:  Replace the `description:` in SKILL.md with the block below, then 
+run `skillgate check` on this same skill.
+  FAIL  trigger-combine-decks — Skill didn’t trigger
+       why:  The agent only sees name + description before opening SKILL.md. 
+This request was: “Extract the text from hello.pdf and save it to 
+output/extracted.txt” — and `pdf-sabotaged`’s current description never matched 
+(it talks about something else).
+       fix:  Replace the `description:` in SKILL.md with the block below, then 
+run `skillgate check` on this same skill.
+  PASS  no-trigger-unrelated
+  FAIL  extract-invoice — Skill didn’t trigger
+       why:  The agent only sees name + description before opening SKILL.md. 
+This request was: “Extract the text from hello.pdf and save it to 
+output/extracted.txt” — and `pdf-sabotaged`’s current description never matched 
+(it talks about something else).
+       fix:  Replace the `description:` in SKILL.md with the block below, then 
+run `skillgate check` on this same skill.
+  FAIL  rotate-hello — Skill didn’t trigger
+       why:  The agent only sees name + description before opening SKILL.md. 
+This request was: “Extract the text from hello.pdf and save it to 
+output/extracted.txt” — and `pdf-sabotaged`’s current description never matched 
+(it talks about something else).
+       fix:  Replace the `description:` in SKILL.md with the block below, then 
+run `skillgate check` on this same skill.
+
+Gate is red. Failed tasks: extract-hello, merge-alpha-beta, create-status, 
+trigger-notes-pdf, trigger-combine-decks, extract-invoice, rotate-hello
+Copy this into SKILL.md below, then run `skillgate check` on this same skill — 
+don’t switch to the good pdf twin.
+Corrected SKILL.md description (not the current one):
+---
+name: pdf-sabotaged
+description: Process PDF files — extract text, merge or split documents, rotate 
+pages, and create new PDFs with Python (pypdf, reportlab). Use this skill 
+whenever the user mentions a .pdf file, invoices, combining documents, 
+extracting text from a PDF, or asking to produce a PDF.
+---
+Suite failed as expected (intentional fail).
+EXIT:0

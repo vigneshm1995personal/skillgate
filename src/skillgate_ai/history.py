@@ -1,0 +1,72 @@
+"""Append-only pack-local eval history under ``<pack>/evals/history/``."""
+
+from __future__ import annotations
+
+import json
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any
+
+HISTORY_DIR = "evals/history"
+
+
+def history_dir(pack_root: str | Path) -> Path:
+    return Path(pack_root).expanduser().resolve() / HISTORY_DIR
+
+
+def append_eval(
+    pack_root: str | Path,
+    *,
+    run_id: str,
+    passed: bool,
+    report: dict[str, Any] | None = None,
+    error: dict[str, Any] | None = None,
+    config: dict[str, Any] | None = None,
+) -> Path | None:
+    """Append one JSONL row. Returns the file path, or None on EACCES/EROFS."""
+    dest_dir = history_dir(pack_root)
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%d")
+    dest = dest_dir / f"{stamp}.jsonl"
+    row = {
+        "ts": datetime.now(timezone.utc).isoformat(),
+        "run_id": run_id,
+        "passed": passed,
+        "gate": "green" if passed else "red",
+        "report": report,
+        "error": error,
+        "config": config,
+    }
+    payload = json.dumps(row, ensure_ascii=True) + "\n"
+    try:
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        with dest.open("a", encoding="utf-8") as handle:
+            handle.write(payload)
+    except OSError:
+        return None
+    return dest
+
+
+def load_history(pack_root: str | Path, *, limit: int = 50) -> list[dict[str, Any]]:
+    """Newest-last rows from JSONL files. Missing dir → empty list."""
+    dest_dir = history_dir(pack_root)
+    if not dest_dir.is_dir():
+        return []
+    rows: list[dict[str, Any]] = []
+    for path in sorted(dest_dir.glob("*.jsonl")):
+        try:
+            text = path.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        for line in text.splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                item = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if isinstance(item, dict):
+                rows.append(item)
+    if limit > 0:
+        return rows[-limit:]
+    return rows

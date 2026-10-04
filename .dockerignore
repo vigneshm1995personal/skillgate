@@ -1,0 +1,62 @@
+# Version control
+.git/
+.gitignore
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+.circleci/
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Documentation (keep README.md + LICENSE for pip install .)
+docs/
+*.md
+!README.md
+!LICENSE
+
+# Docker files (avoid recursive inclusion)
+Dockerfile*
+compose.yaml
+docker-compose*.yml
+docker-compose*.yaml
+.dockerignore
+
+# Environment and secrets
+**/.npmrc
+.env
+.env.*
+*.pem
+*.key
+db-creds.env
+*.pypirc
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+*.egg-info/
+dist/
+build/
+
+# Test and coverage
+coverage/
+.coverage
+htmlcov/
+.pytest_cache/
+.ruff_cache/
+tests/
+
+# Sample packs — bind-mount /pack at runtime
+skills/
+
+# OS files
+.DS_Store
+Thumbs.db

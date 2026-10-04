@@ -1,0 +1,133 @@
+===== CLI commands via --help =====
+                                                                                
+ Usage: skillgate [OPTIONS] COMMAND [ARGS]...                                   
+                                                                                
+ Skill Gate — evaluate agent skills. Pack on disk + `skillgate check` (exit     
+ 0/1).                                                                          
+                                                                                
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Commands ───────────────────────────────────────────────────────────────────╮
+│ version  Print the CLI version.                                              │
+│ ingest   Validate a skill folder against the agentskills spec.               │
+│ check    Run pack-local evals/cases.yaml. Exit 0 if green, 1 if red. No      │
+│          account required.                                                   │
+│ run      Run an eval pack or suite YAML. Prefer `skillgate check` for CI.    │
+│ deploy   Copy a skill pack into a local agent skills directory.              │
+│ list     Show skills/ and evals/ (skill-first paths).                        │
+╰──────────────────────────────────────────────────────────────────────────────╯
+
+
+----- skillgate version --help -----
+                                                                                
+ Usage: skillgate version [OPTIONS]                                             
+                                                                                
+ Print the CLI version.                                                         
+                                                                                
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+
+
+----- skillgate ingest --help -----
+                                                                                
+ Usage: skillgate ingest [OPTIONS] {skill}                                      
+                                                                                
+ Validate a skill folder against the agentskills spec.                          
+                                                                                
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│ *    skill      <path>  Path to a skill folder containing SKILL.md           │
+│                         [required]                                           │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+
+
+----- skillgate check --help -----
+                                                                                
+ Usage: skillgate check [OPTIONS] {pack}                                        
+                                                                                
+ Run pack-local evals/cases.yaml. Exit 0 if green, 1 if red. No account         
+ required.                                                                      
+                                                                                
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│ *    pack      <path>  Skill pack directory (SKILL.md + evals/) [required]   │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --harness                 <str>    auto | cursor-agent | codex | llm | demo  │
+│                                    [default: auto]                           │
+│ --sandbox                 <str>    local | docker [default: local]           │
+│ --demo                             Use the demo harness (no API key)         │
+│ --live                             Require a BYOLLM key; do not fall back    │
+│ --expect-fail                      Exit 0 only if the suite is red           │
+│                                    (sabotaged / intentional-fail demo)       │
+│ --summary                 <str>    cli | github | json [default: cli]        │
+│ --json                             Machine JSON (not the primary UX)         │
+│ --model                   <str>    Requested model id                        │
+│ --timeout                 <int>    Per-task timeout seconds                  │
+│ --temperature             <float>  BYOLLM temperature (0–2)                  │
+│ --reasoning-effort        <str>    Codex reasoning: low | medium | high |    │
+│                                    ultra                                     │
+│ --help                             Show this message and exit.               │
+╰──────────────────────────────────────────────────────────────────────────────╯
+
+
+----- skillgate run --help -----
+                                                                                
+ Usage: skillgate run [OPTIONS] {suite}                                         
+                                                                                
+ Run an eval pack or suite YAML. Prefer `skillgate check` for CI.               
+                                                                                
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│ *    suite      <path>  Skill pack directory or eval suite YAML [required]   │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --skill                   <path>   Override the skill folder                 │
+│ --harness                 <str>    auto | cursor-agent | codex | llm | demo  │
+│                                    [default: auto]                           │
+│ --sandbox                 <str>    local | docker [default: local]           │
+│ --demo                             Use the demo harness (no API key)         │
+│ --live                             Require a BYOLLM key; do not fall back    │
+│ --expect-fail                      Exit 0 only if the suite is red           │
+│                                    (sabotaged / intentional-fail demo)       │
+│ --summary                 <str>    cli | github | json [default: cli]        │
+│ --json                             Machine JSON (not the primary UX)         │
+│ --model                   <str>    Requested model id                        │
+│ --timeout                 <int>    Per-task timeout seconds                  │
+│ --temperature             <float>  BYOLLM temperature (0–2)                  │
+│ --reasoning-effort        <str>    Codex reasoning: low | medium | high |    │
+│                                    ultra                                     │
+│ --help                             Show this message and exit.               │
+╰──────────────────────────────────────────────────────────────────────────────╯
+
+
+----- skillgate deploy --help -----
+                                                                                
+ Usage: skillgate deploy [OPTIONS] {pack}                                       
+                                                                                
+ Copy a skill pack into a local agent skills directory.                         
+                                                                                
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│ *    pack      <path>  Gated skill pack to copy [required]                   │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --target        <str>  cursor | claude | codex [default: cursor]             │
+│ --help                 Show this message and exit.                           │
+╰──────────────────────────────────────────────────────────────────────────────╯
+
+
+----- skillgate list --help -----
+                                                                                
+ Usage: skillgate list [OPTIONS]                                                
+                                                                                
+ Show skills/ and evals/ (skill-first paths).                                   
+                                                                                
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+
+
+----- skillgate serve (must fail) -----
+serve EXIT:2

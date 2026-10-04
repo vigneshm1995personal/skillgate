@@ -1,0 +1,4 @@
+===== START 07-deploy 2026-10-04T01:56:39Z =====
+CMD: env SKILLGATE_CURSOR_SKILLS=/tmp/skillgate-proof-skills skillgate deploy skills/pdf --target cursor
+Installed pdf (16 files) → /tmp/skillgate-proof-skills/pdf
+EXIT:0

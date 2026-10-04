@@ -1,0 +1,23 @@
+===== START 12-workflow 2026-10-04T01:58:17Z =====
+### docs/quickstart.md copy-paste Action ###
+name: skillgate
+on: [push, pull_request]
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install skillgate-ai==0.3.0
+      - run: skillgate check .
+
+--- parsed ---
+<class 'dict'> ['name', True, 'jobs']
+run steps: ['pip install skillgate-ai==0.3.0', 'skillgate check .']
+CLI command 'check' present
+quickstart uses: skillgate check .
+repo CI uses editable install + skillgate check skills/pdf (this repo is the tool, not a pack)
+repo gate.yml matches CLI check + --expect-fail
+PASS
+EXIT:0

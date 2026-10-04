@@ -1,0 +1,25 @@
+services:
+  skillgate:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+    image: skillgate:local
+    pull_policy: build
+    user: "1001:1001"
+    volumes:
+      - ${PACK:-./skills/pdf}:/pack
+    # CLI exits; no ports. Default ENTRYPOINT/CMD → skillgate check /pack
+
+  skillgate-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: dev
+    image: skillgate:dev
+    pull_policy: build
+    user: "1001:1001"
+    volumes:
+      - ./src:/src:ro
+      - ${PACK:-./skills/pdf}:/pack
+    profiles: ["dev"]
