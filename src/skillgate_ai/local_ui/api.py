@@ -75,21 +75,23 @@ def resolve_user_path(raw: str | None, state: UiState, *, must_exist: bool = Fal
             "Path must stay inside the workspace.",
             hint="Do not use .. in pack paths.",
         )
-    path = Path(text).expanduser()
-    if not path.is_absolute():
-        path = state.root / path
+    supplied = Path(text).expanduser()
+    asked_absolute = supplied.is_absolute()
+    path = supplied if asked_absolute else (state.root / supplied)
     path = path.resolve()
     root = state.root.resolve()
     try:
         path.relative_to(root)
     except ValueError:
-        if not path.exists():
+        # Relative paths (including symlinks under --root) must stay inside.
+        # An explicit absolute path the user owns is allowed only if it exists.
+        if not asked_absolute or not path.exists():
             raise SkillGateError(
-                f"Path is outside the workspace and does not exist: {path}",
+                "Path must stay inside the workspace.",
                 hint="Open an existing folder, or create a pack under --root.",
             ) from None
     if must_exist and not path.exists():
-        raise SkillGateError(f"Path not found: {path}")
+        raise SkillGateError("Path not found.")
     return path
 
 
@@ -352,7 +354,17 @@ def _put_env(state: UiState, payload: dict[str, Any]) -> tuple[int, dict[str, An
             f"Unknown env names: {', '.join(sorted(unknown))}",
             hint="Only API keys from .env.example are allowed.",
         )
-    updates = {key: str(payload[key]).strip() for key in ALLOWED_ENV if key in payload}
+    updates: dict[str, str] = {}
+    for key in ALLOWED_ENV:
+        if key not in payload:
+            continue
+        value = str(payload[key]).strip()
+        if any(ch in value for ch in "\r\n"):
+            raise SkillGateError(
+                "API keys cannot contain line breaks.",
+                hint="Paste a single-line key.",
+            )
+        updates[key] = value
     dest = state.root / ".env"
     merge_env_file(dest, updates)
     load_env(state.root)

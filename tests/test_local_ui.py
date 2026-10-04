@@ -126,6 +126,49 @@ def test_ui_static_index(project_root: Path) -> None:
         server.server_close()
 
 
+def test_ui_rejects_dotdot_and_symlink_escape(tmp_path: Path) -> None:
+    root = tmp_path / "ws"
+    (root / "skills").mkdir(parents=True)
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "SKILL.md").write_text(
+        "---\nname: outside\ndescription: not a workspace pack\n---\n",
+        encoding="utf-8",
+    )
+    (root / "skills" / "escape").symlink_to(outside)
+    server, base, _state = start_background(root=root, host="127.0.0.1", port=0)
+    try:
+        status, payload = _request("GET", f"{base}/api/pack?path=../outside")
+        assert status == 400, payload
+        blob = json.dumps(payload)
+        assert "workspace" in blob.lower()
+        assert "/outside" not in blob
+
+        status, payload = _request("GET", f"{base}/api/pack?path=skills/escape")
+        assert status == 400, payload
+        assert "workspace" in json.dumps(payload).lower()
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_ui_env_rejects_newlines(tmp_path: Path) -> None:
+    server, base, _state = start_background(root=tmp_path, host="127.0.0.1", port=0)
+    try:
+        status, payload = _request(
+            "PUT",
+            f"{base}/api/env",
+            {"OPENAI_API_KEY": "sk-line1\nMALICIOUS=1"},
+        )
+        assert status == 400, payload
+        assert "line break" in str(payload).lower()
+        env = tmp_path / ".env"
+        assert not env.exists() or "MALICIOUS" not in env.read_text(encoding="utf-8")
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
 def test_ui_name_mismatch_400(project_root: Path, tmp_path: Path) -> None:
     server, base, _state = start_background(root=project_root, host="127.0.0.1", port=0)
     try:
