@@ -150,7 +150,8 @@ def test_ui_wizard_motion_is_wired_not_just_class_names(project_root: Path) -> N
     assert "function swapPanel" in js
     assert "panel-leave" in js
     assert "panel-enter" in js
-    assert "requestAnimationFrame" in js
+    assert "void current.offsetWidth" in js
+    assert "return sleep(MOTION_MS)" in js
     assert 'wizard.step = "checking"' in js
     create = js.split("async function createAndRun")[1].split("async function pollWizard")[0]
     assert create.index('wizard.step = "checking"') < create.index('"/api/packs"')

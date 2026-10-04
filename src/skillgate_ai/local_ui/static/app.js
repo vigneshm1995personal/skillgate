@@ -215,6 +215,26 @@ function ensureWizardShell() {
   return root;
 }
 
+function swapPanel(nextEl) {
+  const stage = document.getElementById("wiz-stage");
+  nextEl.classList.add("wiz-panel");
+  const current = stage.querySelector(".wiz-panel:not(.panel-leave):not(.panel-leave-back)");
+  const dirBack = wizard.dir < 0;
+  if (!current || prefersReducedMotion()) {
+    stage.innerHTML = "";
+    stage.appendChild(nextEl);
+    return Promise.resolve();
+  }
+  current.classList.remove("panel-enter", "panel-enter-back");
+  void current.offsetWidth;
+  current.classList.add(dirBack ? "panel-leave-back" : "panel-leave");
+  nextEl.classList.add(dirBack ? "panel-enter-back" : "panel-enter");
+  stage.appendChild(nextEl);
+  return sleep(MOTION_MS).then(() => {
+    if (current.parentNode) current.remove();
+  });
+}
+
 function updateStepper(step) {
   const wrap = document.getElementById("wiz-stepper");
   if (!wrap) return;
@@ -228,8 +248,6 @@ function updateStepper(step) {
     </div>`;
   }
   const show = step === 1 || step === 2 || step === "checking";
-  wrap.hidden = !show;
-  if (!show) return;
   const one = wrap.querySelector("[data-node='1']");
   const two = wrap.querySelector("[data-node='2']");
   const rail = wrap.querySelector(".rail");
@@ -247,38 +265,25 @@ function updateStepper(step) {
   } else {
     rail.classList.remove("filled");
   }
+  if (show) wrap.hidden = false;
 }
 
-function swapPanel(nextEl) {
-  const stage = document.getElementById("wiz-stage");
-  nextEl.classList.add("wiz-panel");
-  const current = stage.querySelector(".wiz-panel:not(.panel-leave):not(.panel-leave-back)");
-  const dirBack = wizard.dir < 0;
-  if (!current || prefersReducedMotion()) {
-    stage.innerHTML = "";
-    if (current && prefersReducedMotion()) {
-      stage.appendChild(nextEl);
-      return Promise.resolve();
-    }
-    if (!prefersReducedMotion()) nextEl.classList.add(dirBack ? "panel-enter-back" : "panel-enter");
-    stage.appendChild(nextEl);
-    return Promise.resolve();
+async function paintWizard() {
+  ensureWizardShell();
+  updateStepper(wizard.step);
+  await swapPanel(buildWizardPanel());
+  const wrap = document.getElementById("wiz-stepper");
+  const show = wizard.step === 1 || wizard.step === 2 || wizard.step === "checking";
+  if (wrap) wrap.hidden = !show;
+  const pop = document.querySelector("#wiz-stage .check-pop");
+  if (pop && !prefersReducedMotion()) {
+    pop.classList.remove("play");
+    void pop.offsetWidth;
+    pop.classList.add("play");
+    await sleep(700);
+  } else if (pop) {
+    pop.classList.add("play");
   }
-  current.classList.remove("panel-enter", "panel-enter-back");
-  current.classList.add(dirBack ? "panel-leave-back" : "panel-leave");
-  nextEl.classList.add(dirBack ? "panel-enter-back" : "panel-enter");
-  stage.appendChild(nextEl);
-  return new Promise((resolve) => {
-    let settled = false;
-    const done = () => {
-      if (settled) return;
-      settled = true;
-      if (current.parentNode) current.remove();
-      resolve();
-    };
-    current.addEventListener("animationend", done, { once: true });
-    setTimeout(done, MOTION_MS + 40);
-  });
 }
 
 function buildWizardPanel() {
@@ -387,20 +392,6 @@ function buildWizardPanel() {
   const see = card.querySelector("#see");
   if (see) see.onclick = () => { location.hash = packHref(wizard.path); };
   return card;
-}
-
-async function paintWizard() {
-  ensureWizardShell();
-  updateStepper(wizard.step);
-  await swapPanel(buildWizardPanel());
-  const pop = document.querySelector("#wiz-stage .check-pop");
-  if (pop && !prefersReducedMotion()) {
-    pop.classList.remove("play");
-    void pop.offsetWidth;
-    pop.classList.add("play");
-  } else if (pop) {
-    pop.classList.add("play");
-  }
 }
 
 async function renderSetup(params) {
