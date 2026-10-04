@@ -11,13 +11,13 @@ skillgate ui --root . --open
 
 This is a **local process**, not hosted `serve`. Default bind is `127.0.0.1:8765` (not 8477). There is no login.
 
-Wizard: pick or create a pack folder (`name` must match the folder basename), edit `SKILL.md` frontmatter, point at or scaffold `evals/cases.yaml` + fixtures, optionally write an API key to `.env`. **Run check** (and `skillgate check` without `--live`) always uses the built-in checker — even if `OPENAI_API_KEY` / `AI_GATEWAY_API_KEY` / other keys are in the environment. It shows “Using the built-in checker. No API key needed.” **Run live** is the only control that uses your API key. Pack labels in the UI are short paths like `skills/pdf`, not absolute machine paths.
+**New skill** is two steps: name the skill, describe it, then **Create and run check**. That writes a skill under `skills/`, adds example checks, and runs the built-in checker (no API key). A **Passed** screen shows `n/n` checks. **Run check** (and `skillgate check` without `--live`) always uses the built-in checker — even if an API key is in the environment. **Run live** is the only control that uses your API key; the optional key form is collapsed on the skill page, not in the first-run wizard. Labels in the UI are short paths like `skills/pdf`, not absolute machine paths.
 
 ## Intentional red path
 
-1. On the picker, open **See a red gate** (`skills/pdf-sabotaged`).
-2. Run check → RED, exit 1, corrected description paste (PDF-shaped, not grocery/dinner).
-3. Apply the paste on **this same pack**, then re-run → GREEN, exit 0.
+1. On the picker, open the muted **See a failing check** card (`skills/pdf-sabotaged`).
+2. Run check → Failed, exit 1, corrected description paste (PDF-shaped, not grocery/dinner).
+3. Apply the paste on **this same pack**, then re-run → Passed, exit 0.
 
 CI still uses `skillgate check`; the UI calls the same `run_check` engine.
 
