@@ -1,6 +1,8 @@
 """Pack-as-dataset bind: inherit fixtures, authenticity, gate decision.
 
-OSS has no Start-Evaluations UI. Wizard/regression stay in the private app.
+OSS has a local setup wizard (`skillgate ui`). Generated-check drafts and
+regression stay in the private hosted app.
+
 """
 
 from __future__ import annotations

@@ -61,6 +61,27 @@ def test_no_denied_imports() -> None:
 
 
 def test_cli_imports_without_hosted() -> None:
-    import skillgate_ai.cli  # noqa: F401
-    import skillgate_ai.engine  # noqa: F401
-    import skillgate_ai.config  # noqa: F401
+    import skillgate_ai.cli
+    import skillgate_ai.config
+    import skillgate_ai.engine
+    import skillgate_ai.local_ui.server  # noqa: F401
+
+
+def test_local_ui_may_exist_without_hosted_names() -> None:
+    assert (ROOT / "local_ui").is_dir()
+    assert not (ROOT / "web.py").exists()
+    assert not (ROOT / "wizard.py").exists()
+    assert not (ROOT / "local_ui" / "wizard.py").exists()
+    tree = ast.parse((ROOT / "cli.py").read_text(encoding="utf-8"), filename="cli.py")
+    imported = _imported_names(tree)
+    assert "uvicorn" not in imported
+    assert "fastapi" not in imported
+
+
+def test_static_index_is_packaged() -> None:
+    from importlib.resources import files
+
+    index = files("skillgate_ai.local_ui").joinpath("static/index.html")
+    text = index.read_text(encoding="utf-8")
+    assert "no account" in text.lower()
+

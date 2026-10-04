@@ -58,3 +58,13 @@ def test_no_serve_command() -> None:
     assert "No such command" in (result.stdout + result.stderr) or "Got unexpected extra argument" in (
         result.stdout + result.stderr
     ) or "No such command 'serve'" in (result.stdout + result.stderr)
+
+
+def test_ui_help() -> None:
+    result = runner.invoke(app, ["ui", "--help"])
+    assert result.exit_code == 0, result.stdout
+    combined = result.stdout + result.stderr
+    assert "127.0.0.1" in combined
+    assert "no account" in combined.lower()
+    assert "8765" in combined
+

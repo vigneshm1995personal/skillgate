@@ -137,13 +137,13 @@ def load_case_pack(skill_path: str | Path) -> CasePack | None:
     try:
         raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     except yaml.YAMLError as exc:
-        raise SuiteError(f"Case pack is not valid YAML: {orig}") from exc
+        raise SuiteError(f"Case pack is not valid YAML: {exc}") from exc
     if not isinstance(raw, dict):
         raise SuiteError("Case pack must be a YAML mapping.")
     try:
         pack = CasePack.model_validate(raw)
     except Exception as exc:
-        raise SuiteError(f"Case pack is invalid: {orig}") from exc
+        raise SuiteError(f"Case pack is invalid: {exc}") from exc
     _validate_pack_on_disk(root, pack)
     return pack
 
@@ -153,7 +153,7 @@ def save_case_pack(skill_path: str | Path, pack: CasePack) -> Path:
     try:
         CasePack.model_validate(pack.model_dump())
     except Exception as exc:
-        raise SuiteError(f"Case pack is invalid: {orig}") from exc
+        raise SuiteError(f"Case pack is invalid: {exc}") from exc
     _validate_pack_on_disk(root, pack)
     dest = cases_path(root)
     dest.parent.mkdir(parents=True, exist_ok=True)
@@ -256,7 +256,7 @@ def suite_from_pack(pack: CasePack, skill_rel: str) -> SuiteSpec:
     try:
         return SuiteSpec.model_validate(raw)
     except Exception as exc:
-        raise SuiteError(f"Case pack could not become a suite: {orig}") from exc
+        raise SuiteError(f"Case pack could not become a suite: {exc}") from exc
 
 
 def checks_from_pack(pack: CasePack, *, include_drafts: bool = False) -> list[dict[str, Any]]:
