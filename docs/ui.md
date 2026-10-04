@@ -11,7 +11,7 @@ skillgate ui --root . --open
 
 This is a **local process**, not hosted `serve`. Default bind is `127.0.0.1:8765` (not 8477). There is no login.
 
-**New skill** is two steps: name the skill, describe it, then **Create and run check**. That writes a skill under `skills/`, adds example checks, and runs the built-in checker (no API key). A **Passed** screen shows `n/n` checks. **Run check** (and `skillgate check` without `--live`) always uses the built-in checker — even if an API key is in the environment. **Run live** is the only control that uses your API key; the optional key form is collapsed on the skill page, not in the first-run wizard. Labels in the UI are short paths like `skills/pdf`, not absolute machine paths.
+**New skill** is two steps: name the skill, describe it, then **Create and run check**. That writes a skill under `skills/`, adds example checks, and runs the built-in checker (no API key). A **Passed** screen shows `n/n` checks. **Run check** (and `skillgate check` without `--live`) always uses the built-in checker — even if an API key is in the environment. **Run live** is the only control that uses your API key. After Passed or Failed you can **Add a key for live checks** (or skip); the same optional form stays collapsed on the skill page. Labels in the UI are short paths like `skills/pdf`, not absolute machine paths.
 
 ## Intentional red path
 

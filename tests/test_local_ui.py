@@ -135,6 +135,11 @@ def test_ui_copy_has_no_internal_jargon(project_root: Path) -> None:
         assert "docker" not in html.lower()
         assert "SKILL.md frontmatter" not in js
         assert "Optional API key" not in js
+        assert "Your API key (optional)" in js
+        assert "Add a key for live checks" in js
+        assert "You already have a key. Run live uses it." in js
+        assert "function keyFieldsHtml" in js
+        assert "function keyPayloadFrom" in js
         assert "<code>${esc(t.id)}</code>" not in js
         assert "function checkHeadline" in js
         assert "The skill should run for a matching request." in js
@@ -173,6 +178,57 @@ def test_ui_wizard_motion_is_wired_not_just_class_names(project_root: Path) -> N
     assert "@keyframes bar-slide" in css
     assert "prefers-reduced-motion" in css
     assert "min-height: 1.4em" in css
+
+
+def test_ui_wizard_optional_key_is_after_result(project_root: Path) -> None:
+    js = (project_root / "src/skillgate_ai/local_ui/static/app.js").read_text(encoding="utf-8")
+    assert "function keyFieldsHtml" in js
+    assert "function keyPayloadFrom" in js
+    assert "Your API key (optional)" in js
+    assert "Add a key for live checks" in js
+    assert "You already have a key. Run live uses it." in js
+    assert "Skip this. The check you just ran used the built-in checker." in js
+    assert 'id="skip">Skip' in js
+    assert "<label>OPENAI_API_KEY" not in js
+    assert "<label>CURSOR_API_KEY" not in js
+    assert "Optional API key" not in js
+    assert "<span class=\"label\">Name</span>" in js
+    assert "<span class=\"label\">Describe</span>" in js
+    assert "data-node=\"3\"" not in js
+    step2 = js.split("if (step === 2)")[1].split('if (step === "checking")')[0]
+    assert "Create and run check" in step2
+    assert "Skip" not in step2
+    assert 'id="add-key"' not in step2
+    create = js.split("async function createAndRun")[1].split("async function pollWizard")[0]
+    assert 'api("POST", "/api/check", { path: wizard.path, live: false })' in create
+    assert "live: true" not in create
+    assert "if (value) body[name] = value" in js
+    saved = js.split('if (step === "keySaved")')[1].split("const snap = wizard.result")[0]
+    assert "See the checks" in saved
+    assert "Run live" in saved
+    assert "/api/check" not in saved
+    assert 'wizard.step = "keys"' in js
+    paint = js.split("async function paintWizard")[1].split("function buildWizardPanel")[0]
+    assert 'wizard.step === 1 || wizard.step === 2 || wizard.step === "checking"' in paint
+
+
+def test_ui_env_writes_only_supplied_keys(tmp_path: Path) -> None:
+    server, base, _state = start_background(root=tmp_path, host="127.0.0.1", port=0)
+    try:
+        status, payload = _request(
+            "PUT",
+            f"{base}/api/env",
+            {"OPENAI_API_KEY": "sk-test-not-a-real-key"},
+        )
+        assert status == 200, payload
+        assert payload["ok"] is True
+        env = (tmp_path / ".env").read_text(encoding="utf-8")
+        assert "OPENAI_API_KEY=sk-test-not-a-real-key" in env
+        assert "CURSOR_API_KEY" not in env
+        assert "ANTHROPIC_API_KEY" not in env
+    finally:
+        server.shutdown()
+        server.server_close()
 
 
 def test_ui_wizard_first_run_sequence_is_green(project_root: Path, tmp_path: Path) -> None:

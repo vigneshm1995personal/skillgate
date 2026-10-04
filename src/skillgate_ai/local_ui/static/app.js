@@ -74,6 +74,43 @@ function packHref(packOrPath) {
   return `#/pack?path=${encodeURIComponent(value)}`;
 }
 
+function keyFieldsHtml() {
+  return `<label>OpenAI</label><input id="k-openai" type="password" autocomplete="off">
+        <label>Cursor</label><input id="k-cursor" type="password" autocomplete="off">
+        <label>Codex</label><input id="k-codex" type="password" autocomplete="off">
+        <label>Anthropic</label><input id="k-ant" type="password" autocomplete="off">
+        <label>AI Gateway</label><input id="k-gw" type="password" autocomplete="off">`;
+}
+
+function keyPayloadFrom(root) {
+  const fields = [
+    ["OPENAI_API_KEY", "#k-openai"],
+    ["CURSOR_API_KEY", "#k-cursor"],
+    ["CODEX_API_KEY", "#k-codex"],
+    ["ANTHROPIC_API_KEY", "#k-ant"],
+    ["AI_GATEWAY_API_KEY", "#k-gw"],
+  ];
+  const body = {};
+  fields.forEach(([name, sel]) => {
+    const el = root.querySelector(sel);
+    const value = el ? el.value.trim() : "";
+    if (value) body[name] = value;
+  });
+  return body;
+}
+
+function goToPack(live) {
+  const href = packHref(wizard.path);
+  location.hash = live ? `${href}&live=1` : href;
+}
+
+async function openKeyPanel() {
+  try { meta = await api("GET", "/api/meta"); } catch (e) { /* keep cached meta */ }
+  wizard.dir = 1;
+  wizard.step = "keys";
+  await paintWizard();
+}
+
 function defaultDescription(name) {
   const n = name || "skill";
   return `Produce ${n} notes, extracts, and local file outputs. Use when the user asks for ${n}, mentions invoices or documents, or wants the documented ${n} workflow.`;
@@ -253,7 +290,8 @@ function updateStepper(step) {
   const rail = wrap.querySelector(".rail");
   const oneDone = step !== 1;
   const twoCurrent = step === 2;
-  const twoDone = step === "checking" || step === "success" || step === "fail";
+  const twoDone = step === "checking" || step === "success" || step === "fail"
+    || step === "keys" || step === "keySaved";
   one.className = "node " + (oneDone ? "done" : "current");
   one.textContent = oneDone ? "✓" : "1";
   two.className = "node " + (twoDone ? "done" : twoCurrent ? "current" : "");
@@ -372,6 +410,59 @@ function buildWizardPanel() {
     </div>`);
   }
 
+  if (step === "keys") {
+    if (meta.has_any_key) {
+      const have = $(`<div class="card">
+        <h2>Your API key (optional)</h2>
+        <p class="muted">You already have a key. Run live uses it.</p>
+        <p><button type="button" id="see">See the checks</button>
+        <button type="button" class="secondary" id="live">Run live</button></p>
+      </div>`);
+      have.querySelector("#see").onclick = () => goToPack(false);
+      have.querySelector("#live").onclick = () => goToPack(true);
+      return have;
+    }
+    const form = $(`<div class="card">
+      <h2>Your API key (optional)</h2>
+      <p class="muted">Skip this. The check you just ran used the built-in checker. A key is only for Run live.</p>
+      ${keyFieldsHtml()}
+      <p class="field-msg" id="step-msg" aria-live="polite"></p>
+      <p><button type="button" id="save-key">Save key</button>
+      <button type="button" class="secondary" id="skip">Skip</button></p>
+      <div id="key-err"></div>
+    </div>`);
+    form.querySelector("#skip").onclick = () => goToPack(false);
+    form.querySelector("#save-key").onclick = async () => {
+      const msg = form.querySelector("#step-msg");
+      const keyErr = form.querySelector("#key-err");
+      const body = keyPayloadFrom(form);
+      if (!Object.keys(body).length) {
+        msg.textContent = "Add a key to save, or skip.";
+        return;
+      }
+      try {
+        const saved = await api("PUT", "/api/env", body);
+        meta.has_any_key = !!(saved && saved.has_any_key);
+        wizard.dir = 1;
+        wizard.step = "keySaved";
+        await paintWizard();
+      } catch (e) { keyErr.innerHTML = showError(e); }
+    };
+    return form;
+  }
+
+  if (step === "keySaved") {
+    const saved = $(`<div class="card">
+      <h2>Your API key (optional)</h2>
+      <p class="muted">Saved for Run live. Run check still uses the built-in checker.</p>
+      <p><button type="button" id="see">See the checks</button>
+      <button type="button" class="secondary" id="live">Run live</button></p>
+    </div>`);
+    saved.querySelector("#see").onclick = () => goToPack(false);
+    saved.querySelector("#live").onclick = () => goToPack(true);
+    return saved;
+  }
+
   const snap = wizard.result || {};
   const report = snap.report || {};
   const passed = report.passed_count ?? 0;
@@ -388,16 +479,20 @@ function buildWizardPanel() {
       <h1 class="gate green">Passed</h1>
       <p>${esc(passed)}/${esc(total)} checks</p>
       <p class="muted">Built-in checker. No API key needed.</p>
-      <p><button type="button" class="secondary" id="see">See the checks</button></p>
+      <p><button type="button" class="secondary" id="see">See the checks</button>
+      <button type="button" class="secondary" id="add-key">Add a key for live checks</button></p>
     </div>`)
     : $(`<div class="card">
       <h1 class="gate red">Failed</h1>
       <p>${esc(passed)}/${esc(total)} checks</p>
       <p class="muted">Built-in checker. No API key needed.</p>
-      <p><button type="button" id="see">See the checks</button></p>
+      <p><button type="button" id="see">See the checks</button>
+      <button type="button" class="secondary" id="add-key">Add a key for live checks</button></p>
     </div>`);
   const see = card.querySelector("#see");
-  if (see) see.onclick = () => { location.hash = packHref(wizard.path); };
+  if (see) see.onclick = () => goToPack(false);
+  const addKey = card.querySelector("#add-key");
+  if (addKey) addKey.onclick = () => openKeyPanel();
   return card;
 }
 
@@ -531,11 +626,7 @@ async function renderPack(params) {
       <summary>Use your own API key (optional)</summary>
       <div class="stack">
         <p class="muted">Leave this closed. Run check does not need a key. A key is only for Run live.</p>
-        <label>OpenAI</label><input id="k-openai" type="password" autocomplete="off">
-        <label>Cursor</label><input id="k-cursor" type="password" autocomplete="off">
-        <label>Codex</label><input id="k-codex" type="password" autocomplete="off">
-        <label>Anthropic</label><input id="k-ant" type="password" autocomplete="off">
-        <label>AI Gateway</label><input id="k-gw" type="password" autocomplete="off">
+        ${keyFieldsHtml()}
         <p><button type="button" class="secondary" id="save-key">Save key</button></p>
         <div id="key-err"></div>
       </div>
@@ -547,13 +638,11 @@ async function renderPack(params) {
   head.querySelector("#live").onclick = () => startCheck(path, true);
   head.querySelector("#save-key").onclick = async () => {
     const keyErr = head.querySelector("#key-err");
-    const body = {
-      OPENAI_API_KEY: head.querySelector("#k-openai").value,
-      CURSOR_API_KEY: head.querySelector("#k-cursor").value,
-      CODEX_API_KEY: head.querySelector("#k-codex").value,
-      ANTHROPIC_API_KEY: head.querySelector("#k-ant").value,
-      AI_GATEWAY_API_KEY: head.querySelector("#k-gw").value,
-    };
+    const body = keyPayloadFrom(head);
+    if (!Object.keys(body).length) {
+      keyErr.innerHTML = "<p class='muted'>Add a key to save.</p>";
+      return;
+    }
     try {
       await api("PUT", "/api/env", body);
       keyErr.innerHTML = "<p class='muted'>Saved for Run live. Run check still uses the built-in checker.</p>";
@@ -561,6 +650,7 @@ async function renderPack(params) {
   };
   app.appendChild(head);
   if (params.get("run") === "1") startCheck(path, false);
+  else if (params.get("live") === "1") startCheck(path, true);
   else if (lastRun.path === path && lastRun.snap) paintResult(lastRun.snap, path);
 }
 
