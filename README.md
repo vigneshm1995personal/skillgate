@@ -60,5 +60,6 @@ Until the first PyPI release, CI in this repo uses `pip install -e .`.
 - [`docs/quickstart.md`](docs/quickstart.md) — red sabotaged → green pdf
 - [`docs/pack.md`](docs/pack.md) — `evals/cases.yaml` schema 1, fixtures, goldens, history
 - [Extract plan](docs/plans/2026-10-03-skillgate-oss-extract.md) — allowlist / deny-list
+- [`docs/proof/PUBLISH.md`](docs/proof/PUBLISH.md) — secret scan, tag, PyPI Trusted Publishing, GHCR (owner UI; do not flip public from CI)
 
 BYO keys (Cursor / Codex / OpenAI-compatible / Anthropic) are optional and only for a **live** harness. See `.env.example`.

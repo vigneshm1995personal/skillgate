@@ -1,0 +1,25 @@
+===== START 15-scan-verdict 2026-10-04T02:08:00Z =====
+HEAD scanned: e65dbaf804beacf4faa9e0354077e97d8c53b717 (origin/main)
+Tools: gitleaks 8.30.1, trufflehog 3.97.9, git grep
+
+gitleaks --all (7 local commits): PASS  EXIT:0  "no leaks found"
+gitleaks log-opts=e65dbaf (2 commits on main): PASS  EXIT:0  report=[]
+trufflehog git file://workspace --fail --results=verified,unknown: PASS  EXIT:0
+  verified_secrets=0 unverified_secrets=0 chunks=343
+git grep needles on e65dbaf: PASS — hits are deny-list / scan-instruction documentation only
+  SKILLGATE_SECRETS_KEY=  → MATRIX.md saying assignments were NOT found
+  postgres://             → extract plan + proof logs listing the scan needle
+  postgresql://           → no matches
+  neon.tech               → MATRIX/proof saying no neon.tech URLs
+  VERCEL_APP_CLIENT       → extract plan deny-list names, no values
+  sk-                     → extract plan "git grep for sk-"
+  sk-[A-Za-z0-9]{20,}     → no matches
+
+GitHub secret scanning API: CANNOT ENABLE
+  gh token permissions.admin=false
+  security_and_analysis=null
+  GET .../secret-scanning/alerts → 403 Resource not accessible by integration
+  UI steps: docs/proof/PUBLISH.md
+
+OVERALL: PASS
+EXIT:0
