@@ -2,7 +2,7 @@ const app = document.getElementById("app");
 const banner = document.getElementById("banner");
 const NAME_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const MOTION_MS = 350;
-const CHECKING_MIN_MS = 1400;
+const CHECKING_MIN_MS = 700;
 let meta = { account: false, demo_default: true, packs: [] };
 let wizard = blankWizard();
 let lastRoutePath = "";
@@ -276,14 +276,21 @@ async function paintWizard() {
   const show = wizard.step === 1 || wizard.step === 2 || wizard.step === "checking";
   if (wrap) wrap.hidden = !show;
   const pop = document.querySelector("#wiz-stage .check-pop");
-  if (pop && !prefersReducedMotion()) {
-    pop.classList.remove("play");
-    void pop.offsetWidth;
+  if (!pop) return;
+  if (prefersReducedMotion()) {
     pop.classList.add("play");
-    await sleep(700);
-  } else if (pop) {
-    pop.classList.add("play");
+    return;
   }
+  pop.classList.remove("play");
+  void pop.offsetWidth;
+  await new Promise((resolve) => {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        pop.classList.add("play");
+        resolve();
+      });
+    });
+  });
 }
 
 function buildWizardPanel() {
@@ -420,8 +427,8 @@ async function createAndRun(button) {
   wizard.dir = 1;
   wizard.step = "checking";
   wizard.progress = { completed: 0, total: 0 };
-  const shownAt = Date.now();
   await paintWizard();
+  const checkingShownAt = Date.now();
   try {
     if (!wizard.path) {
       const created = await api("POST", "/api/packs", {
@@ -450,9 +457,9 @@ async function createAndRun(button) {
     }
     const started = await api("POST", "/api/check", { path: wizard.path, live: false });
     await pollWizard(started.run_id);
+    const wait = CHECKING_MIN_MS - (Date.now() - checkingShownAt);
+    if (wait > 0) await sleep(wait);
     if (!prefersReducedMotion()) {
-      const wait = CHECKING_MIN_MS - (Date.now() - shownAt);
-      if (wait > 0) await sleep(wait);
       const bar = document.querySelector("#wiz-progress > i");
       const wrap = document.getElementById("wiz-progress");
       if (wrap) wrap.classList.remove("busy");

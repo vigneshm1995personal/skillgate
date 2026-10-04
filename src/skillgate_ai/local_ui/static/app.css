@@ -186,28 +186,29 @@ pre { background: #f0ece3; padding: 0.75rem; overflow: auto; border-radius: 4px;
   height: 4.5rem;
   margin: 0 auto 0.85rem;
   color: var(--green);
+  transform-origin: center center;
+  transform: scale(0.3);
 }
 .check-pop svg { width: 100%; height: 100%; display: block; overflow: visible; }
 .check-pop circle {
   transform-origin: 36px 36px;
-  opacity: 0;
-  transform: scale(0.45);
 }
 .check-pop path {
   stroke-dasharray: 48;
   stroke-dashoffset: 48;
 }
-.check-pop.play circle {
-  animation: check-ring 480ms var(--ease) both;
+.check-pop.play {
+  animation: check-pop-in 400ms linear forwards;
 }
 .check-pop.play path {
-  animation: check-stroke 560ms var(--ease) 140ms forwards;
+  animation: check-stroke 400ms linear forwards;
 }
-@keyframes check-ring {
-  from { opacity: 0; transform: scale(0.55); }
-  to { opacity: 1; transform: none; }
+@keyframes check-pop-in {
+  from { transform: scale(0.3); }
+  to { transform: scale(1); }
 }
 @keyframes check-stroke {
+  from { stroke-dashoffset: 48; }
   to { stroke-dashoffset: 0; }
 }
 
@@ -223,10 +224,10 @@ details.keys .stack { margin-top: 0.75rem; }
   .wiz-panel.panel-enter-back,
   .wiz-panel.panel-leave,
   .wiz-panel.panel-leave-back,
-  .check-pop.play circle,
+  .check-pop.play,
   .check-pop.play path,
   .progress.busy > i { animation: none; }
-  .check-pop circle { opacity: 1; transform: none; }
+  .check-pop { transform: none; }
   .check-pop path { stroke-dashoffset: 0; }
   .progress.busy > i { width: 50%; transform: none; }
 }

@@ -156,6 +156,11 @@ def test_ui_wizard_motion_is_wired_not_just_class_names(project_root: Path) -> N
     create = js.split("async function createAndRun")[1].split("async function pollWizard")[0]
     assert create.index('wizard.step = "checking"') < create.index('"/api/packs"')
     assert create.index("await paintWizard()") < create.index('"/api/packs"')
+    assert "const CHECKING_MIN_MS = 700" in js
+    assert "checkingShownAt" in create
+    assert create.index("await paintWizard()") < create.index("checkingShownAt")
+    assert create.index("checkingShownAt") < create.index('"/api/packs"')
+    assert create.index("CHECKING_MIN_MS") < create.index('wizard.step = (wizard.result')
     packs = __import__("re").search(r'api\("POST", "/api/packs", \{([^}]+)\}', js)
     assert packs, "wizard must POST /api/packs"
     assert "scaffold" not in packs.group(1)
@@ -163,6 +168,8 @@ def test_ui_wizard_motion_is_wired_not_just_class_names(project_root: Path) -> N
     assert "--motion: 350ms" in css
     assert "@keyframes panel-out" in css
     assert "@keyframes check-stroke" in css
+    assert "check-stroke 400ms linear" in css
+    assert "check-pop-in 400ms linear" in css
     assert "@keyframes bar-slide" in css
     assert "prefers-reduced-motion" in css
     assert "min-height: 1.4em" in css
