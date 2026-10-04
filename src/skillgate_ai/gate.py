@@ -15,7 +15,7 @@ from typing import Any
 from skillgate_ai.config import get_llm_config, load_env
 from skillgate_ai.demo_files import ensure_demo_pdfs
 from skillgate_ai.engine import EvalProgress, SuiteReport, run_eval
-from skillgate_ai.errors import SkillGateError
+from skillgate_ai.errors import HarnessError, MissingLLMKeyError, SkillGateError
 from skillgate_ai.eval_config import (
     EvalConfigError,
     EvalRunConfig,
@@ -24,7 +24,12 @@ from skillgate_ai.eval_config import (
     stamp_resolved,
     with_timeout_effective,
 )
-from skillgate_ai.harness import live_harness_or_error, resolve_harness
+from skillgate_ai.harness import (
+    DemoHarness,
+    harness_is_startable,
+    live_harness_or_error,
+    resolve_harness,
+)
 from skillgate_ai.history import append_eval
 from skillgate_ai.live import RunControl
 from skillgate_ai.observability import (
@@ -40,6 +45,13 @@ DEMO_NOTICE = (
     "No BYOLLM key in .env — using demo harness (same scorers). "
     "Set CURSOR_API_KEY, CODEX_API_KEY, OPENAI_API_KEY, or ANTHROPIC_API_KEY "
     "for a live run. See .env.example."
+)
+
+FALLBACK_NOTICE = (
+    "No usable BYOLLM harness — using demo harness (same scorers). "
+    "A key is set but Codex/Cursor CLI is missing or the key cannot run. "
+    "Install the matching CLI, or use Run live / --live once a key actually works. "
+    "See .env.example."
 )
 
 
@@ -159,53 +171,70 @@ def run_check(
             source=source,
         )
         cfg = apply_eval_config(cfg, run_cfg)
+        pref = (harness or "auto").strip().lower() or "auto"
         if live:
             resolved = live_harness_or_error(harness, cfg)
         else:
             resolved = resolve_harness(harness, cfg, demo=demo)
-            if resolved.name == "demo" and not demo and harness == "auto" and not cfg.has_any_key:
-                demo_notice = DEMO_NOTICE
-        run_cfg = stamp_resolved(run_cfg, resolved.name, cfg)
-        mode = "live" if live else ("demo" if resolved.name == "demo" else "live")
-        with eval_transaction(
-            run_id=rid,
-            skill=skill_label,
-            harness=resolved.name,
-            mode=mode,
-            suite=suite_path.stem,
-            sandbox=sandbox_kind,
-        ):
-            report = run_eval(
-                None if spec is not None else suite_path,
-                spec=spec,
-                harness=resolved,
-                sandbox_kind=sandbox_kind,
-                docker_image=cfg.docker_image,
-                project_root=project,
-                skill_override=skill_path or (suite_path if spec is not None else None),
-                run_id=rid,
-                timeout_override=run_cfg.timeout_sec,
-                config=run_cfg.to_dict(),
-                on_progress=on_progress,
-                control=control,
-            )
-            run_cfg = with_timeout_effective(run_cfg, report.timeout_effective)
-            report.config = run_cfg.to_dict()
-            set_eval_passed(report.passed)
-            log_eval_finished(
-                run_id=rid,
-                skill=report.skill,
-                harness=report.harness,
-                passed=report.passed,
-            )
-            persist_root = Path(report.skill_path) if report.skill_path else pack_root
-            persist_eval(
-                pack_root=persist_root,
-                run_id=rid,
-                passed=report.passed,
-                report=report_to_dict(report),
-                config=run_cfg,
-            )
+            if not demo:
+                if not harness_is_startable(resolved, cfg):
+                    demo_notice = FALLBACK_NOTICE
+                    resolved = DemoHarness()
+                elif resolved.name == "demo" and pref == "auto":
+                    demo_notice = DEMO_NOTICE if not cfg.has_any_key else FALLBACK_NOTICE
+        fallback_attempted = False
+        while True:
+            run_cfg = stamp_resolved(run_cfg, resolved.name, cfg)
+            mode = "live" if live else ("demo" if resolved.name == "demo" else "live")
+            try:
+                with eval_transaction(
+                    run_id=rid,
+                    skill=skill_label,
+                    harness=resolved.name,
+                    mode=mode,
+                    suite=suite_path.stem,
+                    sandbox=sandbox_kind,
+                ):
+                    report = run_eval(
+                        None if spec is not None else suite_path,
+                        spec=spec,
+                        harness=resolved,
+                        sandbox_kind=sandbox_kind,
+                        docker_image=cfg.docker_image,
+                        project_root=project,
+                        skill_override=skill_path or (suite_path if spec is not None else None),
+                        run_id=rid,
+                        timeout_override=run_cfg.timeout_sec,
+                        config=run_cfg.to_dict(),
+                        on_progress=on_progress,
+                        control=control,
+                    )
+                    run_cfg = with_timeout_effective(run_cfg, report.timeout_effective)
+                    report.config = run_cfg.to_dict()
+                    set_eval_passed(report.passed)
+                    log_eval_finished(
+                        run_id=rid,
+                        skill=report.skill,
+                        harness=report.harness,
+                        passed=report.passed,
+                    )
+                    persist_root = Path(report.skill_path) if report.skill_path else pack_root
+                    persist_eval(
+                        pack_root=persist_root,
+                        run_id=rid,
+                        passed=report.passed,
+                        report=report_to_dict(report),
+                        config=run_cfg,
+                    )
+                break
+            except (HarnessError, MissingLLMKeyError):
+                # Auto/default fixture checks must not paint 0/0 red when a
+                # key is set but Codex/Cursor/HTTP cannot actually run.
+                if live or demo or fallback_attempted or pref != "auto" or resolved.name == "demo":
+                    raise
+                fallback_attempted = True
+                demo_notice = FALLBACK_NOTICE
+                resolved = DemoHarness()
     except SkillGateError as exc:
         capture_run_failure(exc)
         persist_root = skill_path or pack_root

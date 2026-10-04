@@ -11,7 +11,7 @@ skillgate ui --root . --open
 
 This is a **local process**, not hosted `serve`. Default bind is `127.0.0.1:8765` (not 8477). There is no login.
 
-Wizard: pick or create a pack folder (`name` must match the folder basename), edit `SKILL.md` frontmatter, point at or scaffold `evals/cases.yaml` + fixtures, optionally write BYO keys to `.env`. Keys are **not** required for demo fixtures.
+Wizard: pick or create a pack folder (`name` must match the folder basename), edit `SKILL.md` frontmatter, point at or scaffold `evals/cases.yaml` + fixtures, optionally write BYO keys to `.env`. Keys are **not** required for demo fixtures. **Run check** (and `skillgate check`) uses the demo harness when no BYO harness can actually run — including when `OPENAI_API_KEY` / `CODEX_API_KEY` is set but the `codex` binary is missing. That path shows a notice instead of a 0/0 red gate. **Run live** still requires a working harness.
 
 ## Intentional red path
 

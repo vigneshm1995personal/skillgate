@@ -138,6 +138,32 @@ def test_ui_apply_fix_then_green(project_root: Path, tmp_path: Path) -> None:
         server.server_close()
 
 
+def test_ui_check_pdf_green_when_codex_env_but_no_binary(
+    project_root: Path, tmp_path: Path, monkeypatch
+) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test-not-a-real-key")
+    monkeypatch.setenv("CODEX_API_KEY", "sk-codex-not-a-real-key")
+    monkeypatch.setattr("skillgate_ai.harness._resolve_codex_bin", lambda _preferred: None)
+    dest = tmp_path / "pdf"
+    shutil.copytree(project_root / "skills" / "pdf", dest)
+    ensure_demo_pdfs(dest / "evals" / "fixtures")
+    server, base, _state = start_background(root=project_root, host="127.0.0.1", port=0)
+    try:
+        status, started = _request("POST", f"{base}/api/check", {"path": str(dest)})
+        assert status == 202, started
+        done = _poll_run(base, started["run_id"])
+        report = done["report"] or {}
+        assert done["exit_code"] == 0, done
+        assert report.get("gate") == "green"
+        assert (report.get("task_count") or 0) > 0
+        assert report.get("harness") == "demo"
+        notice = (done.get("demo_notice") or "").lower()
+        assert "demo harness" in notice
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
 def test_ui_new_pack_no_key_green(project_root: Path, tmp_path: Path) -> None:
     server, base, _state = start_background(root=project_root, host="127.0.0.1", port=0)
     try:

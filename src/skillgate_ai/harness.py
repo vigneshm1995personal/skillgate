@@ -574,6 +574,23 @@ class LLMHarness:
         return _anthropic_complete_response(self.cfg, prompt, timeout_sec)
 
 
+def harness_is_startable(harness: Harness, cfg: LLMConfig) -> bool:
+    """True when this harness can spawn (CLI on PATH / HTTP key present).
+
+    Auto must not pick Codex just because OPENAI_API_KEY filled ``codex_api_key``.
+    A missing ``codex`` binary is not startable — Gate falls back to demo.
+    """
+    if isinstance(harness, DemoHarness):
+        return True
+    if isinstance(harness, CodexCliHarness):
+        return _resolve_codex_bin(cfg.codex_bin) is not None
+    if isinstance(harness, CursorAgentHarness):
+        return _resolve_agent_bin(cfg.cursor_agent_bin) is not None
+    if isinstance(harness, LLMHarness):
+        return bool(cfg.gateway_api_key or cfg.openai_api_key or cfg.anthropic_api_key)
+    return True
+
+
 def resolve_harness(kind: str, cfg: LLMConfig, *, demo: bool = False) -> Harness:
     kind = (kind or "auto").lower()
     if demo or kind in {"demo", "fixture", "offline"}:
@@ -596,13 +613,12 @@ def resolve_harness(kind: str, cfg: LLMConfig, *, demo: bool = False) -> Harness
         )
     if cfg.cursor_api_key and _resolve_agent_bin(cfg.cursor_agent_bin):
         return CursorAgentHarness(cfg)
-    if cfg.cursor_api_key:
-        if cfg.gateway_api_key or cfg.openai_api_key or cfg.anthropic_api_key:
-            return LLMHarness(cfg)
-        return DemoHarness()
-    if cfg.codex_api_key:
+    if cfg.codex_api_key and _resolve_codex_bin(cfg.codex_bin):
         return CodexCliHarness(cfg)
-    if cfg.gateway_api_key or cfg.openai_api_key or cfg.anthropic_api_key:
+    # OPENAI_API_KEY is aliased onto codex_api_key. Do not send auto/default
+    # fixture checks through LLM HTTP when Codex CLI is missing — a dummy key
+    # would 401 and paint the gate 0/0 red. Gateway / Anthropic are HTTP-native.
+    if cfg.gateway_api_key or cfg.anthropic_api_key:
         return LLMHarness(cfg)
     return DemoHarness()
 
