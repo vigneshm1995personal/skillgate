@@ -1,0 +1,66 @@
+"""AST deny-list: public package must not import hosted modules."""
+
+from __future__ import annotations
+
+import ast
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1] / "src" / "skillgate_ai"
+
+DENIED = {
+    "skillgate_ai.auth_siwv",
+    "skillgate_ai.vault",
+    "skillgate_ai.store",
+    "skillgate_ai.store_postgres",
+    "skillgate_ai.web",
+    "skillgate_ai.eval_slice",
+    "skillgate_ai.jev_qa",
+    "skillgate_ai.author",
+    "skillgate_ai.wizard",
+    "skillgate_ai.stage_b",
+    "skillgate_ai.deploy_git",
+    "skillgate_ai.remote_harness",
+}
+
+DENIED_STEMS = {name.rsplit(".", 1)[-1] for name in DENIED}
+DENIED_FILES = {f"{stem}.py" for stem in DENIED_STEMS} | {"web.py"}
+
+
+def _imported_names(tree: ast.AST) -> set[str]:
+    found: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                found.add(alias.name)
+        elif isinstance(node, ast.ImportFrom):
+            module = node.module or ""
+            found.add(module)
+            for alias in node.names:
+                found.add(f"{module}.{alias.name}" if module else alias.name)
+    return found
+
+
+def test_denied_modules_are_absent_on_disk() -> None:
+    names = {path.name for path in ROOT.glob("*.py")}
+    leaked = names & DENIED_FILES
+    assert not leaked, f"hosted files in public tree: {sorted(leaked)}"
+    assert not (ROOT / "remote_harness").exists()
+    assert not (ROOT / "web").exists()
+
+
+def test_no_denied_imports() -> None:
+    leaks: list[str] = []
+    for path in sorted(ROOT.rglob("*.py")):
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        imported = _imported_names(tree)
+        for name in imported:
+            for denied in DENIED:
+                if name == denied or name.startswith(denied + "."):
+                    leaks.append(f"{path.name}: {name}")
+    assert not leaks, "hosted imports:\n" + "\n".join(leaks)
+
+
+def test_cli_imports_without_hosted() -> None:
+    import skillgate_ai.cli  # noqa: F401
+    import skillgate_ai.engine  # noqa: F401
+    import skillgate_ai.config  # noqa: F401

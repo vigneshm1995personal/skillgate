@@ -298,7 +298,7 @@ class RunControl:
             self._poll_flush = fn
 
     def persist_sandbox_poll(self, poll: dict[str, Any]) -> None:
-        """Flush durable Sandbox job state to Neon before the Function can die."""
+        """Flush durable sandbox job state when a callback is registered."""
         with self._lock:
             flush = self._poll_flush
         if flush is None:
@@ -309,7 +309,7 @@ class RunControl:
             pass
 
     def notify_live(self) -> None:
-        """Push current spans/transcript to durable progress (Neon / RUNS)."""
+        """Push current spans/transcript to durable progress if a callback is set."""
         with self._lock:
             flush = self._live_flush
             if flush is None or self._task_id is None:

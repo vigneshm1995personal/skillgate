@@ -1,12 +1,64 @@
 # skillgate
 
-Skill Gate OSS local gate: pack on disk + `skillgate check` exit 0/1, no account (Apache-2.0).
+Apache-2.0 local gate for [Agent Skills](https://agentskills.io): **one pack on disk** plus `skillgate check` exiting **0 or 1**. No Skill Gate account. Deterministic fixture checks need no API key.
 
-This GitHub repo is the **public staging** tree for the extract. The hosted product stays private at [`vigneshm1995personal/skillgate-ai`](https://github.com/vigneshm1995personal/skillgate-ai) and will never be made public.
+PyPI distribution: **`skillgate-ai`** (`pip install skillgate` is a different project). CLI command: `skillgate`.
 
-**Phase 1 (current):** plan only. Do not expect a working CLI in this checkout yet.
+Hosted product (SIWV, vault, Neon, dashboard) stays private at [`vigneshm1995personal/skillgate-ai`](https://github.com/vigneshm1995personal/skillgate-ai) and will never be made public.
 
-- Extract + Docker implementation plan: [`docs/plans/2026-10-03-skillgate-oss-extract.md`](docs/plans/2026-10-03-skillgate-oss-extract.md)
-- Locked parent plan (private): `docs/plans/2026-10-03-oss-public-private-split.md` on `skillgate-ai` ([PR #152](https://github.com/vigneshm1995personal/skillgate-ai/pull/152))
+## 10 minutes, no account
 
-PyPI distribution name will be **`skillgate-ai`** (`skillgate` is already taken on PyPI by a different project). The CLI command remains `skillgate`.
+```bash
+python3 -m venv .venv && source .venv/bin/activate
+pip install -e .
+skillgate check skills/pdf-sabotaged    # exit 1 — description never matches PDF tasks
+# copy SKILL.md from skills/pdf (or paste the CLI “Corrected SKILL.md description”)
+skillgate check skills/pdf              # exit 0
+```
+
+`--expect-fail` inverts the exit code (CI for the sabotaged twin):
+
+```bash
+skillgate check skills/pdf-sabotaged --expect-fail   # exit 0
+```
+
+## Docker
+
+Image `ENTRYPOINT` is `skillgate`; default `CMD` is `check /pack` (never `serve`).
+
+```bash
+docker compose run --rm --no-TTY skillgate
+# bind-mount a pack:
+PACK=./skills/pdf-sabotaged docker compose run --rm --no-TTY skillgate
+# exit 1
+```
+
+After the first public tag:
+
+```bash
+docker run --rm -v "$PWD/skills/pdf:/pack:ro" \
+  ghcr.io/vigneshm1995personal/skillgate:v0.3.0
+```
+
+A `:ro` mount skips writing `evals/history/*.jsonl` (EACCES). Compose mounts the pack read-write so history can append.
+
+## Copy-paste GitHub Action
+
+Working directory is the skill pack. Exit 1 fails the job. No account.
+
+```yaml
+- uses: actions/setup-python@v5
+  with: { python-version: "3.12" }
+- run: pip install skillgate-ai==0.3.0
+- run: skillgate check .
+```
+
+Until the first PyPI release, CI in this repo uses `pip install -e .`.
+
+## Docs
+
+- [`docs/quickstart.md`](docs/quickstart.md) — red sabotaged → green pdf
+- [`docs/pack.md`](docs/pack.md) — `evals/cases.yaml` schema 1, fixtures, goldens, history
+- [Extract plan](docs/plans/2026-10-03-skillgate-oss-extract.md) — allowlist / deny-list
+
+BYO keys (Cursor / Codex / OpenAI-compatible / Anthropic) are optional and only for a **live** harness. See `.env.example`.

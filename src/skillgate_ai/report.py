@@ -1,4 +1,4 @@
-"""Human-readable reports for CLI, GitHub Actions, and the web UI."""
+"""Human-readable reports for CLI and GitHub Actions."""
 
 from __future__ import annotations
 
@@ -176,7 +176,7 @@ def _progress_task_to_dict(task: TaskProgress) -> dict:
 
 
 def hydrate_report_spans(payload: dict) -> dict:
-    """Fill missing tasks[].spans from transcript JSONL (old Neon mid-suite rows).
+    """Fill missing tasks[].spans from transcript JSONL (older mid-suite rows).
 
     Mutates ``payload`` in place and returns it. No-op when spans already present
     or transcript has no reconstructible JSONL events.

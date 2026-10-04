@@ -1,0 +1,25 @@
+.env
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+dist/
+build/
+.pytest_cache/
+.ruff_cache/
+.skillgate/
+uploads/
+*.log
+.DS_Store
+
+# Pack-local history (keep .gitkeep)
+evals/history/*.jsonl
+**/evals/history/*.jsonl
+!**/evals/history/.gitkeep
+
+*.env
+!.env.example
+uv.lock
+skillgate.db

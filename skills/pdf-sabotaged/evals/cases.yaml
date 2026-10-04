@@ -1,0 +1,106 @@
+schema: 1
+skill: pdf-sabotaged
+cases:
+  - id: extract-hello
+    status: pinned
+    prompt: Extract the text from hello.pdf and save it to output/extracted.txt
+    should_trigger: true
+    input:
+      files:
+        - src: evals/fixtures/hello.pdf
+          dest: hello.pdf
+    golden:
+      output_path: output/extracted.txt
+      path: evals/goldens/extract-hello.txt
+      kind: text
+    contains:
+      - Hello Skill Gate
+  - id: merge-alpha-beta
+    status: pinned
+    prompt: Merge alpha.pdf and beta.pdf into output/merged.pdf
+    should_trigger: true
+    input:
+      files:
+        - src: evals/fixtures/alpha.pdf
+          dest: alpha.pdf
+        - src: evals/fixtures/beta.pdf
+          dest: beta.pdf
+    golden:
+      output_path: output/merged.pdf
+      path: evals/goldens/merge-alpha-beta.pdf
+      kind: bytes
+    min_pages: 2
+  - id: create-status
+    status: pinned
+    prompt: Create a PDF at output/status.pdf titled Q3 Status that contains the sentence "All systems are go."
+    should_trigger: true
+    input:
+      files: []
+    golden:
+      output_path: output/status.pdf
+      path: evals/goldens/create-status.pdf
+      kind: bytes
+    contains:
+      - All systems are go
+  - id: trigger-notes-pdf
+    status: pinned
+    prompt: The user mentioned a .pdf file named notes.pdf — dump its text to output/notes.txt
+    should_trigger: true
+    input:
+      files:
+        - src: evals/fixtures/notes.pdf
+          dest: notes.pdf
+    golden:
+      output_path: output/notes.txt
+      path: evals/goldens/trigger-notes-pdf.txt
+      kind: text
+    contains:
+      - Meeting notes
+  - id: trigger-combine-decks
+    status: pinned
+    prompt: Combine these two PDF decks (alpha.pdf and beta.pdf) into one file at output/deck.pdf
+    should_trigger: true
+    input:
+      files:
+        - src: evals/fixtures/alpha.pdf
+          dest: alpha.pdf
+        - src: evals/fixtures/beta.pdf
+          dest: beta.pdf
+    golden:
+      output_path: output/deck.pdf
+      path: evals/goldens/trigger-combine-decks.pdf
+      kind: bytes
+    min_pages: 2
+  - id: no-trigger-unrelated
+    status: pinned
+    prompt: Write a pytest for a FastAPI /health endpoint. Do not touch any PDFs.
+    should_trigger: false
+    input:
+      files: []
+    golden: null
+  - id: extract-invoice
+    status: pinned
+    prompt: Extract text from invoice.pdf into output/invoice.txt
+    should_trigger: true
+    input:
+      files:
+        - src: evals/fixtures/invoice.pdf
+          dest: invoice.pdf
+    golden:
+      output_path: output/invoice.txt
+      path: evals/goldens/extract-invoice.txt
+      kind: text
+    contains:
+      - "Invoice #1042"
+  - id: rotate-hello
+    status: pinned
+    prompt: Rotate hello.pdf 90 degrees clockwise and write output/rotated.pdf
+    should_trigger: true
+    input:
+      files:
+        - src: evals/fixtures/hello.pdf
+          dest: hello.pdf
+    golden:
+      output_path: output/rotated.pdf
+      path: evals/goldens/rotate-hello.pdf
+      kind: bytes

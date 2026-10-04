@@ -1,0 +1,41 @@
+from __future__ import annotations
+
+import os
+from pathlib import Path
+
+import pytest
+
+ROOT = Path(__file__).resolve().parents[1]
+
+os.environ["AI_GATEWAY_API_KEY"] = ""
+os.environ["CURSOR_API_KEY"] = ""
+os.environ["CODEX_API_KEY"] = ""
+os.environ["OPENAI_API_KEY"] = ""
+os.environ["ANTHROPIC_API_KEY"] = ""
+
+
+@pytest.fixture(autouse=True)
+def _no_live_keys(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("skillgate_ai.harness._codex_session_ok", lambda cfg: False)
+    monkeypatch.setenv("AI_GATEWAY_API_KEY", "")
+    monkeypatch.setenv("CURSOR_API_KEY", "")
+    monkeypatch.setenv("CODEX_API_KEY", "")
+    monkeypatch.setenv("OPENAI_API_KEY", "")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "")
+
+
+@pytest.fixture
+def project_root(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
+    monkeypatch.setenv("SKILLGATE_ROOT", str(ROOT))
+    monkeypatch.setenv("SKILLGATE_CURSOR_SKILLS", str(tmp_path / "cursor-skills"))
+    monkeypatch.setenv("SKILLGATE_CODEX_SKILLS", str(tmp_path / "codex-skills"))
+    monkeypatch.setenv("SKILLGATE_CLAUDE_SKILLS", str(tmp_path / "claude-skills"))
+    monkeypatch.setenv("CURSOR_API_KEY", "")
+    monkeypatch.setenv("CODEX_API_KEY", "")
+    monkeypatch.setenv("OPENAI_API_KEY", "")
+    monkeypatch.setenv("AI_GATEWAY_API_KEY", "")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "")
+    monkeypatch.delenv("SKILLGATE_TASK_TIMEOUT_SEC", raising=False)
+    monkeypatch.delenv("CODEX_REASONING_EFFORT", raising=False)
+    monkeypatch.delenv("CODEX_MODEL", raising=False)
+    return ROOT

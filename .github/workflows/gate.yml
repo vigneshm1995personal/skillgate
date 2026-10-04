@@ -1,0 +1,64 @@
+name: gate
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e ".[dev]"
+      - run: pytest -q
+
+  gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e .
+      - run: skillgate check skills/pdf
+      - run: skillgate check skills/pdf-sabotaged --expect-fail
+      - name: sabotaged must be red without expect-fail
+        run: |
+          set +e
+          skillgate check skills/pdf-sabotaged
+          test $? -eq 1
+
+  oss-surface:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e ".[dev]"
+      - run: pytest -q tests/test_oss_surface.py tests/test_dockerfile.py
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build CLI image
+        run: docker build -t skillgate:test --target runtime .
+      - name: Image is non-root CLI (not serve)
+        run: |
+          user=$(docker inspect skillgate:test --format '{{.Config.User}}')
+          entry=$(docker inspect skillgate:test --format '{{json .Config.Entrypoint}}')
+          cmd=$(docker inspect skillgate:test --format '{{json .Config.Cmd}}')
+          echo "user=$user entry=$entry cmd=$cmd"
+          test "$user" = "appuser" -o "$user" = "1001:1001"
+          test "$entry" = '["skillgate"]'
+          test "$cmd" = '["check","/pack"]'
+      - name: pdf green / sabotaged red
+        run: |
+          docker run --rm -v "$PWD/skills/pdf:/pack" skillgate:test
+          set +e
+          docker run --rm -v "$PWD/skills/pdf-sabotaged:/pack" skillgate:test
+          test $? -eq 1
