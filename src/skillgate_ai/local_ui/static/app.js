@@ -8,6 +8,7 @@ let meta = { account: false, demo_default: true, packs: [], has_any_key: false, 
 let wizard = blankWizard();
 let lastRoutePath = "";
 let lastRun = { path: "", snap: null };
+let sawChecking = false;
 
 function blankWizard() {
   return {
@@ -572,6 +573,7 @@ function checkingPanel(opts) {
 }
 
 async function showChecking(opts) {
+  sawChecking = true;
   const stage = document.getElementById("run-stage");
   const extra = document.getElementById("run-rows");
   if (extra) extra.innerHTML = "";
@@ -614,8 +616,10 @@ async function playMark(pop) {
 async function revealResult(panel, replay) {
   const stage = document.getElementById("run-stage");
   if (!stage) return;
+  const play = (replay || sawChecking) && !prefersReducedMotion();
+  sawChecking = false;
   const pop = panel.querySelector(".check-pop");
-  if (!replay || prefersReducedMotion()) {
+  if (!play) {
     if (pop) {
       pop.classList.add("complete");
       pop.classList.remove("play");
@@ -707,6 +711,7 @@ async function startCheck(path, opts) {
     await showChecking(opts);
     await pollRun(started.run_id, path, Date.now());
   } catch (e) {
+    sawChecking = false;
     if (stage) stage.innerHTML = "";
     err.innerHTML = showError(e);
   } finally {
@@ -785,7 +790,8 @@ async function paintResult(snap, path, opts) {
   const checkerLine = checker === "Built-in checker"
     ? "Built-in checker. This is not a live model."
     : checker;
-  const complete = !replay || prefersReducedMotion();
+  const playMotion = (replay || sawChecking) && !prefersReducedMotion();
+  const complete = !playMotion;
   const panel = $(`<div class="run-stamp success">
       ${resultMarkHtml(gate === "green", complete)}
       <p><span class="gate ${esc(gate)}">${headline}</span>

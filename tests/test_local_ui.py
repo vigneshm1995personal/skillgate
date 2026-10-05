@@ -190,6 +190,8 @@ def test_ui_skill_page_run_motion_is_wired(project_root: Path) -> None:
     assert "M24 24 L48 48 M48 24 L24 48" in js
     assert "replay: false" in js
     assert "replay: true" in js
+    assert "let sawChecking = false" in js
+    assert "sawChecking = true" in js
     assert "Evaluating" not in js
     assert 'wizard.step = "checking"' not in js
     assert "#run-stage" in css
