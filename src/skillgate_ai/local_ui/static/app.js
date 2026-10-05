@@ -615,9 +615,9 @@ async function playMark(pop) {
 
 async function revealResult(panel, replay) {
   const stage = document.getElementById("run-stage");
-  if (!stage) return;
   const play = (replay || sawChecking) && !prefersReducedMotion();
   sawChecking = false;
+  if (!stage) return;
   const pop = panel.querySelector(".check-pop");
   if (!play) {
     if (pop) {
@@ -690,6 +690,7 @@ async function renderPack(params) {
   app.appendChild(head);
   const stage = document.getElementById("run-stage");
   if (lastRun.path === path && lastRun.snap) {
+    sawChecking = false;
     await paintResult(lastRun.snap, path, { replay: false });
   } else if (stage) {
     const idle = $(`<div>${checksTable(checksFromPack(pack))}</div>`);
@@ -742,7 +743,7 @@ async function pollRun(runId, path, checkingShownAt) {
       : Math.max(0, CHECKING_MIN_MS - (Date.now() - checkingShownAt));
     if (wait > 0) await sleep(wait);
     await paintResult(snap, path, { replay: true });
-    lastRun = { path, snap, runId };
+    lastRun = { path, snap };
     return;
   }
 }
@@ -790,10 +791,8 @@ async function paintResult(snap, path, opts) {
   const checkerLine = checker === "Built-in checker"
     ? "Built-in checker. This is not a live model."
     : checker;
-  const playMotion = (replay || sawChecking) && !prefersReducedMotion();
-  const complete = !playMotion;
-  const panel = $(`<div class="run-stamp success">
-      ${resultMarkHtml(gate === "green", complete)}
+  const panel = $(`<div class="success">
+      ${resultMarkHtml(gate === "green", false)}
       <p><span class="gate ${esc(gate)}">${headline}</span>
         · ${esc(report.passed_count ?? 0)}/${esc(report.task_count ?? tasks.length)} checks</p>
       <p class="muted">${esc(checkerLine)}</p>

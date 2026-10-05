@@ -202,8 +202,16 @@ def test_ui_skill_page_run_motion_is_wired(project_root: Path) -> None:
     start = js.split("async function startCheck")[1].split("async function pollRun")[0]
     assert 'api("POST", "/api/check"' in start
     assert "await showChecking(opts)" in start
+    assert start.index('api("POST", "/api/check"') < start.index("await showChecking(opts)")
     poll = js.split("async function pollRun")[1].split("async function paintResult")[0]
     assert "CHECKING_MIN_MS" in poll
+    reveal = js.split("async function revealResult")[1].split("async function renderPack")[0]
+    assert reveal.index("sawChecking = false") < reveal.index("if (!stage) return")
+    pack = js.split("async function renderPack")[1].split("async function startCheck")[0]
+    assert "sawChecking = false" in pack
+    assert pack.index("sawChecking = false") < pack.index("replay: false")
+    assert "startCheck(path, { live: true })" in pack
+    assert "startCheck(path, { live: false, demo: true })" in pack
     create = js.split("async function createSkill")[1].split("function checksFromPack")[0]
     assert "<p class=\"gate\">Checking</p>" not in create
     assert "/api/check" not in create
