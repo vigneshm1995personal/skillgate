@@ -133,6 +133,8 @@ def test_ui_copy_has_no_internal_jargon(project_root: Path) -> None:
         assert "Built-in checker. This is not a live model." in js
         assert "Create and run check" not in js
         assert "Checking…" not in js
+        assert "<p class=\"gate\">Checking</p>" in js
+        assert "Evaluating" not in js
         assert "New skill" in html
         assert "Setup wizard" not in html
         assert "skillgate check" not in html.lower()
@@ -174,6 +176,52 @@ def test_ui_wizard_motion_is_wired_not_just_class_names(project_root: Path) -> N
     assert "@keyframes panel-out" in css
     assert "prefers-reduced-motion" in css
     assert "min-height: 1.4em" in css
+
+
+def test_ui_skill_page_run_motion_is_wired(project_root: Path) -> None:
+    js = (project_root / "src/skillgate_ai/local_ui/static/app.js").read_text(encoding="utf-8")
+    css = (project_root / "src/skillgate_ai/local_ui/static/app.css").read_text(encoding="utf-8")
+    assert "const CHECKING_MIN_MS = 700" in js
+    assert "function swapIn" in js
+    assert 'id="run-stage"' in js
+    assert "await showChecking(opts)" in js
+    assert "check-pop" in js
+    assert 'pop.classList.add("play")' in js
+    assert "M24 24 L48 48 M48 24 L24 48" in js
+    assert "replay: false" in js
+    assert "replay: true" in js
+    assert "let sawChecking = false" in js
+    assert "sawChecking = true" in js
+    assert "Evaluating" not in js
+    assert 'wizard.step = "checking"' not in js
+    assert "#run-stage" in css
+    assert "check-pop.complete" in css
+    assert "check-pop.fail" in css
+    assert "@keyframes check-stroke" in css
+    assert "400ms linear" in css
+    start = js.split("async function startCheck")[1].split("async function pollRun")[0]
+    assert 'api("POST", "/api/check"' in start
+    assert "await showChecking(opts)" in start
+    assert start.index('api("POST", "/api/check"') < start.index("await showChecking(opts)")
+    poll = js.split("async function pollRun")[1].split("async function paintResult")[0]
+    assert "CHECKING_MIN_MS" in poll
+    reveal = js.split("async function revealResult")[1].split("async function renderPack")[0]
+    assert reveal.index("sawChecking = false") < reveal.index("if (!stage) return")
+    pack = js.split("async function renderPack")[1].split("async function startCheck")[0]
+    assert "sawChecking = false" in pack
+    assert pack.index("sawChecking = false") < pack.index("replay: false")
+    assert "startCheck(path, { live: true })" in pack
+    assert "startCheck(path, { live: false, demo: true })" in pack
+    create = js.split("async function createSkill")[1].split("function checksFromPack")[0]
+    assert "<p class=\"gate\">Checking</p>" not in create
+    assert "/api/check" not in create
+    keys = js.split('if (step === "keys")')[1].split('if (step === "firstSkill")')[0]
+    assert "<p class=\"gate\">Checking</p>" not in keys
+    assert "/api/check" not in keys
+    setup = js.split("async function renderSetup")[1].split("async function renderNew")[0]
+    assert "<p class=\"gate\">Checking</p>" not in setup
+    assert "/api/check" not in setup
+    assert "<p class=\"gate\">Checking</p>" in js
 
 
 def test_ui_wizard_is_setup_only_then_skill_page(project_root: Path) -> None:

@@ -2,11 +2,13 @@ const app = document.getElementById("app");
 const banner = document.getElementById("banner");
 const NAME_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const MOTION_MS = 350;
+const CHECKING_MIN_MS = 700;
 const SETUP_DONE_KEY = "skillgate-setup-done";
 let meta = { account: false, demo_default: true, packs: [], has_any_key: false, pdf_path: null };
 let wizard = blankWizard();
 let lastRoutePath = "";
 let lastRun = { path: "", snap: null };
+let sawChecking = false;
 
 function blankWizard() {
   return {
@@ -255,13 +257,17 @@ function ensureWizardShell() {
   return root;
 }
 
-function swapPanel(nextEl) {
-  const stage = document.getElementById("wiz-stage");
-  nextEl.classList.add("wiz-panel");
-  const current = stage.querySelector(".wiz-panel:not(.panel-leave):not(.panel-leave-back)");
-  const dirBack = wizard.dir < 0;
+function swapIn(stage, nextEl, dir, panelClass) {
+  if (!stage) return Promise.resolve();
+  nextEl.classList.add(panelClass);
+  let current = Array.from(stage.children).find((el) => (
+    el !== nextEl
+    && !el.classList.contains("panel-leave")
+    && !el.classList.contains("panel-leave-back")
+  ));
+  const dirBack = dir < 0;
   if (!current || prefersReducedMotion()) {
-    stage.innerHTML = "";
+    Array.from(stage.children).forEach((el) => { if (el !== nextEl) el.remove(); });
     stage.appendChild(nextEl);
     return Promise.resolve();
   }
@@ -273,6 +279,10 @@ function swapPanel(nextEl) {
   return sleep(MOTION_MS).then(() => {
     if (current.parentNode) current.remove();
   });
+}
+
+function swapPanel(nextEl) {
+  return swapIn(document.getElementById("wiz-stage"), nextEl, wizard.dir, "wiz-panel");
 }
 
 function updateStepper(step) {
@@ -541,6 +551,88 @@ function checksTable(tasks) {
   return `<table><thead><tr><th>Check</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
 
+function setRunButtonsDisabled(disabled) {
+  const live = document.getElementById("live");
+  const builtin = document.getElementById("builtin");
+  if (live) live.disabled = disabled;
+  if (builtin) builtin.disabled = disabled;
+}
+
+function checkingLine(opts) {
+  if (opts && opts.live && !opts.demo) return "Run live uses your API key.";
+  return "Built-in checker. This is not a live model.";
+}
+
+function checkingPanel(opts) {
+  return $(`<div>
+    <p class="gate">Checking</p>
+    <div class="progress busy" id="run-progress"><i></i></div>
+    <p class="muted" id="run-prog-label">Running your checks</p>
+    <p class="muted">${esc(checkingLine(opts))}</p>
+  </div>`);
+}
+
+async function showChecking(opts) {
+  sawChecking = true;
+  const stage = document.getElementById("run-stage");
+  const extra = document.getElementById("run-rows");
+  if (extra) extra.innerHTML = "";
+  if (!stage) return;
+  await swapIn(stage, checkingPanel(opts), 1, "run-panel");
+}
+
+function resultMarkHtml(ok, complete) {
+  const label = ok ? "Passed" : "Failed";
+  const cls = ["check-pop", ok ? "" : "fail", complete ? "complete" : ""].filter(Boolean).join(" ");
+  const d = ok ? "M22 37 l10 10 18-22" : "M24 24 L48 48 M48 24 L24 48";
+  return `<div class="${cls}" aria-hidden="true">
+    <svg viewBox="0 0 72 72" role="img" aria-label="${label}">
+      <circle cx="36" cy="36" r="32" fill="none" stroke="currentColor" stroke-width="3"></circle>
+      <path d="${d}" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"></path>
+    </svg>
+  </div>`;
+}
+
+async function playMark(pop) {
+  if (!pop) return;
+  if (prefersReducedMotion()) {
+    pop.classList.add("complete");
+    pop.classList.remove("play");
+    return;
+  }
+  pop.classList.remove("play", "complete");
+  void pop.offsetWidth;
+  await new Promise((resolve) => {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        pop.classList.add("play");
+        resolve();
+      });
+    });
+  });
+  await sleep(400);
+}
+
+async function revealResult(panel, replay) {
+  const stage = document.getElementById("run-stage");
+  const play = (replay || sawChecking) && !prefersReducedMotion();
+  sawChecking = false;
+  if (!stage) return;
+  const pop = panel.querySelector(".check-pop");
+  if (!play) {
+    if (pop) {
+      pop.classList.add("complete");
+      pop.classList.remove("play");
+    }
+    Array.from(stage.children).forEach((el) => { if (el !== panel) el.remove(); });
+    panel.classList.add("run-panel");
+    stage.appendChild(panel);
+    return;
+  }
+  await swapIn(stage, panel, 1, "run-panel");
+  await playMark(stage.querySelector(".check-pop"));
+}
+
 async function renderPack(params) {
   const path = params.get("path");
   if (!path) { location.hash = "#/"; return; }
@@ -576,7 +668,7 @@ async function renderPack(params) {
     </details>
     <h2>Checks</h2>
     <div id="run-err"></div>
-    <div id="results">${checksTable(checksFromPack(pack))}</div>
+    <div id="results"><div id="run-stage"></div><div id="run-rows"></div></div>
   </section>`);
   head.querySelector("#live").onclick = () => startCheck(path, { live: true });
   const builtin = head.querySelector("#builtin");
@@ -596,28 +688,39 @@ async function renderPack(params) {
     } catch (e) { keyErr.innerHTML = showError(e); }
   };
   app.appendChild(head);
-  if (lastRun.path === path && lastRun.snap) paintResult(lastRun.snap, path);
-}
-
-async function startCheck(path, opts) {
-  const box = document.getElementById("results");
-  const err = document.getElementById("run-err");
-  err.innerHTML = "";
-  box.innerHTML = `<div class="progress busy" id="run-progress"><i></i></div><p class="muted" id="run-prog-label">Evaluating…</p>`;
-  banner.classList.add("hidden");
-  const body = { path, live: !!opts.live };
-  if (opts.demo) body.demo = true;
-  try {
-    const started = await api("POST", "/api/check", body);
-    await pollRun(started.run_id, path);
-  } catch (e) {
-    box.innerHTML = "";
-    err.innerHTML = showError(e);
+  const stage = document.getElementById("run-stage");
+  if (lastRun.path === path && lastRun.snap) {
+    sawChecking = false;
+    await paintResult(lastRun.snap, path, { replay: false });
+  } else if (stage) {
+    const idle = $(`<div>${checksTable(checksFromPack(pack))}</div>`);
+    idle.classList.add("run-panel");
+    stage.appendChild(idle);
   }
 }
 
-async function pollRun(runId, path) {
-  const box = document.getElementById("results");
+async function startCheck(path, opts) {
+  const err = document.getElementById("run-err");
+  const stage = document.getElementById("run-stage");
+  err.innerHTML = "";
+  banner.classList.add("hidden");
+  const body = { path, live: !!opts.live };
+  if (opts.demo) body.demo = true;
+  setRunButtonsDisabled(true);
+  try {
+    const started = await api("POST", "/api/check", body);
+    await showChecking(opts);
+    await pollRun(started.run_id, path, Date.now());
+  } catch (e) {
+    sawChecking = false;
+    if (stage) stage.innerHTML = "";
+    err.innerHTML = showError(e);
+  } finally {
+    setRunButtonsDisabled(false);
+  }
+}
+
+async function pollRun(runId, path, checkingShownAt) {
   for (;;) {
     const snap = await api("GET", `/api/runs/${runId}`);
     if (snap.exit_code === null || snap.exit_code === undefined) {
@@ -630,24 +733,29 @@ async function pollRun(runId, path) {
       if (total && wrap) {
         wrap.classList.remove("busy");
         if (bar) bar.style.width = `${Math.max(12, Math.round((done / total) * 100))}%`;
-        if (label) label.textContent = `Evaluating ${done}/${total}`;
+        if (label) label.textContent = `${done}/${total} checks`;
       }
       await sleep(400);
       continue;
     }
-    paintResult(snap, path);
+    const wait = prefersReducedMotion()
+      ? 0
+      : Math.max(0, CHECKING_MIN_MS - (Date.now() - checkingShownAt));
+    if (wait > 0) await sleep(wait);
+    await paintResult(snap, path, { replay: true });
     lastRun = { path, snap };
     return;
   }
 }
 
-function paintResult(snap, path) {
-  const box = document.getElementById("results");
+async function paintResult(snap, path, opts) {
+  const replay = !!(opts && opts.replay);
   const report = snap.report || {};
   if (snap.error && !snap.report) {
     const hint = snap.error.hint ? `<p class="muted">${esc(snap.error.hint)}</p>` : "";
-    box.innerHTML = `<p class="err">${esc(snap.error.message || "Your API key could not run this check.")}</p>${hint}`;
+    const panel = $(`<div><p class="err">${esc(snap.error.message || "Your API key could not run this check.")}</p>${hint}</div>`);
     banner.classList.add("hidden");
+    await revealResult(panel, replay);
     return;
   }
   const gate = (report.gate || (snap.exit_code === 0 ? "green" : "red")).toLowerCase();
@@ -683,14 +791,17 @@ function paintResult(snap, path) {
   const checkerLine = checker === "Built-in checker"
     ? "Built-in checker. This is not a live model."
     : checker;
-  box.innerHTML = `
-    <p><span class="gate ${esc(gate)}">${headline}</span>
-      · ${esc(report.passed_count ?? 0)}/${esc(report.task_count ?? tasks.length)} checks</p>
-    <p class="muted">${esc(checkerLine)}</p>
+  const panel = $(`<div class="success">
+      ${resultMarkHtml(gate === "green", false)}
+      <p><span class="gate ${esc(gate)}">${headline}</span>
+        · ${esc(report.passed_count ?? 0)}/${esc(report.task_count ?? tasks.length)} checks</p>
+      <p class="muted">${esc(checkerLine)}</p>
+    </div>`);
+  const details = $(`<div>
     <table><thead><tr><th>Result</th><th>Check</th><th>What happened</th></tr></thead><tbody>${rows}</tbody></table>
     ${adviceHtml}
-  `;
-  const apply = document.getElementById("apply");
+  </div>`);
+  const apply = details.querySelector("#apply");
   if (apply && advice) {
     apply.onclick = async () => {
       if (path.includes("skills/pdf-sabotaged") && !confirm("This edits the example skill in your checkout. Continue?")) return;
@@ -702,9 +813,15 @@ function paintResult(snap, path) {
         if (meta.has_any_key) startCheck(path, { live: true });
         else startCheck(path, { live: false, demo: true });
       } catch (e) {
-        box.insertAdjacentHTML("afterbegin", showError(e));
+        details.insertAdjacentHTML("afterbegin", showError(e));
       }
     };
+  }
+  await revealResult(panel, replay);
+  const extra = document.getElementById("run-rows");
+  if (extra) {
+    extra.innerHTML = "";
+    extra.appendChild(details);
   }
 }
 

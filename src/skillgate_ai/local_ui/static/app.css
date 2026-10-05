@@ -119,14 +119,17 @@ pre { background: #f0ece3; padding: 0.75rem; overflow: auto; border-radius: 4px;
 }
 .stepper .rail.filled > i { width: 100%; }
 
-#wiz-stage {
+#wiz-stage, #run-stage {
   position: relative;
   overflow: hidden;
-  min-height: 16rem;
 }
-.wiz-panel { width: 100%; }
+#wiz-stage { min-height: 16rem; }
+#run-stage { min-height: 8rem; }
+.wiz-panel, .run-panel { width: 100%; }
 .wiz-panel.panel-leave,
-.wiz-panel.panel-leave-back {
+.wiz-panel.panel-leave-back,
+.run-panel.panel-leave,
+.run-panel.panel-leave-back {
   position: absolute;
   top: 0;
   left: 0;
@@ -134,10 +137,10 @@ pre { background: #f0ece3; padding: 0.75rem; overflow: auto; border-radius: 4px;
   margin-top: 0;
   pointer-events: none;
 }
-.wiz-panel.panel-enter { animation: panel-in var(--motion) var(--ease) both; }
-.wiz-panel.panel-enter-back { animation: panel-in-back var(--motion) var(--ease) both; }
-.wiz-panel.panel-leave { animation: panel-out var(--motion) var(--ease) both; }
-.wiz-panel.panel-leave-back { animation: panel-out-back var(--motion) var(--ease) both; }
+.wiz-panel.panel-enter, .run-panel.panel-enter { animation: panel-in var(--motion) var(--ease) both; }
+.wiz-panel.panel-enter-back, .run-panel.panel-enter-back { animation: panel-in-back var(--motion) var(--ease) both; }
+.wiz-panel.panel-leave, .run-panel.panel-leave { animation: panel-out var(--motion) var(--ease) both; }
+.wiz-panel.panel-leave-back, .run-panel.panel-leave-back { animation: panel-out-back var(--motion) var(--ease) both; }
 @keyframes panel-in {
   from { opacity: 0; transform: translateX(48px); }
   to { opacity: 1; transform: none; }
@@ -193,9 +196,14 @@ pre { background: #f0ece3; padding: 0.75rem; overflow: auto; border-radius: 4px;
 .check-pop circle {
   transform-origin: 36px 36px;
 }
+.check-pop.fail { color: var(--red); }
 .check-pop path {
   stroke-dasharray: 48;
   stroke-dashoffset: 48;
+}
+.check-pop.fail path {
+  stroke-dasharray: 68;
+  stroke-dashoffset: 68;
 }
 .check-pop.play {
   animation: check-pop-in 400ms linear forwards;
@@ -203,12 +211,17 @@ pre { background: #f0ece3; padding: 0.75rem; overflow: auto; border-radius: 4px;
 .check-pop.play path {
   animation: check-stroke 400ms linear forwards;
 }
+.check-pop.complete {
+  transform: none;
+}
+.check-pop.complete path {
+  stroke-dashoffset: 0;
+}
 @keyframes check-pop-in {
   from { transform: scale(0.3); }
   to { transform: scale(1); }
 }
 @keyframes check-stroke {
-  from { stroke-dashoffset: 48; }
   to { stroke-dashoffset: 0; }
 }
 
@@ -224,6 +237,10 @@ details.keys .stack { margin-top: 0.75rem; }
   .wiz-panel.panel-enter-back,
   .wiz-panel.panel-leave,
   .wiz-panel.panel-leave-back,
+  .run-panel.panel-enter,
+  .run-panel.panel-enter-back,
+  .run-panel.panel-leave,
+  .run-panel.panel-leave-back,
   .check-pop.play,
   .check-pop.play path,
   .progress.busy > i { animation: none; }
