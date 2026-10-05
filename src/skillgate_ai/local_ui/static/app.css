@@ -207,9 +207,11 @@ pre { background: #f0ece3; padding: 0.75rem; overflow: auto; border-radius: 4px;
 }
 .check-pop.play {
   animation: check-pop-in 400ms linear forwards;
+  will-change: transform;
 }
 .check-pop.play path {
   animation: check-stroke 400ms linear forwards;
+  will-change: stroke-dashoffset;
 }
 .check-pop.complete {
   transform: none;

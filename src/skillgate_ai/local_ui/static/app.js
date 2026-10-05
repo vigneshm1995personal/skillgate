@@ -259,10 +259,14 @@ function ensureWizardShell() {
 function swapIn(stage, nextEl, dir, panelClass) {
   if (!stage) return Promise.resolve();
   nextEl.classList.add(panelClass);
-  const current = stage.querySelector(`.${panelClass}:not(.panel-leave):not(.panel-leave-back)`);
+  let current = Array.from(stage.children).find((el) => (
+    el !== nextEl
+    && !el.classList.contains("panel-leave")
+    && !el.classList.contains("panel-leave-back")
+  ));
   const dirBack = dir < 0;
   if (!current || prefersReducedMotion()) {
-    stage.innerHTML = "";
+    Array.from(stage.children).forEach((el) => { if (el !== nextEl) el.remove(); });
     stage.appendChild(nextEl);
     return Promise.resolve();
   }
@@ -569,6 +573,8 @@ function checkingPanel(opts) {
 
 async function showChecking(opts) {
   const stage = document.getElementById("run-stage");
+  const extra = document.getElementById("run-rows");
+  if (extra) extra.innerHTML = "";
   if (!stage) return;
   await swapIn(stage, checkingPanel(opts), 1, "run-panel");
 }
@@ -602,6 +608,7 @@ async function playMark(pop) {
       });
     });
   });
+  await sleep(400);
 }
 
 async function revealResult(panel, replay) {
@@ -613,7 +620,7 @@ async function revealResult(panel, replay) {
       pop.classList.add("complete");
       pop.classList.remove("play");
     }
-    stage.innerHTML = "";
+    Array.from(stage.children).forEach((el) => { if (el !== panel) el.remove(); });
     panel.classList.add("run-panel");
     stage.appendChild(panel);
     return;
@@ -657,7 +664,7 @@ async function renderPack(params) {
     </details>
     <h2>Checks</h2>
     <div id="run-err"></div>
-    <div id="results"><div id="run-stage"></div></div>
+    <div id="results"><div id="run-stage"></div><div id="run-rows"></div></div>
   </section>`);
   head.querySelector("#live").onclick = () => startCheck(path, { live: true });
   const builtin = head.querySelector("#builtin");
@@ -779,17 +786,17 @@ async function paintResult(snap, path, opts) {
     ? "Built-in checker. This is not a live model."
     : checker;
   const complete = !replay || prefersReducedMotion();
-  const panel = $(`<div>
-    <div class="run-stamp success">
+  const panel = $(`<div class="run-stamp success">
       ${resultMarkHtml(gate === "green", complete)}
       <p><span class="gate ${esc(gate)}">${headline}</span>
         · ${esc(report.passed_count ?? 0)}/${esc(report.task_count ?? tasks.length)} checks</p>
       <p class="muted">${esc(checkerLine)}</p>
-    </div>
+    </div>`);
+  const details = $(`<div>
     <table><thead><tr><th>Result</th><th>Check</th><th>What happened</th></tr></thead><tbody>${rows}</tbody></table>
     ${adviceHtml}
   </div>`);
-  const apply = panel.querySelector("#apply");
+  const apply = details.querySelector("#apply");
   if (apply && advice) {
     apply.onclick = async () => {
       if (path.includes("skills/pdf-sabotaged") && !confirm("This edits the example skill in your checkout. Continue?")) return;
@@ -801,11 +808,16 @@ async function paintResult(snap, path, opts) {
         if (meta.has_any_key) startCheck(path, { live: true });
         else startCheck(path, { live: false, demo: true });
       } catch (e) {
-        panel.insertAdjacentHTML("afterbegin", showError(e));
+        details.insertAdjacentHTML("afterbegin", showError(e));
       }
     };
   }
   await revealResult(panel, replay);
+  const extra = document.getElementById("run-rows");
+  if (extra) {
+    extra.innerHTML = "";
+    extra.appendChild(details);
+  }
 }
 
 window.addEventListener("hashchange", () => { render(); });
