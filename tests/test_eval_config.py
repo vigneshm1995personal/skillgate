@@ -230,3 +230,50 @@ def test_config_label_includes_harness_and_timeout() -> None:
     assert "gpt-test" in label
     assert "300s" in label
     assert "medium" in label
+
+
+def test_fingerprint_changes_on_judge_backend() -> None:
+    base = EvalRunConfig(harness="llm", timeout_effective=300)
+    decisions = replace(
+        base,
+        judge={"provider": "openai", "backend": "decisions", "model": "gpt-6-luna"},
+    )
+    responses = replace(
+        base,
+        judge={"provider": "openai", "backend": "responses", "model": "gpt-6-luna"},
+    )
+    assert config_fingerprint(base) != config_fingerprint(decisions)
+    assert config_fingerprint(decisions) != config_fingerprint(responses)
+
+
+def test_config_label_names_openai_scorer_not_model_id() -> None:
+    run = EvalRunConfig(
+        harness="llm",
+        timeout_effective=300,
+        judge={
+            "provider": "openai",
+            "backend": "decisions",
+            "display_name": "OpenAI (your key)",
+            "model": "gpt-6-luna",
+        },
+    )
+    label = config_label(run)
+    assert "OpenAI (your key)" in label
+    assert "gpt-6-luna" not in label
+
+
+def test_from_dict_drops_judge_api_key() -> None:
+    restored = EvalRunConfig.from_dict(
+        {
+            "harness": "llm",
+            "judge": {
+                "provider": "openai",
+                "backend": "decisions",
+                "api_key": "sk-leak",
+            },
+        }
+    )
+    assert restored is not None
+    assert restored.judge is not None
+    assert "api_key" not in restored.judge
+    assert "sk-leak" not in str(restored.to_dict())

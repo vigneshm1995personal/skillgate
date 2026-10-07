@@ -25,6 +25,7 @@ def test_check_pdf_green(project_root: Path) -> None:
     assert "GREEN" in result.stdout
     assert "built-in checker" in result.stdout.lower()
     assert "not a live model" in result.stdout.lower()
+    assert "scored this run" in result.stdout.lower()
 
 
 def test_check_sabotaged_red(project_root: Path) -> None:

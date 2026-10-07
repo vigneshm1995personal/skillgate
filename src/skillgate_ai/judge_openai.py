@@ -1,0 +1,872 @@
+"""OpenAI outcome judge: Decisions by default, Responses fallback."""
+
+from __future__ import annotations
+
+import base64
+import json
+import logging
+import time
+from pathlib import Path
+from typing import Any, Callable, Mapping, Protocol
+
+import httpx
+
+from skillgate_ai.judge_bank import (
+    CHECK_CELL_LABELS,
+    CHECK_CELL_ORDER,
+    DEFAULT_MIN_CONFIDENCE,
+    LOW_CONFIDENCE_WARNING,
+    SOFT_CELL_LABELS,
+    SOFT_CELL_ORDER,
+    UNUSABLE_ANSWER,
+    all_questions,
+    canonical_choice,
+    criteria_text,
+    decisions_questions,
+    extract_choice,
+    extract_confidence,
+    extract_probabilities,
+    low_confidence_warnings,
+    outcome_verdict,
+    structured_output_schema,
+    unusable_answers,
+)
+
+_LOG = logging.getLogger(__name__)
+
+DEFAULT_MODEL = "gpt-6-luna"
+DEFAULT_BASE_URL = "https://api.openai.com/v1"
+DEFAULT_TIMEOUT_SEC = 20.0
+WHY_TIMEOUT_SEC = 10.0
+WHY_MAX_OUTPUT_TOKENS = 128
+TRANSCRIPT_TAIL_CHARS = 4000
+IMAGE_MAX_BYTES = 4 * 1024 * 1024
+IMAGE_MAX_COUNT = 3
+INLINE_MAGICS = {"jpeg": "image/jpeg", "png": "image/png"}
+DISPLAY_NAME = "OpenAI (your key)"
+_TRANSIENT = frozenset({429, 500, 502, 503, 504})
+_RETRY_BACKOFF_SEC = (0.05, 0.1)
+_MAX_ATTEMPTS = 3
+_ERROR_BODY_MAX = 240
+
+PostFn = Callable[..., httpx.Response]
+
+
+class JudgeBackend(Protocol):
+    name: str
+
+    def evaluate(
+        self,
+        *,
+        state: Mapping[str, Any],
+        images: list[dict[str, str]],
+        timeout_sec: float,
+    ) -> dict[str, Any]:
+        """Return status/model/answers. Never logs secrets."""
+        ...
+
+
+def _tail(text: str, limit: int = TRANSCRIPT_TAIL_CHARS) -> str:
+    if limit <= 0:
+        return ""
+    return (text or "")[-limit:]
+
+
+def _redact(text: str, secret: str | None) -> str:
+    if not secret or not text:
+        return text
+    return text.replace(secret, "***")
+
+
+def _error_body(response: httpx.Response, secret: str | None) -> str:
+    body = (response.text or "").strip().replace("\n", " ")
+    body = _redact(body, secret)
+    if len(body) > _ERROR_BODY_MAX:
+        body = body[:_ERROR_BODY_MAX] + "…"
+    return body
+
+
+def user_message_for_status(status: int, *, decisions: bool = False) -> str:
+    if status == 401:
+        return "OpenAI did not accept this API key. Check OPENAI_API_KEY."
+    if status == 403:
+        return "OpenAI scoring is not enabled for this key."
+    if status == 404:
+        return "OpenAI has no scoring endpoint for this key."
+    if status == 429:
+        return "OpenAI rate limit or quota. Wait and retry, or check billing."
+    if status == 400:
+        return "OpenAI rejected this scoring request."
+    if decisions:
+        return f"OpenAI scoring failed (HTTP {status})."
+    return f"OpenAI scoring failed (HTTP {status})."
+
+
+def post_openai(
+    url: str,
+    *,
+    headers: dict[str, str],
+    payload: dict[str, Any],
+    timeout_sec: float,
+    secret: str | None = None,
+    post: PostFn | None = None,
+) -> httpx.Response:
+    sender = post or httpx.post
+    last_exc: BaseException | None = None
+    for attempt in range(_MAX_ATTEMPTS):
+        try:
+            response = sender(url, headers=headers, json=payload, timeout=timeout_sec)
+        except httpx.TimeoutException as exc:
+            last_exc = exc
+            if attempt >= _MAX_ATTEMPTS - 1:
+                raise
+            _LOG.warning("OpenAI scoring timed out (attempt %s/%s)", attempt + 1, _MAX_ATTEMPTS)
+            time.sleep(_RETRY_BACKOFF_SEC[min(attempt, len(_RETRY_BACKOFF_SEC) - 1)])
+            continue
+        except httpx.HTTPError as exc:
+            last_exc = exc
+            if attempt >= _MAX_ATTEMPTS - 1:
+                raise
+            _LOG.warning(
+                "OpenAI scoring transport error (attempt %s/%s): %s",
+                attempt + 1,
+                _MAX_ATTEMPTS,
+                type(exc).__name__,
+            )
+            time.sleep(_RETRY_BACKOFF_SEC[min(attempt, len(_RETRY_BACKOFF_SEC) - 1)])
+            continue
+        if response.status_code in _TRANSIENT and attempt < _MAX_ATTEMPTS - 1:
+            _LOG.warning(
+                "OpenAI scoring HTTP %s (attempt %s/%s)",
+                response.status_code,
+                attempt + 1,
+                _MAX_ATTEMPTS,
+            )
+            time.sleep(_RETRY_BACKOFF_SEC[min(attempt, len(_RETRY_BACKOFF_SEC) - 1)])
+            continue
+        return response
+    assert last_exc is not None
+    raise last_exc
+
+
+def collect_images(
+    *,
+    artifacts: list[dict[str, Any]],
+    golden: Mapping[str, Any] | None,
+    actual: Mapping[str, Any] | None,
+    workspace: Path | None,
+    skill_root: Path | None,
+) -> tuple[list[dict[str, str]], list[dict[str, Any]]]:
+    """JPEG/PNG data URLs only. Caps: 4 MiB each, 3 images. Never logs bytes."""
+    candidates: list[tuple[Path, str]] = []
+    seen: set[Path] = set()
+
+    def consider(path: Path, label: str) -> None:
+        try:
+            resolved = path.resolve()
+        except OSError:
+            return
+        if resolved in seen or not resolved.is_file():
+            return
+        seen.add(resolved)
+        candidates.append((resolved, label))
+
+    if workspace is not None:
+        for row in artifacts:
+            if not isinstance(row, Mapping) or not row.get("present"):
+                continue
+            magic = str(row.get("magic") or "")
+            if magic not in INLINE_MAGICS:
+                continue
+            rel = str(row.get("path") or "").strip()
+            if rel:
+                consider(workspace / rel, rel)
+    if actual and actual.get("present") and str(actual.get("magic") or "") in INLINE_MAGICS:
+        rel = str(actual.get("path") or "").strip()
+        if rel and workspace is not None:
+            consider(workspace / rel, rel)
+    if golden and skill_root is not None:
+        rel = str(golden.get("path") or "").strip()
+        if rel:
+            consider(skill_root / rel, rel)
+
+    images: list[dict[str, str]] = []
+    omitted: list[dict[str, Any]] = []
+    for path, label in candidates:
+        try:
+            data = path.read_bytes()
+        except OSError:
+            omitted.append({"path": label, "reason": "unreadable"})
+            continue
+        magic = _magic_of(data)
+        if magic not in INLINE_MAGICS:
+            continue
+        if len(data) > IMAGE_MAX_BYTES:
+            omitted.append({"path": label, "size": len(data), "reason": "too large"})
+            continue
+        if len(images) >= IMAGE_MAX_COUNT:
+            omitted.append({"path": label, "size": len(data), "reason": "over cap"})
+            continue
+        b64 = base64.b64encode(data).decode("ascii")
+        images.append(
+            {
+                "type": "input_image",
+                "image_url": f"data:{INLINE_MAGICS[magic]};base64,{b64}",
+            }
+        )
+    return images, omitted
+
+
+def _magic_of(data: bytes) -> str | None:
+    if data.startswith(b"\xff\xd8\xff"):
+        return "jpeg"
+    if data.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "png"
+    return None
+
+
+def _state_text(state: Mapping[str, Any]) -> str:
+    payload = {
+        "check_prompt": state.get("check_prompt"),
+        "expect_skill": state.get("expect_skill"),
+        "selected_skill": state.get("selected_skill"),
+        "scorer_results": state.get("scorer_results"),
+        "artifacts": _artifacts_without_bodies(state.get("artifacts")),
+        "golden": _text_blob(state.get("golden")),
+        "actual_output": _text_blob(state.get("actual_output")),
+        "path": state.get("path"),
+        "transcript_tail": state.get("transcript_tail"),
+        "omitted_images": state.get("omitted_images"),
+    }
+    return json.dumps(payload, ensure_ascii=True, default=str)
+
+
+def _artifacts_without_bodies(raw: Any) -> list[dict[str, Any]]:
+    rows = raw if isinstance(raw, list) else []
+    out: list[dict[str, Any]] = []
+    for item in rows:
+        if not isinstance(item, Mapping):
+            continue
+        out.append(
+            {
+                "path": item.get("path"),
+                "present": item.get("present"),
+                "kind": item.get("kind"),
+                "magic": item.get("magic"),
+                "mime": item.get("mime"),
+                "size": item.get("size"),
+            }
+        )
+    return out
+
+
+def _text_blob(raw: Any) -> Any:
+    if not isinstance(raw, Mapping):
+        return raw
+    data = dict(raw)
+    data.pop("body", None)
+    return data
+
+
+def _answer_row(key: str, item: Any) -> dict[str, Any]:
+    if isinstance(item, str):
+        mapping: Mapping[str, Any] = {"choice": item}
+    elif isinstance(item, Mapping):
+        mapping = item
+    else:
+        mapping = {}
+    raw_choice = extract_choice(mapping)
+    row: dict[str, Any] = {"choice": canonical_choice(key, raw_choice) or raw_choice}
+    confidence = extract_confidence(mapping)
+    if confidence is not None:
+        row["confidence"] = confidence
+    probabilities = extract_probabilities(mapping)
+    if probabilities:
+        row["probabilities"] = probabilities
+    return row
+
+
+def _normalize_answers(raw: Mapping[str, Any]) -> dict[str, dict[str, Any]]:
+    answers: dict[str, dict[str, Any]] = {}
+    for key in CHECK_CELL_ORDER:
+        answers[key] = _answer_row(key, raw.get(key))
+    for key in SOFT_CELL_ORDER:
+        if key in raw:
+            answers[key] = _answer_row(key, raw.get(key))
+    return answers
+
+
+def _answers_from_decisions_list(payload: Mapping[str, Any]) -> dict[str, Any]:
+    rows = payload.get("answers")
+    mapped: dict[str, Any] = {}
+    if isinstance(rows, list):
+        for item in rows:
+            if not isinstance(item, Mapping):
+                continue
+            name = item.get("name")
+            if isinstance(name, str) and name.strip():
+                mapped[name] = dict(item)
+    elif isinstance(rows, Mapping):
+        mapped = dict(rows)
+    return mapped
+
+
+def _output_text(payload: Mapping[str, Any]) -> tuple[str | None, bool]:
+    """Return (text, refused)."""
+    refused = False
+    direct = payload.get("output_text")
+    if isinstance(direct, str) and direct.strip():
+        return direct, False
+    output = payload.get("output")
+    chunks: list[str] = []
+    if isinstance(output, list):
+        for item in output:
+            if not isinstance(item, Mapping):
+                continue
+            content = item.get("content")
+            if not isinstance(content, list):
+                continue
+            for part in content:
+                if not isinstance(part, Mapping):
+                    continue
+                kind = str(part.get("type") or "")
+                if kind == "refusal":
+                    refused = True
+                    continue
+                text = part.get("text")
+                if isinstance(text, str) and text.strip():
+                    chunks.append(text)
+    if refused and not chunks:
+        return None, True
+    if chunks:
+        return "".join(chunks), refused
+    return None, refused
+
+
+class DecisionsBackend:
+    name = "decisions"
+
+    def __init__(
+        self,
+        *,
+        api_key: str,
+        base_url: str = DEFAULT_BASE_URL,
+        model: str = DEFAULT_MODEL,
+        post: PostFn | None = None,
+    ) -> None:
+        del model
+        self.api_key = api_key
+        self.base_url = base_url.rstrip("/")
+        # Decisions documents gpt-6-luna only. Do not send a Responses override.
+        self.model = DEFAULT_MODEL
+        self._post = post
+
+    def evaluate(
+        self,
+        *,
+        state: Mapping[str, Any],
+        images: list[dict[str, str]],
+        timeout_sec: float,
+    ) -> dict[str, Any]:
+        url = f"{self.base_url}/decisions"
+        text = _state_text(state)
+        if images:
+            content: list[dict[str, Any]] = [{"type": "input_text", "text": text}, *images]
+            payload_input: str | list[dict[str, Any]] = [
+                {"role": "user", "content": content}
+            ]
+        else:
+            payload_input = text
+        payload = {
+            "model": self.model,
+            "input": payload_input,
+            "questions": decisions_questions(),
+        }
+        return self._send(url, payload, timeout_sec, decisions=True)
+
+    def _send(
+        self,
+        url: str,
+        payload: dict[str, Any],
+        timeout_sec: float,
+        *,
+        decisions: bool,
+    ) -> dict[str, Any]:
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+        }
+        try:
+            response = post_openai(
+                url,
+                headers=headers,
+                payload=payload,
+                timeout_sec=timeout_sec,
+                secret=self.api_key,
+                post=self._post,
+            )
+        except httpx.TimeoutException:
+            return {"status": "error", "reason": "OpenAI scoring timed out.", "model": self.model}
+        except httpx.HTTPError:
+            return {
+                "status": "error",
+                "reason": "OpenAI scoring failed.",
+                "model": self.model,
+            }
+        if response.status_code >= 400:
+            _LOG.warning(
+                "OpenAI scoring HTTP %s: %s",
+                response.status_code,
+                _error_body(response, self.api_key),
+            )
+            return {
+                "status": "error",
+                "reason": user_message_for_status(response.status_code, decisions=decisions),
+                "model": self.model,
+            }
+        try:
+            data = response.json()
+        except ValueError:
+            return {
+                "status": "error",
+                "reason": UNUSABLE_ANSWER,
+                "model": self.model,
+            }
+        if not isinstance(data, Mapping):
+            return {"status": "error", "reason": UNUSABLE_ANSWER, "model": self.model}
+        raw = _answers_from_decisions_list(data)
+        answers = _normalize_answers(raw)
+        if unusable_answers(answers):
+            return {
+                "status": "error",
+                "reason": UNUSABLE_ANSWER,
+                "model": str(data.get("model") or self.model),
+                "answers": answers,
+                "usage": data.get("usage") if isinstance(data.get("usage"), dict) else None,
+            }
+        return {
+            "status": "completed",
+            "model": str(data.get("model") or self.model),
+            "answers": answers,
+            "usage": data.get("usage") if isinstance(data.get("usage"), dict) else None,
+        }
+
+
+class StructuredOutputsBackend:
+    name = "responses"
+
+    def __init__(
+        self,
+        *,
+        api_key: str,
+        base_url: str = DEFAULT_BASE_URL,
+        model: str = DEFAULT_MODEL,
+        reasoning_effort: str = "low",
+        post: PostFn | None = None,
+    ) -> None:
+        self.api_key = api_key
+        self.base_url = base_url.rstrip("/")
+        self.model = model
+        self.reasoning_effort = reasoning_effort
+        self._post = post
+
+    def evaluate(
+        self,
+        *,
+        state: Mapping[str, Any],
+        images: list[dict[str, str]],
+        timeout_sec: float,
+    ) -> dict[str, Any]:
+        url = f"{self.base_url}/responses"
+        text = _state_text(state)
+        user_content: str | list[dict[str, Any]]
+        if images:
+            user_content = [{"type": "input_text", "text": text}, *images]
+        else:
+            user_content = text
+        payload: dict[str, Any] = {
+            "model": self.model,
+            "reasoning": {"effort": self.reasoning_effort},
+            "input": [
+                {
+                    "role": "system",
+                    "content": (
+                        "Score this skill check. Pick exactly one allowed answer "
+                        "for each field. Use only the evidence in the user message."
+                    ),
+                },
+                {"role": "user", "content": user_content},
+            ],
+            "text": {
+                "format": {
+                    "type": "json_schema",
+                    "name": "skill_gate_check",
+                    "strict": True,
+                    "schema": structured_output_schema(),
+                }
+            },
+        }
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+        }
+        try:
+            response = post_openai(
+                url,
+                headers=headers,
+                payload=payload,
+                timeout_sec=timeout_sec,
+                secret=self.api_key,
+                post=self._post,
+            )
+        except httpx.TimeoutException:
+            return {"status": "error", "reason": "OpenAI scoring timed out.", "model": self.model}
+        except httpx.HTTPError:
+            return {"status": "error", "reason": "OpenAI scoring failed.", "model": self.model}
+        if response.status_code >= 400:
+            _LOG.warning(
+                "OpenAI scoring HTTP %s: %s",
+                response.status_code,
+                _error_body(response, self.api_key),
+            )
+            return {
+                "status": "error",
+                "reason": user_message_for_status(response.status_code),
+                "model": self.model,
+            }
+        try:
+            data = response.json()
+        except ValueError:
+            return {"status": "error", "reason": UNUSABLE_ANSWER, "model": self.model}
+        if not isinstance(data, Mapping):
+            return {"status": "error", "reason": UNUSABLE_ANSWER, "model": self.model}
+        text_out, refused = _output_text(data)
+        if refused:
+            return {
+                "status": "error",
+                "reason": "OpenAI declined to score this check.",
+                "model": str(data.get("model") or self.model),
+            }
+        if not text_out:
+            return {"status": "error", "reason": UNUSABLE_ANSWER, "model": self.model}
+        try:
+            parsed = json.loads(text_out)
+        except json.JSONDecodeError:
+            return {"status": "error", "reason": UNUSABLE_ANSWER, "model": self.model}
+        if not isinstance(parsed, Mapping):
+            return {"status": "error", "reason": UNUSABLE_ANSWER, "model": self.model}
+        answers = _normalize_answers(parsed)
+        if unusable_answers(answers):
+            return {
+                "status": "error",
+                "reason": UNUSABLE_ANSWER,
+                "model": str(data.get("model") or self.model),
+                "answers": answers,
+            }
+        return {
+            "status": "completed",
+            "model": str(data.get("model") or self.model),
+            "answers": answers,
+            "usage": data.get("usage") if isinstance(data.get("usage"), dict) else None,
+        }
+
+
+class OutcomeJudge:
+    """Applies the Pass lock. HTTP stays on the backend."""
+
+    name = "openai"
+
+    def __init__(
+        self,
+        backend: JudgeBackend,
+        *,
+        api_key: str,
+        base_url: str = DEFAULT_BASE_URL,
+        model: str = DEFAULT_MODEL,
+        min_confidence: float = DEFAULT_MIN_CONFIDENCE,
+        why_enabled: bool = True,
+        reasoning_effort: str = "low",
+        timeout_sec: float = DEFAULT_TIMEOUT_SEC,
+        post: PostFn | None = None,
+    ) -> None:
+        self.backend = backend
+        self.api_key = api_key
+        self.base_url = base_url.rstrip("/")
+        self.model = model
+        self.min_confidence = min_confidence
+        self.why_enabled = why_enabled
+        self.reasoning_effort = reasoning_effort
+        self.timeout_sec = timeout_sec
+        self._post = post
+
+    def judge(
+        self,
+        goal: str,
+        artifacts: list[dict[str, Any]],
+        transcript_tail: str,
+        **kwargs: Any,
+    ) -> dict[str, Any]:
+        workspace = _as_path(kwargs.get("workspace"))
+        skill_root = _as_path(kwargs.get("skill_root"))
+        golden = kwargs.get("golden") if isinstance(kwargs.get("golden"), Mapping) else None
+        actual = (
+            kwargs.get("actual_output")
+            if isinstance(kwargs.get("actual_output"), Mapping)
+            else None
+        )
+        scores = kwargs.get("scores") if isinstance(kwargs.get("scores"), list) else []
+        path = kwargs.get("path") if isinstance(kwargs.get("path"), Mapping) else None
+        images, omitted = collect_images(
+            artifacts=artifacts,
+            golden=golden,
+            actual=actual,
+            workspace=workspace,
+            skill_root=skill_root,
+        )
+        state = {
+            "check_prompt": goal,
+            "expect_skill": kwargs.get("expect_skill"),
+            "selected_skill": kwargs.get("selected_skill"),
+            "scorer_results": scores,
+            "artifacts": artifacts,
+            "golden": golden,
+            "actual_output": actual,
+            "path": path,
+            "transcript_tail": _tail(transcript_tail),
+            "omitted_images": omitted,
+        }
+        evaluated = self.backend.evaluate(
+            state=state, images=images, timeout_sec=self.timeout_sec
+        )
+        return self._stamp(evaluated, artifacts=artifacts, omitted=omitted, state=state)
+
+    def _stamp(
+        self,
+        evaluated: Mapping[str, Any],
+        *,
+        artifacts: list[dict[str, Any]],
+        omitted: list[dict[str, Any]],
+        state: Mapping[str, Any],
+    ) -> dict[str, Any]:
+        model = str(evaluated.get("model") or self.model)
+        citations = {"artifacts": list(artifacts), "omitted_images": omitted}
+        if evaluated.get("status") != "completed":
+            reason = str(evaluated.get("reason") or "OpenAI scoring failed.")
+            return {
+                "status": "error",
+                "provider": "openai",
+                "backend": self.backend.name,
+                "display_name": DISPLAY_NAME,
+                "model": model,
+                "passed": False,
+                "reasons": [reason],
+                "why": None,
+                "answers": evaluated.get("answers") or {},
+                "soft_answers": {},
+                "questions": all_questions(),
+                "soft_questions": {k: all_questions()[k] for k in SOFT_CELL_ORDER},
+                "cells": {},
+                "citations": citations,
+                "usage": evaluated.get("usage"),
+                "warnings": [],
+                "min_confidence": self.min_confidence,
+                "blocks_deploy": True,
+            }
+        answers = evaluated.get("answers") if isinstance(evaluated.get("answers"), dict) else {}
+        passed, reasons = outcome_verdict(answers)
+        warnings = low_confidence_warnings(
+            answers,
+            min_confidence=self.min_confidence,
+            expect_confidence=self.backend.name == "decisions",
+        )
+        pass_answers = {key: answers[key] for key in CHECK_CELL_ORDER if key in answers}
+        soft_answers = {key: answers[key] for key in SOFT_CELL_ORDER if key in answers}
+        cells: dict[str, dict[str, Any]] = {}
+        for key in CHECK_CELL_ORDER:
+            answer = pass_answers.get(key)
+            choice = extract_choice(answer)
+            cell = {
+                "label": CHECK_CELL_LABELS[key],
+                "choice": choice,
+                "reason": criteria_text(key, choice),
+            }
+            confidence = extract_confidence(answer)
+            if confidence is not None:
+                cell["confidence"] = confidence
+            cells[key] = cell
+        for key in SOFT_CELL_ORDER:
+            answer = soft_answers.get(key)
+            choice = extract_choice(answer)
+            cell = {
+                "label": SOFT_CELL_LABELS[key],
+                "choice": choice,
+                "reason": criteria_text(key, choice),
+            }
+            confidence = extract_confidence(answer)
+            if confidence is not None:
+                cell["confidence"] = confidence
+            cells[key] = cell
+        why = None
+        if not passed and self.why_enabled:
+            why = self._why_call(state, reasons)
+        return {
+            "status": "completed",
+            "provider": "openai",
+            "backend": self.backend.name,
+            "display_name": DISPLAY_NAME,
+            "model": model,
+            "passed": passed,
+            "reasons": reasons,
+            "why": why,
+            "answers": pass_answers,
+            "soft_answers": soft_answers,
+            "questions": {k: all_questions()[k] for k in CHECK_CELL_ORDER},
+            "soft_questions": {k: all_questions()[k] for k in SOFT_CELL_ORDER},
+            "cells": cells,
+            "citations": citations,
+            "usage": evaluated.get("usage"),
+            "warnings": warnings,
+            "min_confidence": self.min_confidence,
+            "blocks_deploy": True,
+        }
+
+    def _why_call(self, state: Mapping[str, Any], reasons: list[str]) -> str | None:
+        payload = {
+            "model": self.model,
+            "max_output_tokens": WHY_MAX_OUTPUT_TOKENS,
+            "reasoning": {"effort": self.reasoning_effort},
+            "input": [
+                {
+                    "role": "system",
+                    "content": (
+                        "Explain in one or two short sentences why this check failed. "
+                        "Use everyday words. Do not mention APIs, schemas, or internal field names."
+                    ),
+                },
+                {
+                    "role": "user",
+                    "content": json.dumps(
+                        {
+                            "check": state.get("check_prompt"),
+                            "what_failed": reasons,
+                            "transcript_tail": state.get("transcript_tail"),
+                        },
+                        ensure_ascii=True,
+                        default=str,
+                    ),
+                },
+            ],
+            "text": {
+                "format": {
+                    "type": "json_schema",
+                    "name": "check_fail_why",
+                    "strict": True,
+                    "schema": {
+                        "type": "object",
+                        "properties": {"why": {"type": "string"}},
+                        "required": ["why"],
+                        "additionalProperties": False,
+                    },
+                }
+            },
+        }
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+        }
+        try:
+            response = post_openai(
+                f"{self.base_url}/responses",
+                headers=headers,
+                payload=payload,
+                timeout_sec=WHY_TIMEOUT_SEC,
+                secret=self.api_key,
+                post=self._post,
+            )
+        except (httpx.TimeoutException, httpx.HTTPError):
+            return None
+        if response.status_code >= 400:
+            return None
+        try:
+            data = response.json()
+        except ValueError:
+            return None
+        if not isinstance(data, Mapping):
+            return None
+        text_out, refused = _output_text(data)
+        if refused or not text_out:
+            return None
+        try:
+            parsed = json.loads(text_out)
+        except json.JSONDecodeError:
+            return None
+        if not isinstance(parsed, Mapping):
+            return None
+        why = parsed.get("why")
+        if isinstance(why, str) and why.strip():
+            return why.strip()
+        return None
+
+
+def _as_path(value: Any) -> Path | None:
+    if isinstance(value, Path):
+        return value
+    if isinstance(value, str) and value.strip():
+        return Path(value)
+    return None
+
+
+def make_openai_judge(
+    *,
+    api_key: str,
+    backend: str = "decisions",
+    model: str = DEFAULT_MODEL,
+    min_confidence: float = DEFAULT_MIN_CONFIDENCE,
+    why_enabled: bool = True,
+    reasoning_effort: str = "low",
+    timeout_sec: float = DEFAULT_TIMEOUT_SEC,
+    base_url: str = DEFAULT_BASE_URL,
+    post: PostFn | None = None,
+) -> OutcomeJudge:
+    name = (backend or "decisions").strip().lower()
+    if name in {"structured", "responses"}:
+        impl: JudgeBackend = StructuredOutputsBackend(
+            api_key=api_key,
+            base_url=base_url,
+            model=model,
+            reasoning_effort=reasoning_effort,
+            post=post,
+        )
+    else:
+        impl = DecisionsBackend(
+            api_key=api_key,
+            base_url=base_url,
+            model=model,
+            post=post,
+        )
+    return OutcomeJudge(
+        impl,
+        api_key=api_key,
+        base_url=base_url,
+        model=model,
+        min_confidence=min_confidence,
+        why_enabled=why_enabled,
+        reasoning_effort=reasoning_effort,
+        timeout_sec=timeout_sec,
+        post=post,
+    )
+
+
+# Re-export for tests
+__all__ = [
+    "DISPLAY_NAME",
+    "IMAGE_MAX_BYTES",
+    "IMAGE_MAX_COUNT",
+    "LOW_CONFIDENCE_WARNING",
+    "DecisionsBackend",
+    "OutcomeJudge",
+    "StructuredOutputsBackend",
+    "collect_images",
+    "make_openai_judge",
+    "user_message_for_status",
+]

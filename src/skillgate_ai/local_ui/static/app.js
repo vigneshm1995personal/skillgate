@@ -111,7 +111,19 @@ function defaultDescription(name) {
   return `Produce ${n} notes, extracts, and local file outputs. Use when the user asks for ${n}, mentions invoices or documents, or wants the documented ${n} workflow.`;
 }
 
+function displayNameFromJudge(report) {
+  const cfg = report && report.config && report.config.judge;
+  if (cfg && cfg.display_name) return String(cfg.display_name);
+  const tasks = (report && report.tasks) || [];
+  for (const task of tasks) {
+    if (task && task.judge && task.judge.display_name) return String(task.judge.display_name);
+  }
+  return "";
+}
+
 function checkerLabel(report, snap) {
+  const scored = displayNameFromJudge(report);
+  if (scored) return scored;
   const name = String((report && report.harness) || "").toLowerCase();
   if (name === "demo" || (snap && snap.demo_notice)) return "Built-in checker";
   if (name === "llm") return "Your API key";
@@ -340,7 +352,7 @@ function buildWizardPanel() {
     const card = $(`<div class="card">
       <h2>This is local</h2>
       <p>Skill Gate runs on this computer. No Skill Gate account.</p>
-      <p class="muted">Your API key is the model that runs live checks. Skip only if you want the built-in checker.</p>
+      <p class="muted">Your API key is the model that runs live checks. An OpenAI key also scores them. Skip only if you want the built-in checker.</p>
       <p><button type="button" id="next">Continue</button></p>
     </div>`);
     card.querySelector("#next").onclick = () => {
@@ -363,7 +375,7 @@ function buildWizardPanel() {
     }
     const form = $(`<div class="card">
       <h2>Your API key</h2>
-      <p class="muted">Cursor, Codex, Claude, OpenAI, or AI Gateway. This is the model that runs live checks. No Skill Gate account.</p>
+      <p class="muted">Paste an OpenAI key to run live checks and score them. Cursor, Codex, Claude, or AI Gateway also run live checks. No Skill Gate account.</p>
       ${keyFieldsHtml()}
       <p class="field-msg" id="step-msg" aria-live="polite"></p>
       <p><button type="button" id="save-key">Save key</button>
@@ -661,6 +673,7 @@ async function renderPack(params) {
     <details class="keys">
       <summary>${hasKey ? "Replace your API key" : "Add your API key"}</summary>
       <div class="stack">
+        <p class="muted">An OpenAI key scores live checks. Other keys only run them.</p>
         ${keyFieldsHtml()}
         <p><button type="button" class="secondary" id="save-key">Save key</button></p>
         <div id="key-err"></div>
@@ -769,9 +782,12 @@ async function paintResult(snap, path, opts) {
   const rows = tasks.map((t) => {
     const mark = t.passed ? "PASS" : "FAIL";
     const cls = t.passed ? "pass" : "fail";
-    const why = (t.failures && t.failures[0]) || "";
+    const judge = t.judge || {};
+    const why = (!t.passed && judge.why) || (t.failures && t.failures[0]) || "";
+    const warn = (t.passed && judge.warnings && judge.warnings[0]) || "";
+    const happened = why || warn;
     const extra = t.advice ? `<div class="muted">${esc(t.advice.why || "")}</div>` : "";
-    return `<tr><td class="${cls}">${mark}</td><td>${esc(checkHeadline(t))}${extra}</td><td>${esc(why)}</td></tr>`;
+    return `<tr><td class="${cls}">${mark}</td><td>${esc(checkHeadline(t))}${extra}</td><td>${esc(happened)}</td></tr>`;
   }).join("");
   const advice = report.advice;
   let adviceHtml = "";

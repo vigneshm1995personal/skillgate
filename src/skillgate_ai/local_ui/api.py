@@ -150,9 +150,16 @@ def meta_payload(state: UiState) -> dict[str, Any]:
     if state.initial_pack:
         pack = display_pack_label(state.initial_pack, state.root)
     pdf = pdf_demo_path(state)
+    judge_pref = (cfg.judge_pref or "auto").strip().lower() or "auto"
+    if judge_pref == "skip" or not cfg.openai_api_key:
+        judge_provider = "skip"
+    else:
+        judge_provider = "openai"
     return {
         "version": __version__,
         "has_any_key": cfg.has_any_key,
+        "has_openai_key": bool(cfg.openai_api_key),
+        "judge_provider": judge_provider,
         "demo_default": True,
         "account": False,
         "pack": pack,

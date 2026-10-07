@@ -1,6 +1,6 @@
 # OpenAI judge provider — Implementation Plan
 
-> **This document is Phase 1 (plan only) for OSS `vigneshm1995personal/skillgate`.** Do **not** implement the OpenAI judge, cell bank, UI copy, or tests in this PR. Do **not** copy private `jev_qa.py` into this repo. Do **not** flip this repo public.
+> **Phase 2 implements this plan** on OSS `vigneshm1995personal/skillgate`. Do **not** copy private `jev_qa.py`. Do **not** bump/publish the PyPI version in this PR. Do **not** flip this repo public.
 
 **Goal:** Let a user score live checks with **their own OpenAI API key**. **v1 scores with the Decisions API** (`POST /v1/decisions`, `gpt-6-luna` only) as the primary backend — that is the product-owner lock after the official guide confirmed public beta for standard keys. Same fixed questions the hosted TypeSafe judge answers today, same Pass/Fail lock, same report shape. The rest of the gate (`skillgate check` exit 0/1, history JSONL, Docker `ENTRYPOINT`/`CMD`, copy-paste GitHub Action) stays unchanged.
 
@@ -255,24 +255,22 @@ answers[name] = {
 
 `cells[name]` stays `{label, choice, reason}` for UI chips. Put `confidence` on the cell too so the UI can show it later without digging. Path lives in `soft_answers` with the same extra fields.
 
-`metrics.py` budgets and `blocks_deploy` **do not** change because of confidence. This is not a new Gate/Deploy rule besides the existing Pass lock + the fail-for-safety clause below.
+`metrics.py` budgets and `blocks_deploy` **do not** change because of confidence. Low confidence is **not** a Gate fail and does **not** change `skillgate check` exit 0/1.
 
-### 4.2 Low-confidence: Fail-for-safety (not “flag for review”)
+### 4.2 Low-confidence: keep Pass, warn (owner lock)
 
-OpenAI: pick a threshold from **your** labeled examples and the cost of false positives vs false negatives ([Interpret the answers](https://developers.openai.com/api/docs/guides/decisions#interpret-the-answers)). This repo has **no** labeled OpenAI-vs-TypeSafe set yet. OSS also has **no** review queue.
+OpenAI: pick a threshold from labeled examples ([Interpret the answers](https://developers.openai.com/api/docs/guides/decisions#interpret-the-answers)). This repo has none yet.
 
 **Default (product choice, not an OpenAI number):** `SKILLGATE_JUDGE_MIN_CONFIDENCE=0.5`.
 
-Apply only to **Pass-lock** `choice` answers (`CHECK_CELL_ORDER`), never to Path:
+Apply only to **Pass-lock** `choice` answers (`CHECK_CELL_ORDER`) on the **Decisions** backend (the one that returns `confidence`). Never Path. Never the Responses fallback (no confidence channel — do not warn on every Pass).
 
-1. Missing `confidence` or non-numeric → treat as below threshold (fail-closed; do not assume 1.0).
-2. If `choice` is already outside `_PASS_LOCK` → Fail (unchanged). Confidence still recorded.
-3. If `choice` is inside `_PASS_LOCK` **and** `confidence < min` → **Fail-for-safety**. Add a reason like “OpenAI was not sure enough about ‘Got it right?’.” Never Pass.
-4. If all five Pass-lock cells are in-lock **and** each `confidence >= min` → Pass (then JPEG/missing-output mismatch can still fail).
+1. If `choice` is missing or not a supplied enum value → **Fail closed** (“OpenAI scoring returned an unusable answer.”). Exit 1. This is not a confidence case.
+2. If `choice` is outside `_PASS_LOCK` → Fail (unchanged). Record confidence.
+3. If `choice` is inside `_PASS_LOCK` and `confidence` is missing, non-numeric, or `< min` → **keep Pass**. Record confidence/probabilities. Add a plain warning: *The judge wasn't very sure about this one.* Do **not** change `passed` or the process exit code.
+4. If all five Pass-lock cells are in-lock and each `confidence >= min` → Pass with no warning (JPEG/missing-output mismatch can still fail).
 
-**Why Fail-for-safety, not review:** a CI gate that prints GREEN on a maybe is a silent Pass. A red that says “not sure enough” is recoverable (re-run, raise the key’s quota, or set `SKILLGATE_JUDGE=skip` for det). `0.5` matches “no majority confidence” and the spirit of hosted Jev’s boolean `probability >= 0.5`; it is **not** claimed to be OpenAI’s recommended cutoff. Operators may raise it (stricter) via env.
-
-Do **not** also threshold the chosen option’s `probabilities[].probability` in v1 unless calibration shows `confidence` is noisy — **hunch:** one knob is enough; record both.
+Do **not** also threshold `probabilities[].probability` in v1.
 
 ---
 
@@ -280,7 +278,7 @@ Do **not** also threshold the chosen option’s `probabilities[].probability` in
 
 Decisions does not return explanation text ([Decisions](https://developers.openai.com/api/docs/guides/decisions) points you to Structured Outputs for that).
 
-**When:** after the Decisions verdict is computed, if the check **Failed** (Pass lock miss, fail-for-safety, or output mismatch) **or** any Pass-lock cell was low-confidence. Skip on a clean Pass.
+**When:** after the Decisions (or fallback) verdict is computed, if the check **Failed** (Pass lock miss, unusable choice, or output mismatch). Skip on a clean Pass, including a Pass that only has a low-confidence warning.
 
 **What:** exactly **one** `POST /v1/responses` with `gpt-6-luna`, Structured Outputs, short plain-words `why` for the UI Fail line.
 
@@ -360,7 +358,7 @@ engine._run_outcome_judge
 Judge.judge(...)
         │
         ├── SkipJudge
-        └── OutcomeJudge          # Pass lock + fail-for-safety + optional why-call
+        └── OutcomeJudge          # Pass lock + low-confidence warning + optional Fail why-call
                 │
                 └── JudgeBackend.evaluate(...)
                         ├── DecisionsBackend          # v1 default   POST /v1/decisions
@@ -432,12 +430,12 @@ Port into `skillgate_ai.judge_bank`: cell order, labels, criteria, `_PASS_LOCK`,
 `engine._live_verdict`:
 
 1. Skip / `passed is None` → det owns (built-in).
-2. `status=completed` → `outcome_verdict` + fail-for-safety on low Pass-lock confidence.
+2. `status=completed` → `outcome_verdict`. Low Pass-lock confidence keeps Pass and stamps `warnings`.
 3. `status=error` → fail closed.
 4. `expect_skill is None` → det owns; judge stored as evidence.
 5. Keep `expected_output_mismatch_reason`.
 
-Then (not inside `_live_verdict`): if Failed or low-confidence, why-call; ignore its errors.
+Then (not inside `_live_verdict`): if Failed, why-call; ignore its errors. Skip the why-call on a Pass that only has a low-confidence warning.
 
 `gate.run_check` resolves judge and passes `judge=` into `run_eval`.
 
@@ -515,8 +513,8 @@ Monkeypatch `httpx.post` (no new dep).
 | Images | JPEG/PNG become `input_image` data URLs; no `http://`/`https://`/`file_id`; GIF/PDF not inlined (v1) |
 | Happy path | All Pass ordinals + confidence `>= 0.5` → `passed is True`; `probabilities` round-trip into history-shaped dict |
 | Fail lock | `Incorrect` → Fail; Path `Wasteful` does not Fail |
-| Low confidence | `Correct` with `confidence: 0.2` → Fail-for-safety, not Pass |
-| Missing confidence | Fail-for-safety |
+| Low confidence | `Correct` with `confidence: 0.2` → **Pass** + warning *The judge wasn't very sure about this one.* Exit unchanged |
+| Missing confidence (Decisions, otherwise Pass) | **Pass** + same warning |
 | Unknown `choice` | error, Fail |
 | 401 / 403 / 404 / 400 / 429 / timeout | public message, Fail, no key in exception/logs |
 | Why-call | On Fail, exactly one `/v1/responses`; `judge.why` set from schema; if why 500s, `passed` still False from Decisions |
@@ -586,7 +584,7 @@ This Phase 1 PR does **not** change the private repo.
 | Decisions public beta | Official as of 2026-10-07. Per-key 403 still possible. | Default Decisions; **no silent fallback**. Clear 403; documented `responses` backend. |
 | Model id | **Verified:** `gpt-6-luna` only on Decisions. | Hard-require it on that URL. |
 | Calibration vs TypeSafe | **Hunch:** same ordinals ≠ same calls. | Do not claim parity. |
-| Confidence cutoff `0.5` | **Product choice.** OpenAI says use labeled examples; we have none. | Env override; fail-for-safety; never Pass. |
+| Confidence cutoff `0.5` | **Product choice.** OpenAI says use labeled examples; we have none. | Env override; keep Pass; plain warning; never change exit 0/1. |
 | Path as `choice` not `score` | Justified from official type rule. | Revisit only with a new ordered rubric. |
 | Decisions image size | **Undocumented** on the Decisions page. | Product 4 MiB / 3 images; fail closed on 400. Do not cite vision 512 MB as Decisions. |
 | GIF / PDF as vision | Decisions examples are PNG (and talk about photos). | Inline JPEG/PNG only in v1. |
@@ -598,23 +596,23 @@ This Phase 1 PR does **not** change the private repo.
 
 ## 14. Ordered Phase 2 checklist
 
-1. `judge_bank.py` + Pass lock / fail-for-safety tests.
+1. `judge_bank.py` + Pass lock / low-confidence warning tests.
 2. `DecisionsBackend` + mocked `/v1/decisions` (probabilities, confidence, 403/400).
 3. Image inlining (JPEG/PNG data URLs only).
 4. Why-call on Fail; ignored errors.
 5. `StructuredOutputsBackend` behind `SKILLGATE_JUDGE_BACKEND=responses`.
 6. Wire `resolve_judge` → `run_check` → `run_eval`; no-trigger det.
 7. CLI/UI “who scored” + Fail why. Motion tests still green.
-8. Docs + live smoke. Bump **0.4.0**.
+8. Docs + live smoke. **Do not bump 0.4.0 in this PR** (follow-up).
 9. **Private follow-up:** pin wheel; wrap Jev as `Judge`.
 
 ---
 
 ## 15. This PR
 
-Docs only (revision of the Phase 1 plan):
+Phase 2 **code** on this branch (PR #8). Owner lock: low-confidence **keeps Pass** + warning; missing/invalid enum still fails closed.
 
-- `docs/plans/openai-judge.md` (this file)
-- `README.md` pointer in the docs list (already added)
-
-No product code, no version bump, no Docker/Action change.
+- `judge_bank.py`, `judge_openai.py`, wiring in `judge.py` / `engine.py` / `gate.py` / `report.py` / UI
+- User docs: `docs/openai-judge.md`
+- Tests: mocked Decisions + Responses, including the low-confidence warning path
+- **No** PyPI version bump (stays 0.3.0). **No** Docker/Action required secret.

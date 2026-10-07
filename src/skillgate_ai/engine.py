@@ -393,6 +393,18 @@ def expected_output_mismatch_reason(
     return None
 
 
+def _score_rows(scores: list[Score]) -> list[dict[str, Any]]:
+    return [
+        {
+            "scorer": item.scorer,
+            "passed": item.passed,
+            "headline": item.headline,
+            "detail": item.detail,
+        }
+        for item in scores
+    ]
+
+
 def _run_outcome_judge(
     task: TaskSpec,
     artifacts: RunArtifacts,
@@ -404,7 +416,6 @@ def _run_outcome_judge(
     judge: Judge | None = None,
 ) -> dict[str, Any] | None:
     """Optional Judge protocol. SkipJudge (default) does not own red/green."""
-    del scores, path
     if not is_live_harness(harness_name):
         return None
     outcome = judge if judge is not None else SkipJudge()
@@ -433,6 +444,10 @@ def _run_outcome_judge(
         selected_skill=result.trigger.selected_skill,
         golden=golden_payload,
         actual_output=actual_payload,
+        scores=_score_rows(scores),
+        path=path,
+        workspace=artifacts.workspace,
+        skill_root=skill_root,
     )
     if isinstance(judged, dict):
         if golden_payload is not None:
@@ -449,27 +464,46 @@ def _live_verdict(
     det_passed: bool,
     det_failures: list[str],
 ) -> tuple[bool, list[str], dict[str, Any] | None]:
-    """OSS default: deterministic scorers own red/green. A Judge with a bool
-    ``passed`` may override on live harnesses (private Jev injects this)."""
-    del expect_skill
+    """Skip leaves det in charge. Errors fail closed. No-trigger keeps det.
+    A completed bool ``passed`` overrides, including a low-confidence Pass."""
     if not isinstance(judge, dict):
         return det_passed, det_failures, judge
     if judge.get("status") == "skip" or judge.get("passed") is None:
         return det_passed, det_failures, judge
-    passed = bool(judge.get("passed"))
-    failures = [str(item) for item in (judge.get("reasons") or []) if str(item).strip()]
-    if not passed and not failures:
-        failures = list(det_failures) or ["Judge failed this check."]
+    warnings = [
+        str(item) for item in (judge.get("warnings") or []) if str(item).strip()
+    ]
     mismatch = expected_output_mismatch_reason(
         golden=judge.get("golden") if isinstance(judge, dict) else None,
         actual=judge.get("actual_output") if isinstance(judge, dict) else None,
         artifacts=_judge_artifact_rows(judge),
     )
+    if judge.get("status") == "error":
+        failures = [str(item) for item in (judge.get("reasons") or []) if str(item).strip()]
+        if not failures:
+            failures = ["OpenAI scoring failed."]
+        if mismatch and mismatch not in failures:
+            failures = [mismatch, *failures]
+        stamped = {**judge, "passed": False, "reasons": list(failures), "warnings": warnings}
+        return False, failures, stamped
+    if expect_skill is None:
+        passed = det_passed
+        failures = list(det_failures)
+        if mismatch:
+            passed = False
+            if mismatch not in failures:
+                failures = [mismatch, *failures]
+        stamped = {**judge, "warnings": warnings}
+        return passed, failures, stamped
+    passed = bool(judge.get("passed"))
+    failures = [str(item) for item in (judge.get("reasons") or []) if str(item).strip()]
+    if not passed and not failures:
+        failures = list(det_failures) or ["OpenAI scoring failed this check."]
     if mismatch:
         passed = False
         if mismatch not in failures:
             failures = [mismatch, *failures]
-    stamped = {**judge, "passed": passed, "reasons": list(failures)}
+    stamped = {**judge, "passed": passed, "reasons": list(failures), "warnings": warnings}
     return passed, failures, stamped
 
 

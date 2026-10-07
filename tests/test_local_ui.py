@@ -74,7 +74,12 @@ def test_ui_meta_no_account(project_root: Path) -> None:
         assert status == 200
         assert payload["account"] is False
         assert payload["has_any_key"] is False
+        assert payload["has_openai_key"] is False
+        assert payload["judge_provider"] == "skip"
         assert payload["demo_default"] is True
+        blob = json.dumps(payload)
+        assert "sk-" not in blob
+        assert "OPENAI_API_KEY" not in blob
     finally:
         server.shutdown()
         server.server_close()
@@ -148,6 +153,12 @@ def test_ui_copy_has_no_internal_jargon(project_root: Path) -> None:
         assert "function checkHeadline" in js
         assert "The skill should run for a matching request." in js
         assert "The skill should stay off for an unrelated request." in js
+        assert "Paste an OpenAI key to run live checks and score them" in js
+        assert "An OpenAI key scores live checks" in js
+        assert "function displayNameFromJudge" in js
+        assert "decisions" not in js.lower()
+        assert "gpt-6-luna" not in js
+        assert "OpenAI (your key)" not in js
     finally:
         server.shutdown()
         server.server_close()
@@ -296,6 +307,9 @@ def test_ui_env_writes_only_supplied_keys(tmp_path: Path) -> None:
         assert "OPENAI_API_KEY=sk-test-not-a-real-key" in env
         assert "CURSOR_API_KEY" not in env
         assert "ANTHROPIC_API_KEY" not in env
+        status, meta = _request("GET", f"{base}/api/meta")
+        assert status == 200
+        assert "sk-test-not-a-real-key" not in json.dumps(meta)
     finally:
         server.shutdown()
         server.server_close()

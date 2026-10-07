@@ -21,7 +21,14 @@ TIMEOUT_MAX = 3600
 TEMP_MIN = 0.0
 TEMP_MAX = 2.0
 MODEL_MAX_LEN = 120
-DIFF_FIELDS = ("harness", "model", "timeout_sec", "temperature", "reasoning_effort")
+DIFF_FIELDS = (
+    "harness",
+    "model",
+    "timeout_sec",
+    "temperature",
+    "reasoning_effort",
+    "judge_backend",
+)
 
 
 class EvalConfigError(SkillGateError):
@@ -42,6 +49,7 @@ class EvalRunConfig:
     reasoning_effort: str | None = None
     source: str = "env"
     applied: dict[str, bool] = field(default_factory=dict)
+    judge: dict[str, str] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -55,6 +63,7 @@ class EvalRunConfig:
             "reasoning_effort": self.reasoning_effort,
             "source": self.source,
             "applied": dict(self.applied),
+            "judge": dict(self.judge) if self.judge else None,
             "fingerprint": config_fingerprint(self),
             "label": config_label(self),
         }
@@ -77,6 +86,7 @@ class EvalRunConfig:
             reasoning_effort=_blank_to_none(data.get("reasoning_effort")),
             source=str(data.get("source") or "env"),
             applied={str(key): bool(value) for key, value in applied.items()},
+            judge=_judge_stamp(data.get("judge")),
         )
 
 
@@ -241,6 +251,10 @@ def with_timeout_effective(run: EvalRunConfig, effective: int | None) -> EvalRun
     return replace(run, timeout_effective=effective)
 
 
+def with_judge(run: EvalRunConfig, stamp: dict[str, str] | None) -> EvalRunConfig:
+    return replace(run, judge=dict(stamp) if stamp else None)
+
+
 def config_fingerprint(run: EvalRunConfig | None) -> str | None:
     if run is None:
         return None
@@ -250,12 +264,15 @@ def config_fingerprint(run: EvalRunConfig | None) -> str | None:
     timeout = run.timeout_effective
     if timeout is None:
         timeout = run.timeout_sec or 0
+    judge = run.judge or {}
     payload = {
         "harness": run.harness or "",
         "model": run.model or "",
         "timeout_sec": timeout,
         "temperature": run.temperature,
         "reasoning_effort": effort,
+        "judge_backend": str(judge.get("backend") or ""),
+        "judge_model": str(judge.get("model") or ""),
     }
     blob = json.dumps(payload, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(blob.encode("utf-8")).hexdigest()[:16]
@@ -275,6 +292,9 @@ def config_label(run: EvalRunConfig | dict[str, Any] | None) -> str:
         parts.append(cfg.reasoning_effort or DEFAULT_CODEX_REASONING_EFFORT)
     elif cfg.temperature not in (0, 0.0) and (cfg.applied or {}).get("temperature"):
         parts.append(f"temp {cfg.temperature}")
+    judge = cfg.judge or {}
+    if str(judge.get("provider") or "") == "openai":
+        parts.append(str(judge.get("display_name") or "OpenAI (your key)"))
     return " · ".join(parts)
 
 
@@ -314,13 +334,26 @@ def _diff_view(run: EvalRunConfig) -> dict[str, Any]:
     effort = None
     if run.harness == "codex":
         effort = run.reasoning_effort or DEFAULT_CODEX_REASONING_EFFORT
+    judge = run.judge or {}
     return {
         "harness": run.harness or None,
         "model": run.model,
         "timeout_sec": timeout,
         "temperature": run.temperature,
         "reasoning_effort": effort,
+        "judge_backend": str(judge.get("backend") or "") or None,
     }
+
+
+def _judge_stamp(value: Any) -> dict[str, str] | None:
+    if not isinstance(value, dict):
+        return None
+    stamp = {
+        str(key): str(item)
+        for key, item in value.items()
+        if item is not None and str(key).lower() not in {"api_key", "key", "authorization"}
+    }
+    return stamp or None
 
 
 def _blank_to_none(value: Any) -> str | None:

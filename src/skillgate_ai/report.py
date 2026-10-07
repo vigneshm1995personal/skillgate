@@ -13,6 +13,9 @@ def format_cli(report: SuiteReport) -> str:
         f"Skill Gate  ·  {report.title}  ·  {gate}",
         f"skill `{report.skill}`  ·  {report.passed_count}/{len(report.tasks)} tasks passed",
     ]
+    who = scored_by(report)
+    if who:
+        lines.append(_scored_by_line(who))
     label = config_label(report.config)
     if label:
         lines.append(f"config  {label}")
@@ -21,8 +24,10 @@ def format_cli(report: SuiteReport) -> str:
         mark = "PASS" if task.passed else "FAIL"
         if task.passed:
             lines.append(f"  {mark}  {task.task_id}")
+            for warning in _task_warnings(task):
+                lines.append(f"       {warning}")
             continue
-        why = task.failures[0] if task.failures else "failed"
+        why = _task_fail_line(task)
         lines.append(f"  {mark}  {task.task_id} — {why}")
         if task.advice:
             lines.append(f"       why:  {task.advice.why}")
@@ -53,6 +58,9 @@ def format_github(report: SuiteReport) -> str:
     label = config_label(report.config)
     if label:
         lines += ["", f"Config: `{label}`"]
+    who = scored_by(report)
+    if who:
+        lines += ["", _scored_by_line(who)]
     lines += [
         "",
         "| Task | Result | What happened |",
@@ -60,13 +68,19 @@ def format_github(report: SuiteReport) -> str:
     ]
     for task in report.tasks:
         result = "pass" if task.passed else "FAIL"
-        what = "; ".join(task.failures) if task.failures else "ok"
+        if task.passed:
+            what = "; ".join(_task_warnings(task)) if _task_warnings(task) else "ok"
+        else:
+            what = _task_fail_line(task)
+            extra = "; ".join(task.failures[1:]) if len(task.failures) > 1 else ""
+            if extra:
+                what = f"{what}; {extra}"
         lines.append(f"| `{task.task_id}` | **{result}** | {what} |")
     failed = report.failed_tasks
     if failed:
         lines += ["", "### Failed tasks — what to change", ""]
         for task in failed:
-            lines.append(f"**{task.task_id}** — {task.failures[0] if task.failures else 'failed'}")
+            lines.append(f"**{task.task_id}** — {_task_fail_line(task)}")
             if task.advice:
                 lines.append("")
                 lines.append(task.advice.why)
@@ -228,6 +242,44 @@ def _task_to_dict(task: TaskReport) -> dict:
             for s in task.scores
         ],
     }
+
+
+def scored_by(report: SuiteReport) -> str:
+    cfg = report.config if isinstance(report.config, dict) else {}
+    judge_cfg = cfg.get("judge") if isinstance(cfg, dict) else None
+    if isinstance(judge_cfg, dict):
+        name = judge_cfg.get("display_name")
+        if isinstance(name, str) and name.strip():
+            return name.strip()
+    for task in report.tasks:
+        judge = task.judge if isinstance(task.judge, dict) else None
+        if isinstance(judge, dict):
+            name = judge.get("display_name")
+            if isinstance(name, str) and name.strip():
+                return name.strip()
+    return ""
+
+
+def _scored_by_line(who: str) -> str:
+    if who == "Built-in checker":
+        return "Built-in checker scored this run. This is not a live model."
+    return f"{who} scored this run."
+
+
+def _task_fail_line(task: TaskReport) -> str:
+    judge = task.judge if isinstance(task.judge, dict) else {}
+    why = judge.get("why") if isinstance(judge, dict) else None
+    if isinstance(why, str) and why.strip():
+        return why.strip()
+    return task.failures[0] if task.failures else "failed"
+
+
+def _task_warnings(task: TaskReport) -> list[str]:
+    judge = task.judge if isinstance(task.judge, dict) else {}
+    raw = judge.get("warnings") if isinstance(judge, dict) else None
+    if not isinstance(raw, list):
+        return []
+    return [str(item).strip() for item in raw if str(item).strip()]
 
 
 def _advice_to_dict(advice) -> dict:
