@@ -2,13 +2,15 @@
 
 > **This document is Phase 1 (plan only) for OSS `vigneshm1995personal/skillgate`.** Do **not** implement the OpenAI judge, cell bank, UI copy, or tests in this PR. Do **not** copy private `jev_qa.py` into this repo. Do **not** flip this repo public.
 
-**Goal:** Let a user score live checks with **their own OpenAI API key**, answering the same fixed questions the hosted TypeSafe judge answers today, with the same Pass/Fail lock and the same report shape. The rest of the gate (`skillgate check` exit 0/1, history JSONL, Docker `ENTRYPOINT`/`CMD`, copy-paste GitHub Action) stays unchanged.
+**Goal:** Let a user score live checks with **their own OpenAI API key**. **v1 scores with the Decisions API** (`POST /v1/decisions`, `gpt-6-luna` only) as the primary backend — that is the product-owner lock after the official guide confirmed public beta for standard keys. Same fixed questions the hosted TypeSafe judge answers today, same Pass/Fail lock, same report shape. The rest of the gate (`skillgate check` exit 0/1, history JSONL, Docker `ENTRYPOINT`/`CMD`, copy-paste GitHub Action) stays unchanged.
 
 **Parent (locked):** [`docs/plans/2026-10-03-skillgate-oss-extract.md`](2026-10-03-skillgate-oss-extract.md). Decision rule unchanged: if a feature cannot work as **one pack on disk** plus `skillgate check` exiting **0 or 1** with **no Skill Gate account**, it does not belong here. OpenAI judge = the user’s key only. The built-in checker stays the skip/fallback when no OpenAI key is set.
 
 Inspected OSS tree: `main` @ `6a3b0d3` (`Hold Checking then draw Passed or Failed on Run live (#7)`). PyPI dist **`skillgate-ai` 0.3.0**. CLI command **`skillgate`**. Hosted app stays private at [`vigneshm1995personal/skillgate-ai`](https://github.com/vigneshm1995personal/skillgate-ai).
 
 Private judge source of truth (read-only, **do not copy the file**): `src/skillgate_ai/jev_qa.py` on private `skillgate-ai` (`run_jev_outcome_judge`, `CHECK_CELL_ORDER`, `_PASS_LOCK`, `SOFT_CELL_ORDER`). Hosted engine still hard-calls Jev (`run_jev_outcome_judge` inside private `engine._run_outcome_judge`); OSS already stripped that import.
+
+Official OpenAI citations in this doc were re-fetched **2026-10-07**. Shapes below are only from those pages.
 
 ---
 
@@ -30,6 +32,7 @@ Private judge source of truth (read-only, **do not copy the file**): `src/skillg
 | Keys | `config.ROOT_ENV_NAMES` | Already includes `OPENAI_API_KEY`. Wizard + pack-page details write it via `PUT /api/env`. |
 | UI motion | `local_ui/static/app.js` | Checking hold (`CHECKING_MIN_MS = 700`) → slide → drawn Passed/Failed. Tests in `tests/test_local_ui.py` lock this. |
 | Deny-list | `tests/test_oss_surface.py` | Forbids `skillgate_ai.jev_qa` on disk and as an import. |
+| Image sniff | `case_pack.sniff_output_bytes` | JPEG / PNG / GIF / PDF magics. No vision upload today — judge state is JSON metadata (path, present, kind, size). |
 
 ### 0.2 Hosted TypeSafe questions (private `jev_qa.py`, not in this tree)
 
@@ -45,7 +48,7 @@ One bounded request per **live** task. Never free-form questions invented per ru
 | `evidence_action_validity` | Used the right evidence/actions? | `Fully supported` **or** `N/A` |
 | `result_quality` | Delivered a good result? | **Soft:** `Clear and complete` **or** `Mostly good` (Pass); `Significant issues` / `Poor` → Fail |
 
-Full choice lists (must be the schema enums):
+Full choice lists (must be the Decisions `choices[].value` strings):
 
 - `task_completion`: Fully completed / Partially completed / Not completed
 - `correctness`: Correct / Mostly correct / Incorrect / Insufficient evidence
@@ -81,120 +84,230 @@ A Cursor-only user can run live without OpenAI. A user with only `OPENAI_API_KEY
 1. One pack on disk + `skillgate check` exit **0 or 1**, no Skill Gate account.
 2. OpenAI judge uses the **user’s** `OPENAI_API_KEY` only. Never a Skill Gate-owned key. Never log or print the key (headers, traces, history, UI, CLI).
 3. No key / `SKILLGATE_JUDGE=skip` / demo harness → built-in checker. Det fixtures stay unlimited.
-4. Same questions, same Pass lock, same `tasks[].judge` shape as hosted TypeSafe, so history / `check` / Docker / Action stay compatible.
-5. Customer copy is plain. Do **not** show “Jev”, “Jev cells”, “harness”, “BYOLLM”, “Option A” unless already user-facing (hosted may say TypeSafe internally; OSS UI already forbids `jev` in `test_ui_copy_has_no_internal_jargon`).
+4. Same questions, same Pass lock, same `tasks[].judge` shape as hosted TypeSafe, so history / `check` / Docker / Action stay compatible. Extra fields (`confidence`, `probabilities`, `why`) are additive.
+5. Customer copy is plain. Do **not** show “Jev”, “Jev cells”, “harness”, “BYOLLM”, “Option A” unless already user-facing (OSS UI already forbids `jev` in `test_ui_copy_has_no_internal_jargon`).
 6. Reuse Checking → slide → drawn Passed/Failed. No new hold screen, no “Evaluating”.
-7. Errors (bad key, quota, model missing, Decisions 403, timeout, refusal) → clear message, **fail the check**, never silent Pass, never a traceback as the primary UX.
-8. Do not add `openai` as a required PyPI dep. Use existing `httpx` (same as BYO chat). Optional extra is allowed later; v1 should not need it.
-9. Do not import or vendor `jev_qa.py`. Re-home the **cell bank + Pass lock** in OSS under a public name (`skillgate_ai.judge_bank`), then private TypeSafe imports that bank from the wheel.
+7. Errors (bad key, quota, model missing, Decisions 403/404/400, timeout) → clear message, **fail the check**, never silent Pass, never a traceback as the primary UX.
+8. Do not add `openai` as a required PyPI dep. Use existing `httpx`.
+9. Do not import or vendor `jev_qa.py`. Re-home the **cell bank + Pass lock** in OSS (`skillgate_ai.judge_bank`); private TypeSafe imports that bank from the wheel.
 10. Implementation PR bumps package version **0.3.0 → 0.4.0** (this plan PR does not).
+11. **v1 default backend is Decisions.** Responses + Structured Outputs is a selectable fallback (`SKILLGATE_JUDGE_BACKEND=responses`) and the Fail “why” writer. Do not silently switch backends on 403.
 
 ---
 
-## 2. OpenAI: what is verified vs what we will not depend on yet
-
-Verified **2026-10-07** against official OpenAI docs (not blogs).
+## 2. OpenAI: verified from official docs (2026-10-07)
 
 ### 2.1 Model id — verified
 
-**Default model: `gpt-6-luna`.**
+**Default (and Decisions-only) model: `gpt-6-luna`.**
 
-Citation: [GPT-6 Luna model page](https://developers.openai.com/api/docs/models/gpt-6-luna) and [Models catalog](https://developers.openai.com/api/docs/models).
+Citations: [GPT-6 Luna](https://developers.openai.com/api/docs/models/gpt-6-luna), [Models catalog](https://developers.openai.com/api/docs/models), [Decisions guide](https://developers.openai.com/api/docs/guides/decisions) (“Currently, only `gpt-6-luna` is supported”).
 
-Facts from those pages:
+Config override `SKILLGATE_JUDGE_MODEL` still exists for the **Responses fallback / why-call**. Decisions requests must send `gpt-6-luna` unless OpenAI later documents another Decisions model — do not send Astra/Sol to `/v1/decisions`.
 
-- Request id is `gpt-6-luna` (not “GPT-6 Luna”).
-- Structured outputs: **Supported**.
-- Endpoints include Chat Completions `v1/chat/completions` and Responses `v1/responses`.
-- `reasoning.effort` supports `none`, `low`, `medium` (default), `high`, `xhigh`, `max`.
-- Chat Completions function calling only with `reasoning_effort: "none"`. Judge v1 does **not** use tools.
-- Context 1.05M, max output 128K, knowledge cutoff May 18, 2026.
-- Standard (non-Decisions) pricing: **$0.10 / 1M input**, **$0.50 / 1M output** tokens. Cached input $0.01; cache writes $0.125. Long-context (>272K input) multipliers apply. Regional processing +10% where available.
+Luna on ordinary Responses/Chat Completions (why-call and fallback backend): Structured outputs **Supported**; input **$0.10 / 1M**, output **$0.50 / 1M** ([model page](https://developers.openai.com/api/docs/models/gpt-6-luna)). `reasoning.effort` supports `none`, `low`, `medium` (default), `high`, `xhigh`, `max`.
 
-**Config, not a hardcoded-only id:** `SKILLGATE_JUDGE_MODEL` (default `gpt-6-luna`). If OpenAI ships a snapshot id later, operators can override without a code change.
+### 2.2 Decisions API — v1 primary backend (verified)
 
-### 2.2 Decisions API — official docs exist; still not the v1 path
+Citation: [Decisions](https://developers.openai.com/api/docs/guides/decisions) (markdown: [decisions.md](https://developers.openai.com/api/docs/guides/decisions.md)).
 
-Citation: [Decisions guide](https://developers.openai.com/api/docs/guides/decisions).
+Facts from that page:
 
-Official page (fetched 2026-10-07) says:
-
+- Public beta; GA “in the coming weeks”.
 - `POST https://api.openai.com/v1/decisions`
-- Public beta; GA “in the coming weeks”
 - Only model: `gpt-6-luna`
-- Body: `{model, input, questions[]}` with `predicate` | `choice` | `score`
-- Choice answer: `{type, name, choice, probabilities[], confidence}`
-- Decisions-only pricing: **$0.10 / 1M input**, no output / cache charges (different from ordinary Luna requests)
+- Request parts: `model`, `input` (text string **or** user messages with text and images), `questions[]`
+- Question types: `predicate` | `choice` | `score`
+- Response: `answers[]`, each echoing `name`
+- `choice` answer: `choice`, `probabilities[]` (`value` + `probability`), `confidence`
+- `score` answer: `score` (probability-weighted average of **level indices starting at 0**), `probabilities[]` (`value` index, `label`, `probability`), `confidence`
+- `predicate` answer: `probability` (0–1 that the condition is true). **No `confidence` field in the official predicate excerpt.**
+- Multiple independent questions in one `questions` array share `input`
+- Decisions returns **typed answers, not prose**. The same page says to use [Structured Outputs](https://developers.openai.com/api/docs/guides/structured-outputs) with the Responses API when you need a written explanation
+- Images: **inline base64 data URLs only**. Hosted HTTP/HTTPS URLs and `file_id` are **not** supported
+- Pricing on `/v1/decisions`: **$0.10 per 1M input tokens**; no cache-read, cache-write, or output-token charges. Regional premiums and long-context input multipliers apply. Other Luna endpoints use the model/pricing page instead
 
-**Product lock for v1:** do **not** call `/v1/decisions` by default.
+**Interpret the answers** (same page): set thresholds from labeled examples based on the cost of false positives vs false negatives. OpenAI does **not** publish a numeric confidence cutoff.
 
-Why, even though the schema is now on the official page:
+**Not on that page (do not invent):** Python SDK method, per-question rate limits, a published byte/patch cap for Decisions images, a `refusal` question type, output-token charges.
 
-- Owner instruction for this work: ship on the normal API + Structured Outputs so any standard `OPENAI_API_KEY` works.
-- Earlier (through at least 2026-10-02, third-party) standard keys returned HTTP **403** `Decision API is not enabled for this user`. That may still be true for some accounts during public beta. Treat enablement as **unknown per key**.
-- No first-party Python SDK method is a published dependency of this repo. (Hunch: Node `client.decisions.create` is landing in `openai/openai-node` PR #2886; do not rely on it.)
+### 2.3 Structured Outputs — fallback backend + Fail “why” (verified)
 
-Phase 2 therefore implements **Structured Outputs now**, and a `JudgeBackend` so a future `decisions` backend can replace **one HTTP call** without touching `engine` / `gate` / UI.
+Citation: [Structured model outputs](https://developers.openai.com/api/docs/guides/structured-outputs).
 
-If someone sets `SKILLGATE_JUDGE_BACKEND=decisions` later: same questions as `choice` items; HTTP 403 must surface as “OpenAI scoring is not enabled for this key” (or similar), fail the check, never Pass.
+- `POST https://api.openai.com/v1/responses`
+- `text.format`: `{type: "json_schema", name, schema, strict: true}`
+- Enums are a documented schema feature; every property `required`; `additionalProperties: false`
+- Refusals: `output[].content[]` with `type: "refusal"` (not schema JSON)
 
-### 2.3 Structured Outputs — verified request/response (v1 backend)
+This is **not** how v1 scores the six questions by default. It is (a) `SKILLGATE_JUDGE_BACKEND=responses` if Decisions is unusable for a given key, and (b) the one optional why-call after a Fail / low-confidence Decisions result.
 
-Citation: [Structured model outputs](https://developers.openai.com/api/docs/guides/structured-outputs) (Responses mode). Official curl uses `POST /v1/responses` with `text.format` `{type: json_schema, name, schema, strict: true}`. Enums are a documented schema feature. Refusals arrive as `output[].content[]` with `type: "refusal"` (not schema JSON) — fail closed.
+---
 
-**v1 HTTP call (httpx, no SDK required):**
+## 3. Map Skill Gate questions → Decisions types
 
-`POST https://api.openai.com/v1/responses`
+Official type rule ([Decisions](https://developers.openai.com/api/docs/guides/decisions)): use **`choice` for categories without an order**; use **`score` for ordered levels** (severity). `score` “can fall between levels”; “Use `choice` to select a single category.” `predicate` is for a yes/no condition and returns only `probability`.
+
+Our Pass lock needs **one named ordinal per question** (the chip + the lock). A between-level float cannot be the chip.
+
+### 3.1 Five Pass-lock questions → `choice` (not `predicate`)
+
+None of the five are binary. Collapsing them to a predicate (“is this a Pass?”) would hide ordinals the lock cares about (`Mostly good` vs `Clear and complete`, `N/A` vs `Fully supported`). A documented predicate threshold (the page says pick your own) would also be a **new** Pass rule, which is forbidden.
+
+| `name` | `type` | `choices[].value` | `choices[].description` |
+| --- | --- | --- | --- |
+| `task_completion` | `choice` | Fully completed / Partially completed / Not completed | Existing TypeSafe criteria text |
+| `correctness` | `choice` | Correct / Mostly correct / Incorrect / Insufficient evidence | same |
+| `instruction_adherence` | `choice` | Fully followed / Minor deviation / Major deviation / Violated | same |
+| `evidence_action_validity` | `choice` | Fully supported / Partially supported / Unsupported / N/A | same |
+| `result_quality` | `choice` | Clear and complete / Mostly good / Significant issues / Poor | same |
+
+`instructions` = the user-facing label plus “Pick exactly one.” Distinct descriptions come from the hosted criteria strings (port into `judge_bank`).
+
+Pass rule **unchanged**: lowercase `choice` must sit in `_PASS_LOCK`. Map each Decisions answer to hosted shape `answers[name] = {"choice": <value>}`.
+
+### 3.2 Soft Path → `choice`, not `score`
+
+**Justification (official + product):**
+
+1. [Decisions](https://developers.openai.com/api/docs/guides/decisions): “Use `choice` for categories without an order.” Efficient / Acceptable / **Looping** / **Wasteful** are not a single severity ladder. Looping (repeated same tools) and Wasteful (off-task thrashing) are different failure **modes**. Adjacent `score` levels must have distinct ordered criteria; inventing “Wasteful is worse than Looping” is a hunch, not the bank.
+2. Same page: `score` is a **weighted average of indices** and **can fall between levels** (their example: `1.1`). The report chip and hosted `soft_answers.path_efficiency.choice` need **one** ordinal.
+3. Same page: “The score summarizes the distribution across levels. Use `choice` to select a single category.”
+
+So Path is a sixth `choice` on the **same** Decisions request (`name`: `path_efficiency`; values Efficient / Acceptable / Looping / Wasteful; descriptions from `_SOFT_OUTCOME_QUESTIONS`). Still **not** in the Pass lock.
+
+If a later calibration pass wants a 0–3 efficiency rubric, that would be a new question, not this bank.
+
+### 3.3 Canonical Decisions request (v1 score call)
+
+`POST https://api.openai.com/v1/decisions`
+
+Auth: `Authorization: Bearer $OPENAI_API_KEY`. Never log the bearer token.
 
 ```json
 {
   "model": "gpt-6-luna",
+  "input": [
+    {
+      "role": "user",
+      "content": [
+        {"type": "input_text", "text": "<JSON state: check prompt, expect/selected skill, scorer rows, artifact metadata, golden/actual text, path.steps, transcript tail>"},
+        {"type": "input_image", "image_url": "data:image/png;base64,<...>"}
+      ]
+    }
+  ],
+  "questions": [
+    {
+      "type": "choice",
+      "name": "task_completion",
+      "instructions": "Got the job done?",
+      "choices": [
+        {"value": "Fully completed", "description": "The requested work is fully done."},
+        {"value": "Partially completed", "description": "Some of the requested work is done but incomplete."},
+        {"value": "Not completed", "description": "The requested work was not done."}
+      ]
+    }
+  ]
+}
+```
+
+(Five more `choice` questions in the same array: the remaining Pass-lock keys + `path_efficiency`.) When there are no images, `input` may be a **string** (official complaint-routing example).
+
+Illustrative `choice` response (official excerpt, department example):
+
+```json
+{
+  "answers": [
+    {
+      "type": "choice",
+      "name": "department",
+      "choice": "billing",
+      "probabilities": [
+        {"value": "billing", "probability": 0.95},
+        {"value": "technical", "probability": 0.02}
+      ],
+      "confidence": 0.93
+    }
+  ]
+}
+```
+
+Stamp every Skill Gate cell the same way. If `answers` is missing a required `name`, or `choice` is not in the supplied values → `status=error`, fail closed (never Pass).
+
+---
+
+## 4. Confidence / probabilities (soft) and low-confidence behavior
+
+### 4.1 Record (additive, not a new Deploy block)
+
+On each Pass-lock and Path cell, persist under `tasks[].judge` (history already stores the judge dict):
+
+```python
+answers[name] = {
+  "choice": str,                 # hosted field; Pass lock reads this
+  "confidence": float | None,    # Decisions choice field
+  "probabilities": [             # Decisions array, copied not invented
+    {"value": str, "probability": float},
+    ...
+  ],
+}
+```
+
+`cells[name]` stays `{label, choice, reason}` for UI chips. Put `confidence` on the cell too so the UI can show it later without digging. Path lives in `soft_answers` with the same extra fields.
+
+`metrics.py` budgets and `blocks_deploy` **do not** change because of confidence. This is not a new Gate/Deploy rule besides the existing Pass lock + the fail-for-safety clause below.
+
+### 4.2 Low-confidence: Fail-for-safety (not “flag for review”)
+
+OpenAI: pick a threshold from **your** labeled examples and the cost of false positives vs false negatives ([Interpret the answers](https://developers.openai.com/api/docs/guides/decisions#interpret-the-answers)). This repo has **no** labeled OpenAI-vs-TypeSafe set yet. OSS also has **no** review queue.
+
+**Default (product choice, not an OpenAI number):** `SKILLGATE_JUDGE_MIN_CONFIDENCE=0.5`.
+
+Apply only to **Pass-lock** `choice` answers (`CHECK_CELL_ORDER`), never to Path:
+
+1. Missing `confidence` or non-numeric → treat as below threshold (fail-closed; do not assume 1.0).
+2. If `choice` is already outside `_PASS_LOCK` → Fail (unchanged). Confidence still recorded.
+3. If `choice` is inside `_PASS_LOCK` **and** `confidence < min` → **Fail-for-safety**. Add a reason like “OpenAI was not sure enough about ‘Got it right?’.” Never Pass.
+4. If all five Pass-lock cells are in-lock **and** each `confidence >= min` → Pass (then JPEG/missing-output mismatch can still fail).
+
+**Why Fail-for-safety, not review:** a CI gate that prints GREEN on a maybe is a silent Pass. A red that says “not sure enough” is recoverable (re-run, raise the key’s quota, or set `SKILLGATE_JUDGE=skip` for det). `0.5` matches “no majority confidence” and the spirit of hosted Jev’s boolean `probability >= 0.5`; it is **not** claimed to be OpenAI’s recommended cutoff. Operators may raise it (stricter) via env.
+
+Do **not** also threshold the chosen option’s `probabilities[].probability` in v1 unless calibration shows `confidence` is noisy — **hunch:** one knob is enough; record both.
+
+---
+
+## 5. Fail “why” — one optional Responses follow-up
+
+Decisions does not return explanation text ([Decisions](https://developers.openai.com/api/docs/guides/decisions) points you to Structured Outputs for that).
+
+**When:** after the Decisions verdict is computed, if the check **Failed** (Pass lock miss, fail-for-safety, or output mismatch) **or** any Pass-lock cell was low-confidence. Skip on a clean Pass.
+
+**What:** exactly **one** `POST /v1/responses` with `gpt-6-luna`, Structured Outputs, short plain-words `why` for the UI Fail line.
+
+```json
+{
+  "model": "gpt-6-luna",
+  "max_output_tokens": 128,
   "reasoning": {"effort": "low"},
   "input": [
-    {"role": "system", "content": "<fixed scorer instructions + ordinal definitions>"},
-    {"role": "user", "content": "<JSON state: check prompt, expect/selected skill, scorer rows, artifacts, golden/actual, path, transcript tail>"}
+    {
+      "role": "system",
+      "content": "Explain in one or two short sentences why this check failed. Use everyday words. Do not mention APIs, schemas, or internal field names."
+    },
+    {
+      "role": "user",
+      "content": "<check prompt + failing cell labels/choices + transcript tail; no secrets>"
+    }
   ],
   "text": {
     "format": {
       "type": "json_schema",
-      "name": "skill_gate_check",
+      "name": "check_fail_why",
       "strict": true,
       "schema": {
         "type": "object",
-        "properties": {
-          "task_completion": {
-            "type": "string",
-            "enum": ["Fully completed", "Partially completed", "Not completed"]
-          },
-          "correctness": {
-            "type": "string",
-            "enum": ["Correct", "Mostly correct", "Incorrect", "Insufficient evidence"]
-          },
-          "instruction_adherence": {
-            "type": "string",
-            "enum": ["Fully followed", "Minor deviation", "Major deviation", "Violated"]
-          },
-          "evidence_action_validity": {
-            "type": "string",
-            "enum": ["Fully supported", "Partially supported", "Unsupported", "N/A"]
-          },
-          "result_quality": {
-            "type": "string",
-            "enum": ["Clear and complete", "Mostly good", "Significant issues", "Poor"]
-          },
-          "path_efficiency": {
-            "type": "string",
-            "enum": ["Efficient", "Acceptable", "Looping", "Wasteful"]
-          }
-        },
-        "required": [
-          "task_completion",
-          "correctness",
-          "instruction_adherence",
-          "evidence_action_validity",
-          "result_quality",
-          "path_efficiency"
-        ],
+        "properties": {"why": {"type": "string"}},
+        "required": ["why"],
         "additionalProperties": false
       }
     }
@@ -202,316 +315,306 @@ Citation: [Structured model outputs](https://developers.openai.com/api/docs/guid
 }
 ```
 
-Notes that are documented, not hunches:
+Citations: Responses Structured Outputs curl in [structured-outputs](https://developers.openai.com/api/docs/guides/structured-outputs); Luna `reasoning.effort` on the [model page](https://developers.openai.com/api/docs/models/gpt-6-luna). `max_output_tokens: 128` is a **product bound** (Responses supports the field). `reasoning.effort: "low"` is a supported Luna value, not a documented “judge mode”.
 
-- Every object property must be in `required`; `additionalProperties` must be `false` (Structured Outputs subset).
-- Auth: `Authorization: Bearer $OPENAI_API_KEY`. Never write that value into logs; on HTTP errors log **status + truncated body** only (same pattern as private `_http_error_detail`).
-- Parse success from `output_text` / `output[].content[]` `output_text`. If any content part is `refusal` → `status=error`, fail the check.
-- `reasoning.effort: "low"` is a **supported** Luna value. Default on the model page is `medium`. Using `low` is a product choice for latency/cost on a constrained enum task, **not** a documented “judge mode”. Make it `SKILLGATE_JUDGE_REASONING_EFFORT` (default `low`). `none` is also supported on Luna if we need to cut reasoning tokens later.
+**Hard rule:** if this call 401s, 403s, 429s, times out, refuses, or returns empty `why`, **leave the verdict unchanged**. Set `judge.why` to omitted/null and keep Pass-lock reasons. Never fail a check *because* the why-call failed; never Pass a check because it succeeded.
 
-Chat Completions equivalent (documented; keep as a fallback only if Responses is awkward in tests): `POST /v1/chat/completions` with `response_format: {type: "json_schema", json_schema: {name, strict: true, schema}}`. Prefer Responses for v1 because the Structured Outputs guide’s Responses examples are the current canonical shape, and Luna’s model page lists Responses as a first-class endpoint.
+Optional kill switch: `SKILLGATE_JUDGE_WHY=0` skips the call (CI cost). Default **on**.
 
-**Do not invent** Decisions rate limits, a Python `client.decisions.create` in this package, or unpublished snapshot ids.
+UI: Fail “What happened” prefers `judge.why` when present; else the first Pass-lock reason. Do not show raw `confidence` as the only explanation.
+
+The why-call uses **Responses pricing** (input $0.10 + output $0.50 / 1M), not Decisions input-only pricing.
 
 ---
 
-## 3. Provider interface (callers stay stable)
+## 6. Images (Decisions input)
 
-Keep `Judge` as the only type `engine` knows. Split “who scores” from “which HTTP”.
+Citation: [Decisions — Check an image](https://developers.openai.com/api/docs/guides/decisions): `input_image.image_url` must be a `data:image/png;base64,...` (or jpeg) data URL. **No** hosted HTTP/HTTPS URLs, **no** `file_id`. Combine `input_text` + `input_image` in a user message.
+
+### 6.1 What we send
+
+From the live workspace (and golden, if present), if `sniff_output_bytes` says `magic` in `{jpeg, png, gif}` (GIF is sniffed today; whether Decisions accepts GIF is **not** on the Decisions page — **hunch:** send JPEG/PNG only, the types in the official curl; skip GIF/PDF/webp unless Decisions later lists them):
+
+- Read file bytes, base64, inline `data:{mime};base64,{b64}`
+- Cap **product-side** (not an OpenAI Decisions number): omit a file larger than **4 MiB raw**, record `citations.omitted_images` with path + size, still score from text. Oversized image + text-only state often yields `Insufficient evidence` → Fail. That is acceptable fail-closed.
+- Product cap **3** inline images per request (golden + actual + one extra fixture). Decisions does not publish an image-count limit. Do not cite the vision guide’s 1,500 / 512 MB as a Decisions fact — those are [Images and vision](https://developers.openai.com/api/docs/guides/images-vision) limits for Responses/Chat Completions.
+
+**Size limits documented for Decisions:** none on the Decisions page. If OpenAI returns 400 for payload/image, surface that body (truncated), fail the check.
+
+**Never:** fetch `https://...` image URLs from a skill prompt; never upload via Files API; never put base64 in logs.
+
+PDFs stay text metadata (`path`, `present`, `kind`, `size`, optional extracted snippet already used for goldens). Do not pretend a PDF is an `input_image`.
+
+### 6.2 Fallback Responses backend
+
+The Responses vision guide **does** allow hosted URLs and `file_id`. **Do not use them** in the fallback either, so switching backends does not change image policy. Same inline data URLs.
+
+---
+
+## 7. Provider interface (callers stay stable)
 
 ```
 engine._run_outcome_judge
         │
         ▼
-Judge.judge(goal, artifacts, transcript_tail, **state)
+Judge.judge(...)
         │
-        ├── SkipJudge                # no HTTP; passed=None
-        └── OutcomeJudge             # shared Pass lock + cell stamp
+        ├── SkipJudge
+        └── OutcomeJudge          # Pass lock + fail-for-safety + optional why-call
                 │
-                └── JudgeBackend.evaluate(state, questions) -> raw answers
-                        ├── StructuredOutputsBackend   # v1 default  POST /v1/responses
-                        └── DecisionsBackend           # future       POST /v1/decisions
+                └── JudgeBackend.evaluate(...)
+                        ├── DecisionsBackend          # v1 default   POST /v1/decisions
+                        └── StructuredOutputsBackend  # fallback     POST /v1/responses
 ```
 
-### 3.1 `Judge` (existing, slightly documented)
-
-Return dict (hosted-compatible):
+### 7.1 Return dict (hosted-compatible + additive)
 
 ```python
 {
   "status": "completed" | "skip" | "error",
-  "provider": "skip" | "openai",          # new, stable
-  "backend": "skip" | "structured" | "decisions",
+  "provider": "skip" | "openai",
+  "backend": "skip" | "decisions" | "responses",
   "display_name": "Built-in checker" | "OpenAI (your key)",
   "model": str | None,
-  "passed": bool | None,                 # None only for skip
+  "passed": bool | None,
   "reasons": list[str],
-  "answers": {cell: {"choice": str}},    # Pass-lock cells
-  "soft_answers": {cell: {"choice": str}},
+  "why": str | None,                 # Responses follow-up; null if skipped/failed
+  "answers": {cell: {choice, confidence, probabilities}},
+  "soft_answers": {cell: {choice, confidence, probabilities}},
   "questions": <bank>,
   "soft_questions": <bank>,
-  "cells": {cell: {"label", "choice", "reason"}},  # dict, hosted shape
-  "citations": {"artifacts": [...]},
-  "usage": dict | None,                  # pass through; never invent
+  "cells": {cell: {label, choice, reason, confidence}},
+  "citations": {"artifacts": [...], "omitted_images": [...]},
+  "usage": dict | None,              # pass through if Decisions returns it; never invent
   "require_artifacts": bool,
-  "blocks_deploy": True,                 # when this judge owned the verdict
+  "blocks_deploy": True,
+  "min_confidence": float,           # the threshold used
 }
 ```
 
-`SkipJudge` stays `{status: skip, passed: None, cells: []}` so `tests/test_judge.py` remains valid. UI/CLI treat skip as “Built-in checker”.
+`SkipJudge` stays `{status: skip, passed: None, cells: []}`.
 
-### 3.2 `JudgeBackend` (new, small)
+### 7.2 `JudgeBackend`
 
 ```python
 class JudgeBackend(Protocol):
-    name: str  # "structured" | "decisions"
+    name: str  # "decisions" | "responses"
 
-    def evaluate(
-        self,
-        *,
-        state: Mapping[str, Any],
-        questions: Mapping[str, Any],
-        timeout_sec: float,
-    ) -> dict[str, Any]:
-        """Return {status, model, answers, usage, reason?} with answers[key].choice.
-
-        Must not log secrets. HTTP 4xx/5xx become status=error with a public reason.
-        """
+    def evaluate(self, *, state, questions, timeout_sec: float) -> dict[str, Any]:
+        """{status, model, answers, usage?, reason?} with per-name choice + optional
+        confidence/probabilities. No secrets in logs."""
 ```
 
-`OutcomeJudge` maps each bank key from `evaluate()` into hosted-shaped `answers` / `soft_answers`, then runs **the same** `outcome_verdict` as TypeSafe.
+`DecisionsBackend` builds the six `choice` questions. `StructuredOutputsBackend` uses the enum JSON schema from the previous revision (same ordinals) so a key that cannot call Decisions can still score — **only when the operator sets the fallback**.
 
-Future `DecisionsBackend.evaluate`: one `POST /v1/decisions` with `questions[].type = "choice"`, `choices[].value` = the ordinals above, `name` = cell key, `instructions` = user-facing label + criteria text. Map `answers[].choice` back onto the bank. Callers unchanged.
+`OutcomeJudge` always runs `outcome_verdict` + fail-for-safety. Why-call is a method on `OutcomeJudge`, not on the backend (Decisions has nothing to explain).
 
-### 3.3 How the provider is chosen
+### 7.3 How the provider is chosen
 
-Resolved once per `run_check`, passed into `run_eval(..., judge=...)`.
+| Setting | Result |
+| --- | --- |
+| `SKILLGATE_JUDGE` unset/`auto`, no `OPENAI_API_KEY` | `SkipJudge` |
+| `auto` + OpenAI key + live harness | `OutcomeJudge` + **Decisions** backend |
+| `SKILLGATE_JUDGE=openai` + key + live | same; missing key → exit 2 |
+| `SKILLGATE_JUDGE=openai` + demo | Skip (live-only) |
+| `SKILLGATE_JUDGE=skip` | `SkipJudge` |
+| `SKILLGATE_JUDGE_BACKEND=decisions` (default) | `/v1/decisions` |
+| `SKILLGATE_JUDGE_BACKEND=responses` | Structured Outputs fallback (no auto-fallback on 403) |
 
-| `SKILLGATE_JUDGE` | Key present | Result |
-| --- | --- | --- |
-| unset / `auto` | no `OPENAI_API_KEY` | `SkipJudge` (built-in) |
-| unset / `auto` | `OPENAI_API_KEY` set **and** live harness | `OutcomeJudge` + structured backend |
-| `openai` | key set, live harness | OpenAI judge (error if key missing **before** the run: exit 2, same family as missing live key) |
-| `openai` | demo / `--demo` | still Skip (judge is live-only, same as hosted) |
-| `skip` | any | `SkipJudge` |
-| `decisions` | (Phase 2.1+, not default) | Decisions backend; 403 fail-closed |
-
-`SKILLGATE_JUDGE_BACKEND=structured|decisions` defaults to `structured`. `decisions` is documented but **not** wired until a follow-up unless implementation is cheap behind the protocol (prefer a clearly skipped/unimplemented backend in v1 that errors with “not enabled in this version” rather than a silent structured fallback).
-
-Harness vs judge:
-
-- Demo / no live key → no OpenAI judge call.
-- Live Cursor + OpenAI key → Cursor runs the skill; OpenAI scores it.
-- Live Codex/llm with only `OPENAI_API_KEY` → same key runs and scores.
-- `AI_GATEWAY_API_KEY` without `OPENAI_API_KEY` → **not** an OpenAI judge key in OSS (that is hosted TypeSafe / BYO chat). Auto does not treat Gateway as OpenAI scoring.
-
-Explicit setting always wins over auto.
+`AI_GATEWAY_API_KEY` without `OPENAI_API_KEY` is **not** an OpenAI judge key.
 
 ---
 
-## 4. Pass/Fail and engine wiring
+## 8. Pass/Fail and engine wiring
 
-Port these into OSS `skillgate_ai.judge_bank` (names can match private constants so the hosted wrapper is a thin import):
+Port into `skillgate_ai.judge_bank`: cell order, labels, criteria, `_PASS_LOCK`, `outcome_verdict`.
 
-- `CHECK_CELL_ORDER`, `CHECK_CELL_LABELS`, `_OUTCOME_QUESTIONS`
-- `SOFT_CELL_ORDER`, `SOFT_CELL_LABELS`, `_SOFT_OUTCOME_QUESTIONS`
-- `_PASS_LOCK`, `_PASS_NEED_LABEL`
-- `outcome_verdict`, `has_option_a_cells`, criteria lookup
+`engine._live_verdict`:
 
-`engine._live_verdict` changes (behavior, not a new product):
+1. Skip / `passed is None` → det owns (built-in).
+2. `status=completed` → `outcome_verdict` + fail-for-safety on low Pass-lock confidence.
+3. `status=error` → fail closed.
+4. `expect_skill is None` → det owns; judge stored as evidence.
+5. Keep `expected_output_mismatch_reason`.
 
-1. **Skip / `passed is None`:** det owns (unchanged OSS). This is the built-in checker.
-2. **Live judge `status=completed`:** apply `outcome_verdict` (do not trust a raw model bool). Stamp `passed` / `reasons`.
-3. **Live judge `status=error`:** fail closed with the public reason. Never Pass.
-4. **`expect_skill is None`:** det owns; judge payload still stored as evidence (match hosted). **Today OSS does not do this** — adding it is required so OpenAI cannot red a clean no-trigger skip.
-5. Keep `expected_output_mismatch_reason` (JPEG-as-JSON etc.) as an extra fail.
+Then (not inside `_live_verdict`): if Failed or low-confidence, why-call; ignore its errors.
 
-Do not call the judge on demo. Do not change `is_live_harness`.
+`gate.run_check` resolves judge and passes `judge=` into `run_eval`.
 
-`gate.run_check` must `load_env`, `get_llm_config`, `resolve_judge(cfg, harness_name)`, pass `judge=` into `run_eval`.
+Timeout: 20s for Decisions (hosted judge used 20s), overridable `SKILLGATE_JUDGE_TIMEOUT_SEC`. Why-call: 10s, separate. Retry 429/502/503/504 up to 2 extra times. **Never retry 401/403/400.**
 
-Timeout: 20s per task (hosted `DEFAULT_JUDGE_TIMEOUT_SEC`), overridable via `SKILLGATE_JUDGE_TIMEOUT_SEC`. Retry **once or twice** on 429/502/503/504 with short backoff (hosted retries 3 times). Never retry 401/403.
-
-Transcript tail: 4000 characters (hosted `JUDGE_TRANSCRIPT_TAIL_CHARS`).
+Transcript tail: 4000 characters.
 
 ---
 
-## 5. File-by-file change list (Phase 2)
+## 9. File-by-file change list (Phase 2)
 
-### 5.1 New
+### 9.1 New
 
 | Path | Role |
 | --- | --- |
-| `src/skillgate_ai/judge_bank.py` | Fixed questions, labels, Pass lock, `outcome_verdict`. No HTTP. Private TypeSafe will import this from the wheel. |
-| `src/skillgate_ai/judge_openai.py` | `StructuredOutputsBackend` + `OutcomeJudge` factory. httpx only. Error mapping. |
-| `tests/test_judge_openai.py` | Mocked httpx: schema body, enum-only parse, 401/403/429, timeout, refusal, missing fields, no silent Pass. |
-| `tests/test_judge_bank.py` | Pass lock table (Fully completed+Correct+… → Pass; soft result_quality; path_efficiency ignored). |
-| `docs/openai-judge.md` | User-facing: set `OPENAI_API_KEY`, what gets scored, live smoke command. No internal lingo. |
+| `src/skillgate_ai/judge_bank.py` | Questions, labels, Pass lock, `outcome_verdict`. |
+| `src/skillgate_ai/judge_openai.py` | `DecisionsBackend`, `StructuredOutputsBackend`, `OutcomeJudge` (fail-for-safety + why-call + image inlining). |
+| `tests/test_judge_openai.py` | Mocked Decisions JSON (choice + probabilities + confidence), 401/403/404/400, timeout, missing answers, unknown choice, image data-URL construction, why-call skipped on Pass / ignored on error. |
+| `tests/test_judge_bank.py` | Pass lock table + fail-for-safety table. |
+| `docs/openai-judge.md` | User-facing: key, default Decisions scoring, fallback env, live smoke. |
 
-### 5.2 Change
+### 9.2 Change
 
 | Path | Change |
 | --- | --- |
-| `src/skillgate_ai/judge.py` | Keep protocol + `SkipJudge`. Add `resolve_judge(cfg, *, harness: str) -> Judge`. Optional `provider` / `display_name` on skip payload. |
-| `src/skillgate_ai/engine.py` | `_live_verdict` as §4. Continue calling `Judge.judge` with today’s kwargs (`expect_skill`, `selected_skill`, `golden`, `actual_output`, plus **pass `scores` and `path`** — hosted already sends them; OSS currently `del`s `path`). |
-| `src/skillgate_ai/gate.py` | Resolve judge; pass into `run_eval`. Stamp `report.config["judge"]` = `{provider, backend, model}` (no secrets). |
-| `src/skillgate_ai/config.py` | Read `SKILLGATE_JUDGE`, `SKILLGATE_JUDGE_BACKEND`, `SKILLGATE_JUDGE_MODEL`, `SKILLGATE_JUDGE_TIMEOUT_SEC`, `SKILLGATE_JUDGE_REASONING_EFFORT`. Do not put keys in `__repr__`. Hints: OpenAI key scores live checks; skip = built-in. |
-| `src/skillgate_ai/eval_config.py` | Include judge provider/model in fingerprint/label when set, so history can tell “OpenAI scored this” vs built-in. |
-| `src/skillgate_ai/errors.py` | `JudgeError(SkillGateError)` for fail-closed scoring (exit 1, not 2). Missing **explicit** `SKILLGATE_JUDGE=openai` without a key can reuse `MissingLLMKeyError` (exit 2). |
-| `src/skillgate_ai/report.py` | `format_cli` / `format_github`: one line naming who scored (`OpenAI (your key)` / `Built-in checker`). Do not dump cell keys. |
-| `src/skillgate_ai/local_ui/static/app.js` | Keys-step copy: OpenAI key also scores live checks. Result panel: show `display_name` under Passed/Failed (reuse `checkerLabel` or a sibling line). **Do not** change Checking hold / slide / `check-pop` drawing. Keep two-step Local → Key wizard. |
-| `src/skillgate_ai/local_ui/static/index.html` | Only if a static string needs the same sentence (likely no). |
-| `src/skillgate_ai/local_ui/api.py` | Env allow-list already has `OPENAI_API_KEY`. Optionally return `has_openai_key` / `judge_provider` on `/api/meta` so the UI can label without guessing. Never echo the key. |
-| `.env.example` | Comment block: OpenAI key for live run **and** scoring; `SKILLGATE_JUDGE=auto\|openai\|skip`. |
-| `README.md`, `docs/quickstart.md`, `docs/ui.md` | Optional OpenAI scoring; Action snippet with `env: OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}` as optional. Det path still needs no secret. |
-| `pyproject.toml` | Version **0.4.0** on the implementation PR. No new required deps. |
-| `tests/test_judge.py` | SkipJudge unchanged. |
-| `tests/test_gate.py` / `test_check_cli.py` | Auto + OpenAI key still goes live for the **harness**; assert judge is resolved (mock HTTP so CI has no real key). Demo / no key still exit 0/1 on pdf twins. |
-| `tests/test_local_ui.py` | Copy assertions: OpenAI field remains; no `jev`; Checking motion tests still pass; new friendly “who scored” string present. |
-| `tests/test_oss_surface.py` | Still forbids `jev_qa`. Allow `judge_openai` / `judge_bank`. |
-| `.github/workflows/gate.yml` | Unchanged (det). Do **not** add `OPENAI_API_KEY` as a required secret. |
+| `judge.py` | `resolve_judge`. |
+| `engine.py` | §8 `_live_verdict`; pass `scores` and `path` into the judge (stop `del path`). |
+| `gate.py` | Inject judge; stamp `config.judge` `{provider, backend, model}` (no secrets). |
+| `config.py` | `SKILLGATE_JUDGE`, `SKILLGATE_JUDGE_BACKEND` (`decisions` default), `SKILLGATE_JUDGE_MODEL`, `SKILLGATE_JUDGE_TIMEOUT_SEC`, `SKILLGATE_JUDGE_MIN_CONFIDENCE`, `SKILLGATE_JUDGE_WHY`, `SKILLGATE_JUDGE_REASONING_EFFORT`. |
+| `eval_config.py` | Fingerprint/label includes judge backend/model. |
+| `errors.py` | `JudgeError` (exit 1). Explicit openai-without-key → `MissingLLMKeyError` (exit 2). |
+| `report.py` | CLI/GitHub: who scored. Fail line can use `why`. |
+| `local_ui/static/app.js` | Keys copy; “OpenAI (your key)” on the result panel; Fail why. **No** Checking-motion changes. |
+| `local_ui/api.py` | Optional `judge_provider` on `/api/meta`. Never echo the key. |
+| `.env.example` | OpenAI key scores live checks; backend/min-confidence comments. |
+| `README.md`, `docs/quickstart.md`, `docs/ui.md` | Optional OpenAI scoring + Action `OPENAI_API_KEY` secret. |
+| `pyproject.toml` | **0.4.0** on the implementation PR. |
+| tests: `test_judge.py`, `test_gate.py`, `test_check_cli.py`, `test_local_ui.py`, `test_oss_surface.py` | As previously; plus no `jev`. |
+| `.github/workflows/gate.yml` | Unchanged. No required OpenAI secret. |
 
-### 5.3 Do not change
+### 9.3 Do not change
 
-- Docker `ENTRYPOINT`/`CMD`, `compose.yaml`
-- Pack schema, scorers, demo harness
-- Deny-list / extract script
-- Hosted `web/` (not in this repo)
+Docker `ENTRYPOINT`/`CMD`, pack schema, scorers, demo harness, deny-list.
 
-### 5.4 Customer-facing copy (locked tone)
+### 9.4 Customer copy and errors
 
-Use:
+Use: “OpenAI (your key)”, “Built-in checker. This is not a live model.”, existing question labels. Avoid Jev / Decisions / `gpt-6-luna` in UI chrome (ids may appear in `--json`).
 
-- “OpenAI (your key)” / “Scored by OpenAI with your key”
-- “Built-in checker. This is not a live model.” (already shipped)
-- Question labels: Got the job done? / Got it right? / Followed the rules? / Used the right evidence/actions? / Delivered a good result? / Path
+| Case | User message | Verdict |
+| --- | --- | --- |
+| 401 | OpenAI did not accept this API key. Check `OPENAI_API_KEY`. | Fail |
+| 403 | OpenAI scoring is not enabled for this key. | Fail |
+| 404 | OpenAI has no scoring endpoint for this key. | Fail |
+| 400 (schema / image) | OpenAI rejected this scoring request. | Fail |
+| 429 | OpenAI rate limit or quota. Wait and retry, or check billing. | Fail |
+| timeout | OpenAI scoring timed out. | Fail |
+| missing/invalid `choice` | OpenAI scoring returned an unusable answer. | Fail |
+| why-call any error | (no extra message required) | **unchanged** |
 
-Avoid in UI/CLI:
-
-- Jev, TypeSafe, cells, harness, BYOLLM, Option A, `task_completion` as a heading, Decisions API, `gpt-6-luna` as a required user-facing term (model id may appear in `--json` / config label only)
-
-Errors (examples; keep short):
-
-| HTTP / case | User message |
-| --- | --- |
-| 401 | OpenAI did not accept this API key. Check `OPENAI_API_KEY`. |
-| 403 | OpenAI refused this request. This key may not have access (including Decisions, if that backend is on). |
-| 429 | OpenAI rate limit or quota. Wait and retry, or check billing. |
-| 404 / model missing | This OpenAI model is not available for your key (`gpt-6-luna` unless overridden). |
-| timeout | OpenAI scoring timed out. |
-| refusal | OpenAI declined to score this check. |
-| bad JSON / missing enum | OpenAI scoring returned an unusable answer. |
-
-All of the above → check **Failed**, gate red, exit 1.
+Do **not** auto-retry Decisions 403 as Responses. Operator sets `SKILLGATE_JUDGE_BACKEND=responses`.
 
 ---
 
-## 6. Test plan
+## 10. Test plan
 
-### 6.1 Unit (CI, no real key)
+### 10.1 Unit (CI, no real key)
 
-`tests/test_judge_openai.py` with `httpx.MockTransport` or `respx` **only if we add it** — prefer stdlib monkeypatch of `httpx.post` to avoid a new dep.
+Monkeypatch `httpx.post` (no new dep).
+
+**Decisions (default):**
 
 | Case | Assert |
 | --- | --- |
-| Request body | `model==gpt-6-luna` (or config), `text.format.type==json_schema`, `strict is True`, every cell in `enum`, `additionalProperties is False`, all six keys `required` |
-| Happy path | Enums map to `answers`/`soft_answers`; Pass lock Pass; `cells` dict uses **labels** not raw keys |
-| Fail lock | e.g. `Incorrect` → `passed is False`, reason mentions “Got it right?” not `correctness` in UI layer (internal reasons may keep the key for hosted parity — **hunch:** keep hosted reason format `Checks: correctness Incorrect (need Correct)` in JSON, map to labels only in UI/CLI) |
-| Extra / unknown enum | Treat as fail closed (schema should prevent; still guard) |
-| Refusal content type | `status=error`, `passed=False` |
-| 401 / 403 / 429 | Public message, no stack in `JudgeError.message`, `passed=False` |
-| Timeout (`httpx.TimeoutException`) | same |
-| Decisions 403 body | Dedicated message even on structured backend if body mentions Decision API |
-| Authorization header | Present on the request; **absent** from logs / exception strings / returned dict |
-| Skip without key | `resolve_judge` → SkipJudge; `_live_verdict` leaves det in charge |
-| `SKILLGATE_JUDGE=openai` without key | exit 2 / `MissingLLMKeyError`, no silent Pass |
-| Demo harness | no HTTP |
-| No-trigger (`expect_skill is None`) | det owns even if OpenAI says Not completed |
+| Request | URL ends with `/v1/decisions`; `model==gpt-6-luna`; six `choice` questions; names match the bank; `choices[].value` exact ordinals; Authorization present |
+| Images | JPEG/PNG become `input_image` data URLs; no `http://`/`https://`/`file_id`; GIF/PDF not inlined (v1) |
+| Happy path | All Pass ordinals + confidence `>= 0.5` → `passed is True`; `probabilities` round-trip into history-shaped dict |
+| Fail lock | `Incorrect` → Fail; Path `Wasteful` does not Fail |
+| Low confidence | `Correct` with `confidence: 0.2` → Fail-for-safety, not Pass |
+| Missing confidence | Fail-for-safety |
+| Unknown `choice` | error, Fail |
+| 401 / 403 / 404 / 400 / 429 / timeout | public message, Fail, no key in exception/logs |
+| Why-call | On Fail, exactly one `/v1/responses`; `judge.why` set from schema; if why 500s, `passed` still False from Decisions |
+| Why on Pass | no Responses call |
+| Skip / demo / no key | no HTTP |
+| `SKILLGATE_JUDGE=openai` without key | exit 2 |
+| No-trigger | det owns |
+| Fallback backend | `SKILLGATE_JUDGE_BACKEND=responses` hits `/v1/responses` with `json_schema` `strict: true`, not `/v1/decisions` |
 
-`tests/test_judge_bank.py`: table-driven Pass lock including soft `result_quality` and ignored `path_efficiency`.
-
-Existing pdf / sabotaged / UI motion tests must stay green with no keys.
-
-### 6.2 Live smoke (documented, not CI)
-
-Not in `.github/workflows/gate.yml`. Operator machine or a manual workflow_dispatch later.
+### 10.2 Live smoke (documented, not CI)
 
 ```bash
-# from a pack directory, with a real key in the environment (not committed)
-export OPENAI_API_KEY=sk-...          # never echo / never printenv in logs
+export OPENAI_API_KEY=sk-...     # never echo
 export SKILLGATE_JUDGE=openai
-skillgate check skills/pdf --live --json | python -c \
-  'import json,sys; r=json.load(sys.stdin); t=r["tasks"][0]; j=t["judge"];
-   assert j["status"]=="completed" and j["provider"]=="openai";
-   print(r["gate"], j["display_name"], j["model"])'
-# expect: green or red from the Pass lock; never a traceback
-echo $?   # 0 or 1
+# default backend is decisions
+# one-case temp pack recommended (this repo has no task filter)
+skillgate check /tmp/one-case-pack --live --json
+# assert tasks[].judge.backend == "decisions"
+# assert tasks[].judge.answers.task_completion.choice
+# assert "confidence" in that object
+# exit 0 or 1, never a traceback
 ```
 
-Cheaper smoke (one case): document `SKILLGATE_TASK_FILTER` **only if it already exists** — it does **not**. Do not invent a filter in this plan. Smoke = full `skills/pdf` live run (8 tasks) **or** a tiny throwaway pack in `/tmp` with one trigger-only case. Prefer a **one-case temp pack** in the smoke doc so a real key is not billed 8×.
+If the key returns **403** on `/v1/decisions`, that is a **failed smoke of the default backend**, not a reason to hide it. Document the fallback:
 
-Record: HTTP must hit `api.openai.com`; judge `model` echoes `gpt-6-luna` unless overridden.
+```bash
+export SKILLGATE_JUDGE_BACKEND=responses
+skillgate check /tmp/one-case-pack --live --json
+```
 
-If the live key gets Decisions 403, that is **out of scope for v1 smoke** (we are not calling `/v1/decisions`).
+Do not put a real key in GitHub Actions for merge.
 
 ---
 
-## 7. Private hosted app (`vigneshm1995personal/skillgate-ai`) via the published package
+## 11. Cost (official numbers; per-check is an estimate)
 
-Facts: private `pyproject.toml` is still **0.2.0** with the full in-tree `src/skillgate_ai` (FastAPI, vault, `jev_qa`). Extract plan §9 is the follow-up: pin `skillgate-ai==X.Y.Z` from PyPI and inject the Judge. That pin has **not** landed. Until it does, private continues to vendor engine/Jev.
+| Call | When | Official price | Notes |
+| --- | --- | --- | --- |
+| `POST /v1/decisions` | every live judged task | **$0.10 / 1M input**; no output/cache ([Decisions pricing](https://developers.openai.com/api/docs/guides/decisions)) | State + optional inlined images |
+| `POST /v1/responses` why | Fail or low-confidence only | Luna **$0.10 in / $0.50 out** per 1M ([model page](https://developers.openai.com/api/docs/models/gpt-6-luna)) | `max_output_tokens` 128 |
+| Responses fallback scoring | only if backend=`responses` | same Luna in/out | six enums, no Decisions input-only rate |
 
-After OSS **0.4.0** is on PyPI:
+**Hunch (not a measurement):** text-only Decisions on a 4k tail is cheap fractions of a cent; inlining a few-MB JPEG dominates input tokens. Why-call is small. Live smoke uses a **one-case** pack.
 
-1. Private adds `skillgate-ai==0.4.0` (Dependabot pin, no unbounded `>=`).
-2. Delete in-tree copies of `judge_bank` / engine judge protocol as they are replaced by the wheel. **Keep** `jev_qa.py` as a `Judge` implementation that POSTs `https://ai-gateway.vercel.sh/v1/evaluate` with model `typesafe-ai/jev`.
-3. Private `run_jev_outcome_judge` should call `judge_bank.outcome_verdict` so Pass lock cannot drift.
-4. Private `engine._run_outcome_judge` should take `Judge` like OSS (it does not today). Hosted `resolve_judge`:
-   - explicit setting if any
-   - else TypeSafe when `AI_GATEWAY_API_KEY` is set (current product)
-   - else OpenAI when `OPENAI_API_KEY` is set (new, same as OSS)
-   - else hosted fail-closed **or** skip — **hunch:** keep hosted fail-closed without TypeSafe for paying live runs; OSS skip remains the public default
-5. Hosted UI may keep its existing judge card; it already consumes `answers` / `cells` / `passed`. OSS `display_name` / `provider` let it show “OpenAI (your key)” vs TypeSafe without saying “Jev cells”.
-6. Private CI `consume` job installs the pin and runs hosted tests.
+---
+
+## 12. Private hosted app (`vigneshm1995personal/skillgate-ai`) via the published package
+
+Facts: private `pyproject.toml` is still **0.2.0** in-tree (FastAPI, vault, `jev_qa`). Extract plan §9 pin has not landed.
+
+After OSS **0.4.0** on PyPI:
+
+1. Pin `skillgate-ai==0.4.0`.
+2. Keep `jev_qa.py` as a `Judge` that POSTs Gateway `typesafe-ai/jev`. Import `judge_bank.outcome_verdict` from the wheel.
+3. Hosted `resolve_judge`: explicit → else TypeSafe if `AI_GATEWAY_API_KEY` → else OpenAI Decisions if `OPENAI_API_KEY` → else hosted fail-closed (**hunch:** keep fail-closed for paid live; OSS skip stays public default).
+4. Hosted judge card can show `why` + `confidence` without renaming chips.
+5. Private CI `consume` job installs the pin.
 
 This Phase 1 PR does **not** change the private repo.
 
 ---
 
-## 8. Risks / unknowns (labeled)
+## 13. Risks / unknowns (labeled)
 
 | Item | Status | Mitigation |
 | --- | --- | --- |
-| Decisions not GA / per-key 403 | Official docs: public beta as of 2026-10-07. Enablement for a **standard** key is still unverified in this repo. | v1 = Structured Outputs only. Decisions behind an explicit backend later; 403 fail-closed with a plain message. |
-| Model id | **Verified:** `gpt-6-luna`. | Config override `SKILLGATE_JUDGE_MODEL`. |
-| Calibration vs TypeSafe | **Hunch:** same questions + lock ≠ same ordinals. Luna is a generative model with constrained decoding; TypeSafe Jev is a dedicated evaluate endpoint. Scores will diverge on edge traces (invented JSON, looping tools). | Do not claim “same as hosted.” Ship the lock; add a later side-by-side eval if the owner wants it. |
-| `reasoning.effort: low` vs `medium` | Supported values; quality impact **unverified**. | Config; default `low`; document. |
-| Responses vs Chat Completions | Both listed on the Luna page; Structured Outputs guide’s Responses curl is the v1 shape. | Implement Responses; Chat Completions only if Responses parse is painful. |
-| OSS `_live_verdict` vs hosted no-trigger exception | Fact: they differ today. | Align when a live judge is present (§4.4). |
-| `OPENAI_API_KEY` also selects live Codex/llm | Fact: `run_check` auto-live when any key is set. Adding a judge key can switch a user from built-in to **live harness** as well as scoring. | Copy must say the OpenAI key is for live checks **and** scoring. `SKILLGATE_JUDGE=skip` still runs live if a harness key exists. `--demo` / Skip in the wizard stays the built-in path. |
-| Hosted still in-tree | Fact: no PyPI pin yet. | §7 follow-up; OSS is usable without it. |
-| Cost | Luna standard: $0.10 / $0.50 per 1M in/out ([model page](https://developers.openai.com/api/docs/models/gpt-6-luna)). Per-check cost **unverified**. | One Responses call per live task; 4k transcript tail; live smoke uses a one-case pack. |
-| Key leakage | Tests must assert the secret never appears in exceptions, history JSON, or UI payloads. | Truncate error bodies; never `print` env. |
+| Decisions public beta | Official as of 2026-10-07. Per-key 403 still possible. | Default Decisions; **no silent fallback**. Clear 403; documented `responses` backend. |
+| Model id | **Verified:** `gpt-6-luna` only on Decisions. | Hard-require it on that URL. |
+| Calibration vs TypeSafe | **Hunch:** same ordinals ≠ same calls. | Do not claim parity. |
+| Confidence cutoff `0.5` | **Product choice.** OpenAI says use labeled examples; we have none. | Env override; fail-for-safety; never Pass. |
+| Path as `choice` not `score` | Justified from official type rule. | Revisit only with a new ordered rubric. |
+| Decisions image size | **Undocumented** on the Decisions page. | Product 4 MiB / 3 images; fail closed on 400. Do not cite vision 512 MB as Decisions. |
+| GIF / PDF as vision | Decisions examples are PNG (and talk about photos). | Inline JPEG/PNG only in v1. |
+| Decisions `usage` field | Not in official excerpts. | Pass through if present; never invent. |
+| `OPENAI_API_KEY` also selects live harness | Fact. | Copy: key is for live checks **and** scoring. |
+| Why-call cost/latency | Extra Luna Responses on reds only. | `SKILLGATE_JUDGE_WHY=0`; 128 output tokens; must not change verdict. |
 
 ---
 
-## 9. Ordered Phase 2 checklist
+## 14. Ordered Phase 2 checklist
 
-1. Add `judge_bank.py` + `test_judge_bank.py` (Pass lock only; no HTTP).
-2. Add `JudgeBackend` + `StructuredOutputsBackend` + mocked `test_judge_openai.py`.
-3. Wire `resolve_judge` → `gate.run_check` → `run_eval`; fix `_live_verdict` (error fail-closed, no-trigger det).
-4. CLI/GitHub/UI “who scored” + keys-step copy. Re-run UI motion tests.
-5. Docs: `.env.example`, `docs/openai-judge.md` live smoke, README/quickstart optional Action env.
-6. Bump **0.4.0**. `pytest -q` green without `OPENAI_API_KEY`.
-7. Manual live smoke with a real key (one-case pack).
-8. **Private follow-up (separate repo):** pin `skillgate-ai==0.4.0`, wrap Jev as `Judge`, import `judge_bank`.
+1. `judge_bank.py` + Pass lock / fail-for-safety tests.
+2. `DecisionsBackend` + mocked `/v1/decisions` (probabilities, confidence, 403/400).
+3. Image inlining (JPEG/PNG data URLs only).
+4. Why-call on Fail; ignored errors.
+5. `StructuredOutputsBackend` behind `SKILLGATE_JUDGE_BACKEND=responses`.
+6. Wire `resolve_judge` → `run_check` → `run_eval`; no-trigger det.
+7. CLI/UI “who scored” + Fail why. Motion tests still green.
+8. Docs + live smoke. Bump **0.4.0**.
+9. **Private follow-up:** pin wheel; wrap Jev as `Judge`.
 
 ---
 
-## 10. This PR
+## 15. This PR
 
-Docs only:
+Docs only (revision of the Phase 1 plan):
 
 - `docs/plans/openai-judge.md` (this file)
-- `README.md` pointer in the docs list
+- `README.md` pointer in the docs list (already added)
 
 No product code, no version bump, no Docker/Action change.
