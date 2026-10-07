@@ -224,9 +224,10 @@ def test_why_call_on_fail_ignored_on_error() -> None:
     judged = _score(_judge(post))
     assert judged["passed"] is False
     assert judged["why"] is None
-    assert len(post.calls) == 2
-    assert post.calls[1]["url"].endswith("/v1/responses")
-    schema = post.calls[1]["json"]["text"]["format"]
+    assert post.calls[0]["url"].endswith("/v1/decisions")
+    why_calls = [item for item in post.calls if str(item["url"]).endswith("/v1/responses")]
+    assert why_calls
+    schema = why_calls[0]["json"]["text"]["format"]
     assert schema["strict"] is True
     assert schema["name"] == "check_fail_why"
 
