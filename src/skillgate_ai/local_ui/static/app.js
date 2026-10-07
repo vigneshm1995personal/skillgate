@@ -4,7 +4,7 @@ const NAME_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const MOTION_MS = 350;
 const CHECKING_MIN_MS = 700;
 const SETUP_DONE_KEY = "skillgate-setup-done";
-let meta = { account: false, demo_default: true, packs: [], has_any_key: false, pdf_path: null };
+let meta = { account: false, demo_default: true, packs: [], has_any_key: false, has_openai_key: false, judge_provider: "skip", pdf_path: null };
 let wizard = blankWizard();
 let lastRoutePath = "";
 let lastRun = { path: "", snap: null };
@@ -111,66 +111,11 @@ function defaultDescription(name) {
   return `Produce ${n} notes, extracts, and local file outputs. Use when the user asks for ${n}, mentions invoices or documents, or wants the documented ${n} workflow.`;
 }
 
-function displayNameFromJudge(report) {
-  const cfg = report && report.config && report.config.judge;
-  if (cfg && cfg.display_name) return String(cfg.display_name);
-  const tasks = (report && report.tasks) || [];
-  for (const task of tasks) {
-    if (task && task.judge && task.judge.display_name) return String(task.judge.display_name);
-  }
-  return "";
-}
-
-function checkerLabel(report, snap) {
-  const scored = displayNameFromJudge(report);
-  if (scored) return scored;
-  const name = String((report && report.harness) || "").toLowerCase();
-  if (name === "demo" || (snap && snap.demo_notice)) return "Built-in checker";
-  if (name === "llm") return "Your API key";
-  if (name === "codex") return "Codex (your API key)";
-  if (name === "cursor-agent") return "Cursor (your API key)";
-  if (snap && snap.error) return "Your API key";
-  return "";
-}
-
-function scoredByLine(report, snap) {
+function scoredByLine(report) {
   if (report && typeof report.scored_by === "string" && report.scored_by.trim()) {
     return report.scored_by.trim();
   }
-  const tasks = (report && report.tasks) || [];
-  let openaiScored = false;
-  let openaiError = "";
-  let skipped = false;
-  for (const t of tasks) {
-    const j = t && t.judge;
-    if (!j) continue;
-    const provider = String(j.provider || "");
-    const status = String(j.status || "");
-    const answers = j.answers && typeof j.answers === "object" ? j.answers : null;
-    const hasChoice = !!(answers && Object.keys(answers).some((k) => {
-      const row = answers[k];
-      return row && (typeof row === "string" ? row.trim() : row.choice);
-    }));
-    if (provider === "openai") {
-      if (status === "completed" && hasChoice) openaiScored = true;
-      else if (status === "error") {
-        openaiError = (j.reasons && j.reasons[0]) || "OpenAI scoring failed.";
-      }
-    }
-    if (status === "skip" || provider === "skip") skipped = true;
-  }
-  if (openaiScored) {
-    const name = displayNameFromJudge(report) || "OpenAI";
-    return `${name} scored this run.`;
-  }
-  if (openaiError) return "OpenAI couldn't score this run. " + openaiError;
-  const harness = String((report && report.harness) || "").toLowerCase();
-  const live = harness !== "demo" && !(snap && snap.demo_notice);
-  if (skipped || checkerLabel(report, snap) === "Built-in checker") {
-    if (live) return "The skill ran live. The built-in checker scored it.";
-    return "Built-in checker scored this run. This is not a live model.";
-  }
-  return checkerLabel(report, snap);
+  return "";
 }
 
 function checkHeadline(task) {
@@ -611,8 +556,13 @@ function setRunButtonsDisabled(disabled) {
 }
 
 function checkingLine(opts) {
-  if (opts && opts.live && !opts.demo) return "Run live uses your API key.";
-  return "Built-in checker. This is not a live model.";
+  if (opts && opts.live && !opts.demo) {
+    if (meta.judge_provider === "skip" || !meta.has_openai_key) {
+      return "The skill ran live. The built-in checker scored it.";
+    }
+    return "Run live uses your API key.";
+  }
+  return "Built-in checker scored this run. This is not a live model.";
 }
 
 function checkingPanel(opts) {
@@ -843,7 +793,7 @@ async function paintResult(snap, path, opts) {
     </div>`;
   }
   const headline = gate === "green" ? "Passed" : "Failed";
-  const checkerLine = scoredByLine(report, snap);
+  const checkerLine = scoredByLine(report);
   const panel = $(`<div class="success">
       ${resultMarkHtml(gate === "green", false)}
       <p><span class="gate ${esc(gate)}">${headline}</span>

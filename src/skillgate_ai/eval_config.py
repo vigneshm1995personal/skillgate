@@ -28,6 +28,7 @@ DIFF_FIELDS = (
     "temperature",
     "reasoning_effort",
     "judge_backend",
+    "judge_model",
 )
 
 
@@ -342,6 +343,7 @@ def _diff_view(run: EvalRunConfig) -> dict[str, Any]:
         "temperature": run.temperature,
         "reasoning_effort": effort,
         "judge_backend": str(judge.get("backend") or "") or None,
+        "judge_model": str(judge.get("model") or "") or None,
     }
 
 

@@ -109,6 +109,22 @@ def test_diff_lists_only_changed_fields() -> None:
     assert harness["to"] == "codex"
 
 
+def test_diff_includes_judge_model() -> None:
+    previous = EvalRunConfig(
+        harness="llm",
+        timeout_effective=300,
+        judge={"backend": "decisions", "model": "gpt-6-luna"},
+    )
+    current = EvalRunConfig(
+        harness="llm",
+        timeout_effective=300,
+        judge={"backend": "decisions", "model": "other"},
+    )
+    diff = diff_eval_config(current, previous)
+    fields = {item["field"] for item in diff}
+    assert fields == {"judge_model"}
+
+
 def test_diff_legacy_null_is_empty() -> None:
     current = EvalRunConfig(harness="demo", timeout_effective=12)
     assert diff_eval_config(current, None) == []

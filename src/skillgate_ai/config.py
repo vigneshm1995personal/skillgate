@@ -9,6 +9,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 from skillgate_ai.errors import MissingLLMKeyError
+from skillgate_ai.judge_bank import DEFAULT_MIN_CONFIDENCE as DEFAULT_JUDGE_MIN_CONFIDENCE
 
 ROOT_ENV_NAMES = (
     "CURSOR_API_KEY",
@@ -25,7 +26,6 @@ DEFAULT_JUDGE_MODEL = "gpt-6-luna"
 DEFAULT_JUDGE_BACKEND = "decisions"
 DEFAULT_JUDGE_PREF = "auto"
 DEFAULT_JUDGE_TIMEOUT_SEC = 20.0
-DEFAULT_JUDGE_MIN_CONFIDENCE = 0.5
 DEFAULT_JUDGE_REASONING_EFFORT = "low"
 
 CODEX_REASONING_EFFORTS = frozenset({"low", "medium", "high", "ultra"})

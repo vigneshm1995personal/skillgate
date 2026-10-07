@@ -157,10 +157,14 @@ def test_ui_copy_has_no_internal_jargon(project_root: Path) -> None:
         assert "The skill should stay off for an unrelated request." in js
         assert "Paste an OpenAI key to run live checks and score them" in js
         assert "An OpenAI key scores live checks" in js
-        assert "function displayNameFromJudge" in js
         assert "function scoredByLine" in js
-        assert "OpenAI couldn't score this run" in js
+        assert "function displayNameFromJudge" not in js
+        assert "OpenAI couldn't score this run" not in js
         assert "The skill ran live. The built-in checker scored it." in js
+        checking = js.split("function checkingLine")[1].split("function checkingPanel")[0]
+        live_branch = checking.split("Built-in checker scored this run")[0]
+        assert "not a live model" not in live_branch
+        assert "The skill ran live. The built-in checker scored it." in checking
         assert "decisions" not in js.lower()
         assert "gpt-6-luna" not in js
         assert "OpenAI (your key)" not in js

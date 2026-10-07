@@ -4,13 +4,8 @@ from __future__ import annotations
 
 import base64
 import json
-import logging
-import re
-import time
 from pathlib import Path
-from typing import Any, Callable, Mapping, Protocol
-
-import httpx
+from typing import Any, Mapping, Protocol
 
 from skillgate_ai.judge_bank import (
     CHECK_CELL_LABELS,
@@ -31,11 +26,17 @@ from skillgate_ai.judge_bank import (
     structured_output_schema,
     unusable_answers,
 )
-
-_LOG = logging.getLogger(__name__)
+from skillgate_ai.openai_http import (
+    DEFAULT_BASE_URL,
+    OUT_OF_CREDITS,
+    PostFn,
+    post_openai_json,
+    redact_secrets,
+    user_message_for_status,
+)
+from skillgate_ai.output_match import expected_output_mismatch_reason
 
 DEFAULT_MODEL = "gpt-6-luna"
-DEFAULT_BASE_URL = "https://api.openai.com/v1"
 DEFAULT_TIMEOUT_SEC = 20.0
 WHY_TIMEOUT_SEC = 10.0
 WHY_MAX_OUTPUT_TOKENS = 128
@@ -44,17 +45,6 @@ IMAGE_MAX_BYTES = 4 * 1024 * 1024
 IMAGE_MAX_COUNT = 3
 INLINE_MAGICS = {"jpeg": "image/jpeg", "png": "image/png"}
 DISPLAY_NAME = "OpenAI (your key)"
-_TRANSIENT = frozenset({429, 502, 503, 504})
-_QUOTA_CODES = frozenset({"insufficient_quota", "credit_balance_exhausted"})
-_RETRY_BACKOFF_SEC = (0.05, 0.1)
-_MAX_ATTEMPTS = 3
-_SK_TOKEN = re.compile(r"sk-[A-Za-z0-9_*\-]{2,}")
-OUT_OF_CREDITS = (
-    "Your OpenAI account is out of credits. Add credits at platform.openai.com "
-    "billing, then try again."
-)
-
-PostFn = Callable[..., httpx.Response]
 
 
 class JudgeBackend(Protocol):
@@ -75,146 +65,6 @@ def _tail(text: str, limit: int = TRANSCRIPT_TAIL_CHARS) -> str:
     if limit <= 0:
         return ""
     return (text or "")[-limit:]
-
-
-def redact_secrets(text: str, secret: str | None = None) -> str:
-    """Strip the configured key and any sk-… token (full or masked) from text."""
-    if not text:
-        return text
-    out = text
-    if secret:
-        out = out.replace(secret, "***")
-    return _SK_TOKEN.sub("sk-***", out)
-
-
-def openai_error_code(response: httpx.Response) -> str | None:
-    try:
-        data = response.json()
-    except ValueError:
-        return None
-    if not isinstance(data, Mapping):
-        return None
-    err = data.get("error")
-    if not isinstance(err, Mapping):
-        return None
-    for key in ("code", "type"):
-        value = err.get(key)
-        if isinstance(value, str) and value.strip():
-            return value.strip()
-    return None
-
-
-def is_quota_exhausted(response: httpx.Response) -> bool:
-    return response.status_code == 429 and openai_error_code(response) in _QUOTA_CODES
-
-
-def user_message_for_status(status: int, *, error_code: str | None = None) -> str:
-    if status == 401:
-        return "OpenAI did not accept this API key. Check OPENAI_API_KEY."
-    if status == 403:
-        return "OpenAI scoring is not enabled for this key."
-    if status == 404:
-        return "OpenAI has no scoring endpoint for this key."
-    if status == 429 and error_code in _QUOTA_CODES:
-        return OUT_OF_CREDITS
-    if status == 429:
-        return "OpenAI rate limit or quota. Wait and retry, or check billing."
-    if status == 400:
-        return "OpenAI rejected this scoring request."
-    return f"OpenAI scoring failed (HTTP {status})."
-
-
-def _status_error(response: httpx.Response, *, model: str) -> dict[str, Any]:
-    code = openai_error_code(response)
-    reason = user_message_for_status(response.status_code, error_code=code)
-    _LOG.warning("OpenAI scoring HTTP %s", response.status_code)
-    return {"status": "error", "reason": reason, "model": model}
-
-
-def post_openai(
-    url: str,
-    *,
-    headers: dict[str, str],
-    payload: dict[str, Any],
-    timeout_sec: float,
-    post: PostFn | None = None,
-    retries: bool = True,
-) -> httpx.Response:
-    sender = post or httpx.post
-    attempts = _MAX_ATTEMPTS if retries else 1
-    last_exc: BaseException | None = None
-    for attempt in range(attempts):
-        try:
-            response = sender(url, headers=headers, json=payload, timeout=timeout_sec)
-        except httpx.TimeoutException:
-            raise
-        except httpx.HTTPError as exc:
-            last_exc = exc
-            if attempt >= attempts - 1:
-                raise
-            _LOG.warning(
-                "OpenAI scoring transport error (attempt %s/%s): %s",
-                attempt + 1,
-                attempts,
-                type(exc).__name__,
-            )
-            time.sleep(_RETRY_BACKOFF_SEC[min(attempt, len(_RETRY_BACKOFF_SEC) - 1)])
-            continue
-        if (
-            response.status_code in _TRANSIENT
-            and attempt < attempts - 1
-            and not is_quota_exhausted(response)
-        ):
-            _LOG.warning(
-                "OpenAI scoring HTTP %s (attempt %s/%s)",
-                response.status_code,
-                attempt + 1,
-                attempts,
-            )
-            time.sleep(_RETRY_BACKOFF_SEC[min(attempt, len(_RETRY_BACKOFF_SEC) - 1)])
-            continue
-        return response
-    assert last_exc is not None
-    raise last_exc
-
-
-def _post_openai_json(
-    url: str,
-    *,
-    api_key: str,
-    payload: dict[str, Any],
-    timeout_sec: float,
-    model: str,
-    post: PostFn | None = None,
-    retries: bool = True,
-) -> dict[str, Any]:
-    """POST JSON. Transport/HTTP/parse failures return ``status=error``."""
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json",
-    }
-    try:
-        response = post_openai(
-            url,
-            headers=headers,
-            payload=payload,
-            timeout_sec=timeout_sec,
-            post=post,
-            retries=retries,
-        )
-    except httpx.TimeoutException:
-        return {"status": "error", "reason": "OpenAI scoring timed out.", "model": model}
-    except httpx.HTTPError:
-        return {"status": "error", "reason": "OpenAI scoring failed.", "model": model}
-    if response.status_code >= 400:
-        return _status_error(response, model=model)
-    try:
-        data = response.json()
-    except ValueError:
-        return {"status": "error", "reason": UNUSABLE_ANSWER, "model": model}
-    if not isinstance(data, Mapping):
-        return {"status": "error", "reason": UNUSABLE_ANSWER, "model": model}
-    return {"status": "ok", "data": data}
 
 
 def _cell_entry(key: str, answer: Any, labels: Mapping[str, str]) -> dict[str, Any]:
@@ -376,8 +226,6 @@ def _mismatch_reason(
     state: Mapping[str, Any],
     artifacts: list[dict[str, Any]],
 ) -> str | None:
-    from skillgate_ai.engine import expected_output_mismatch_reason
-
     golden = state.get("golden")
     actual = state.get("actual_output")
     return expected_output_mismatch_reason(
@@ -385,6 +233,28 @@ def _mismatch_reason(
         actual=actual if isinstance(actual, dict) else None,
         artifacts=artifacts,
     )
+
+
+def _finished_answers(
+    answers: dict[str, dict[str, Any]],
+    *,
+    model: str,
+    usage: Any = None,
+) -> dict[str, Any]:
+    if unusable_answers(answers):
+        return {
+            "status": "error",
+            "reason": UNUSABLE_ANSWER,
+            "model": model,
+            "answers": answers,
+            "usage": usage,
+        }
+    return {
+        "status": "completed",
+        "model": model,
+        "answers": answers,
+        "usage": usage,
+    }
 
 
 def _answer_row(key: str, item: Any) -> dict[str, Any]:
@@ -509,7 +379,7 @@ class DecisionsBackend:
         payload: dict[str, Any],
         timeout_sec: float,
     ) -> dict[str, Any]:
-        result = _post_openai_json(
+        result = post_openai_json(
             url,
             api_key=self.api_key,
             payload=payload,
@@ -520,22 +390,12 @@ class DecisionsBackend:
         if result.get("status") != "ok":
             return result
         data = result["data"]
-        raw = _answers_from_decisions_list(data)
-        answers = _normalize_answers(raw)
-        if unusable_answers(answers):
-            return {
-                "status": "error",
-                "reason": UNUSABLE_ANSWER,
-                "model": str(data.get("model") or self.model),
-                "answers": answers,
-                "usage": data.get("usage") if isinstance(data.get("usage"), dict) else None,
-            }
-        return {
-            "status": "completed",
-            "model": str(data.get("model") or self.model),
-            "answers": answers,
-            "usage": data.get("usage") if isinstance(data.get("usage"), dict) else None,
-        }
+        usage = data.get("usage") if isinstance(data.get("usage"), dict) else None
+        return _finished_answers(
+            _normalize_answers(_answers_from_decisions_list(data)),
+            model=str(data.get("model") or self.model),
+            usage=usage,
+        )
 
 
 class StructuredOutputsBackend:
@@ -592,7 +452,7 @@ class StructuredOutputsBackend:
                 }
             },
         }
-        result = _post_openai_json(
+        result = post_openai_json(
             url,
             api_key=self.api_key,
             payload=payload,
@@ -618,20 +478,12 @@ class StructuredOutputsBackend:
             return {"status": "error", "reason": UNUSABLE_ANSWER, "model": self.model}
         if not isinstance(parsed, Mapping):
             return {"status": "error", "reason": UNUSABLE_ANSWER, "model": self.model}
-        answers = _normalize_answers(parsed)
-        if unusable_answers(answers):
-            return {
-                "status": "error",
-                "reason": UNUSABLE_ANSWER,
-                "model": str(data.get("model") or self.model),
-                "answers": answers,
-            }
-        return {
-            "status": "completed",
-            "model": str(data.get("model") or self.model),
-            "answers": answers,
-            "usage": data.get("usage") if isinstance(data.get("usage"), dict) else None,
-        }
+        usage = data.get("usage") if isinstance(data.get("usage"), dict) else None
+        return _finished_answers(
+            _normalize_answers(parsed),
+            model=str(data.get("model") or self.model),
+            usage=usage,
+        )
 
 
 class OutcomeJudge:
@@ -703,6 +555,43 @@ class OutcomeJudge:
         )
         return self._stamp(evaluated, artifacts=artifacts, omitted=omitted, state=state)
 
+    def _payload(
+        self,
+        *,
+        status: str,
+        model: str,
+        passed: bool,
+        reasons: list[str],
+        why: str | None,
+        answers: Any,
+        soft_answers: dict[str, Any],
+        cells: dict[str, Any],
+        citations: dict[str, Any],
+        usage: Any,
+        warnings: list[str],
+        questions: dict[str, Any],
+        soft_questions: dict[str, Any],
+    ) -> dict[str, Any]:
+        return {
+            "status": status,
+            "provider": "openai",
+            "backend": self.backend.name,
+            "display_name": DISPLAY_NAME,
+            "model": model,
+            "passed": passed,
+            "reasons": reasons,
+            "why": why,
+            "answers": answers,
+            "soft_answers": soft_answers,
+            "questions": questions,
+            "soft_questions": soft_questions,
+            "cells": cells,
+            "citations": citations,
+            "usage": usage,
+            "warnings": warnings,
+            "min_confidence": self.min_confidence,
+        }
+
     def _stamp(
         self,
         evaluated: Mapping[str, Any],
@@ -716,32 +605,27 @@ class OutcomeJudge:
         mismatch = _mismatch_reason(state, artifacts)
         if evaluated.get("status") != "completed":
             reason = str(evaluated.get("reason") or "OpenAI scoring failed.")
+            reasons = [reason]
+            if mismatch and mismatch not in reasons:
+                reasons = [mismatch, *reasons]
             why = None
             if self.why_enabled and reason == UNUSABLE_ANSWER:
-                why_reasons = [reason]
-                if mismatch and mismatch not in why_reasons:
-                    why_reasons.append(mismatch)
-                why = self._why_call(state, why_reasons)
-            return {
-                "status": "error",
-                "provider": "openai",
-                "backend": self.backend.name,
-                "display_name": DISPLAY_NAME,
-                "model": model,
-                "passed": False,
-                "reasons": [reason],
-                "why": why,
-                "answers": evaluated.get("answers") or {},
-                "soft_answers": {},
-                "questions": all_questions(),
-                "soft_questions": {k: all_questions()[k] for k in SOFT_CELL_ORDER},
-                "cells": {},
-                "citations": citations,
-                "usage": evaluated.get("usage"),
-                "warnings": [],
-                "min_confidence": self.min_confidence,
-                "blocks_deploy": True,
-            }
+                why = self._why_call(state, reasons)
+            return self._payload(
+                status="error",
+                model=model,
+                passed=False,
+                reasons=reasons,
+                why=why,
+                answers=evaluated.get("answers") or {},
+                soft_answers={},
+                cells={},
+                citations=citations,
+                usage=evaluated.get("usage"),
+                warnings=[],
+                questions=all_questions(),
+                soft_questions={k: all_questions()[k] for k in SOFT_CELL_ORDER},
+            )
         answers = evaluated.get("answers") if isinstance(evaluated.get("answers"), dict) else {}
         passed, reasons = outcome_verdict(answers)
         if mismatch:
@@ -766,26 +650,21 @@ class OutcomeJudge:
         no_trigger = state.get("expect_skill") is None
         if not passed and self.why_enabled and (not no_trigger or mismatch):
             why = self._why_call(state, reasons)
-        return {
-            "status": "completed",
-            "provider": "openai",
-            "backend": self.backend.name,
-            "display_name": DISPLAY_NAME,
-            "model": model,
-            "passed": passed,
-            "reasons": reasons,
-            "why": why,
-            "answers": pass_answers,
-            "soft_answers": soft_answers,
-            "questions": {k: all_questions()[k] for k in CHECK_CELL_ORDER},
-            "soft_questions": {k: all_questions()[k] for k in SOFT_CELL_ORDER},
-            "cells": cells,
-            "citations": citations,
-            "usage": evaluated.get("usage"),
-            "warnings": warnings,
-            "min_confidence": self.min_confidence,
-            "blocks_deploy": True,
-        }
+        return self._payload(
+            status="completed",
+            model=model,
+            passed=passed,
+            reasons=reasons,
+            why=why,
+            answers=pass_answers,
+            soft_answers=soft_answers,
+            cells=cells,
+            citations=citations,
+            usage=evaluated.get("usage"),
+            warnings=warnings,
+            questions={k: all_questions()[k] for k in CHECK_CELL_ORDER},
+            soft_questions={k: all_questions()[k] for k in SOFT_CELL_ORDER},
+        )
 
     def _why_call(self, state: Mapping[str, Any], reasons: list[str]) -> str | None:
         payload = {
@@ -827,7 +706,7 @@ class OutcomeJudge:
                 }
             },
         }
-        result = _post_openai_json(
+        result = post_openai_json(
             f"{self.base_url}/responses",
             api_key=self.api_key,
             payload=payload,

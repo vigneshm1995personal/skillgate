@@ -577,6 +577,25 @@ def test_why_fires_on_no_trigger_when_output_missing() -> None:
     assert len(post.calls) == 2
 
 
+def test_http_error_with_missing_output_names_both() -> None:
+    post = FakePost(
+        [
+            FakeResponse(
+                401,
+                {"error": {"message": f"Incorrect API key provided: {SECRET}"}},
+            )
+        ]
+    )
+    judged = _score(
+        _judge(post),
+        golden={"path": "out.json", "kind": "json", "output_path": "out.json"},
+        actual_output={"path": "out.json", "present": False, "body": None},
+    )
+    assert judged["passed"] is False
+    assert REASON_MISSING_OUTPUT in judged["reasons"]
+    assert "OpenAI did not accept this API key. Check OPENAI_API_KEY." in judged["reasons"]
+
+
 def test_http_500_is_not_retried() -> None:
     post = FakePost(
         [

@@ -15,6 +15,11 @@ from skillgate_ai.ingest import Skill, ingest_skill, ingest_skills
 from skillgate_ai.judge import Judge, SkipJudge, default_judge
 from skillgate_ai.live import KILL, CheckAborted, RunControl
 from skillgate_ai.observability import breadcrumb_task, report_eval_outcome, set_eval_passed, span
+from skillgate_ai.output_match import (
+    REASON_BINARY_OUTPUT,
+    REASON_MISSING_OUTPUT,
+    expected_output_mismatch_reason,
+)
 from skillgate_ai.pack import resolve_input_file
 from skillgate_ai.sandbox import Sandbox, open_sandbox, prepare_workspace
 from skillgate_ai.scorers import RunArtifacts, Score, score_task
@@ -22,11 +27,6 @@ from skillgate_ai.suite import SuiteSpec, TaskSpec, load_suite
 
 SKIP_FAILURE = "Skipped by user"
 KILL_FAILURE = "Killed by user"
-
-REASON_BINARY_OUTPUT = "Expected output is text/JSON, but the file is binary (JPEG)."
-REASON_MISSING_OUTPUT = "Expected output is missing."
-_TEXT_OUTPUT_SUFFIXES = {".json", ".txt", ".md", ".csv"}
-_BINARY_MAGICS = {"jpeg", "png", "pdf", "gif", "nul"}
 
 
 @dataclass
@@ -346,51 +346,6 @@ def _outcome_judge_outputs(task: TaskSpec, artifacts: RunArtifacts) -> list[dict
                 row.update(sniffed)
             outputs.append(row)
     return outputs
-
-
-def expected_output_mismatch_reason(
-    *,
-    golden: dict[str, Any] | None = None,
-    actual: dict[str, Any] | None = None,
-    artifacts: list[dict[str, Any]] | None = None,
-) -> str | None:
-    path: str | None = None
-    if isinstance(golden, dict):
-        path = str(golden.get("output_path") or golden.get("path") or "").strip() or None
-    rows = [item for item in (artifacts or []) if isinstance(item, dict)]
-    if not path and rows:
-        path = str(rows[0].get("path") or "").strip() or None
-    kind_hint = golden.get("kind") if isinstance(golden, dict) else None
-    suffix = Path(path or "").suffix.lower()
-    expected_text = kind_hint in {"json", "text"} or suffix in _TEXT_OUTPUT_SUFFIXES
-    if not expected_text:
-        return None
-    present: bool | None = None
-    kind: str | None = None
-    magic: str | None = None
-    if isinstance(actual, dict):
-        present = actual.get("present") if "present" in actual else actual.get("body") is not None
-        if actual.get("present") is False:
-            present = False
-        kind = actual.get("kind")
-        magic = actual.get("magic")
-        if present is None and actual.get("path"):
-            present = True
-    if present is None:
-        for item in rows:
-            if path and item.get("path") != path:
-                continue
-            present = bool(item.get("present"))
-            kind = item.get("kind")
-            magic = item.get("magic")
-            break
-    if present is False:
-        return REASON_MISSING_OUTPUT
-    if kind == "bytes" or (isinstance(magic, str) and magic in _BINARY_MAGICS):
-        if magic in (None, "jpeg", "nul"):
-            return REASON_BINARY_OUTPUT
-        return f"Expected output is text/JSON, but the file is binary ({str(magic).upper()})."
-    return None
 
 
 def _score_rows(scores: list[Score]) -> list[dict[str, Any]]:

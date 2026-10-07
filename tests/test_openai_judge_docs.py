@@ -16,3 +16,5 @@ def test_openai_judge_docs_are_plain() -> None:
     assert "does **not** compare the full output" in text or "does not compare the full output" in lower
     assert "expected and actual text" in lower or "full output" in lower
     assert "page counts" in lower or "contain this text" in lower
+    assert "tasks[].judge.backend" not in text
+    assert "task_completion.choice" not in text

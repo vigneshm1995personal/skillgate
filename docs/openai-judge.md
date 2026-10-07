@@ -57,10 +57,7 @@ Do not add a required OpenAI secret to merge CI.
 export OPENAI_API_KEY=sk-...     # never echo
 export SKILLGATE_JUDGE=openai
 skillgate check /path/to/one-case-pack --live --json
-# tasks[].judge.backend is "decisions" on the default path
-# tasks[].judge.answers.task_completion.choice is set
-# confidence is present on default scoring answers
-# exit 0 or 1 — never a traceback
+# JSON names who scored. Exit 0 or 1 — never a traceback.
 ```
 
 If your key can't use the newer scoring service, set `SKILLGATE_JUDGE_BACKEND=responses` and retry. That is a fallback you choose, not an automatic switch.
