@@ -333,7 +333,7 @@ def test_images_inline_jpeg_png_only(tmp_path: Path) -> None:
         {"path": "shot.gif", "present": True, "magic": "gif"},
         {"path": "doc.pdf", "present": True, "magic": "pdf"},
     ]
-    images, omitted = collect_images(
+    images, _omitted = collect_images(
         artifacts=artifacts,
         golden=None,
         actual=None,
