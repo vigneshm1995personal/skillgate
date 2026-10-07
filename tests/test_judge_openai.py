@@ -526,13 +526,19 @@ def test_why_call_redacts_key_shaped_text() -> None:
     post = FakePost(
         [
             FakeResponse(200, decisions_payload({"correctness": "Incorrect"})),
-            FakeResponse(200, why_payload(f"The scorer echoed {SECRET} in the explanation.")),
+            FakeResponse(
+                200,
+                why_payload(
+                    f"The scorer echoed {SECRET} and sk-otherleak123 in the explanation."
+                ),
+            ),
         ]
     )
     judged = _score(_judge(post))
     assert judged["passed"] is False
     assert judged["why"] is not None
     assert SECRET not in judged["why"]
+    assert "sk-otherleak123" not in judged["why"]
     assert "sk-***" in judged["why"]
     blob = json.dumps(judged)
     assert SECRET not in blob
