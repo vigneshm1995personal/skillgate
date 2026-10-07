@@ -16,12 +16,10 @@ from skillgate_ai.judge_bank import (
 from skillgate_ai.judge_openai import (
     DISPLAY_NAME,
     IMAGE_MAX_BYTES,
-    OUT_OF_CREDITS,
     WHY_MAX_OUTPUT_TOKENS,
     collect_images,
     make_openai_judge,
     redact_secrets,
-    user_message_for_status,
 )
 
 SECRET = "sk-test-secret-do-not-log"
@@ -109,12 +107,15 @@ def _judge(post: FakePost, *, backend: str = "decisions", why: bool = True):
 
 
 def _score(judge, **kwargs):
+    artifacts = kwargs.pop("artifacts", [{"path": "out.txt", "present": True, "kind": "text"}])
+    expect_skill = kwargs.pop("expect_skill", "pdf")
+    selected_skill = kwargs.pop("selected_skill", "pdf")
     return judge.judge(
         "Extract the invoice total.",
-        kwargs.pop("artifacts", [{"path": "out.txt", "present": True, "kind": "text"}]),
+        artifacts,
         "selected: pdf\n" + ("x" * 20),
-        expect_skill="pdf",
-        selected_skill="pdf",
+        expect_skill=expect_skill,
+        selected_skill=selected_skill,
         **kwargs,
     )
 
@@ -224,11 +225,11 @@ def test_missing_answer_name_fails_closed() -> None:
 
 def test_http_errors_fail_and_never_log_key(caplog: pytest.LogCaptureFixture) -> None:
     cases = {
-        401: user_message_for_status(401),
-        403: user_message_for_status(403),
-        404: user_message_for_status(404),
-        400: user_message_for_status(400),
-        429: user_message_for_status(429),
+        401: "OpenAI did not accept this API key. Check OPENAI_API_KEY.",
+        403: "OpenAI scoring is not enabled for this key.",
+        404: "OpenAI has no scoring endpoint for this key.",
+        400: "OpenAI rejected this scoring request.",
+        429: "OpenAI rate limit or quota. Wait and retry, or check billing.",
     }
     for status, message in cases.items():
         copies = 3 if status == 429 else 1
@@ -291,7 +292,10 @@ def test_quota_429_is_not_retried() -> None:
     )
     judged = _score(_judge(post))
     assert judged["passed"] is False
-    assert judged["reasons"] == [OUT_OF_CREDITS]
+    assert judged["reasons"] == [
+        "Your OpenAI account is out of credits. Add credits at platform.openai.com "
+        "billing, then try again."
+    ]
     assert "rate limit" not in judged["reasons"][0].lower()
     assert len(post.calls) == 1
     assert all(not str(item["url"]).endswith("/v1/responses") for item in post.calls)
@@ -308,7 +312,10 @@ def test_credit_balance_exhausted_429_is_not_retried() -> None:
         ]
     )
     judged = _score(_judge(post))
-    assert judged["reasons"] == [OUT_OF_CREDITS]
+    assert judged["reasons"] == [
+        "Your OpenAI account is out of credits. Add credits at platform.openai.com "
+        "billing, then try again."
+    ]
     assert len(post.calls) == 1
 
 
@@ -515,6 +522,55 @@ def test_image_paths_stay_inside_workspace(tmp_path: Path) -> None:
     assert joined.startswith("data:image/png;base64,")
 
 
+def test_why_call_redacts_key_shaped_text() -> None:
+    post = FakePost(
+        [
+            FakeResponse(200, decisions_payload({"correctness": "Incorrect"})),
+            FakeResponse(200, why_payload(f"The scorer echoed {SECRET} in the explanation.")),
+        ]
+    )
+    judged = _score(_judge(post))
+    assert judged["passed"] is False
+    assert judged["why"] is not None
+    assert SECRET not in judged["why"]
+    assert "sk-***" in judged["why"]
+    blob = json.dumps(judged)
+    assert SECRET not in blob
+
+
+def test_why_skipped_on_no_trigger_without_mismatch() -> None:
+    post = FakePost(
+        [
+            FakeResponse(200, decisions_payload({"correctness": "Incorrect"})),
+            FakeResponse(200, why_payload("should not fire")),
+        ]
+    )
+    judged = _score(_judge(post), expect_skill=None)
+    assert judged["passed"] is False
+    assert judged["why"] is None
+    assert len(post.calls) == 1
+    assert post.calls[0]["url"].endswith("/v1/decisions")
+
+
+def test_why_fires_on_no_trigger_when_output_missing() -> None:
+    post = FakePost(
+        [
+            FakeResponse(200, decisions_payload()),
+            FakeResponse(200, why_payload("The expected file was missing.")),
+        ]
+    )
+    judged = _score(
+        _judge(post),
+        expect_skill=None,
+        golden={"path": "out.json", "kind": "json", "output_path": "out.json"},
+        actual_output={"path": "out.json", "present": False, "body": None},
+    )
+    assert judged["passed"] is False
+    assert REASON_MISSING_OUTPUT in judged["reasons"]
+    assert judged["why"] == "The expected file was missing."
+    assert len(post.calls) == 2
+
+
 def test_http_500_is_not_retried() -> None:
     post = FakePost(
         [
@@ -526,13 +582,3 @@ def test_http_500_is_not_retried() -> None:
     assert judged["passed"] is False
     assert "HTTP 500" in judged["reasons"][0]
     assert len(post.calls) == 1
-
-
-def test_no_http_when_skip_backend_not_constructed() -> None:
-    post = FakePost([])
-    from skillgate_ai.judge import SkipJudge
-
-    judged = SkipJudge().judge("goal", [], "tail")
-    assert judged["status"] == "skip"
-    assert judged["passed"] is None
-    assert post.calls == []

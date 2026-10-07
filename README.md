@@ -64,7 +64,7 @@ Until the first PyPI release, CI in this repo uses `pip install -e .`.
 - [Extract plan](docs/plans/2026-10-03-skillgate-oss-extract.md) — allowlist / deny-list
 - [Local UI + setup wizard plan](docs/plans/2026-10-04-local-ui-setup-wizard.md) — `skillgate ui` (local stdlib UI; not hosted `serve`)
 - [Score live checks with your OpenAI key](docs/openai-judge.md) — optional; `OPENAI_API_KEY` scores live checks. Built-in checker if unset.
-- [OpenAI judge plan](docs/plans/openai-judge.md) — implementation plan (Decisions default, Responses fallback)
+- [OpenAI judge plan](docs/plans/openai-judge.md) — implementation plan
 - [`docs/ui.md`](docs/ui.md) — start the local UI, red path, Docker stays `check /pack`
 - [`docs/proof/PUBLISH.md`](docs/proof/PUBLISH.md) — secret scan, tag, PyPI Trusted Publishing, GHCR (owner UI; do not flip public from CI)
 

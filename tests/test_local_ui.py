@@ -135,7 +135,9 @@ def test_ui_copy_has_no_internal_jargon(project_root: Path) -> None:
         assert "See a failing check" in js
         assert "Run live" in js
         assert "Skip — use the built-in checker" in js
+        assert "Built-in checker scored this run. This is not a live model." in js
         assert "Built-in checker. This is not a live model." in js
+        assert "report.scored_by" in js
         assert "Create and run check" not in js
         assert "Checking…" not in js
         assert "<p class=\"gate\">Checking</p>" in js

@@ -46,7 +46,3 @@ class SandboxError(SkillGateError):
 
 class DeployError(SkillGateError):
     """Deploy adapter failed to copy or validate a skill folder."""
-
-
-class JudgeError(SkillGateError):
-    """Live scoring failed. Exit 1 — the check did not Pass."""

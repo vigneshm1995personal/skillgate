@@ -134,6 +134,9 @@ function checkerLabel(report, snap) {
 }
 
 function scoredByLine(report, snap) {
+  if (report && typeof report.scored_by === "string" && report.scored_by.trim()) {
+    return report.scored_by.trim();
+  }
   const tasks = (report && report.tasks) || [];
   let openaiScored = false;
   let openaiError = "";
@@ -165,7 +168,7 @@ function scoredByLine(report, snap) {
   const live = harness !== "demo" && !(snap && snap.demo_notice);
   if (skipped || checkerLabel(report, snap) === "Built-in checker") {
     if (live) return "The skill ran live. The built-in checker scored it.";
-    return "Built-in checker. This is not a live model.";
+    return "Built-in checker scored this run. This is not a live model.";
   }
   return checkerLabel(report, snap);
 }

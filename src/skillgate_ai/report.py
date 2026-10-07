@@ -150,6 +150,7 @@ def report_to_dict(report: SuiteReport) -> dict:
         "metrics": suite_metrics_summary(tasks),
         "pack_fingerprint": report.pack_fingerprint,
         "pack_case_ids": list(report.pack_case_ids or ()),
+        "scored_by": scored_by_line(report),
     }
 
 

@@ -115,6 +115,9 @@ def test_check_json_is_parseable(project_root: Path, monkeypatch: pytest.MonkeyP
     payload = json.loads(result.stdout)
     assert payload["gate"] == "green"
     assert payload["passed"] is True
+    assert payload["scored_by"] == (
+        "Built-in checker scored this run. This is not a live model."
+    )
 
 
 def test_check_json_error_is_json(project_root: Path, tmp_path: Path) -> None:

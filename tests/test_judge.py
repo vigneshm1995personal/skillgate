@@ -7,7 +7,7 @@ from skillgate_ai.errors import MissingLLMKeyError
 from skillgate_ai.engine import REASON_MISSING_OUTPUT, _live_verdict
 from skillgate_ai.judge import SkipJudge, judge_stamp, resolve_judge
 from skillgate_ai.judge_bank import LOW_CONFIDENCE_WARNING
-from skillgate_ai.judge_openai import OutcomeJudge
+from skillgate_ai.judge_openai import OutcomeJudge, make_openai_judge
 
 
 def _cfg(**overrides: object) -> LLMConfig:
@@ -81,6 +81,14 @@ def test_judge_stamp_has_no_secret() -> None:
     assert stamp["provider"] == "openai"
     assert stamp["backend"] == "decisions"
     assert stamp["display_name"] == "OpenAI (your key)"
+    assert stamp["model"] == "gpt-6-luna"
+
+
+def test_judge_stamp_uses_decisions_backend_model() -> None:
+    judge = make_openai_judge(api_key="sk-test", model="not-the-decisions-model")
+    stamp = judge_stamp(judge)
+    assert stamp["model"] == "gpt-6-luna"
+    assert "not-the-decisions-model" not in str(stamp)
 
 
 def test_live_verdict_skip_keeps_det() -> None:
@@ -104,6 +112,20 @@ def test_live_verdict_error_fails_closed() -> None:
     assert passed is False
     assert "OpenAI did not accept this API key" in failures[0]
     assert stamped is not None and stamped["passed"] is False
+
+
+def test_live_verdict_error_without_passed_fails_closed() -> None:
+    passed, failures, stamped = _live_verdict(
+        {"status": "error", "reasons": ["OpenAI scoring timed out."]},
+        "pdf",
+        det_passed=True,
+        det_failures=[],
+    )
+    assert passed is False
+    assert failures == ["OpenAI scoring timed out."]
+    assert stamped is not None
+    assert stamped["passed"] is False
+    assert stamped["reasons"] == ["OpenAI scoring timed out."]
 
 
 def test_live_verdict_no_trigger_det_owns() -> None:

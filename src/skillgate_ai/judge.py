@@ -94,10 +94,9 @@ def judge_stamp(judge: Judge | None) -> dict[str, str]:
             "backend": "skip",
             "display_name": "Built-in checker",
         }
-    backend = getattr(getattr(judge, "backend", None), "name", None) or getattr(
-        judge, "name", "openai"
-    )
-    model = getattr(judge, "model", "") or ""
+    backend_obj = getattr(judge, "backend", None)
+    backend = getattr(backend_obj, "name", None) or getattr(judge, "name", "openai")
+    model = getattr(backend_obj, "model", None) or getattr(judge, "model", "") or ""
     return {
         "provider": "openai",
         "backend": str(backend),

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from skillgate_ai.engine import SuiteReport, TaskReport
 from skillgate_ai.judge_openai import OUT_OF_CREDITS
-from skillgate_ai.report import format_cli, scored_by_line
+from skillgate_ai.report import format_cli, report_to_dict, scored_by_line
 
 
 def _task(*, judge: dict | None, passed: bool = True, task_id: str = "t1") -> TaskReport:
@@ -107,3 +107,15 @@ def test_scored_by_openai_with_answers() -> None:
         ],
     )
     assert scored_by_line(report) == "OpenAI (your key) scored this run."
+
+
+def test_report_json_includes_scored_by() -> None:
+    report = _report(
+        harness="demo",
+        config={"judge": {"provider": "skip", "display_name": "Built-in checker"}},
+        tasks=[_task(judge=None)],
+    )
+    payload = report_to_dict(report)
+    assert payload["scored_by"] == (
+        "Built-in checker scored this run. This is not a live model."
+    )

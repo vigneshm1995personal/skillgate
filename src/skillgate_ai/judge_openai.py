@@ -137,11 +137,9 @@ def post_openai(
     headers: dict[str, str],
     payload: dict[str, Any],
     timeout_sec: float,
-    secret: str | None = None,
     post: PostFn | None = None,
     retries: bool = True,
 ) -> httpx.Response:
-    del secret
     sender = post or httpx.post
     attempts = _MAX_ATTEMPTS if retries else 1
     last_exc: BaseException | None = None
@@ -178,6 +176,58 @@ def post_openai(
         return response
     assert last_exc is not None
     raise last_exc
+
+
+def _post_openai_json(
+    url: str,
+    *,
+    api_key: str,
+    payload: dict[str, Any],
+    timeout_sec: float,
+    model: str,
+    post: PostFn | None = None,
+    retries: bool = True,
+) -> dict[str, Any]:
+    """POST JSON. Transport/HTTP/parse failures return ``status=error``."""
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }
+    try:
+        response = post_openai(
+            url,
+            headers=headers,
+            payload=payload,
+            timeout_sec=timeout_sec,
+            post=post,
+            retries=retries,
+        )
+    except httpx.TimeoutException:
+        return {"status": "error", "reason": "OpenAI scoring timed out.", "model": model}
+    except httpx.HTTPError:
+        return {"status": "error", "reason": "OpenAI scoring failed.", "model": model}
+    if response.status_code >= 400:
+        return _status_error(response, model=model)
+    try:
+        data = response.json()
+    except ValueError:
+        return {"status": "error", "reason": UNUSABLE_ANSWER, "model": model}
+    if not isinstance(data, Mapping):
+        return {"status": "error", "reason": UNUSABLE_ANSWER, "model": model}
+    return {"status": "ok", "data": data}
+
+
+def _cell_entry(key: str, answer: Any, labels: Mapping[str, str]) -> dict[str, Any]:
+    choice = extract_choice(answer)
+    cell: dict[str, Any] = {
+        "label": labels[key],
+        "choice": choice,
+        "reason": criteria_text(key, choice),
+    }
+    confidence = extract_confidence(answer)
+    if confidence is not None:
+        cell["confidence"] = confidence
+    return cell
 
 
 def _resolved_under(path: Path, root: Path) -> Path | None:
@@ -459,39 +509,17 @@ class DecisionsBackend:
         payload: dict[str, Any],
         timeout_sec: float,
     ) -> dict[str, Any]:
-        headers = {
-            "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json",
-        }
-        try:
-            response = post_openai(
-                url,
-                headers=headers,
-                payload=payload,
-                timeout_sec=timeout_sec,
-                secret=self.api_key,
-                post=self._post,
-            )
-        except httpx.TimeoutException:
-            return {"status": "error", "reason": "OpenAI scoring timed out.", "model": self.model}
-        except httpx.HTTPError:
-            return {
-                "status": "error",
-                "reason": "OpenAI scoring failed.",
-                "model": self.model,
-            }
-        if response.status_code >= 400:
-            return _status_error(response, model=self.model)
-        try:
-            data = response.json()
-        except ValueError:
-            return {
-                "status": "error",
-                "reason": UNUSABLE_ANSWER,
-                "model": self.model,
-            }
-        if not isinstance(data, Mapping):
-            return {"status": "error", "reason": UNUSABLE_ANSWER, "model": self.model}
+        result = _post_openai_json(
+            url,
+            api_key=self.api_key,
+            payload=payload,
+            timeout_sec=timeout_sec,
+            model=self.model,
+            post=self._post,
+        )
+        if result.get("status") != "ok":
+            return result
+        data = result["data"]
         raw = _answers_from_decisions_list(data)
         answers = _normalize_answers(raw)
         if unusable_answers(answers):
@@ -564,31 +592,17 @@ class StructuredOutputsBackend:
                 }
             },
         }
-        headers = {
-            "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json",
-        }
-        try:
-            response = post_openai(
-                url,
-                headers=headers,
-                payload=payload,
-                timeout_sec=timeout_sec,
-                secret=self.api_key,
-                post=self._post,
-            )
-        except httpx.TimeoutException:
-            return {"status": "error", "reason": "OpenAI scoring timed out.", "model": self.model}
-        except httpx.HTTPError:
-            return {"status": "error", "reason": "OpenAI scoring failed.", "model": self.model}
-        if response.status_code >= 400:
-            return _status_error(response, model=self.model)
-        try:
-            data = response.json()
-        except ValueError:
-            return {"status": "error", "reason": UNUSABLE_ANSWER, "model": self.model}
-        if not isinstance(data, Mapping):
-            return {"status": "error", "reason": UNUSABLE_ANSWER, "model": self.model}
+        result = _post_openai_json(
+            url,
+            api_key=self.api_key,
+            payload=payload,
+            timeout_sec=timeout_sec,
+            model=self.model,
+            post=self._post,
+        )
+        if result.get("status") != "ok":
+            return result
+        data = result["data"]
         text_out, refused = _output_text(data)
         if refused:
             return {
@@ -702,11 +716,11 @@ class OutcomeJudge:
         mismatch = _mismatch_reason(state, artifacts)
         if evaluated.get("status") != "completed":
             reason = str(evaluated.get("reason") or "OpenAI scoring failed.")
-            why_reasons = [reason]
-            if mismatch and mismatch not in why_reasons:
-                why_reasons.append(mismatch)
             why = None
             if self.why_enabled and reason == UNUSABLE_ANSWER:
+                why_reasons = [reason]
+                if mismatch and mismatch not in why_reasons:
+                    why_reasons.append(mismatch)
                 why = self._why_call(state, why_reasons)
             return {
                 "status": "error",
@@ -745,31 +759,12 @@ class OutcomeJudge:
         soft_answers = {key: answers[key] for key in SOFT_CELL_ORDER if key in answers}
         cells: dict[str, dict[str, Any]] = {}
         for key in CHECK_CELL_ORDER:
-            answer = pass_answers.get(key)
-            choice = extract_choice(answer)
-            cell = {
-                "label": CHECK_CELL_LABELS[key],
-                "choice": choice,
-                "reason": criteria_text(key, choice),
-            }
-            confidence = extract_confidence(answer)
-            if confidence is not None:
-                cell["confidence"] = confidence
-            cells[key] = cell
+            cells[key] = _cell_entry(key, pass_answers.get(key), CHECK_CELL_LABELS)
         for key in SOFT_CELL_ORDER:
-            answer = soft_answers.get(key)
-            choice = extract_choice(answer)
-            cell = {
-                "label": SOFT_CELL_LABELS[key],
-                "choice": choice,
-                "reason": criteria_text(key, choice),
-            }
-            confidence = extract_confidence(answer)
-            if confidence is not None:
-                cell["confidence"] = confidence
-            cells[key] = cell
+            cells[key] = _cell_entry(key, soft_answers.get(key), SOFT_CELL_LABELS)
         why = None
-        if not passed and self.why_enabled:
+        no_trigger = state.get("expect_skill") is None
+        if not passed and self.why_enabled and (not no_trigger or mismatch):
             why = self._why_call(state, reasons)
         return {
             "status": "completed",
@@ -832,30 +827,18 @@ class OutcomeJudge:
                 }
             },
         }
-        headers = {
-            "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json",
-        }
-        try:
-            response = post_openai(
-                f"{self.base_url}/responses",
-                headers=headers,
-                payload=payload,
-                timeout_sec=WHY_TIMEOUT_SEC,
-                secret=self.api_key,
-                post=self._post,
-                retries=False,
-            )
-        except (httpx.TimeoutException, httpx.HTTPError):
+        result = _post_openai_json(
+            f"{self.base_url}/responses",
+            api_key=self.api_key,
+            payload=payload,
+            timeout_sec=WHY_TIMEOUT_SEC,
+            model=self.model,
+            post=self._post,
+            retries=False,
+        )
+        if result.get("status") != "ok":
             return None
-        if response.status_code >= 400:
-            return None
-        try:
-            data = response.json()
-        except ValueError:
-            return None
-        if not isinstance(data, Mapping):
-            return None
+        data = result["data"]
         text_out, refused = _output_text(data)
         if refused or not text_out:
             return None
@@ -867,7 +850,7 @@ class OutcomeJudge:
             return None
         why = parsed.get("why")
         if isinstance(why, str) and why.strip():
-            return why.strip()
+            return redact_secrets(why.strip(), self.api_key)
         return None
 
 

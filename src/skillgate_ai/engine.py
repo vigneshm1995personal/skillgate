@@ -457,6 +457,38 @@ def _run_outcome_judge(
     return judged
 
 
+def _mismatch_from_judge(judge: dict[str, Any]) -> str | None:
+    return expected_output_mismatch_reason(
+        golden=judge.get("golden") if isinstance(judge.get("golden"), dict) else None,
+        actual=(
+            judge.get("actual_output")
+            if isinstance(judge.get("actual_output"), dict)
+            else None
+        ),
+        artifacts=_judge_artifact_rows(judge),
+    )
+
+
+def _with_mismatch(
+    judge: dict[str, Any],
+    *,
+    passed: bool,
+    failures: list[str],
+    warnings: list[str],
+    stamp_verdict: bool,
+) -> tuple[bool, list[str], dict[str, Any]]:
+    mismatch = _mismatch_from_judge(judge)
+    if mismatch:
+        passed = False
+        if mismatch not in failures:
+            failures = [mismatch, *failures]
+    stamped = {**judge, "warnings": warnings}
+    if stamp_verdict:
+        stamped["passed"] = passed
+        stamped["reasons"] = list(failures)
+    return passed, failures, stamped
+
+
 def _live_verdict(
     judge: dict[str, Any] | None,
     expect_skill: str | None,
@@ -468,43 +500,41 @@ def _live_verdict(
     A completed bool ``passed`` overrides, including a low-confidence Pass."""
     if not isinstance(judge, dict):
         return det_passed, det_failures, judge
-    if judge.get("status") == "skip" or judge.get("passed") is None:
-        return det_passed, det_failures, judge
     warnings = [
         str(item) for item in (judge.get("warnings") or []) if str(item).strip()
     ]
-    mismatch = expected_output_mismatch_reason(
-        golden=judge.get("golden") if isinstance(judge, dict) else None,
-        actual=judge.get("actual_output") if isinstance(judge, dict) else None,
-        artifacts=_judge_artifact_rows(judge),
-    )
     if judge.get("status") == "error":
         failures = [str(item) for item in (judge.get("reasons") or []) if str(item).strip()]
         if not failures:
             failures = ["OpenAI scoring failed."]
-        if mismatch and mismatch not in failures:
-            failures = [mismatch, *failures]
-        stamped = {**judge, "passed": False, "reasons": list(failures), "warnings": warnings}
-        return False, failures, stamped
+        return _with_mismatch(
+            judge,
+            passed=False,
+            failures=failures,
+            warnings=warnings,
+            stamp_verdict=True,
+        )
+    if judge.get("status") == "skip" or judge.get("passed") is None:
+        return det_passed, det_failures, judge
     if expect_skill is None:
-        passed = det_passed
-        failures = list(det_failures)
-        if mismatch:
-            passed = False
-            if mismatch not in failures:
-                failures = [mismatch, *failures]
-        stamped = {**judge, "warnings": warnings}
-        return passed, failures, stamped
+        return _with_mismatch(
+            judge,
+            passed=det_passed,
+            failures=list(det_failures),
+            warnings=warnings,
+            stamp_verdict=False,
+        )
     passed = bool(judge.get("passed"))
     failures = [str(item) for item in (judge.get("reasons") or []) if str(item).strip()]
     if not passed and not failures:
         failures = list(det_failures) or ["OpenAI scoring failed this check."]
-    if mismatch:
-        passed = False
-        if mismatch not in failures:
-            failures = [mismatch, *failures]
-    stamped = {**judge, "passed": passed, "reasons": list(failures), "warnings": warnings}
-    return passed, failures, stamped
+    return _with_mismatch(
+        judge,
+        passed=passed,
+        failures=failures,
+        warnings=warnings,
+        stamp_verdict=True,
+    )
 
 
 def _judge_artifact_rows(judge: dict[str, Any] | None) -> list[dict[str, Any]]:
