@@ -133,6 +133,43 @@ function checkerLabel(report, snap) {
   return "";
 }
 
+function scoredByLine(report, snap) {
+  const tasks = (report && report.tasks) || [];
+  let openaiScored = false;
+  let openaiError = "";
+  let skipped = false;
+  for (const t of tasks) {
+    const j = t && t.judge;
+    if (!j) continue;
+    const provider = String(j.provider || "");
+    const status = String(j.status || "");
+    const answers = j.answers && typeof j.answers === "object" ? j.answers : null;
+    const hasChoice = !!(answers && Object.keys(answers).some((k) => {
+      const row = answers[k];
+      return row && (typeof row === "string" ? row.trim() : row.choice);
+    }));
+    if (provider === "openai") {
+      if (status === "completed" && hasChoice) openaiScored = true;
+      else if (status === "error") {
+        openaiError = (j.reasons && j.reasons[0]) || "OpenAI scoring failed.";
+      }
+    }
+    if (status === "skip" || provider === "skip") skipped = true;
+  }
+  if (openaiScored) {
+    const name = displayNameFromJudge(report) || "OpenAI";
+    return `${name} scored this run.`;
+  }
+  if (openaiError) return "OpenAI couldn't score this run. " + openaiError;
+  const harness = String((report && report.harness) || "").toLowerCase();
+  const live = harness !== "demo" && !(snap && snap.demo_notice);
+  if (skipped || checkerLabel(report, snap) === "Built-in checker") {
+    if (live) return "The skill ran live. The built-in checker scored it.";
+    return "Built-in checker. This is not a live model.";
+  }
+  return checkerLabel(report, snap);
+}
+
 function checkHeadline(task) {
   const id = String((task && task.id) || "");
   if (id.includes("no-trigger")) return "The skill should stay off for an unrelated request.";
@@ -803,10 +840,7 @@ async function paintResult(snap, path, opts) {
     </div>`;
   }
   const headline = gate === "green" ? "Passed" : "Failed";
-  const checker = checkerLabel(report, snap);
-  const checkerLine = checker === "Built-in checker"
-    ? "Built-in checker. This is not a live model."
-    : checker;
+  const checkerLine = scoredByLine(report, snap);
   const panel = $(`<div class="success">
       ${resultMarkHtml(gate === "green", false)}
       <p><span class="gate ${esc(gate)}">${headline}</span>

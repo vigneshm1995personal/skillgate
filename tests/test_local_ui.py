@@ -156,6 +156,9 @@ def test_ui_copy_has_no_internal_jargon(project_root: Path) -> None:
         assert "Paste an OpenAI key to run live checks and score them" in js
         assert "An OpenAI key scores live checks" in js
         assert "function displayNameFromJudge" in js
+        assert "function scoredByLine" in js
+        assert "OpenAI couldn't score this run" in js
+        assert "The skill ran live. The built-in checker scored it." in js
         assert "decisions" not in js.lower()
         assert "gpt-6-luna" not in js
         assert "OpenAI (your key)" not in js

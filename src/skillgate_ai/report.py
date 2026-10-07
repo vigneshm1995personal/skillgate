@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from skillgate_ai.eval_config import config_label
 from skillgate_ai.engine import EvalProgress, SuiteReport, TaskProgress, TaskReport
+from skillgate_ai.harness import is_live_harness
 from skillgate_ai.metrics import suite_metrics_summary
 
 
@@ -13,9 +14,9 @@ def format_cli(report: SuiteReport) -> str:
         f"Skill Gate  ·  {report.title}  ·  {gate}",
         f"skill `{report.skill}`  ·  {report.passed_count}/{len(report.tasks)} tasks passed",
     ]
-    who = scored_by(report)
+    who = scored_by_line(report)
     if who:
-        lines.append(_scored_by_line(who))
+        lines.append(who)
     label = config_label(report.config)
     if label:
         lines.append(f"config  {label}")
@@ -58,9 +59,9 @@ def format_github(report: SuiteReport) -> str:
     label = config_label(report.config)
     if label:
         lines += ["", f"Config: `{label}`"]
-    who = scored_by(report)
+    who = scored_by_line(report)
     if who:
-        lines += ["", _scored_by_line(who)]
+        lines += ["", who]
     lines += [
         "",
         "| Task | Result | What happened |",
@@ -244,26 +245,68 @@ def _task_to_dict(task: TaskReport) -> dict:
     }
 
 
-def scored_by(report: SuiteReport) -> str:
+def _judge_stamp(report: SuiteReport) -> dict:
     cfg = report.config if isinstance(report.config, dict) else {}
-    judge_cfg = cfg.get("judge") if isinstance(cfg, dict) else None
-    if isinstance(judge_cfg, dict):
-        name = judge_cfg.get("display_name")
-        if isinstance(name, str) and name.strip():
-            return name.strip()
+    judge = cfg.get("judge") if isinstance(cfg, dict) else None
+    return judge if isinstance(judge, dict) else {}
+
+
+def _has_choice_answers(judge: dict) -> bool:
+    answers = judge.get("answers")
+    if not isinstance(answers, dict) or not answers:
+        return False
+    for item in answers.values():
+        if isinstance(item, str) and item.strip():
+            return True
+        if isinstance(item, dict) and str(item.get("choice") or "").strip():
+            return True
+    return False
+
+
+def scored_by_line(report: SuiteReport) -> str:
+    """Who scored, from actual answers — not the pre-run stamp."""
+    openai_scored = False
+    openai_reason: str | None = None
+    openai_failed = False
+    saw_skip = False
     for task in report.tasks:
         judge = task.judge if isinstance(task.judge, dict) else None
-        if isinstance(judge, dict):
-            name = judge.get("display_name")
-            if isinstance(name, str) and name.strip():
-                return name.strip()
-    return ""
-
-
-def _scored_by_line(who: str) -> str:
-    if who == "Built-in checker":
+        if not isinstance(judge, dict):
+            continue
+        provider = str(judge.get("provider") or "")
+        status = str(judge.get("status") or "")
+        if provider == "openai" or str(judge.get("display_name") or "") == "OpenAI (your key)":
+            if status == "completed" and _has_choice_answers(judge):
+                openai_scored = True
+            elif status == "error":
+                openai_failed = True
+                reasons = [
+                    str(item).strip() for item in (judge.get("reasons") or []) if str(item).strip()
+                ]
+                if reasons and openai_reason is None:
+                    openai_reason = reasons[0]
+        if status == "skip" or provider == "skip":
+            saw_skip = True
+    if openai_scored:
+        return "OpenAI (your key) scored this run."
+    if openai_failed:
+        extra = openai_reason or "OpenAI scoring failed."
+        return f"OpenAI couldn't score this run. {extra}"
+    stamp = _judge_stamp(report)
+    skip = (
+        saw_skip
+        or str(stamp.get("provider") or "") == "skip"
+        or str(stamp.get("display_name") or "") == "Built-in checker"
+    )
+    live = is_live_harness(report.harness)
+    if skip:
+        if live:
+            return "The skill ran live. The built-in checker scored it."
         return "Built-in checker scored this run. This is not a live model."
-    return f"{who} scored this run."
+    name = str(stamp.get("display_name") or "").strip()
+    if name:
+        return f"{name} scored this run."
+    return ""
 
 
 def _task_fail_line(task: TaskReport) -> str:

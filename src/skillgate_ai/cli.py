@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import json
 import os
+import sys
 from pathlib import Path
 
 import typer
@@ -23,6 +25,12 @@ app = typer.Typer(
     help="Skill Gate — evaluate agent skills. Pack on disk + `skillgate check` (exit 0/1).",
 )
 console = Console(stderr=False)
+
+
+def _emit_json(payload: object) -> None:
+    """Write JSON to stdout with no terminal wrapping. Safe to pipe to json.tool."""
+    sys.stdout.write(json.dumps(payload, indent=2, ensure_ascii=True) + "\n")
+    sys.stdout.flush()
 
 
 def _boot() -> Path:
@@ -86,21 +94,31 @@ def _run_gate(
         reasoning_effort=reasoning_effort,
         source="cli",
     )
-    if result.demo_notice:
+    machine = json_out or summary == "json"
+    if result.demo_notice and not machine:
         console.print(f"[dim]{result.demo_notice}[/dim]\n")
+    elif result.demo_notice:
+        sys.stderr.write(f"{result.demo_notice}\n")
     if result.error:
-        console.print(result.error["message"])
-        hint = result.error.get("hint")
-        if hint:
-            console.print(hint)
+        if machine:
+            _emit_json(
+                {
+                    "error": result.error["message"],
+                    "hint": result.error.get("hint"),
+                    "exit_code": result.exit_code,
+                }
+            )
+        else:
+            console.print(result.error["message"])
+            hint = result.error.get("hint")
+            if hint:
+                console.print(hint)
         raise typer.Exit(result.exit_code)
     report = result.report
     if report is None:
         raise typer.Exit(result.exit_code)
-    if json_out or summary == "json":
-        import json as _json
-
-        console.print(_json.dumps(report_to_dict(report), indent=2))
+    if machine:
+        _emit_json(report_to_dict(report))
     elif summary == "github":
         text = format_github(report)
         console.print(text)
@@ -112,7 +130,10 @@ def _run_gate(
     else:
         console.print(format_cli(report))
     if result.expect_fail_notice:
-        console.print(result.expect_fail_notice)
+        if machine:
+            sys.stderr.write(f"{result.expect_fail_notice}\n")
+        else:
+            console.print(result.expect_fail_notice)
     raise typer.Exit(result.exit_code)
 
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import json
 import logging
+import re
 import time
 from pathlib import Path
 from typing import Any, Callable, Mapping, Protocol
@@ -44,9 +45,14 @@ IMAGE_MAX_COUNT = 3
 INLINE_MAGICS = {"jpeg": "image/jpeg", "png": "image/png"}
 DISPLAY_NAME = "OpenAI (your key)"
 _TRANSIENT = frozenset({429, 502, 503, 504})
+_QUOTA_CODES = frozenset({"insufficient_quota", "credit_balance_exhausted"})
 _RETRY_BACKOFF_SEC = (0.05, 0.1)
 _MAX_ATTEMPTS = 3
-_ERROR_BODY_MAX = 240
+_SK_TOKEN = re.compile(r"sk-[A-Za-z0-9_*\-]{2,}")
+OUT_OF_CREDITS = (
+    "Your OpenAI account is out of credits. Add credits at platform.openai.com "
+    "billing, then try again."
+)
 
 PostFn = Callable[..., httpx.Response]
 
@@ -71,32 +77,58 @@ def _tail(text: str, limit: int = TRANSCRIPT_TAIL_CHARS) -> str:
     return (text or "")[-limit:]
 
 
-def _redact(text: str, secret: str | None) -> str:
-    if not secret or not text:
+def redact_secrets(text: str, secret: str | None = None) -> str:
+    """Strip the configured key and any sk-… token (full or masked) from text."""
+    if not text:
         return text
-    return text.replace(secret, "***")
+    out = text
+    if secret:
+        out = out.replace(secret, "***")
+    return _SK_TOKEN.sub("sk-***", out)
 
 
-def _error_body(response: httpx.Response, secret: str | None) -> str:
-    body = (response.text or "").strip().replace("\n", " ")
-    body = _redact(body, secret)
-    if len(body) > _ERROR_BODY_MAX:
-        body = body[:_ERROR_BODY_MAX] + "…"
-    return body
+def openai_error_code(response: httpx.Response) -> str | None:
+    try:
+        data = response.json()
+    except ValueError:
+        return None
+    if not isinstance(data, Mapping):
+        return None
+    err = data.get("error")
+    if not isinstance(err, Mapping):
+        return None
+    for key in ("code", "type"):
+        value = err.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return None
 
 
-def user_message_for_status(status: int) -> str:
+def is_quota_exhausted(response: httpx.Response) -> bool:
+    return response.status_code == 429 and openai_error_code(response) in _QUOTA_CODES
+
+
+def user_message_for_status(status: int, *, error_code: str | None = None) -> str:
     if status == 401:
         return "OpenAI did not accept this API key. Check OPENAI_API_KEY."
     if status == 403:
         return "OpenAI scoring is not enabled for this key."
     if status == 404:
         return "OpenAI has no scoring endpoint for this key."
+    if status == 429 and error_code in _QUOTA_CODES:
+        return OUT_OF_CREDITS
     if status == 429:
         return "OpenAI rate limit or quota. Wait and retry, or check billing."
     if status == 400:
         return "OpenAI rejected this scoring request."
     return f"OpenAI scoring failed (HTTP {status})."
+
+
+def _status_error(response: httpx.Response, *, model: str) -> dict[str, Any]:
+    code = openai_error_code(response)
+    reason = user_message_for_status(response.status_code, error_code=code)
+    _LOG.warning("OpenAI scoring HTTP %s", response.status_code)
+    return {"status": "error", "reason": reason, "model": model}
 
 
 def post_openai(
@@ -130,7 +162,11 @@ def post_openai(
             )
             time.sleep(_RETRY_BACKOFF_SEC[min(attempt, len(_RETRY_BACKOFF_SEC) - 1)])
             continue
-        if response.status_code in _TRANSIENT and attempt < attempts - 1:
+        if (
+            response.status_code in _TRANSIENT
+            and attempt < attempts - 1
+            and not is_quota_exhausted(response)
+        ):
             _LOG.warning(
                 "OpenAI scoring HTTP %s (attempt %s/%s)",
                 response.status_code,
@@ -445,16 +481,7 @@ class DecisionsBackend:
                 "model": self.model,
             }
         if response.status_code >= 400:
-            _LOG.warning(
-                "OpenAI scoring HTTP %s: %s",
-                response.status_code,
-                _error_body(response, self.api_key),
-            )
-            return {
-                "status": "error",
-                "reason": user_message_for_status(response.status_code),
-                "model": self.model,
-            }
+            return _status_error(response, model=self.model)
         try:
             data = response.json()
         except ValueError:
@@ -555,16 +582,7 @@ class StructuredOutputsBackend:
         except httpx.HTTPError:
             return {"status": "error", "reason": "OpenAI scoring failed.", "model": self.model}
         if response.status_code >= 400:
-            _LOG.warning(
-                "OpenAI scoring HTTP %s: %s",
-                response.status_code,
-                _error_body(response, self.api_key),
-            )
-            return {
-                "status": "error",
-                "reason": user_message_for_status(response.status_code),
-                "model": self.model,
-            }
+            return _status_error(response, model=self.model)
         try:
             data = response.json()
         except ValueError:
@@ -907,10 +925,12 @@ __all__ = [
     "DISPLAY_NAME",
     "IMAGE_MAX_BYTES",
     "IMAGE_MAX_COUNT",
+    "OUT_OF_CREDITS",
     "DecisionsBackend",
     "OutcomeJudge",
     "StructuredOutputsBackend",
     "collect_images",
     "make_openai_judge",
+    "redact_secrets",
     "user_message_for_status",
 ]

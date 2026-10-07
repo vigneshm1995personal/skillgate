@@ -4,11 +4,13 @@ Optional. Deterministic fixture checks still need **no key**. Live checks still 
 
 ## What you get
 
-When `OPENAI_API_KEY` is set and you run a live check (`skillgate check --live`, or Run live in the local UI), Skill Gate asks OpenAI the same fixed questions on each live task and applies a Pass/Fail lock. The built-in checker stays in charge when:
+When `OPENAI_API_KEY` is set and you run a live check (`skillgate check --live`, or Run live in the local UI), Skill Gate asks OpenAI the same fixed questions on each live task. The check Passes only when those answers meet the bar (job done, correct, followed the rules, and so on). The built-in checker stays in charge when:
 
 - there is no OpenAI key
 - you set `SKILLGATE_JUDGE=skip`
 - you use the built-in / demo path (`--demo`, or Skip in the wizard)
+
+The built-in checker only runs fixture checks such as “does the output contain this text?” and page counts. It does **not** compare the full output to the expected file. Scoring with your OpenAI key does read the expected and actual text (and a few images) and judges whether the work is done.
 
 `AI_GATEWAY_API_KEY` without `OPENAI_API_KEY` does **not** score.
 
@@ -27,12 +29,12 @@ Override if you need it:
 | --- | --- |
 | `SKILLGATE_JUDGE=auto` | Default. Score when an OpenAI key is present; otherwise the built-in checker. |
 | `SKILLGATE_JUDGE=openai` | Require scoring. Missing key → exit 2. |
-| `SKILLGATE_JUDGE=skip` | Never score. Built-in checker owns Pass/Fail. |
-| `SKILLGATE_JUDGE_BACKEND=decisions` | Default scoring API. |
-| `SKILLGATE_JUDGE_BACKEND=responses` | Fallback if Decisions is not enabled for your key. Set this yourself; Skill Gate does not switch on 403. |
+| `SKILLGATE_JUDGE=skip` | Never score with OpenAI. The built-in checker decides the result. |
+| `SKILLGATE_JUDGE_BACKEND=decisions` | Default scoring service. |
+| `SKILLGATE_JUDGE_BACKEND=responses` | If your key can't use the newer scoring service, set this yourself. Skill Gate does not switch on 403. |
 | `SKILLGATE_JUDGE_WHY=0` | Skip the short Fail explanation call (saves a follow-up request). |
 
-Bad key, quota, 403, 400, or timeout **fails the check** (exit 1) with a plain error. It never silently Passes. The key is never printed or stored in history.
+Bad key, no credits, 403, 400, or timeout **fails the check** (exit 1) with a plain error. It never silently Passes. The key is never printed or stored in history.
 
 If the scorer is not very sure about a Pass, the check still Passes. You will see: *The judge wasn't very sure about this one.* That warning does not change exit 0/1.
 
@@ -57,8 +59,8 @@ export SKILLGATE_JUDGE=openai
 skillgate check /path/to/one-case-pack --live --json
 # tasks[].judge.backend is "decisions" on the default path
 # tasks[].judge.answers.task_completion.choice is set
-# confidence is present on Decisions answers
+# confidence is present on default scoring answers
 # exit 0 or 1 — never a traceback
 ```
 
-If that key gets HTTP 403 on the default scorer, set `SKILLGATE_JUDGE_BACKEND=responses` and retry. That is a fallback you choose, not an automatic switch.
+If your key can't use the newer scoring service, set `SKILLGATE_JUDGE_BACKEND=responses` and retry. That is a fallback you choose, not an automatic switch.

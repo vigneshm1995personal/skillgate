@@ -16,9 +16,11 @@ from skillgate_ai.judge_bank import (
 from skillgate_ai.judge_openai import (
     DISPLAY_NAME,
     IMAGE_MAX_BYTES,
+    OUT_OF_CREDITS,
     WHY_MAX_OUTPUT_TOKENS,
     collect_images,
     make_openai_judge,
+    redact_secrets,
     user_message_for_status,
 )
 
@@ -231,7 +233,18 @@ def test_http_errors_fail_and_never_log_key(caplog: pytest.LogCaptureFixture) ->
     for status, message in cases.items():
         copies = 3 if status == 429 else 1
         post = FakePost(
-            [FakeResponse(status, {"error": {"message": "nope", "key": SECRET}})] * copies
+            [
+                FakeResponse(
+                    status,
+                    {
+                        "error": {
+                            "message": f"Incorrect API key provided: sk-inval***test ({SECRET})",
+                            "key": SECRET,
+                        }
+                    },
+                )
+            ]
+            * copies
         )
         with caplog.at_level("WARNING"):
             judged = _score(_judge(post))
@@ -241,10 +254,62 @@ def test_http_errors_fail_and_never_log_key(caplog: pytest.LogCaptureFixture) ->
         blob = json.dumps(judged) + caplog.text
         assert SECRET not in blob
         assert "sk-test" not in caplog.text
+        assert "sk-inval" not in blob
+        assert "Incorrect API key provided" not in caplog.text
+        assert '"error"' not in caplog.text
+        assert "insufficient_quota" not in caplog.text
         assert all(not str(item["url"]).endswith("/v1/responses") for item in post.calls)
         if status == 403:
             assert len(post.calls) == 1
             assert post.calls[0]["url"].endswith("/v1/decisions")
+
+
+def test_redact_secrets_masks_full_and_partial_keys() -> None:
+    leaked = 'Incorrect API key provided: sk-inval***test. Also ' + SECRET
+    cleaned = redact_secrets(leaked, SECRET)
+    assert SECRET not in cleaned
+    assert "sk-inval" not in cleaned
+    assert "sk-test" not in cleaned
+    assert "sk-***" in cleaned
+
+
+def test_quota_429_is_not_retried() -> None:
+    post = FakePost(
+        [
+            FakeResponse(
+                429,
+                {
+                    "error": {
+                        "message": "You exceeded your current quota",
+                        "type": "insufficient_quota",
+                        "code": "insufficient_quota",
+                    }
+                },
+            ),
+            FakeResponse(200, decisions_payload()),
+        ]
+    )
+    judged = _score(_judge(post))
+    assert judged["passed"] is False
+    assert judged["reasons"] == [OUT_OF_CREDITS]
+    assert "rate limit" not in judged["reasons"][0].lower()
+    assert len(post.calls) == 1
+    assert all(not str(item["url"]).endswith("/v1/responses") for item in post.calls)
+
+
+def test_credit_balance_exhausted_429_is_not_retried() -> None:
+    post = FakePost(
+        [
+            FakeResponse(
+                429,
+                {"error": {"code": "credit_balance_exhausted", "message": "no credits"}},
+            ),
+            FakeResponse(200, decisions_payload()),
+        ]
+    )
+    judged = _score(_judge(post))
+    assert judged["reasons"] == [OUT_OF_CREDITS]
+    assert len(post.calls) == 1
 
 
 def test_timeout_fails_closed() -> None:

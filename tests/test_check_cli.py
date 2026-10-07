@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+import json
 import shutil
 from pathlib import Path
 
 import pytest
 from typer.testing import CliRunner
 
-from skillgate_ai.cli import app
+from skillgate_ai.cli import _emit_json, app
 from skillgate_ai.demo_files import ensure_demo_pdfs
 
 runner = CliRunner()
@@ -96,6 +97,34 @@ def test_check_demo_flag_forces_builtin_when_keys_set(
     assert "GREEN" in result.stdout
     assert "built-in checker" in result.stdout.lower()
     assert "not a live model" in result.stdout.lower()
+
+
+def test_emit_json_does_not_wrap_long_strings(capsys: pytest.CaptureFixture[str]) -> None:
+    payload = {"note": "n" * 200, "ok": True}
+    _emit_json(payload)
+    raw = capsys.readouterr().out
+    assert json.loads(raw) == payload
+    assert "n" * 200 in raw
+
+
+def test_check_json_is_parseable(project_root: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("COLUMNS", "40")
+    _prepare(project_root)
+    result = runner.invoke(app, ["check", str(project_root / "skills" / "pdf"), "--json"])
+    assert result.exit_code == 0, result.stdout
+    payload = json.loads(result.stdout)
+    assert payload["gate"] == "green"
+    assert payload["passed"] is True
+
+
+def test_check_json_error_is_json(project_root: Path, tmp_path: Path) -> None:
+    dest = tmp_path / "renamed"
+    shutil.copytree(project_root / "skills" / "pdf", dest)
+    result = runner.invoke(app, ["check", str(dest), "--json"])
+    assert result.exit_code == 1
+    payload = json.loads(result.stdout)
+    assert "must match the folder name" in str(payload.get("error") or "")
+    assert payload.get("exit_code") == 1
 
 
 def test_no_serve_command() -> None:
