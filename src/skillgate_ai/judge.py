@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Protocol
+from typing import Any, Mapping, Protocol
 
 from skillgate_ai.config import LLMConfig
 from skillgate_ai.errors import MissingLLMKeyError
@@ -20,6 +20,17 @@ class Judge(Protocol):
         **kwargs: Any,
     ) -> dict[str, Any]:
         """Return ``{passed, cells, ...}``. Skip implementations set ``status=skip``."""
+        ...
+
+    def explain_fail(
+        self,
+        reasons: list[str],
+        *,
+        judged: Mapping[str, Any] | None = None,
+        check: str = "",
+        transcript_tail: str = "",
+    ) -> str | None:
+        """One Fail sentence after the engine gate. Skip returns None."""
         ...
 
 
@@ -45,6 +56,17 @@ class SkipJudge:
             "display_name": "Built-in checker",
             "reason": "Built-in checker owns this check.",
         }
+
+    def explain_fail(
+        self,
+        reasons: list[str],
+        *,
+        judged: Mapping[str, Any] | None = None,
+        check: str = "",
+        transcript_tail: str = "",
+    ) -> str | None:
+        del reasons, judged, check, transcript_tail
+        return None
 
 
 def default_judge() -> SkipJudge:

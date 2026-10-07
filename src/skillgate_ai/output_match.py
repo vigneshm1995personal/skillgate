@@ -1,4 +1,4 @@
-"""Expected vs actual output mismatch. Shared by the engine and OpenAI judge."""
+"""Expected vs actual output mismatch. Engine-owned; not applied inside the judge."""
 
 from __future__ import annotations
 

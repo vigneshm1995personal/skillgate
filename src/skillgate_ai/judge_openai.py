@@ -49,6 +49,8 @@ DISPLAY_NAME = "OpenAI (your key)"
 
 class JudgeBackend(Protocol):
     name: str
+    model: str
+    api_key: str
 
     def evaluate(
         self,
@@ -59,6 +61,53 @@ class JudgeBackend(Protocol):
     ) -> dict[str, Any]:
         """Return status/model/answers. Never logs secrets."""
         ...
+
+    def post_json(
+        self,
+        path: str,
+        payload: dict[str, Any],
+        *,
+        timeout_sec: float,
+        retries: bool = True,
+    ) -> dict[str, Any]:
+        """POST JSON to this backend's OpenAI base URL."""
+        ...
+
+
+class _OpenAIPosted:
+    """HTTP for one OpenAI key/base/model. Backends own evaluate; why uses post_json."""
+
+    def __init__(
+        self,
+        *,
+        api_key: str,
+        base_url: str = DEFAULT_BASE_URL,
+        model: str = DEFAULT_MODEL,
+        post: PostFn | None = None,
+    ) -> None:
+        self.api_key = api_key
+        self.base_url = base_url.rstrip("/")
+        self.model = model
+        self._post = post
+
+    def post_json(
+        self,
+        path: str,
+        payload: dict[str, Any],
+        *,
+        timeout_sec: float,
+        retries: bool = True,
+    ) -> dict[str, Any]:
+        suffix = path if path.startswith("/") else f"/{path}"
+        return post_openai_json(
+            f"{self.base_url}{suffix}",
+            api_key=self.api_key,
+            payload=payload,
+            timeout_sec=timeout_sec,
+            model=self.model,
+            post=self._post,
+            retries=retries,
+        )
 
 
 def _tail(text: str, limit: int = TRANSCRIPT_TAIL_CHARS) -> str:
@@ -317,7 +366,7 @@ def _output_text(payload: Mapping[str, Any]) -> tuple[str | None, bool]:
     return None, refused
 
 
-class DecisionsBackend:
+class DecisionsBackend(_OpenAIPosted):
     name = "decisions"
 
     def __init__(
@@ -329,11 +378,13 @@ class DecisionsBackend:
         post: PostFn | None = None,
     ) -> None:
         del model
-        self.api_key = api_key
-        self.base_url = base_url.rstrip("/")
         # Decisions documents gpt-6-luna only. Do not send a Responses override.
-        self.model = DEFAULT_MODEL
-        self._post = post
+        super().__init__(
+            api_key=api_key,
+            base_url=base_url,
+            model=DEFAULT_MODEL,
+            post=post,
+        )
 
     def evaluate(
         self,
@@ -342,7 +393,6 @@ class DecisionsBackend:
         images: list[dict[str, str]],
         timeout_sec: float,
     ) -> dict[str, Any]:
-        url = f"{self.base_url}/decisions"
         text = _state_text(state)
         content = _user_content(text, images)
         payload_input: str | list[dict[str, Any]]
@@ -350,26 +400,14 @@ class DecisionsBackend:
             payload_input = [{"role": "user", "content": content}]
         else:
             payload_input = text
-        payload = {
-            "model": self.model,
-            "input": payload_input,
-            "questions": decisions_questions(),
-        }
-        return self._send(url, payload, timeout_sec)
-
-    def _send(
-        self,
-        url: str,
-        payload: dict[str, Any],
-        timeout_sec: float,
-    ) -> dict[str, Any]:
-        result = post_openai_json(
-            url,
-            api_key=self.api_key,
-            payload=payload,
+        result = self.post_json(
+            "/decisions",
+            {
+                "model": self.model,
+                "input": payload_input,
+                "questions": decisions_questions(),
+            },
             timeout_sec=timeout_sec,
-            model=self.model,
-            post=self._post,
         )
         if result.get("status") != "ok":
             return result
@@ -382,7 +420,7 @@ class DecisionsBackend:
         )
 
 
-class StructuredOutputsBackend:
+class StructuredOutputsBackend(_OpenAIPosted):
     name = "responses"
 
     def __init__(
@@ -394,11 +432,8 @@ class StructuredOutputsBackend:
         reasoning_effort: str = "low",
         post: PostFn | None = None,
     ) -> None:
-        self.api_key = api_key
-        self.base_url = base_url.rstrip("/")
-        self.model = model
+        super().__init__(api_key=api_key, base_url=base_url, model=model, post=post)
         self.reasoning_effort = reasoning_effort
-        self._post = post
 
     def evaluate(
         self,
@@ -407,38 +442,33 @@ class StructuredOutputsBackend:
         images: list[dict[str, str]],
         timeout_sec: float,
     ) -> dict[str, Any]:
-        url = f"{self.base_url}/responses"
         text = _state_text(state)
         user_content = _user_content(text, images)
-        payload: dict[str, Any] = {
-            "model": self.model,
-            "reasoning": {"effort": self.reasoning_effort},
-            "input": [
-                {
-                    "role": "system",
-                    "content": (
-                        "Score this skill check. Pick exactly one allowed answer "
-                        "for each field. Use only the evidence in the user message."
-                    ),
+        result = self.post_json(
+            "/responses",
+            {
+                "model": self.model,
+                "reasoning": {"effort": self.reasoning_effort},
+                "input": [
+                    {
+                        "role": "system",
+                        "content": (
+                            "Score this skill check. Pick exactly one allowed answer "
+                            "for each field. Use only the evidence in the user message."
+                        ),
+                    },
+                    {"role": "user", "content": user_content},
+                ],
+                "text": {
+                    "format": {
+                        "type": "json_schema",
+                        "name": "skill_gate_check",
+                        "strict": True,
+                        "schema": structured_output_schema(),
+                    }
                 },
-                {"role": "user", "content": user_content},
-            ],
-            "text": {
-                "format": {
-                    "type": "json_schema",
-                    "name": "skill_gate_check",
-                    "strict": True,
-                    "schema": structured_output_schema(),
-                }
             },
-        }
-        result = post_openai_json(
-            url,
-            api_key=self.api_key,
-            payload=payload,
             timeout_sec=timeout_sec,
-            model=self.model,
-            post=self._post,
         )
         if result.get("status") != "ok":
             return result
@@ -475,21 +505,20 @@ class OutcomeJudge:
         self,
         backend: JudgeBackend,
         *,
-        model: str = DEFAULT_MODEL,
         min_confidence: float = DEFAULT_MIN_CONFIDENCE,
         why_enabled: bool = True,
         reasoning_effort: str = "low",
         timeout_sec: float = DEFAULT_TIMEOUT_SEC,
     ) -> None:
         self.backend = backend
-        self.model = model
         self.min_confidence = min_confidence
         self.why_enabled = why_enabled
         self.reasoning_effort = reasoning_effort
         self.timeout_sec = timeout_sec
-        self._last_state: Mapping[str, Any] | None = None
-        self._last_status: str | None = None
-        self._last_reason: str | None = None
+
+    @property
+    def model(self) -> str:
+        return self.backend.model
 
     def judge(
         self,
@@ -530,10 +559,6 @@ class OutcomeJudge:
         evaluated = self.backend.evaluate(
             state=state, images=images, timeout_sec=self.timeout_sec
         )
-        self._last_state = state
-        self._last_status = str(evaluated.get("status") or "")
-        reason = evaluated.get("reason")
-        self._last_reason = str(reason) if isinstance(reason, str) and reason.strip() else None
         return self._stamp(evaluated, artifacts=artifacts, omitted=omitted)
 
     def _payload(
@@ -580,7 +605,7 @@ class OutcomeJudge:
         artifacts: list[dict[str, Any]],
         omitted: list[dict[str, Any]],
     ) -> dict[str, Any]:
-        model = str(evaluated.get("model") or self.model)
+        model = str(evaluated.get("model") or self.backend.model)
         citations = {"artifacts": list(artifacts), "omitted_images": omitted}
         if evaluated.get("status") != "completed":
             reason = str(evaluated.get("reason") or "OpenAI scoring failed.")
@@ -629,17 +654,27 @@ class OutcomeJudge:
             soft_questions={k: all_questions()[k] for k in SOFT_CELL_ORDER},
         )
 
-    def explain_fail(self, reasons: list[str]) -> str | None:
+    def explain_fail(
+        self,
+        reasons: list[str],
+        *,
+        judged: Mapping[str, Any] | None = None,
+        check: str = "",
+        transcript_tail: str = "",
+    ) -> str | None:
         """One Fail sentence after the engine has the gate verdict."""
-        if not self.why_enabled or self._last_state is None:
+        if not self.why_enabled:
             return None
-        if self._last_status == "error" and self._last_reason != UNUSABLE_ANSWER:
-            return None
-        return self._why_call(self._last_state, reasons)
+        blob = judged or {}
+        if blob.get("status") == "error":
+            cell_reasons = [str(item) for item in (blob.get("reasons") or [])]
+            if UNUSABLE_ANSWER not in cell_reasons:
+                return None
+        return self._why_call(check, reasons, transcript_tail)
 
-    def _why_call(self, state: Mapping[str, Any], reasons: list[str]) -> str | None:
+    def _why_call(self, check: str, reasons: list[str], transcript_tail: str) -> str | None:
         payload = {
-            "model": self.model,
+            "model": self.backend.model,
             "max_output_tokens": WHY_MAX_OUTPUT_TOKENS,
             "reasoning": {"effort": self.reasoning_effort},
             "input": [
@@ -654,9 +689,9 @@ class OutcomeJudge:
                     "role": "user",
                     "content": json.dumps(
                         {
-                            "check": state.get("check_prompt"),
+                            "check": check,
                             "what_failed": reasons,
-                            "transcript_tail": state.get("transcript_tail"),
+                            "transcript_tail": _tail(transcript_tail),
                         },
                         ensure_ascii=True,
                         default=str,
@@ -677,17 +712,10 @@ class OutcomeJudge:
                 }
             },
         }
-        api_key = str(getattr(self.backend, "api_key", "") or "")
-        base_url = str(getattr(self.backend, "base_url", DEFAULT_BASE_URL) or DEFAULT_BASE_URL).rstrip(
-            "/"
-        )
-        result = post_openai_json(
-            f"{base_url}/responses",
-            api_key=api_key,
-            payload=payload,
+        result = self.backend.post_json(
+            "/responses",
+            payload,
             timeout_sec=WHY_TIMEOUT_SEC,
-            model=self.model,
-            post=getattr(self.backend, "_post", None),
             retries=False,
         )
         if result.get("status") != "ok":
@@ -704,7 +732,7 @@ class OutcomeJudge:
             return None
         why = parsed.get("why")
         if isinstance(why, str) and why.strip():
-            return redact_secrets(why.strip(), api_key)
+            return redact_secrets(why.strip(), self.backend.api_key)
         return None
 
 
@@ -746,7 +774,6 @@ def make_openai_judge(
         )
     return OutcomeJudge(
         impl,
-        model=model,
         min_confidence=min_confidence,
         why_enabled=why_enabled,
         reasoning_effort=reasoning_effort,

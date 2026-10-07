@@ -125,8 +125,7 @@ def test_live_verdict_error_without_passed_fails_closed() -> None:
     assert passed is False
     assert failures == ["OpenAI scoring timed out."]
     assert stamped is not None
-    assert stamped["passed"] is False
-    assert stamped["reasons"] == ["OpenAI scoring timed out."]
+    assert stamped.get("reasons") == ["OpenAI scoring timed out."]
 
 
 def test_live_verdict_no_trigger_det_owns() -> None:
@@ -173,27 +172,75 @@ def test_live_verdict_mismatch_still_fails() -> None:
         "passed": True,
         "reasons": [],
         "warnings": [],
-        "golden": {"path": "out.json", "kind": "json"},
-        "actual_output": {"path": "out.json", "present": False},
     }
-    passed, failures, _ = _live_verdict(
+    passed, failures, stamped = _live_verdict(
         judge,
         "pdf",
         det_passed=True,
         det_failures=[],
+        mismatch=REASON_MISSING_OUTPUT,
     )
     assert passed is False
     assert REASON_MISSING_OUTPUT in failures
+    assert stamped is not None
+    assert stamped["passed"] is True
+
+
+def test_live_verdict_mismatch_ignores_judge_blob() -> None:
+    judge = {
+        "status": "completed",
+        "passed": True,
+        "reasons": [],
+        "warnings": [],
+        "golden": {"path": "out.json", "kind": "json"},
+        "actual_output": {"path": "out.json", "present": False},
+    }
+    passed, failures, stamped = _live_verdict(
+        judge,
+        "pdf",
+        det_passed=True,
+        det_failures=[],
+        mismatch=None,
+    )
+    assert passed is True
+    assert failures == []
+    assert stamped is not None
+    assert stamped["passed"] is True
 
 
 def test_explain_fail_runs_only_after_gate_fail() -> None:
     class Explainer:
-        def explain_fail(self, reasons: list[str]) -> str:
+        def explain_fail(
+            self,
+            reasons: list[str],
+            *,
+            judged=None,
+            check="",
+            transcript_tail="",
+        ) -> str:
             assert reasons == ["missing"]
+            assert check == "extract"
             return "The expected file was missing."
 
     judged = {"status": "completed", "passed": True, "reasons": []}
-    assert _maybe_explain_fail(Explainer(), True, ["missing"], judged) == judged
-    failed = _maybe_explain_fail(Explainer(), False, ["missing"], judged)
+    assert (
+        _maybe_explain_fail(
+            Explainer(),
+            True,
+            ["missing"],
+            judged,
+            check="extract",
+            transcript_tail="",
+        )
+        == judged
+    )
+    failed = _maybe_explain_fail(
+        Explainer(),
+        False,
+        ["missing"],
+        judged,
+        check="extract",
+        transcript_tail="",
+    )
     assert failed is not None
     assert failed["why"] == "The expected file was missing."
