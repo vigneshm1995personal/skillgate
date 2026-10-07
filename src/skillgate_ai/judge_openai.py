@@ -26,6 +26,7 @@ from skillgate_ai.judge_bank import (
     structured_output_schema,
     unusable_answers,
 )
+from skillgate_ai.case_pack import sniff_output_bytes
 from skillgate_ai.openai_http import (
     DEFAULT_BASE_URL,
     OUT_OF_CREDITS,
@@ -34,7 +35,6 @@ from skillgate_ai.openai_http import (
     redact_secrets,
     user_message_for_status,
 )
-from skillgate_ai.output_match import expected_output_mismatch_reason
 
 DEFAULT_MODEL = "gpt-6-luna"
 DEFAULT_TIMEOUT_SEC = 20.0
@@ -149,7 +149,7 @@ def collect_images(
         try:
             with path.open("rb") as handle:
                 header = handle.read(16)
-                magic = _magic_of(header)
+                magic = sniff_output_bytes(header).get("magic")
                 if magic not in INLINE_MAGICS:
                     continue
                 data = header + handle.read()
@@ -169,12 +169,10 @@ def collect_images(
     return images, omitted
 
 
-def _magic_of(data: bytes) -> str | None:
-    if data.startswith(b"\xff\xd8\xff"):
-        return "jpeg"
-    if data.startswith(b"\x89PNG\r\n\x1a\n"):
-        return "png"
-    return None
+def _user_content(text: str, images: list[dict[str, str]]) -> str | list[dict[str, Any]]:
+    if images:
+        return [{"type": "input_text", "text": text}, *images]
+    return text
 
 
 def _state_text(state: Mapping[str, Any]) -> str:
@@ -220,19 +218,6 @@ def _text_blob(raw: Any) -> Any:
     if isinstance(data.get("body"), bytes):
         data["body"] = None
     return data
-
-
-def _mismatch_reason(
-    state: Mapping[str, Any],
-    artifacts: list[dict[str, Any]],
-) -> str | None:
-    golden = state.get("golden")
-    actual = state.get("actual_output")
-    return expected_output_mismatch_reason(
-        golden=golden if isinstance(golden, dict) else None,
-        actual=actual if isinstance(actual, dict) else None,
-        artifacts=artifacts,
-    )
 
 
 def _finished_answers(
@@ -359,11 +344,10 @@ class DecisionsBackend:
     ) -> dict[str, Any]:
         url = f"{self.base_url}/decisions"
         text = _state_text(state)
+        content = _user_content(text, images)
+        payload_input: str | list[dict[str, Any]]
         if images:
-            content: list[dict[str, Any]] = [{"type": "input_text", "text": text}, *images]
-            payload_input: str | list[dict[str, Any]] = [
-                {"role": "user", "content": content}
-            ]
+            payload_input = [{"role": "user", "content": content}]
         else:
             payload_input = text
         payload = {
@@ -425,11 +409,7 @@ class StructuredOutputsBackend:
     ) -> dict[str, Any]:
         url = f"{self.base_url}/responses"
         text = _state_text(state)
-        user_content: str | list[dict[str, Any]]
-        if images:
-            user_content = [{"type": "input_text", "text": text}, *images]
-        else:
-            user_content = text
+        user_content = _user_content(text, images)
         payload: dict[str, Any] = {
             "model": self.model,
             "reasoning": {"effort": self.reasoning_effort},
@@ -487,7 +467,7 @@ class StructuredOutputsBackend:
 
 
 class OutcomeJudge:
-    """Applies the Pass lock. HTTP stays on the backend."""
+    """Applies the Pass lock. HTTP stays on the backend. Why-call is a follow-up."""
 
     name = "openai"
 
@@ -495,24 +475,21 @@ class OutcomeJudge:
         self,
         backend: JudgeBackend,
         *,
-        api_key: str,
-        base_url: str = DEFAULT_BASE_URL,
         model: str = DEFAULT_MODEL,
         min_confidence: float = DEFAULT_MIN_CONFIDENCE,
         why_enabled: bool = True,
         reasoning_effort: str = "low",
         timeout_sec: float = DEFAULT_TIMEOUT_SEC,
-        post: PostFn | None = None,
     ) -> None:
         self.backend = backend
-        self.api_key = api_key
-        self.base_url = base_url.rstrip("/")
         self.model = model
         self.min_confidence = min_confidence
         self.why_enabled = why_enabled
         self.reasoning_effort = reasoning_effort
         self.timeout_sec = timeout_sec
-        self._post = post
+        self._last_state: Mapping[str, Any] | None = None
+        self._last_status: str | None = None
+        self._last_reason: str | None = None
 
     def judge(
         self,
@@ -553,7 +530,11 @@ class OutcomeJudge:
         evaluated = self.backend.evaluate(
             state=state, images=images, timeout_sec=self.timeout_sec
         )
-        return self._stamp(evaluated, artifacts=artifacts, omitted=omitted, state=state)
+        self._last_state = state
+        self._last_status = str(evaluated.get("status") or "")
+        reason = evaluated.get("reason")
+        self._last_reason = str(reason) if isinstance(reason, str) and reason.strip() else None
+        return self._stamp(evaluated, artifacts=artifacts, omitted=omitted)
 
     def _payload(
         self,
@@ -598,25 +579,17 @@ class OutcomeJudge:
         *,
         artifacts: list[dict[str, Any]],
         omitted: list[dict[str, Any]],
-        state: Mapping[str, Any],
     ) -> dict[str, Any]:
         model = str(evaluated.get("model") or self.model)
         citations = {"artifacts": list(artifacts), "omitted_images": omitted}
-        mismatch = _mismatch_reason(state, artifacts)
         if evaluated.get("status") != "completed":
             reason = str(evaluated.get("reason") or "OpenAI scoring failed.")
-            reasons = [reason]
-            if mismatch and mismatch not in reasons:
-                reasons = [mismatch, *reasons]
-            why = None
-            if self.why_enabled and reason == UNUSABLE_ANSWER:
-                why = self._why_call(state, reasons)
             return self._payload(
                 status="error",
                 model=model,
                 passed=False,
-                reasons=reasons,
-                why=why,
+                reasons=[reason],
+                why=None,
                 answers=evaluated.get("answers") or {},
                 soft_answers={},
                 cells={},
@@ -628,17 +601,11 @@ class OutcomeJudge:
             )
         answers = evaluated.get("answers") if isinstance(evaluated.get("answers"), dict) else {}
         passed, reasons = outcome_verdict(answers)
-        if mismatch:
-            passed = False
-            if mismatch not in reasons:
-                reasons = [mismatch, *reasons]
         warnings = low_confidence_warnings(
             answers,
             min_confidence=self.min_confidence,
             expect_confidence=self.backend.name == "decisions",
         )
-        if not passed:
-            warnings = []
         pass_answers = {key: answers[key] for key in CHECK_CELL_ORDER if key in answers}
         soft_answers = {key: answers[key] for key in SOFT_CELL_ORDER if key in answers}
         cells: dict[str, dict[str, Any]] = {}
@@ -646,16 +613,12 @@ class OutcomeJudge:
             cells[key] = _cell_entry(key, pass_answers.get(key), CHECK_CELL_LABELS)
         for key in SOFT_CELL_ORDER:
             cells[key] = _cell_entry(key, soft_answers.get(key), SOFT_CELL_LABELS)
-        why = None
-        no_trigger = state.get("expect_skill") is None
-        if not passed and self.why_enabled and (not no_trigger or mismatch):
-            why = self._why_call(state, reasons)
         return self._payload(
             status="completed",
             model=model,
             passed=passed,
             reasons=reasons,
-            why=why,
+            why=None,
             answers=pass_answers,
             soft_answers=soft_answers,
             cells=cells,
@@ -665,6 +628,14 @@ class OutcomeJudge:
             questions={k: all_questions()[k] for k in CHECK_CELL_ORDER},
             soft_questions={k: all_questions()[k] for k in SOFT_CELL_ORDER},
         )
+
+    def explain_fail(self, reasons: list[str]) -> str | None:
+        """One Fail sentence after the engine has the gate verdict."""
+        if not self.why_enabled or self._last_state is None:
+            return None
+        if self._last_status == "error" and self._last_reason != UNUSABLE_ANSWER:
+            return None
+        return self._why_call(self._last_state, reasons)
 
     def _why_call(self, state: Mapping[str, Any], reasons: list[str]) -> str | None:
         payload = {
@@ -706,13 +677,17 @@ class OutcomeJudge:
                 }
             },
         }
+        api_key = str(getattr(self.backend, "api_key", "") or "")
+        base_url = str(getattr(self.backend, "base_url", DEFAULT_BASE_URL) or DEFAULT_BASE_URL).rstrip(
+            "/"
+        )
         result = post_openai_json(
-            f"{self.base_url}/responses",
-            api_key=self.api_key,
+            f"{base_url}/responses",
+            api_key=api_key,
             payload=payload,
             timeout_sec=WHY_TIMEOUT_SEC,
             model=self.model,
-            post=self._post,
+            post=getattr(self.backend, "_post", None),
             retries=False,
         )
         if result.get("status") != "ok":
@@ -729,7 +704,7 @@ class OutcomeJudge:
             return None
         why = parsed.get("why")
         if isinstance(why, str) and why.strip():
-            return redact_secrets(why.strip(), self.api_key)
+            return redact_secrets(why.strip(), api_key)
         return None
 
 
@@ -771,14 +746,11 @@ def make_openai_judge(
         )
     return OutcomeJudge(
         impl,
-        api_key=api_key,
-        base_url=base_url,
         model=model,
         min_confidence=min_confidence,
         why_enabled=why_enabled,
         reasoning_effort=reasoning_effort,
         timeout_sec=timeout_sec,
-        post=post,
     )
 
 

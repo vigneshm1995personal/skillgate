@@ -4,7 +4,8 @@ import pytest
 
 from skillgate_ai.config import LLMConfig
 from skillgate_ai.errors import MissingLLMKeyError
-from skillgate_ai.engine import REASON_MISSING_OUTPUT, _live_verdict
+from skillgate_ai.engine import _live_verdict, _maybe_explain_fail
+from skillgate_ai.output_match import REASON_MISSING_OUTPUT
 from skillgate_ai.judge import SkipJudge, judge_stamp, resolve_judge
 from skillgate_ai.judge_bank import LOW_CONFIDENCE_WARNING
 from skillgate_ai.judge_openai import OutcomeJudge, make_openai_judge
@@ -183,3 +184,16 @@ def test_live_verdict_mismatch_still_fails() -> None:
     )
     assert passed is False
     assert REASON_MISSING_OUTPUT in failures
+
+
+def test_explain_fail_runs_only_after_gate_fail() -> None:
+    class Explainer:
+        def explain_fail(self, reasons: list[str]) -> str:
+            assert reasons == ["missing"]
+            return "The expected file was missing."
+
+    judged = {"status": "completed", "passed": True, "reasons": []}
+    assert _maybe_explain_fail(Explainer(), True, ["missing"], judged) == judged
+    failed = _maybe_explain_fail(Explainer(), False, ["missing"], judged)
+    assert failed is not None
+    assert failed["why"] == "The expected file was missing."

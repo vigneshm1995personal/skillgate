@@ -6,7 +6,8 @@ from pathlib import Path
 import httpx
 import pytest
 
-from skillgate_ai.engine import REASON_MISSING_OUTPUT
+from skillgate_ai.engine import _live_verdict, _maybe_explain_fail
+from skillgate_ai.output_match import REASON_MISSING_OUTPUT
 from skillgate_ai.judge_bank import (
     CHECK_CELL_ORDER,
     LOW_CONFIDENCE_WARNING,
@@ -120,6 +121,28 @@ def _score(judge, **kwargs):
     )
 
 
+def _gated(judge, **kwargs):
+    """Score cells, then apply the engine gate and Fail why-call."""
+    expect_skill = kwargs.get("expect_skill", "pdf")
+    golden = kwargs.get("golden") if isinstance(kwargs.get("golden"), dict) else None
+    actual = kwargs.get("actual_output") if isinstance(kwargs.get("actual_output"), dict) else None
+    judged = _score(judge, **kwargs)
+    if golden is not None:
+        judged["golden"] = golden
+    if actual is not None:
+        judged["actual_output"] = actual
+    passed, failures, stamped = _live_verdict(
+        judged,
+        expect_skill,
+        det_passed=True,
+        det_failures=[],
+    )
+    stamped = _maybe_explain_fail(judge, passed, failures, stamped)
+    if stamped is None:
+        return stamped
+    return {**stamped, "passed": passed, "reasons": list(failures)}
+
+
 def test_decisions_request_shape() -> None:
     post = FakePost([FakeResponse(200, decisions_payload())])
     judged = _score(_judge(post))
@@ -162,7 +185,7 @@ def test_fail_lock_does_not_fail_on_wasteful_path() -> None:
             FakeResponse(200, why_payload("The numbers were wrong.")),
         ]
     )
-    judged = _score(_judge(post))
+    judged = _gated(_judge(post))
     assert judged["passed"] is False
     assert any("Got it right?" in item for item in judged["reasons"])
     assert judged["why"] == "The numbers were wrong."
@@ -198,7 +221,7 @@ def test_unknown_choice_fails_closed() -> None:
             FakeResponse(200, why_payload("The scorer returned an answer we cannot use.")),
         ]
     )
-    judged = _score(_judge(post))
+    judged = _gated(_judge(post))
     assert judged["status"] == "error"
     assert judged["passed"] is False
     assert judged["reasons"] == [UNUSABLE_ANSWER]
@@ -215,7 +238,7 @@ def test_missing_answer_name_fails_closed() -> None:
             FakeResponse(200, why_payload("A required score was missing.")),
         ]
     )
-    judged = _score(_judge(post))
+    judged = _gated(_judge(post))
     assert judged["status"] == "error"
     assert judged["passed"] is False
     assert judged["reasons"] == [UNUSABLE_ANSWER]
@@ -248,7 +271,7 @@ def test_http_errors_fail_and_never_log_key(caplog: pytest.LogCaptureFixture) ->
             * copies
         )
         with caplog.at_level("WARNING"):
-            judged = _score(_judge(post))
+            judged = _gated(_judge(post))
         assert judged["passed"] is False
         assert judged["status"] == "error"
         assert judged["reasons"] == [message]
@@ -342,7 +365,7 @@ def test_why_call_on_fail_ignored_on_error() -> None:
             FakeResponse(200, why_payload("should not be used")),
         ]
     )
-    judged = _score(_judge(post))
+    judged = _gated(_judge(post))
     assert judged["passed"] is False
     assert judged["why"] is None
     assert len(post.calls) == 2
@@ -483,7 +506,7 @@ def test_output_mismatch_fails_and_makes_one_why_call() -> None:
             FakeResponse(200, why_payload("The expected file was missing.")),
         ]
     )
-    judged = _score(
+    judged = _gated(
         _judge(post),
         golden={"path": "out.json", "kind": "json", "output_path": "out.json"},
         actual_output={"path": "out.json", "present": False, "body": None},
@@ -534,7 +557,7 @@ def test_why_call_redacts_key_shaped_text() -> None:
             ),
         ]
     )
-    judged = _score(_judge(post))
+    judged = _gated(_judge(post))
     assert judged["passed"] is False
     assert judged["why"] is not None
     assert SECRET not in judged["why"]
@@ -551,8 +574,8 @@ def test_why_skipped_on_no_trigger_without_mismatch() -> None:
             FakeResponse(200, why_payload("should not fire")),
         ]
     )
-    judged = _score(_judge(post), expect_skill=None)
-    assert judged["passed"] is False
+    judged = _gated(_judge(post), expect_skill=None)
+    assert judged["passed"] is True
     assert judged["why"] is None
     assert len(post.calls) == 1
     assert post.calls[0]["url"].endswith("/v1/decisions")
@@ -565,7 +588,7 @@ def test_why_fires_on_no_trigger_when_output_missing() -> None:
             FakeResponse(200, why_payload("The expected file was missing.")),
         ]
     )
-    judged = _score(
+    judged = _gated(
         _judge(post),
         expect_skill=None,
         golden={"path": "out.json", "kind": "json", "output_path": "out.json"},
@@ -586,7 +609,7 @@ def test_http_error_with_missing_output_names_both() -> None:
             )
         ]
     )
-    judged = _score(
+    judged = _gated(
         _judge(post),
         golden={"path": "out.json", "kind": "json", "output_path": "out.json"},
         actual_output={"path": "out.json", "present": False, "body": None},
@@ -594,6 +617,8 @@ def test_http_error_with_missing_output_names_both() -> None:
     assert judged["passed"] is False
     assert REASON_MISSING_OUTPUT in judged["reasons"]
     assert "OpenAI did not accept this API key. Check OPENAI_API_KEY." in judged["reasons"]
+    assert judged["why"] is None
+    assert len(post.calls) == 1
 
 
 def test_http_500_is_not_retried() -> None:

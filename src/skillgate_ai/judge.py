@@ -94,12 +94,21 @@ def judge_stamp(judge: Judge | None) -> dict[str, str]:
             "backend": "skip",
             "display_name": "Built-in checker",
         }
+    from skillgate_ai.judge_openai import DISPLAY_NAME, OutcomeJudge
+
+    if isinstance(judge, OutcomeJudge):
+        return {
+            "provider": "openai",
+            "backend": judge.backend.name,
+            "display_name": DISPLAY_NAME,
+            "model": str(getattr(judge.backend, "model", "") or judge.model or ""),
+        }
     backend_obj = getattr(judge, "backend", None)
     backend = getattr(backend_obj, "name", None) or getattr(judge, "name", "openai")
     model = getattr(backend_obj, "model", None) or getattr(judge, "model", "") or ""
     return {
         "provider": "openai",
         "backend": str(backend),
-        "display_name": "OpenAI (your key)",
+        "display_name": DISPLAY_NAME,
         "model": str(model),
     }

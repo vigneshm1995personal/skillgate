@@ -15,11 +15,7 @@ from skillgate_ai.ingest import Skill, ingest_skill, ingest_skills
 from skillgate_ai.judge import Judge, SkipJudge, default_judge
 from skillgate_ai.live import KILL, CheckAborted, RunControl
 from skillgate_ai.observability import breadcrumb_task, report_eval_outcome, set_eval_passed, span
-from skillgate_ai.output_match import (
-    REASON_BINARY_OUTPUT,
-    REASON_MISSING_OUTPUT,
-    expected_output_mismatch_reason,
-)
+from skillgate_ai.output_match import expected_output_mismatch_reason
 from skillgate_ai.pack import resolve_input_file
 from skillgate_ai.sandbox import Sandbox, open_sandbox, prepare_workspace
 from skillgate_ai.scorers import RunArtifacts, Score, score_task
@@ -492,6 +488,24 @@ def _live_verdict(
     )
 
 
+def _maybe_explain_fail(
+    judge: Judge | None,
+    passed: bool,
+    failures: list[str],
+    judged: dict[str, Any] | None,
+) -> dict[str, Any] | None:
+    """Ask the scorer for a Fail sentence only after the gate verdict."""
+    if passed or judged is None:
+        return judged
+    explain = getattr(judge, "explain_fail", None)
+    if not callable(explain):
+        return judged
+    why = explain(list(failures))
+    if isinstance(why, str) and why.strip():
+        return {**judged, "why": why.strip()}
+    return judged
+
+
 def _judge_artifact_rows(judge: dict[str, Any] | None) -> list[dict[str, Any]]:
     if not isinstance(judge, dict):
         return []
@@ -604,6 +618,7 @@ def _run_task(
                     det_passed=det_passed,
                     det_failures=det_failures,
                 )
+                judged = _maybe_explain_fail(judge, passed, failures, judged)
             else:
                 passed, failures = det_passed, det_failures
             primary = skills[0] if skills else None
