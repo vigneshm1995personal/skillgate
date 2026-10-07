@@ -63,7 +63,7 @@ Until the first PyPI release, CI in this repo uses `pip install -e .`.
 - [`docs/pack.md`](docs/pack.md) — `evals/cases.yaml` schema 1, fixtures, goldens, history
 - [Extract plan](docs/plans/2026-10-03-skillgate-oss-extract.md) — allowlist / deny-list
 - [Local UI + setup wizard plan](docs/plans/2026-10-04-local-ui-setup-wizard.md) — `skillgate ui` (local stdlib UI; not hosted `serve`)
-- [OpenAI judge plan](docs/plans/openai-judge.md) — Phase 1 only; user’s OpenAI key scores live checks (not implemented yet)
+- [OpenAI judge plan](docs/plans/openai-judge.md) — Phase 1 only; user’s OpenAI key scores live checks via Decisions API (not implemented yet)
 - [`docs/ui.md`](docs/ui.md) — start the local UI, red path, Docker stays `check /pack`
 - [`docs/proof/PUBLISH.md`](docs/proof/PUBLISH.md) — secret scan, tag, PyPI Trusted Publishing, GHCR (owner UI; do not flip public from CI)
 
