@@ -106,11 +106,19 @@ def test_decisions_questions_and_schema_match_bank() -> None:
     assert "path_efficiency" in names
     assert all(item["type"] == "choice" for item in questions)
     task = next(item for item in questions if item["name"] == "task_completion")
+    assert set(task.keys()) == {"type", "name", "instructions", "choices"}
+    assert task["instructions"] == "Got the job done? Pick exactly one."
     assert [row["value"] for row in task["choices"]] == [
         "Fully completed",
         "Partially completed",
         "Not completed",
     ]
+    path_q = next(item for item in questions if item["name"] == "path_efficiency")
+    assert "path.steps" not in path_q["instructions"]
+    assert "Pick exactly one." in path_q["instructions"]
+    for item in questions:
+        if item["name"] in CHECK_CELL_ORDER:
+            assert item["instructions"].endswith("Pick exactly one.")
     schema = structured_output_schema()
     assert schema["additionalProperties"] is False
     assert set(schema["required"]) == set(schema["properties"])

@@ -140,7 +140,7 @@ Citation: [Structured model outputs](https://developers.openai.com/api/docs/guid
 - Enums are a documented schema feature; every property `required`; `additionalProperties: false`
 - Refusals: `output[].content[]` with `type: "refusal"` (not schema JSON)
 
-This is **not** how v1 scores the six questions by default. It is (a) `SKILLGATE_JUDGE_BACKEND=responses` if Decisions is unusable for a given key, and (b) the one optional why-call after a Fail / low-confidence Decisions result.
+This is **not** how v1 scores the six questions by default. It is (a) `SKILLGATE_JUDGE_BACKEND=responses` if Decisions is unusable for a given key, and (b) the one optional why-call after a Fail.
 
 ---
 
@@ -200,7 +200,7 @@ Auth: `Authorization: Bearer $OPENAI_API_KEY`. Never log the bearer token.
     {
       "type": "choice",
       "name": "task_completion",
-      "instructions": "Got the job done?",
+      "instructions": "Got the job done? Pick exactly one.",
       "choices": [
         {"value": "Fully completed", "description": "The requested work is fully done."},
         {"value": "Partially completed", "description": "Some of the requested work is done but incomplete."},
@@ -554,7 +554,7 @@ Do not put a real key in GitHub Actions for merge.
 | Call | When | Official price | Notes |
 | --- | --- | --- | --- |
 | `POST /v1/decisions` | every live judged task | **$0.10 / 1M input**; no output/cache ([Decisions pricing](https://developers.openai.com/api/docs/guides/decisions)) | State + optional inlined images |
-| `POST /v1/responses` why | Fail or low-confidence only | Luna **$0.10 in / $0.50 out** per 1M ([model page](https://developers.openai.com/api/docs/models/gpt-6-luna)) | `max_output_tokens` 128 |
+| `POST /v1/responses` why | Fail only (not low-confidence Pass) | Luna **$0.10 in / $0.50 out** per 1M ([model page](https://developers.openai.com/api/docs/models/gpt-6-luna)) | `max_output_tokens` 128 |
 | Responses fallback scoring | only if backend=`responses` | same Luna in/out | six enums, no Decisions input-only rate |
 
 **Hunch (not a measurement):** text-only Decisions on a 4k tail is cheap fractions of a cent; inlining a few-MB JPEG dominates input tokens. Why-call is small. Live smoke uses a **one-case** pack.

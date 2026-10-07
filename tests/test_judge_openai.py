@@ -6,10 +6,17 @@ from pathlib import Path
 import httpx
 import pytest
 
-from skillgate_ai.judge_bank import LOW_CONFIDENCE_WARNING, UNUSABLE_ANSWER, decisions_questions
+from skillgate_ai.engine import REASON_MISSING_OUTPUT
+from skillgate_ai.judge_bank import (
+    CHECK_CELL_ORDER,
+    LOW_CONFIDENCE_WARNING,
+    UNUSABLE_ANSWER,
+    decisions_questions,
+)
 from skillgate_ai.judge_openai import (
     DISPLAY_NAME,
     IMAGE_MAX_BYTES,
+    WHY_MAX_OUTPUT_TOKENS,
     collect_images,
     make_openai_judge,
     user_message_for_status,
@@ -119,17 +126,25 @@ def test_decisions_request_shape() -> None:
     assert post.calls and post.calls[0]["url"].endswith("/v1/decisions")
     payload = post.calls[0]["json"]
     assert payload["model"] == "gpt-6-luna"
+    assert set(payload.keys()) == {"model", "input", "questions"}
     questions = payload["questions"]
     assert len(questions) == 6
     assert all(item["type"] == "choice" for item in questions)
     names = [item["name"] for item in questions]
     assert names == [item["name"] for item in decisions_questions()]
     task = next(item for item in questions if item["name"] == "task_completion")
+    assert set(task.keys()) == {"type", "name", "instructions", "choices"}
+    assert task["instructions"] == "Got the job done? Pick exactly one."
     assert [row["value"] for row in task["choices"]] == [
         "Fully completed",
         "Partially completed",
         "Not completed",
     ]
+    assert set(task["choices"][0].keys()) == {"value", "description"}
+    for item in questions:
+        if item["name"] in CHECK_CELL_ORDER:
+            assert item["instructions"].endswith("Pick exactly one.")
+        assert "path.steps" not in item["instructions"]
     auth = post.calls[0]["headers"]["Authorization"]
     assert auth == f"Bearer {SECRET}"
     assert judged["answers"]["task_completion"]["choice"] == "Fully completed"
@@ -174,11 +189,35 @@ def test_missing_confidence_keeps_pass_and_warns() -> None:
 
 
 def test_unknown_choice_fails_closed() -> None:
-    post = FakePost([FakeResponse(200, decisions_payload({"correctness": "Pretty good"}))])
+    post = FakePost(
+        [
+            FakeResponse(200, decisions_payload({"correctness": "Pretty good"})),
+            FakeResponse(200, why_payload("The scorer returned an answer we cannot use.")),
+        ]
+    )
     judged = _score(_judge(post))
     assert judged["status"] == "error"
     assert judged["passed"] is False
     assert judged["reasons"] == [UNUSABLE_ANSWER]
+    assert judged["why"] == "The scorer returned an answer we cannot use."
+    assert post.calls[1]["url"].endswith("/v1/responses")
+
+
+def test_missing_answer_name_fails_closed() -> None:
+    payload = decisions_payload()
+    payload["answers"] = [row for row in payload["answers"] if row["name"] != "correctness"]
+    post = FakePost(
+        [
+            FakeResponse(200, payload),
+            FakeResponse(200, why_payload("A required score was missing.")),
+        ]
+    )
+    judged = _score(_judge(post))
+    assert judged["status"] == "error"
+    assert judged["passed"] is False
+    assert judged["reasons"] == [UNUSABLE_ANSWER]
+    assert post.calls[0]["url"].endswith("/v1/decisions")
+    assert post.calls[1]["url"].endswith("/v1/responses")
 
 
 def test_http_errors_fail_and_never_log_key(caplog: pytest.LogCaptureFixture) -> None:
@@ -202,32 +241,45 @@ def test_http_errors_fail_and_never_log_key(caplog: pytest.LogCaptureFixture) ->
         blob = json.dumps(judged) + caplog.text
         assert SECRET not in blob
         assert "sk-test" not in caplog.text
+        assert all(not str(item["url"]).endswith("/v1/responses") for item in post.calls)
+        if status == 403:
+            assert len(post.calls) == 1
+            assert post.calls[0]["url"].endswith("/v1/decisions")
 
 
 def test_timeout_fails_closed() -> None:
-    post = FakePost([httpx.TimeoutException("slow") for _ in range(3)])
+    post = FakePost(
+        [
+            httpx.TimeoutException("slow"),
+            FakeResponse(200, decisions_payload()),
+        ]
+    )
     judged = _score(_judge(post))
     assert judged["passed"] is False
     assert "timed out" in judged["reasons"][0].lower()
     assert SECRET not in json.dumps(judged)
+    assert len(post.calls) == 1
+    assert all(not str(item["url"]).endswith("/v1/responses") for item in post.calls)
 
 
 def test_why_call_on_fail_ignored_on_error() -> None:
     post = FakePost(
         [
             FakeResponse(200, decisions_payload({"correctness": "Incorrect"})),
-            FakeResponse(500, {"error": "nope"}),
-            FakeResponse(500, {"error": "nope"}),
-            FakeResponse(500, {"error": "nope"}),
+            FakeResponse(429, {"error": "nope"}),
+            FakeResponse(200, why_payload("should not be used")),
         ]
     )
     judged = _score(_judge(post))
     assert judged["passed"] is False
     assert judged["why"] is None
+    assert len(post.calls) == 2
     assert post.calls[0]["url"].endswith("/v1/decisions")
     why_calls = [item for item in post.calls if str(item["url"]).endswith("/v1/responses")]
-    assert why_calls
-    schema = why_calls[0]["json"]["text"]["format"]
+    assert len(why_calls) == 1
+    why_json = why_calls[0]["json"]
+    assert why_json["max_output_tokens"] == WHY_MAX_OUTPUT_TOKENS == 128
+    schema = why_json["text"]["format"]
     assert schema["strict"] is True
     assert schema["name"] == "check_fail_why"
 
@@ -331,6 +383,84 @@ def test_oversize_image_is_omitted(tmp_path: Path, monkeypatch: pytest.MonkeyPat
     assert omitted and omitted[0]["reason"] == "too large"
     assert omitted[0]["size"] > 16
     assert IMAGE_MAX_BYTES == 4 * 1024 * 1024
+
+
+def test_golden_actual_text_is_in_decisions_input() -> None:
+    post = FakePost([FakeResponse(200, decisions_payload())])
+    judged = _score(
+        _judge(post),
+        golden={"path": "want.txt", "kind": "text", "body": "TOTAL: 42"},
+        actual_output={
+            "path": "out.txt",
+            "present": True,
+            "kind": "text",
+            "body": "TOTAL: 0",
+        },
+    )
+    assert judged["passed"] is True
+    blob = post.calls[0]["json"]["input"]
+    assert isinstance(blob, str)
+    assert "TOTAL: 42" in blob
+    assert "TOTAL: 0" in blob
+
+
+def test_output_mismatch_fails_and_makes_one_why_call() -> None:
+    post = FakePost(
+        [
+            FakeResponse(200, decisions_payload()),
+            FakeResponse(200, why_payload("The expected file was missing.")),
+        ]
+    )
+    judged = _score(
+        _judge(post),
+        golden={"path": "out.json", "kind": "json", "output_path": "out.json"},
+        actual_output={"path": "out.json", "present": False, "body": None},
+    )
+    assert judged["passed"] is False
+    assert REASON_MISSING_OUTPUT in judged["reasons"]
+    assert judged["why"] == "The expected file was missing."
+    assert judged["warnings"] == []
+    assert len(post.calls) == 2
+    assert post.calls[1]["url"].endswith("/v1/responses")
+    assert post.calls[1]["json"]["max_output_tokens"] == 128
+
+
+def test_image_paths_stay_inside_workspace(tmp_path: Path) -> None:
+    workspace = tmp_path / "ws"
+    skill = tmp_path / "skill"
+    workspace.mkdir()
+    skill.mkdir()
+    outside = tmp_path / "secret.png"
+    outside.write_bytes(PNG_1x1)
+    (workspace / "ok.png").write_bytes(PNG_1x1)
+    images, omitted = collect_images(
+        artifacts=[
+            {"path": "../secret.png", "present": True, "magic": "png"},
+            {"path": str(outside), "present": True, "magic": "png"},
+            {"path": "ok.png", "present": True, "magic": "png"},
+        ],
+        golden={"path": "../secret.png"},
+        actual=None,
+        workspace=workspace,
+        skill_root=skill,
+    )
+    assert len(images) == 1
+    assert omitted == []
+    joined = " ".join(item["image_url"] for item in images)
+    assert joined.startswith("data:image/png;base64,")
+
+
+def test_http_500_is_not_retried() -> None:
+    post = FakePost(
+        [
+            FakeResponse(500, {"error": "nope"}),
+            FakeResponse(200, decisions_payload()),
+        ]
+    )
+    judged = _score(_judge(post))
+    assert judged["passed"] is False
+    assert "HTTP 500" in judged["reasons"][0]
+    assert len(post.calls) == 1
 
 
 def test_no_http_when_skip_backend_not_constructed() -> None:

@@ -15,7 +15,6 @@ from skillgate_ai.judge_bank import (
     CHECK_CELL_LABELS,
     CHECK_CELL_ORDER,
     DEFAULT_MIN_CONFIDENCE,
-    LOW_CONFIDENCE_WARNING,
     SOFT_CELL_LABELS,
     SOFT_CELL_ORDER,
     UNUSABLE_ANSWER,
@@ -44,7 +43,7 @@ IMAGE_MAX_BYTES = 4 * 1024 * 1024
 IMAGE_MAX_COUNT = 3
 INLINE_MAGICS = {"jpeg": "image/jpeg", "png": "image/png"}
 DISPLAY_NAME = "OpenAI (your key)"
-_TRANSIENT = frozenset({429, 500, 502, 503, 504})
+_TRANSIENT = frozenset({429, 502, 503, 504})
 _RETRY_BACKOFF_SEC = (0.05, 0.1)
 _MAX_ATTEMPTS = 3
 _ERROR_BODY_MAX = 240
@@ -86,7 +85,7 @@ def _error_body(response: httpx.Response, secret: str | None) -> str:
     return body
 
 
-def user_message_for_status(status: int, *, decisions: bool = False) -> str:
+def user_message_for_status(status: int) -> str:
     if status == 401:
         return "OpenAI did not accept this API key. Check OPENAI_API_KEY."
     if status == 403:
@@ -97,8 +96,6 @@ def user_message_for_status(status: int, *, decisions: bool = False) -> str:
         return "OpenAI rate limit or quota. Wait and retry, or check billing."
     if status == 400:
         return "OpenAI rejected this scoring request."
-    if decisions:
-        return f"OpenAI scoring failed (HTTP {status})."
     return f"OpenAI scoring failed (HTTP {status})."
 
 
@@ -110,43 +107,52 @@ def post_openai(
     timeout_sec: float,
     secret: str | None = None,
     post: PostFn | None = None,
+    retries: bool = True,
 ) -> httpx.Response:
+    del secret
     sender = post or httpx.post
+    attempts = _MAX_ATTEMPTS if retries else 1
     last_exc: BaseException | None = None
-    for attempt in range(_MAX_ATTEMPTS):
+    for attempt in range(attempts):
         try:
             response = sender(url, headers=headers, json=payload, timeout=timeout_sec)
-        except httpx.TimeoutException as exc:
-            last_exc = exc
-            if attempt >= _MAX_ATTEMPTS - 1:
-                raise
-            _LOG.warning("OpenAI scoring timed out (attempt %s/%s)", attempt + 1, _MAX_ATTEMPTS)
-            time.sleep(_RETRY_BACKOFF_SEC[min(attempt, len(_RETRY_BACKOFF_SEC) - 1)])
-            continue
+        except httpx.TimeoutException:
+            raise
         except httpx.HTTPError as exc:
             last_exc = exc
-            if attempt >= _MAX_ATTEMPTS - 1:
+            if attempt >= attempts - 1:
                 raise
             _LOG.warning(
                 "OpenAI scoring transport error (attempt %s/%s): %s",
                 attempt + 1,
-                _MAX_ATTEMPTS,
+                attempts,
                 type(exc).__name__,
             )
             time.sleep(_RETRY_BACKOFF_SEC[min(attempt, len(_RETRY_BACKOFF_SEC) - 1)])
             continue
-        if response.status_code in _TRANSIENT and attempt < _MAX_ATTEMPTS - 1:
+        if response.status_code in _TRANSIENT and attempt < attempts - 1:
             _LOG.warning(
                 "OpenAI scoring HTTP %s (attempt %s/%s)",
                 response.status_code,
                 attempt + 1,
-                _MAX_ATTEMPTS,
+                attempts,
             )
             time.sleep(_RETRY_BACKOFF_SEC[min(attempt, len(_RETRY_BACKOFF_SEC) - 1)])
             continue
         return response
     assert last_exc is not None
     raise last_exc
+
+
+def _resolved_under(path: Path, root: Path) -> Path | None:
+    """Return path if it resolves inside root. Blocks `..` and absolute escapes."""
+    try:
+        resolved = path.resolve()
+        root_resolved = root.resolve()
+        resolved.relative_to(root_resolved)
+    except (OSError, ValueError):
+        return None
+    return resolved
 
 
 def collect_images(
@@ -161,12 +167,11 @@ def collect_images(
     candidates: list[tuple[Path, str]] = []
     seen: set[Path] = set()
 
-    def consider(path: Path, label: str) -> None:
-        try:
-            resolved = path.resolve()
-        except OSError:
+    def consider(path: Path, label: str, root: Path | None) -> None:
+        if root is None:
             return
-        if resolved in seen or not resolved.is_file():
+        resolved = _resolved_under(path, root)
+        if resolved is None or resolved in seen or not resolved.is_file():
             return
         seen.add(resolved)
         candidates.append((resolved, label))
@@ -180,32 +185,43 @@ def collect_images(
                 continue
             rel = str(row.get("path") or "").strip()
             if rel:
-                consider(workspace / rel, rel)
-    if actual and actual.get("present") and str(actual.get("magic") or "") in INLINE_MAGICS:
-        rel = str(actual.get("path") or "").strip()
-        if rel and workspace is not None:
-            consider(workspace / rel, rel)
+                consider(workspace / rel, rel, workspace)
+        if actual and actual.get("present") and str(actual.get("magic") or "") in INLINE_MAGICS:
+            rel = str(actual.get("path") or "").strip()
+            if rel:
+                consider(workspace / rel, rel, workspace)
     if golden and skill_root is not None:
         rel = str(golden.get("path") or "").strip()
-        if rel:
-            consider(skill_root / rel, rel)
+        magic = str(golden.get("magic") or "")
+        if rel and (not magic or magic in INLINE_MAGICS):
+            consider(skill_root / rel, rel, skill_root)
 
     images: list[dict[str, str]] = []
     omitted: list[dict[str, Any]] = []
     for path, label in candidates:
         try:
-            data = path.read_bytes()
+            size = path.stat().st_size
         except OSError:
             omitted.append({"path": label, "reason": "unreadable"})
             continue
-        magic = _magic_of(data)
-        if magic not in INLINE_MAGICS:
+        if size > IMAGE_MAX_BYTES:
+            omitted.append({"path": label, "size": size, "reason": "too large"})
+            continue
+        if len(images) >= IMAGE_MAX_COUNT:
+            omitted.append({"path": label, "size": size, "reason": "over cap"})
+            continue
+        try:
+            with path.open("rb") as handle:
+                header = handle.read(16)
+                magic = _magic_of(header)
+                if magic not in INLINE_MAGICS:
+                    continue
+                data = header + handle.read()
+        except OSError:
+            omitted.append({"path": label, "reason": "unreadable"})
             continue
         if len(data) > IMAGE_MAX_BYTES:
             omitted.append({"path": label, "size": len(data), "reason": "too large"})
-            continue
-        if len(images) >= IMAGE_MAX_COUNT:
-            omitted.append({"path": label, "size": len(data), "reason": "over cap"})
             continue
         b64 = base64.b64encode(data).decode("ascii")
         images.append(
@@ -261,11 +277,28 @@ def _artifacts_without_bodies(raw: Any) -> list[dict[str, Any]]:
 
 
 def _text_blob(raw: Any) -> Any:
+    """Keep golden/actual text (`body`) for Decisions input. Drop raw bytes."""
     if not isinstance(raw, Mapping):
         return raw
     data = dict(raw)
-    data.pop("body", None)
+    if isinstance(data.get("body"), bytes):
+        data["body"] = None
     return data
+
+
+def _mismatch_reason(
+    state: Mapping[str, Any],
+    artifacts: list[dict[str, Any]],
+) -> str | None:
+    from skillgate_ai.engine import expected_output_mismatch_reason
+
+    golden = state.get("golden")
+    actual = state.get("actual_output")
+    return expected_output_mismatch_reason(
+        golden=golden if isinstance(golden, dict) else None,
+        actual=actual if isinstance(actual, dict) else None,
+        artifacts=artifacts,
+    )
 
 
 def _answer_row(key: str, item: Any) -> dict[str, Any]:
@@ -382,15 +415,13 @@ class DecisionsBackend:
             "input": payload_input,
             "questions": decisions_questions(),
         }
-        return self._send(url, payload, timeout_sec, decisions=True)
+        return self._send(url, payload, timeout_sec)
 
     def _send(
         self,
         url: str,
         payload: dict[str, Any],
         timeout_sec: float,
-        *,
-        decisions: bool,
     ) -> dict[str, Any]:
         headers = {
             "Authorization": f"Bearer {self.api_key}",
@@ -421,7 +452,7 @@ class DecisionsBackend:
             )
             return {
                 "status": "error",
-                "reason": user_message_for_status(response.status_code, decisions=decisions),
+                "reason": user_message_for_status(response.status_code),
                 "model": self.model,
             }
         try:
@@ -650,8 +681,15 @@ class OutcomeJudge:
     ) -> dict[str, Any]:
         model = str(evaluated.get("model") or self.model)
         citations = {"artifacts": list(artifacts), "omitted_images": omitted}
+        mismatch = _mismatch_reason(state, artifacts)
         if evaluated.get("status") != "completed":
             reason = str(evaluated.get("reason") or "OpenAI scoring failed.")
+            why_reasons = [reason]
+            if mismatch and mismatch not in why_reasons:
+                why_reasons.append(mismatch)
+            why = None
+            if self.why_enabled and reason == UNUSABLE_ANSWER:
+                why = self._why_call(state, why_reasons)
             return {
                 "status": "error",
                 "provider": "openai",
@@ -660,7 +698,7 @@ class OutcomeJudge:
                 "model": model,
                 "passed": False,
                 "reasons": [reason],
-                "why": None,
+                "why": why,
                 "answers": evaluated.get("answers") or {},
                 "soft_answers": {},
                 "questions": all_questions(),
@@ -674,11 +712,17 @@ class OutcomeJudge:
             }
         answers = evaluated.get("answers") if isinstance(evaluated.get("answers"), dict) else {}
         passed, reasons = outcome_verdict(answers)
+        if mismatch:
+            passed = False
+            if mismatch not in reasons:
+                reasons = [mismatch, *reasons]
         warnings = low_confidence_warnings(
             answers,
             min_confidence=self.min_confidence,
             expect_confidence=self.backend.name == "decisions",
         )
+        if not passed:
+            warnings = []
         pass_answers = {key: answers[key] for key in CHECK_CELL_ORDER if key in answers}
         soft_answers = {key: answers[key] for key in SOFT_CELL_ORDER if key in answers}
         cells: dict[str, dict[str, Any]] = {}
@@ -782,6 +826,7 @@ class OutcomeJudge:
                 timeout_sec=WHY_TIMEOUT_SEC,
                 secret=self.api_key,
                 post=self._post,
+                retries=False,
             )
         except (httpx.TimeoutException, httpx.HTTPError):
             return None
@@ -862,7 +907,6 @@ __all__ = [
     "DISPLAY_NAME",
     "IMAGE_MAX_BYTES",
     "IMAGE_MAX_COUNT",
-    "LOW_CONFIDENCE_WARNING",
     "DecisionsBackend",
     "OutcomeJudge",
     "StructuredOutputsBackend",

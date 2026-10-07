@@ -43,7 +43,7 @@ class SkipJudge:
             "provider": "skip",
             "backend": "skip",
             "display_name": "Built-in checker",
-            "reason": "SkipJudge: deterministic scorers own this check.",
+            "reason": "Built-in checker owns this check.",
         }
 
 

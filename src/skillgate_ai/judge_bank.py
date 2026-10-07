@@ -102,9 +102,9 @@ SOFT_OUTCOME_QUESTIONS: dict[str, dict[str, Any]] = {
         "type": "choice",
         "instructions": (
             "How efficient was the path? Judge looping, thrashing, or wasted "
-            "tool calls from the transcript. path.steps is supporting context "
-            "only — a short count is not Efficient if the transcript shows "
-            "looping. This must not decide whether the job was done."
+            "tool calls from the transcript. A short step count is not Efficient "
+            "if the transcript shows looping. This must not decide whether the "
+            "job was done. Pick exactly one."
         ),
         "criteria": {
             "Efficient": (
@@ -212,12 +212,6 @@ def extract_probabilities(answer: Any) -> list[dict[str, Any]] | None:
     return rows
 
 
-def has_pass_lock_cells(answers: Mapping[str, Any] | None) -> bool:
-    if not isinstance(answers, Mapping):
-        return False
-    return all(key in answers for key in CHECK_CELL_ORDER)
-
-
 def unusable_answers(answers: Mapping[str, Any] | None) -> bool:
     """True when a Pass-lock cell is missing or not a bank enum.
 
@@ -281,11 +275,15 @@ def decisions_questions() -> list[dict[str, Any]]:
     questions: list[dict[str, Any]] = []
     for key, spec in all_questions().items():
         criteria = spec.get("criteria") or {}
+        label = spec.get("instructions") or CHECK_CELL_LABELS.get(key) or key
+        instructions = str(label)
+        if key in CHECK_CELL_ORDER and "Pick exactly one." not in instructions:
+            instructions = f"{instructions.rstrip()} Pick exactly one."
         questions.append(
             {
                 "type": "choice",
                 "name": key,
-                "instructions": spec.get("instructions") or CHECK_CELL_LABELS.get(key) or key,
+                "instructions": instructions,
                 "choices": [
                     {"value": name, "description": text}
                     for name, text in criteria.items()
