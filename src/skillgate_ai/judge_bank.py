@@ -29,6 +29,8 @@ SOFT_CELL_LABELS: dict[str, str] = {
     "path_efficiency": "Path",
 }
 
+PATH_NOT_AVAILABLE = "Not available. No recorded path."
+
 PASS_LOCK: dict[str, frozenset[str]] = {
     "task_completion": frozenset({"fully completed"}),
     "correctness": frozenset({"correct"}),
@@ -271,9 +273,11 @@ def low_confidence_warnings(
     return []
 
 
-def decisions_questions() -> list[dict[str, Any]]:
+def decisions_questions(*, include_path: bool = True) -> list[dict[str, Any]]:
     questions: list[dict[str, Any]] = []
     for key, spec in all_questions().items():
+        if not include_path and key in SOFT_CELL_ORDER:
+            continue
         criteria = spec.get("criteria") or {}
         label = spec.get("instructions") or CHECK_CELL_LABELS.get(key) or key
         instructions = str(label)
@@ -293,10 +297,12 @@ def decisions_questions() -> list[dict[str, Any]]:
     return questions
 
 
-def structured_output_schema() -> dict[str, Any]:
+def structured_output_schema(*, include_path: bool = True) -> dict[str, Any]:
     properties: dict[str, Any] = {}
     required: list[str] = []
     for key, spec in all_questions().items():
+        if not include_path and key in SOFT_CELL_ORDER:
+            continue
         properties[key] = {
             "type": "string",
             "enum": list(criteria_keys(key)),

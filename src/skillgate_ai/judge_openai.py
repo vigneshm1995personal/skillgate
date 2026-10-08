@@ -11,6 +11,7 @@ from skillgate_ai.judge_bank import (
     CHECK_CELL_LABELS,
     CHECK_CELL_ORDER,
     DEFAULT_MIN_CONFIDENCE,
+    PATH_NOT_AVAILABLE,
     SOFT_CELL_LABELS,
     SOFT_CELL_ORDER,
     UNUSABLE_ANSWER,
@@ -40,6 +41,7 @@ DEFAULT_MODEL = "gpt-6-luna"
 DEFAULT_TIMEOUT_SEC = 20.0
 WHY_TIMEOUT_SEC = 10.0
 WHY_MAX_OUTPUT_TOKENS = 128
+WHY_OUTPUT_CHARS = 1500
 TRANSCRIPT_TAIL_CHARS = 4000
 IMAGE_MAX_BYTES = 4 * 1024 * 1024
 IMAGE_MAX_COUNT = 3
@@ -269,6 +271,48 @@ def _text_blob(raw: Any) -> Any:
     return data
 
 
+def _path_is_recorded(path: Any) -> bool:
+    if not isinstance(path, Mapping):
+        return False
+    if path.get("had_path") is True:
+        return True
+    steps = path.get("steps")
+    if isinstance(steps, bool) or not isinstance(steps, (int, float)):
+        return False
+    return int(steps) > 0
+
+
+def _why_output_text(raw: Any, *, secret: str) -> str | None:
+    """Size-capped, redacted expected/actual for the Fail why-call."""
+    if raw is None:
+        return None
+    if isinstance(raw, str):
+        text = raw
+    elif isinstance(raw, Mapping):
+        if raw.get("present") is False:
+            return redact_secrets("(missing)", secret)
+        body = raw.get("body")
+        if isinstance(body, bytes) or body is None:
+            kind = raw.get("kind") or raw.get("magic")
+            if isinstance(kind, str) and kind.strip():
+                return f"(binary {kind})"
+            return None
+        text = str(body)
+    else:
+        return None
+    if WHY_OUTPUT_CHARS > 0 and len(text) > WHY_OUTPUT_CHARS:
+        text = text[-WHY_OUTPUT_CHARS:]
+    return redact_secrets(text, secret)
+
+
+def _path_not_available_cell() -> dict[str, Any]:
+    return {
+        "label": SOFT_CELL_LABELS["path_efficiency"],
+        "choice": None,
+        "reason": PATH_NOT_AVAILABLE,
+    }
+
+
 def _finished_answers(
     answers: dict[str, dict[str, Any]],
     *,
@@ -309,13 +353,18 @@ def _answer_row(key: str, item: Any) -> dict[str, Any]:
     return row
 
 
-def _normalize_answers(raw: Mapping[str, Any]) -> dict[str, dict[str, Any]]:
+def _normalize_answers(
+    raw: Mapping[str, Any],
+    *,
+    include_path: bool = True,
+) -> dict[str, dict[str, Any]]:
     answers: dict[str, dict[str, Any]] = {}
     for key in CHECK_CELL_ORDER:
         answers[key] = _answer_row(key, raw.get(key))
-    for key in SOFT_CELL_ORDER:
-        if key in raw:
-            answers[key] = _answer_row(key, raw.get(key))
+    if include_path:
+        for key in SOFT_CELL_ORDER:
+            if key in raw:
+                answers[key] = _answer_row(key, raw.get(key))
     return answers
 
 
@@ -400,12 +449,13 @@ class DecisionsBackend(_OpenAIPosted):
             payload_input = [{"role": "user", "content": content}]
         else:
             payload_input = text
+        include_path = _path_is_recorded(state.get("path"))
         result = self.post_json(
             "/decisions",
             {
                 "model": self.model,
                 "input": payload_input,
-                "questions": decisions_questions(),
+                "questions": decisions_questions(include_path=include_path),
             },
             timeout_sec=timeout_sec,
         )
@@ -414,7 +464,10 @@ class DecisionsBackend(_OpenAIPosted):
         data = result["data"]
         usage = data.get("usage") if isinstance(data.get("usage"), dict) else None
         return _finished_answers(
-            _normalize_answers(_answers_from_decisions_list(data)),
+            _normalize_answers(
+                _answers_from_decisions_list(data),
+                include_path=include_path,
+            ),
             model=str(data.get("model") or self.model),
             usage=usage,
         )
@@ -444,6 +497,7 @@ class StructuredOutputsBackend(_OpenAIPosted):
     ) -> dict[str, Any]:
         text = _state_text(state)
         user_content = _user_content(text, images)
+        include_path = _path_is_recorded(state.get("path"))
         result = self.post_json(
             "/responses",
             {
@@ -464,7 +518,7 @@ class StructuredOutputsBackend(_OpenAIPosted):
                         "type": "json_schema",
                         "name": "skill_gate_check",
                         "strict": True,
-                        "schema": structured_output_schema(),
+                        "schema": structured_output_schema(include_path=include_path),
                     }
                 },
             },
@@ -490,7 +544,7 @@ class StructuredOutputsBackend(_OpenAIPosted):
             return {"status": "error", "reason": UNUSABLE_ANSWER, "model": self.model}
         usage = data.get("usage") if isinstance(data.get("usage"), dict) else None
         return _finished_answers(
-            _normalize_answers(parsed),
+            _normalize_answers(parsed, include_path=include_path),
             model=str(data.get("model") or self.model),
             usage=usage,
         )
@@ -559,7 +613,12 @@ class OutcomeJudge:
         evaluated = self.backend.evaluate(
             state=state, images=images, timeout_sec=self.timeout_sec
         )
-        return self._stamp(evaluated, artifacts=artifacts, omitted=omitted)
+        return self._stamp(
+            evaluated,
+            artifacts=artifacts,
+            omitted=omitted,
+            include_path=_path_is_recorded(path),
+        )
 
     def _payload(
         self,
@@ -604,9 +663,11 @@ class OutcomeJudge:
         *,
         artifacts: list[dict[str, Any]],
         omitted: list[dict[str, Any]],
+        include_path: bool,
     ) -> dict[str, Any]:
         model = str(evaluated.get("model") or self.backend.model)
         citations = {"artifacts": list(artifacts), "omitted_images": omitted}
+        soft_questions = {k: all_questions()[k] for k in SOFT_CELL_ORDER}
         if evaluated.get("status") != "completed":
             reason = str(evaluated.get("reason") or "OpenAI scoring failed.")
             return self._payload(
@@ -622,9 +683,11 @@ class OutcomeJudge:
                 usage=evaluated.get("usage"),
                 warnings=[],
                 questions=all_questions(),
-                soft_questions={k: all_questions()[k] for k in SOFT_CELL_ORDER},
+                soft_questions=soft_questions,
             )
         answers = evaluated.get("answers") if isinstance(evaluated.get("answers"), dict) else {}
+        if not include_path:
+            answers = {key: value for key, value in answers.items() if key not in SOFT_CELL_ORDER}
         passed, reasons = outcome_verdict(answers)
         warnings = low_confidence_warnings(
             answers,
@@ -637,7 +700,10 @@ class OutcomeJudge:
         for key in CHECK_CELL_ORDER:
             cells[key] = _cell_entry(key, pass_answers.get(key), CHECK_CELL_LABELS)
         for key in SOFT_CELL_ORDER:
-            cells[key] = _cell_entry(key, soft_answers.get(key), SOFT_CELL_LABELS)
+            if include_path:
+                cells[key] = _cell_entry(key, soft_answers.get(key), SOFT_CELL_LABELS)
+            else:
+                cells[key] = _path_not_available_cell()
         return self._payload(
             status="completed",
             model=model,
@@ -651,7 +717,7 @@ class OutcomeJudge:
             usage=evaluated.get("usage"),
             warnings=warnings,
             questions={k: all_questions()[k] for k in CHECK_CELL_ORDER},
-            soft_questions={k: all_questions()[k] for k in SOFT_CELL_ORDER},
+            soft_questions=soft_questions,
         )
 
     def explain_fail(
@@ -661,6 +727,8 @@ class OutcomeJudge:
         judged: Mapping[str, Any] | None = None,
         check: str = "",
         transcript_tail: str = "",
+        expected_output: Any = None,
+        actual_output: Any = None,
     ) -> str | None:
         """One Fail sentence after the engine has the gate verdict."""
         if not self.why_enabled:
@@ -670,9 +738,35 @@ class OutcomeJudge:
             cell_reasons = [str(item) for item in (blob.get("reasons") or [])]
             if UNUSABLE_ANSWER not in cell_reasons:
                 return None
-        return self._why_call(check, reasons, transcript_tail)
+        return self._why_call(
+            check,
+            reasons,
+            transcript_tail,
+            expected_output=expected_output,
+            actual_output=actual_output,
+        )
 
-    def _why_call(self, check: str, reasons: list[str], transcript_tail: str) -> str | None:
+    def _why_call(
+        self,
+        check: str,
+        reasons: list[str],
+        transcript_tail: str,
+        *,
+        expected_output: Any = None,
+        actual_output: Any = None,
+    ) -> str | None:
+        secret = self.backend.api_key
+        user_blob: dict[str, Any] = {
+            "check": check,
+            "what_failed": reasons,
+            "transcript_tail": _tail(transcript_tail),
+        }
+        expected = _why_output_text(expected_output, secret=secret)
+        actual = _why_output_text(actual_output, secret=secret)
+        if expected is not None:
+            user_blob["expected_output"] = expected
+        if actual is not None:
+            user_blob["actual_output"] = actual
         payload = {
             "model": self.backend.model,
             "max_output_tokens": WHY_MAX_OUTPUT_TOKENS,
@@ -682,17 +776,14 @@ class OutcomeJudge:
                     "role": "system",
                     "content": (
                         "Explain in one or two short sentences why this check failed. "
-                        "Use everyday words. Do not mention APIs, schemas, or internal field names."
+                        "Use everyday words. Do not mention APIs, schemas, or internal field names. "
+                        "If expected and actual output differ, say what was expected and what was produced."
                     ),
                 },
                 {
                     "role": "user",
                     "content": json.dumps(
-                        {
-                            "check": check,
-                            "what_failed": reasons,
-                            "transcript_tail": _tail(transcript_tail),
-                        },
+                        user_blob,
                         ensure_ascii=True,
                         default=str,
                     ),
@@ -787,6 +878,7 @@ __all__ = [
     "IMAGE_MAX_BYTES",
     "IMAGE_MAX_COUNT",
     "OUT_OF_CREDITS",
+    "WHY_OUTPUT_CHARS",
     "DecisionsBackend",
     "OutcomeJudge",
     "StructuredOutputsBackend",

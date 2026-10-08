@@ -365,10 +365,15 @@ def _run_outcome_judge(
     skill_root: Path | None = None,
     path: dict[str, Any] | None = None,
     judge: Judge | None = None,
-) -> tuple[dict[str, Any] | None, str | None]:
+) -> tuple[
+    dict[str, Any] | None,
+    str | None,
+    dict[str, Any] | None,
+    dict[str, Any] | None,
+]:
     """Optional Judge protocol. SkipJudge (default) does not own red/green."""
     if not is_live_harness(harness_name):
-        return None, None
+        return None, None, None, None
     outcome = judge if judge is not None else SkipJudge()
     golden_payload = None
     actual_payload = None
@@ -406,7 +411,7 @@ def _run_outcome_judge(
         actual=actual_payload if isinstance(actual_payload, dict) else None,
         artifacts=outputs,
     )
-    return judged, mismatch
+    return judged, mismatch, golden_payload, actual_payload
 
 
 def _apply_mismatch(
@@ -465,6 +470,8 @@ def _maybe_explain_fail(
     *,
     check: str,
     transcript_tail: str,
+    expected_output: Any = None,
+    actual_output: Any = None,
 ) -> dict[str, Any] | None:
     """Ask the scorer for a Fail sentence only after the gate verdict."""
     if passed or judged is None or judge is None:
@@ -474,6 +481,8 @@ def _maybe_explain_fail(
         judged=judged,
         check=check,
         transcript_tail=transcript_tail,
+        expected_output=expected_output,
+        actual_output=actual_output,
     )
     if isinstance(why, str) and why.strip():
         return {**judged, "why": why.strip()}
@@ -559,7 +568,7 @@ def _run_task(
             from skillgate_ai.metrics import count_path_steps, evaluate_task_metrics
 
             steps, errors, had_path = count_path_steps(spans, result.transcript)
-            judged, mismatch = _run_outcome_judge(
+            judged, mismatch, golden_payload, actual_payload = _run_outcome_judge(
                 task,
                 artifacts,
                 result,
@@ -586,6 +595,8 @@ def _run_task(
                     judged,
                     check=task.prompt,
                     transcript_tail=result.transcript,
+                    expected_output=golden_payload,
+                    actual_output=actual_payload,
                 )
             else:
                 passed, failures = det_passed, det_failures

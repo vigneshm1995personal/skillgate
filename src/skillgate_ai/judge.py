@@ -29,6 +29,8 @@ class Judge(Protocol):
         judged: Mapping[str, Any] | None = None,
         check: str = "",
         transcript_tail: str = "",
+        expected_output: Any = None,
+        actual_output: Any = None,
     ) -> str | None:
         """One Fail sentence after the engine gate. Skip returns None."""
         ...
@@ -64,8 +66,10 @@ class SkipJudge:
         judged: Mapping[str, Any] | None = None,
         check: str = "",
         transcript_tail: str = "",
+        expected_output: Any = None,
+        actual_output: Any = None,
     ) -> str | None:
-        del reasons, judged, check, transcript_tail
+        del reasons, judged, check, transcript_tail, expected_output, actual_output
         return None
 
 

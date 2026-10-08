@@ -217,6 +217,8 @@ def test_explain_fail_runs_only_after_gate_fail() -> None:
             judged=None,
             check="",
             transcript_tail="",
+            expected_output=None,
+            actual_output=None,
         ) -> str:
             assert reasons == ["missing"]
             assert check == "extract"

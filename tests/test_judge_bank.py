@@ -99,6 +99,16 @@ def test_path_is_not_in_pass_lock() -> None:
     assert set(PASS_LOCK) == set(CHECK_CELL_ORDER)
 
 
+def test_decisions_questions_omit_path_when_asked() -> None:
+    questions = decisions_questions(include_path=False)
+    names = [item["name"] for item in questions]
+    assert "path_efficiency" not in names
+    assert names == list(CHECK_CELL_ORDER)
+    schema = structured_output_schema(include_path=False)
+    assert "path_efficiency" not in schema["properties"]
+    assert set(schema["required"]) == set(CHECK_CELL_ORDER)
+
+
 def test_decisions_questions_and_schema_match_bank() -> None:
     questions = decisions_questions()
     names = [item["name"] for item in questions]

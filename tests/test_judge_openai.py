@@ -11,6 +11,7 @@ from skillgate_ai.output_match import REASON_MISSING_OUTPUT, expected_output_mis
 from skillgate_ai.judge_bank import (
     CHECK_CELL_ORDER,
     LOW_CONFIDENCE_WARNING,
+    PATH_NOT_AVAILABLE,
     UNUSABLE_ANSWER,
     decisions_questions,
 )
@@ -18,6 +19,7 @@ from skillgate_ai.judge_openai import (
     DISPLAY_NAME,
     IMAGE_MAX_BYTES,
     WHY_MAX_OUTPUT_TOKENS,
+    WHY_OUTPUT_CHARS,
     collect_images,
     make_openai_judge,
     redact_secrets,
@@ -153,6 +155,8 @@ def _gated(judge, **kwargs):
         stamped,
         check="Extract the invoice total.",
         transcript_tail="selected: pdf\n" + ("x" * 20),
+        expected_output=golden,
+        actual_output=actual,
     )
     return passed, failures, stamped
 
@@ -168,10 +172,11 @@ def test_decisions_request_shape() -> None:
     assert payload["model"] == "gpt-6-luna"
     assert set(payload.keys()) == {"model", "input", "questions"}
     questions = payload["questions"]
-    assert len(questions) == 6
+    assert len(questions) == 5
     assert all(item["type"] == "choice" for item in questions)
     names = [item["name"] for item in questions]
-    assert names == [item["name"] for item in decisions_questions()]
+    assert "path_efficiency" not in names
+    assert names == [item["name"] for item in decisions_questions(include_path=False)]
     task = next(item for item in questions if item["name"] == "task_completion")
     assert set(task.keys()) == {"type", "name", "instructions", "choices"}
     assert task["instructions"] == "Got the job done? Pick exactly one."
@@ -190,6 +195,9 @@ def test_decisions_request_shape() -> None:
     assert judged["answers"]["task_completion"]["choice"] == "Fully completed"
     assert judged["answers"]["task_completion"]["confidence"] == 0.9
     assert judged["answers"]["task_completion"]["probabilities"][0]["value"] == "Fully completed"
+    assert judged["soft_answers"] == {}
+    assert judged["cells"]["path_efficiency"]["choice"] is None
+    assert judged["cells"]["path_efficiency"]["reason"] == PATH_NOT_AVAILABLE
 
 
 def test_fail_lock_does_not_fail_on_wasteful_path() -> None:
@@ -206,7 +214,7 @@ def test_fail_lock_does_not_fail_on_wasteful_path() -> None:
     assert judged["why"] == "The numbers were wrong."
 
     post2 = FakePost([FakeResponse(200, decisions_payload({"path_efficiency": "Wasteful"}))])
-    judged2 = _score(_judge(post2))
+    judged2 = _score(_judge(post2), path={"steps": 4, "errors": 0, "had_path": True})
     assert judged2["passed"] is True
     assert judged2["soft_answers"]["path_efficiency"]["choice"] == "Wasteful"
 
@@ -433,7 +441,9 @@ def test_responses_fallback_uses_structured_outputs() -> None:
     fmt = post.calls[0]["json"]["text"]["format"]
     assert fmt["type"] == "json_schema"
     assert fmt["strict"] is True
+    assert "path_efficiency" not in fmt["schema"]["properties"]
     assert "decisions" not in post.calls[0]["url"]
+    assert judged["cells"]["path_efficiency"]["reason"] == PATH_NOT_AVAILABLE
 
 
 def test_images_inline_jpeg_png_only(tmp_path: Path) -> None:
@@ -666,3 +676,108 @@ def test_http_500_is_not_retried() -> None:
     assert "HTTP 500" in failures[0]
     assert judged["why"] is None
     assert len(post.calls) == 1
+
+
+def test_why_call_includes_expected_and_actual_text() -> None:
+    post = FakePost(
+        [
+            FakeResponse(200, decisions_payload({"correctness": "Incorrect"})),
+            FakeResponse(
+                200,
+                why_payload(
+                    "Expected 'Goodbye Skill Gate, totally different text' "
+                    "but the output was 'Hello Skill Gate'."
+                ),
+            ),
+        ]
+    )
+    passed, _failures, judged = _gated(
+        _judge(post),
+        golden={
+            "path": "out.txt",
+            "kind": "text",
+            "body": "Goodbye Skill Gate, totally different text",
+        },
+        actual_output={
+            "path": "out.txt",
+            "present": True,
+            "kind": "text",
+            "body": "Hello Skill Gate",
+        },
+    )
+    assert passed is False
+    assert judged["why"] is not None
+    assert "Hello Skill Gate" in judged["why"]
+    assert "Goodbye Skill Gate" in judged["why"]
+    assert len(post.calls) == 2
+    why_json = post.calls[1]["json"]
+    assert why_json["max_output_tokens"] == WHY_MAX_OUTPUT_TOKENS == 128
+    user = json.loads(why_json["input"][1]["content"])
+    assert user["expected_output"] == "Goodbye Skill Gate, totally different text"
+    assert user["actual_output"] == "Hello Skill Gate"
+    system = why_json["input"][0]["content"]
+    assert "expected and actual" in system.lower()
+
+
+def test_why_call_redacts_and_caps_output_text() -> None:
+    long_actual = "ok " + ("x" * (WHY_OUTPUT_CHARS + 50)) + f" leaked {SECRET}"
+    post = FakePost(
+        [
+            FakeResponse(200, decisions_payload({"correctness": "Incorrect"})),
+            FakeResponse(200, why_payload("The output did not match.")),
+        ]
+    )
+    passed, _failures, judged = _gated(
+        _judge(post),
+        golden={"path": "out.txt", "kind": "text", "body": f"safe {SECRET}"},
+        actual_output={
+            "path": "out.txt",
+            "present": True,
+            "kind": "text",
+            "body": long_actual,
+        },
+    )
+    assert passed is False
+    why_json = post.calls[1]["json"]
+    user = json.loads(why_json["input"][1]["content"])
+    assert SECRET not in user["expected_output"]
+    assert SECRET not in user["actual_output"]
+    assert "sk-" not in user["expected_output"]
+    assert "sk-" not in user["actual_output"]
+    assert len(user["actual_output"]) <= WHY_OUTPUT_CHARS
+    assert judged["why"] is not None
+    assert SECRET not in judged["why"]
+
+
+def test_path_not_asked_when_unrecorded() -> None:
+    post = FakePost([FakeResponse(200, decisions_payload())])
+    judged = _score(_judge(post), path={"steps": 0, "errors": 0, "had_path": False})
+    assert judged["passed"] is True
+    names = [item["name"] for item in post.calls[0]["json"]["questions"]]
+    assert "path_efficiency" not in names
+    assert judged["soft_answers"] == {}
+    cell = judged["cells"]["path_efficiency"]
+    assert cell["choice"] is None
+    assert cell["reason"] == PATH_NOT_AVAILABLE
+    assert "confidence" not in cell
+
+
+def test_path_asked_when_recorded() -> None:
+    post = FakePost([FakeResponse(200, decisions_payload())])
+    judged = _score(_judge(post), path={"steps": 6, "errors": 0, "had_path": True})
+    assert judged["passed"] is True
+    names = [item["name"] for item in post.calls[0]["json"]["questions"]]
+    assert names[-1] == "path_efficiency"
+    assert judged["soft_answers"]["path_efficiency"]["choice"] == "Efficient"
+    assert judged["cells"]["path_efficiency"]["choice"] == "Efficient"
+
+
+def test_unrecorded_path_ignores_invented_rating() -> None:
+    post = FakePost(
+        [FakeResponse(200, decisions_payload({"path_efficiency": "Efficient"}))]
+    )
+    judged = _score(_judge(post), path={"steps": 0, "had_path": False})
+    assert judged["passed"] is True
+    assert judged["soft_answers"] == {}
+    assert judged["cells"]["path_efficiency"]["reason"] == PATH_NOT_AVAILABLE
+    assert judged["cells"]["path_efficiency"]["choice"] is None
