@@ -13,6 +13,8 @@ skillgate version           # 0.3.0
 
 Or, after the first PyPI release: `pip install skillgate-ai` (not `pip install skillgate` — that name is a different product).
 
+Skill scripts run with that same Python — install the skill’s own packages there too (the pdf example needs `pypdf`).
+
 ## Red → green on the pdf twins
 
 The sabotaged twin has a meal-planner description, so PDF prompts never trigger it:

@@ -122,10 +122,17 @@ pre { background: #f0ece3; padding: 0.75rem; overflow: auto; border-radius: 4px;
 #wiz-stage, #run-stage {
   position: relative;
   overflow: hidden;
+  background: var(--bg);
 }
 #wiz-stage { min-height: 16rem; }
 #run-stage { min-height: 8rem; }
-.wiz-panel, .run-panel { width: 100%; }
+#run-stage:empty { min-height: 0; }
+.wiz-panel, .run-panel {
+  width: 100%;
+  background: var(--bg);
+  position: relative;
+  z-index: 1;
+}
 .wiz-panel.panel-leave,
 .wiz-panel.panel-leave-back,
 .run-panel.panel-leave,
@@ -141,6 +148,13 @@ pre { background: #f0ece3; padding: 0.75rem; overflow: auto; border-radius: 4px;
 .wiz-panel.panel-enter-back, .run-panel.panel-enter-back { animation: panel-in-back var(--motion) var(--ease) both; }
 .wiz-panel.panel-leave, .run-panel.panel-leave { animation: panel-out var(--motion) var(--ease) both; }
 .wiz-panel.panel-leave-back, .run-panel.panel-leave-back { animation: panel-out-back var(--motion) var(--ease) both; }
+.run-panel.is-covered,
+.run-panel.is-covered.panel-leave,
+.run-panel.is-covered.panel-leave-back {
+  animation: none;
+  opacity: 0;
+  visibility: hidden;
+}
 @keyframes panel-in {
   from { opacity: 0; transform: translateX(48px); }
   to { opacity: 1; transform: none; }
@@ -224,6 +238,31 @@ pre { background: #f0ece3; padding: 0.75rem; overflow: auto; border-radius: 4px;
 @keyframes check-stroke {
   to { stroke-dashoffset: 0; }
 }
+
+tr.check-row { cursor: pointer; }
+tr.check-row:focus, tr.check-row:focus-within {
+  outline: 2px solid var(--ink);
+  outline-offset: -2px;
+}
+button.check-toggle {
+  border: 0;
+  background: none;
+  padding: 0;
+  font: inherit;
+  font-weight: 600;
+  color: inherit;
+  cursor: pointer;
+}
+tr.check-detail td {
+  background: var(--card);
+  padding: 0.75rem 0.3rem 1rem;
+}
+.check-answers { margin: 0.25rem 0 0.5rem; padding: 0; }
+.check-answers dt { font-weight: 600; }
+.check-answers dd { margin: 0 0 0.65rem; color: var(--muted); }
+.check-answers li { list-style: disc inside; margin: 0.25rem 0; }
+p.warn { color: var(--muted); }
+p.fail-why { margin-top: 0.5rem; }
 
 details.keys { margin-top: 1rem; }
 details.keys summary { cursor: pointer; color: var(--muted); font-weight: 600; }

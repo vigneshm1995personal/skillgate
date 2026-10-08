@@ -548,6 +548,105 @@ function checksTable(tasks) {
   return `<table><thead><tr><th>Check</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
 
+function happenedLine(task) {
+  const judge = (task && task.judge) || {};
+  if (!(task && task.passed)) {
+    const why = typeof judge.why === "string" ? judge.why.trim() : "";
+    if (why) return why;
+    const fail = task && task.failures && task.failures[0];
+    if (fail) return String(fail);
+    return "This check did not pass.";
+  }
+  const warnings = Array.isArray(judge.warnings) ? judge.warnings : [];
+  const warn = String(warnings[0] || "").trim();
+  if (warn) return warn;
+  return "Output matched what was expected.";
+}
+
+function cellList(judge) {
+  const cells = judge && judge.cells;
+  if (!cells) return [];
+  const list = Array.isArray(cells) ? cells : Object.keys(cells).map((key) => cells[key]);
+  return list.filter((cell) => cell && typeof cell === "object");
+}
+
+function cellAnswer(cell) {
+  const choice = cell && cell.choice != null ? String(cell.choice).trim() : "";
+  if (choice) return choice;
+  const reason = cell && cell.reason != null ? String(cell.reason).trim() : "";
+  if (/^not available/i.test(reason)) return "Not available";
+  const label = cell && cell.label != null ? String(cell.label).trim() : "";
+  if (label.toLowerCase() === "path") return "Not available";
+  return reason || "Not available";
+}
+
+function detailInnerHtml(task) {
+  const judge = (task && task.judge) || {};
+  const cells = cellList(judge);
+  const parts = [];
+  if (cells.length) {
+    parts.push("<dl class=\"check-answers\">");
+    cells.forEach((cell) => {
+      const label = String(cell.label || "").trim() || "Check";
+      parts.push(`<div><dt>${esc(label)}</dt><dd>${esc(cellAnswer(cell))}</dd></div>`);
+    });
+    parts.push("</dl>");
+  } else {
+    parts.push("<p class=\"muted\">What the built-in checker checked</p>");
+    const scores = Array.isArray(task && task.scores) ? task.scores : [];
+    const rows = scores.filter((item) => item && typeof item === "object");
+    if (rows.length) {
+      parts.push("<ul class=\"check-answers\">");
+      rows.forEach((item) => {
+        const mark = item.passed ? "Yes" : "No";
+        const title = String(item.headline || item.detail || "Check").trim();
+        const extra = item.detail && item.detail !== title ? ` — ${item.detail}` : "";
+        parts.push(`<li>${esc(title)}: ${mark}${esc(extra)}</li>`);
+      });
+      parts.push("</ul>");
+    } else {
+      parts.push("<p class=\"muted\">No extra detail for this check.</p>");
+    }
+  }
+  const warnings = Array.isArray(judge.warnings) ? judge.warnings : [];
+  warnings.forEach((item) => {
+    const text = String(item || "").trim();
+    if (text) parts.push(`<p class="warn">${esc(text)}</p>`);
+  });
+  if (!(task && task.passed)) {
+    const why = typeof judge.why === "string" ? judge.why.trim() : "";
+    if (why) parts.push(`<p class="fail-why">${esc(why)}</p>`);
+  }
+  return parts.join("");
+}
+
+function bindCheckRows(root) {
+  if (!root) return;
+  root.querySelectorAll("tr.check-row").forEach((row) => {
+    const btn = row.querySelector("button.check-toggle");
+    const id = (btn && btn.getAttribute("aria-controls")) || row.getAttribute("aria-controls");
+    const detail = id ? document.getElementById(id) : null;
+    if (!detail) return;
+    const setOpen = (open) => {
+      detail.hidden = !open;
+      if (btn) {
+        btn.setAttribute("aria-expanded", open ? "true" : "false");
+        btn.setAttribute("aria-label", open ? "Hide details" : "Show details");
+      }
+      row.setAttribute("aria-expanded", open ? "true" : "false");
+    };
+    const toggle = () => setOpen(detail.hidden);
+    if (btn) btn.addEventListener("click", (e) => { e.stopPropagation(); toggle(); });
+    row.addEventListener("click", toggle);
+    row.addEventListener("keydown", (e) => {
+      if (e.key !== "Enter" && e.key !== " ") return;
+      if (btn && e.target === btn) return;
+      e.preventDefault();
+      toggle();
+    });
+  });
+}
+
 function setRunButtonsDisabled(disabled) {
   const live = document.getElementById("live");
   const builtin = document.getElementById("builtin");
@@ -580,6 +679,7 @@ async function showChecking(opts) {
   const extra = document.getElementById("run-rows");
   if (extra) extra.innerHTML = "";
   if (!stage) return;
+  Array.from(stage.children).forEach((el) => el.classList.add("is-covered"));
   await swapIn(stage, checkingPanel(opts), 1, "run-panel");
 }
 
@@ -691,14 +791,12 @@ async function renderPack(params) {
     } catch (e) { keyErr.innerHTML = showError(e); }
   };
   app.appendChild(head);
-  const stage = document.getElementById("run-stage");
   if (lastRun.path === path && lastRun.snap) {
     sawChecking = false;
     await paintResult(lastRun.snap, path, { replay: false });
-  } else if (stage) {
-    const idle = $(`<div>${checksTable(checksFromPack(pack))}</div>`);
-    idle.classList.add("run-panel");
-    stage.appendChild(idle);
+  } else {
+    const extra = document.getElementById("run-rows");
+    if (extra) extra.innerHTML = checksTable(checksFromPack(pack));
   }
 }
 
@@ -769,15 +867,19 @@ async function paintResult(snap, path, opts) {
     banner.classList.add("hidden");
   }
   const tasks = report.tasks || [];
-  const rows = tasks.map((t) => {
+  const rows = tasks.map((t, i) => {
     const mark = t.passed ? "PASS" : "FAIL";
     const cls = t.passed ? "pass" : "fail";
-    const judge = t.judge || {};
-    const why = (!t.passed && judge.why) || (t.failures && t.failures[0]) || "";
-    const warn = (t.passed && judge.warnings && judge.warnings[0]) || "";
-    const happened = why || warn;
     const extra = t.advice ? `<div class="muted">${esc(t.advice.why || "")}</div>` : "";
-    return `<tr><td class="${cls}">${mark}</td><td>${esc(checkHeadline(t))}${extra}</td><td>${esc(happened)}</td></tr>`;
+    const hid = `check-detail-${i}`;
+    return `<tr class="check-row" tabindex="0" aria-expanded="false" aria-controls="${hid}">
+      <td class="${cls}"><button type="button" class="check-toggle" tabindex="-1" aria-expanded="false" aria-controls="${hid}" aria-label="Show details">${mark}</button></td>
+      <td>${esc(checkHeadline(t))}${extra}</td>
+      <td>${esc(happenedLine(t))}</td>
+    </tr>
+    <tr id="${hid}" class="check-detail" hidden>
+      <td colspan="3">${detailInnerHtml(t)}</td>
+    </tr>`;
   }).join("");
   const advice = report.advice;
   let adviceHtml = "";
@@ -825,6 +927,7 @@ async function paintResult(snap, path, opts) {
   if (extra) {
     extra.innerHTML = "";
     extra.appendChild(details);
+    bindCheckRows(extra);
   }
 }
 
