@@ -549,59 +549,35 @@ function checksTable(tasks) {
 }
 
 function happenedLine(task) {
-  const judge = (task && task.judge) || {};
-  if (!(task && task.passed)) {
-    const why = typeof judge.why === "string" ? judge.why.trim() : "";
-    if (why) return why;
-    const fail = task && task.failures && task.failures[0];
-    if (fail) return String(fail);
-    return "This check did not pass.";
-  }
-  const warnings = Array.isArray(judge.warnings) ? judge.warnings : [];
-  const warn = String(warnings[0] || "").trim();
-  if (warn) return warn;
-  return "Output matched what was expected.";
-}
-
-function cellList(judge) {
-  const cells = judge && judge.cells;
-  if (!cells) return [];
-  const list = Array.isArray(cells) ? cells : Object.keys(cells).map((key) => cells[key]);
-  return list.filter((cell) => cell && typeof cell === "object");
-}
-
-function cellAnswer(cell) {
-  const choice = cell && cell.choice != null ? String(cell.choice).trim() : "";
-  if (choice) return choice;
-  const reason = cell && cell.reason != null ? String(cell.reason).trim() : "";
-  if (/^not available/i.test(reason)) return "Not available";
-  const label = cell && cell.label != null ? String(cell.label).trim() : "";
-  if (label.toLowerCase() === "path") return "Not available";
-  return reason || "Not available";
+  const stamped = task && typeof task.happened === "string" ? task.happened.trim() : "";
+  if (stamped) return stamped;
+  if (task && task.passed) return "Output matched what was expected.";
+  return "This check did not pass.";
 }
 
 function detailInnerHtml(task) {
   const judge = (task && task.judge) || {};
-  const cells = cellList(judge);
+  const answers = Array.isArray(task && task.check_answers) ? task.check_answers : [];
+  const rows = answers.filter((item) => item && typeof item === "object");
   const parts = [];
-  if (cells.length) {
-    parts.push("<dl class=\"check-answers\">");
-    cells.forEach((cell) => {
-      const label = String(cell.label || "").trim() || "Check";
-      parts.push(`<div><dt>${esc(label)}</dt><dd>${esc(cellAnswer(cell))}</dd></div>`);
-    });
-    parts.push("</dl>");
+  if (task && task.check_kind === "openai") {
+    if (rows.length) {
+      parts.push("<dl class=\"check-answers\">");
+      rows.forEach((item) => {
+        const label = String(item.label || "").trim() || "Check";
+        const answer = String(item.answer || "").trim() || "Not available";
+        parts.push(`<div><dt>${esc(label)}</dt><dd>${esc(answer)}</dd></div>`);
+      });
+      parts.push("</dl>");
+    }
   } else {
     parts.push("<p class=\"muted\">What the built-in checker checked</p>");
-    const scores = Array.isArray(task && task.scores) ? task.scores : [];
-    const rows = scores.filter((item) => item && typeof item === "object");
     if (rows.length) {
       parts.push("<ul class=\"check-answers\">");
       rows.forEach((item) => {
-        const mark = item.passed ? "Yes" : "No";
-        const title = String(item.headline || item.detail || "Check").trim();
-        const extra = item.detail && item.detail !== title ? ` — ${item.detail}` : "";
-        parts.push(`<li>${esc(title)}: ${mark}${esc(extra)}</li>`);
+        const label = String(item.label || "").trim() || "Check";
+        const answer = String(item.answer || "").trim();
+        parts.push(`<li>${esc(label)}${answer ? `: ${esc(answer)}` : ""}</li>`);
       });
       parts.push("</ul>");
     } else {

@@ -262,6 +262,8 @@ def test_ui_skill_page_run_motion_is_wired(project_root: Path) -> None:
     assert "function bindCheckRows" in js
     paint = js.split("async function paintResult")[1]
     assert "happenedLine(t)" in paint
+    assert "task.happened" in js
+    assert "task.check_answers" in js
     assert "detailInnerHtml(t)" in paint
     assert "bindCheckRows(extra)" in paint
     bind = js.split("function bindCheckRows")[1].split("function setRunButtonsDisabled")[0]
@@ -598,6 +600,10 @@ def test_ui_new_pack_no_key_green(project_root: Path, tmp_path: Path) -> None:
         done = _poll_run(base, started["run_id"])
         assert done["exit_code"] == 0, done
         assert done["report"]["gate"] == "green"
+        for row in done["report"]["tasks"]:
+            assert row.get("happened"), row
+            assert row.get("check_kind") in {"openai", "builtin"}
+            assert isinstance(row.get("check_answers"), list)
     finally:
         server.shutdown()
         server.server_close()
@@ -611,32 +617,25 @@ def test_app_js_check_detail_helpers_run_in_node(project_root: Path, tmp_path: P
         esc
         + helpers
         + """
-const pass = happenedLine({passed: true, judge: {}});
+const pass = happenedLine({passed: true, happened: "Output matched what was expected."});
 if (pass !== "Output matched what was expected.") process.exit(2);
 const warned = happenedLine({
   passed: true,
-  judge: {warnings: ["The judge wasn't very sure about this one."]}
+  happened: "The judge wasn't very sure about this one."
 });
 if (warned !== "The judge wasn't very sure about this one.") process.exit(3);
-const fail = happenedLine({passed: false, judge: {why: "Wrong file."}});
+const fail = happenedLine({passed: false, happened: "Wrong file."});
 if (fail !== "Wrong file.") process.exit(4);
 const blankFail = happenedLine({passed: false});
-if (!blankFail) process.exit(5);
-const pathAns = cellAnswer({
-  label: "Path",
-  choice: null,
-  reason: "Not available. No recorded path."
-});
-if (pathAns !== "Not available") process.exit(6);
+if (blankFail !== "This check did not pass.") process.exit(5);
 const html = detailInnerHtml({
   passed: true,
-  judge: {
-    cells: {
-      task_completion: {label: "Got the job done?", choice: "Fully completed"},
-      path_efficiency: {label: "Path", choice: null, reason: "Not available. No recorded path."}
-    },
-    warnings: ["The judge wasn't very sure about this one."]
-  }
+  check_kind: "openai",
+  check_answers: [
+    {label: "Got the job done?", answer: "Fully completed"},
+    {label: "Path", answer: "Not available"}
+  ],
+  judge: {warnings: ["The judge wasn't very sure about this one."]}
 });
 if (!html.includes("Got the job done?")) process.exit(7);
 if (!html.includes("Fully completed")) process.exit(8);
@@ -645,24 +644,24 @@ if (!html.includes("Not available")) process.exit(10);
 if (!html.includes("wasn't very sure")) process.exit(11);
 const builtin = detailInnerHtml({
   passed: true,
-  scores: [{
-    scorer: "task_completion",
-    passed: true,
-    headline: "Task completed",
-    detail: "All expected outputs present"
-  }]
+  check_kind: "builtin",
+  check_answers: [{label: "Task completed", answer: "Yes — All expected outputs present"}]
 });
 if (!builtin.includes("What the built-in checker checked")) process.exit(12);
 if (!builtin.includes("Task completed")) process.exit(13);
 const failWhy = detailInnerHtml({
   passed: false,
-  judge: {
-    why: "Missed the output.",
-    cells: {correctness: {label: "Got it right?", choice: "Incorrect"}}
-  }
+  check_kind: "openai",
+  check_answers: [{label: "Got it right?", answer: "Incorrect"}],
+  judge: {why: "Missed the output."}
 });
 if (!failWhy.includes("Missed the output.")) process.exit(14);
-if (detailInnerHtml({passed: true, judge: {why: "should not show", cells: {}}}).includes("should not show")) {
+if (detailInnerHtml({
+  passed: true,
+  check_kind: "openai",
+  check_answers: [],
+  judge: {why: "should not show"}
+}).includes("should not show")) {
   process.exit(15);
 }
 process.stdout.write("ok");

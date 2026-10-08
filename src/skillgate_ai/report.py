@@ -70,7 +70,7 @@ def format_github(report: SuiteReport) -> str:
     for task in report.tasks:
         result = "pass" if task.passed else "FAIL"
         if task.passed:
-            what = "; ".join(_task_warnings(task)) if _task_warnings(task) else "ok"
+            what = _task_happened(task)
         else:
             what = _task_fail_line(task)
             extra = "; ".join(task.failures[1:]) if len(task.failures) > 1 else ""
@@ -217,6 +217,7 @@ def hydrate_report_spans(payload: dict) -> dict:
 
 
 def _task_to_dict(task: TaskReport) -> dict:
+    answers, kind = _task_check_answers(task)
     return {
         "id": task.task_id,
         "prompt": task.prompt,
@@ -232,6 +233,9 @@ def _task_to_dict(task: TaskReport) -> dict:
         "usage": task.usage,
         "judge": task.judge,
         "metrics": getattr(task, "metrics", None),
+        "happened": _task_happened(task),
+        "check_kind": kind,
+        "check_answers": answers,
         "scores": [
             {
                 "scorer": s.scorer,
@@ -315,7 +319,59 @@ def _task_fail_line(task: TaskReport) -> str:
     why = judge.get("why") if isinstance(judge, dict) else None
     if isinstance(why, str) and why.strip():
         return why.strip()
-    return task.failures[0] if task.failures else "failed"
+    return task.failures[0] if task.failures else "This check did not pass."
+
+
+def _task_happened(task: TaskReport) -> str:
+    """Plain What happened line. Never blank."""
+    if task.passed:
+        warnings = _task_warnings(task)
+        return warnings[0] if warnings else "Output matched what was expected."
+    return _task_fail_line(task)
+
+
+def _cell_answer(cell: dict) -> str:
+    choice = str(cell.get("choice") or "").strip()
+    if choice:
+        return choice
+    reason = str(cell.get("reason") or "").strip()
+    if reason.lower().startswith("not available"):
+        return "Not available"
+    label = str(cell.get("label") or "").strip()
+    if label.lower() == "path":
+        return "Not available"
+    return reason or "Not available"
+
+
+def _task_check_answers(task: TaskReport) -> tuple[list[dict[str, str]], str]:
+    """Plain expandable answers. OpenAI cells, else what the built-in checker checked."""
+    judge = task.judge if isinstance(task.judge, dict) else {}
+    raw = judge.get("cells") if isinstance(judge, dict) else None
+    cells: list[dict] = []
+    if isinstance(raw, dict):
+        cells = [item for item in raw.values() if isinstance(item, dict)]
+    elif isinstance(raw, list):
+        cells = [item for item in raw if isinstance(item, dict)]
+    if cells:
+        return (
+            [
+                {
+                    "label": str(cell.get("label") or "").strip() or "Check",
+                    "answer": _cell_answer(cell),
+                }
+                for cell in cells
+            ],
+            "openai",
+        )
+    rows: list[dict[str, str]] = []
+    for score in task.scores:
+        title = (score.headline or score.detail or "Check").strip()
+        mark = "Yes" if score.passed else "No"
+        extra = ""
+        if score.detail and score.detail != title:
+            extra = f" — {score.detail}"
+        rows.append({"label": title, "answer": f"{mark}{extra}"})
+    return rows, "builtin"
 
 
 def _task_warnings(task: TaskReport) -> list[str]:
