@@ -22,9 +22,11 @@ from skillgate_ai.eval_config import (
     apply_eval_config,
     resolve_eval_config,
     stamp_resolved,
+    with_judge,
     with_timeout_effective,
 )
 from skillgate_ai.harness import DemoHarness, live_harness_or_error, resolve_harness
+from skillgate_ai.judge import judge_stamp, resolve_judge
 from skillgate_ai.history import append_eval
 from skillgate_ai.live import RunControl
 from skillgate_ai.observability import (
@@ -169,6 +171,8 @@ def run_check(
         else:
             resolved = resolve_harness(harness, cfg, demo=False)
         run_cfg = stamp_resolved(run_cfg, resolved.name, cfg)
+        outcome_judge = resolve_judge(cfg, harness_name=resolved.name)
+        run_cfg = with_judge(run_cfg, judge_stamp(outcome_judge))
         mode = "live" if live else ("demo" if resolved.name == "demo" else "live")
         with eval_transaction(
             run_id=rid,
@@ -191,6 +195,7 @@ def run_check(
                 config=run_cfg.to_dict(),
                 on_progress=on_progress,
                 control=control,
+                judge=outcome_judge,
             )
             run_cfg = with_timeout_effective(run_cfg, report.timeout_effective)
             report.config = run_cfg.to_dict()

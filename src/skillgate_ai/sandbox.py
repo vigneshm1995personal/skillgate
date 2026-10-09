@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
+import sys
 import tempfile
 import threading
 from dataclasses import dataclass
@@ -88,6 +89,7 @@ class LocalSandbox:
         timeout: int = DEFAULT_TASK_TIMEOUT_SEC,
         cwd: Path | None = None,
     ) -> subprocess.CompletedProcess[str]:
+        command = with_running_python(command)
         merged = _sandbox_env(env)
         breadcrumb_harness_spawn(command)
         sink = self.output_sink
@@ -277,6 +279,24 @@ def open_sandbox(kind: str, docker_image: str) -> Sandbox:
     )
 
 
+_PYTHON_NAMES = frozenset({"python", "python3", "python.exe", "python3.exe"})
+
+
+def running_python() -> str:
+    """Interpreter Skill Gate is running in — not a bare `python3` on PATH."""
+    return sys.executable
+
+
+def with_running_python(command: list[str]) -> list[str]:
+    """Rewrite `python` / `python3` to the running interpreter. Leave other commands."""
+    if not command:
+        return list(command)
+    name = Path(command[0]).name.lower()
+    if name in _PYTHON_NAMES:
+        return [running_python(), *command[1:]]
+    return list(command)
+
+
 def _sandbox_env(extra: dict[str, str] | None) -> dict[str, str]:
     # Do not leak API keys into the skill sandbox.
     blocked = {
@@ -294,4 +314,12 @@ def _sandbox_env(extra: dict[str, str] | None) -> dict[str, str]:
     env["PYTHONUNBUFFERED"] = "1"
     if extra:
         env.update(extra)
+    bindir = str(Path(running_python()).resolve().parent)
+    path = env.get("PATH", "")
+    parts = [
+        item
+        for item in path.split(os.pathsep)
+        if item and Path(item).resolve() != Path(bindir)
+    ]
+    env["PATH"] = os.pathsep.join([bindir, *parts] if bindir else parts)
     return env

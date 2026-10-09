@@ -13,6 +13,8 @@ skillgate version           # 0.3.0
 
 Or, after the first PyPI release: `pip install skillgate-ai` (not `pip install skillgate` — that name is a different product).
 
+Skill scripts run with that same Python — install the skill’s own packages there too (the pdf example needs `pypdf`).
+
 ## Red → green on the pdf twins
 
 The sabotaged twin has a meal-planner description, so PDF prompts never trigger it:
@@ -36,7 +38,7 @@ skillgate check skills/pdf-sabotaged --expect-fail
 echo $?    # 0
 ```
 
-No `AI_GATEWAY_API_KEY`, no Jev, no Docker required for this path.
+No `AI_GATEWAY_API_KEY`, no Docker required for this path. Live scoring with your OpenAI key is optional — see [`openai-judge.md`](openai-judge.md).
 
 ## Optional local UI
 
@@ -74,6 +76,8 @@ jobs:
 ```
 
 Until PyPI publish, replace the install line with a git/editable install of this repo.
+
+To score live checks in CI, add an optional `OPENAI_API_KEY` secret (see [`openai-judge.md`](openai-judge.md)). Omit it to keep the built-in checker.
 
 ## What is not in this package
 

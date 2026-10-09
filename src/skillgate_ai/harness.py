@@ -21,7 +21,7 @@ from skillgate_ai.config import (
 )
 from skillgate_ai.errors import HarnessError, MissingLLMKeyError
 from skillgate_ai.ingest import Skill
-from skillgate_ai.sandbox import Sandbox
+from skillgate_ai.sandbox import Sandbox, running_python
 from skillgate_ai.scorers import TriggerEvidence
 from skillgate_ai.spans import spans_from_jsonl
 from skillgate_ai.usage import (
@@ -202,7 +202,7 @@ class DemoHarness:
             transcript.append(f"phase 2: loaded {selected}/SKILL.md")
             if entry.is_file():
                 proc = sandbox.run(
-                    ["python3", str(entry)],
+                    [running_python(), str(entry)],
                     env={"SKILLGATE_TASK": prompt, "PYTHONPATH": ""},
                     timeout=timeout_sec,
                 )

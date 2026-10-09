@@ -22,6 +22,10 @@ def _no_live_keys(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("CODEX_API_KEY", "")
     monkeypatch.setenv("OPENAI_API_KEY", "")
     monkeypatch.setenv("ANTHROPIC_API_KEY", "")
+    monkeypatch.delenv("SKILLGATE_JUDGE", raising=False)
+    monkeypatch.delenv("SKILLGATE_JUDGE_BACKEND", raising=False)
+    monkeypatch.delenv("SKILLGATE_JUDGE_MODEL", raising=False)
+    monkeypatch.delenv("SKILLGATE_JUDGE_WHY", raising=False)
 
 
 @pytest.fixture
@@ -36,6 +40,10 @@ def project_root(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
     monkeypatch.setenv("AI_GATEWAY_API_KEY", "")
     monkeypatch.setenv("ANTHROPIC_API_KEY", "")
     monkeypatch.delenv("SKILLGATE_TASK_TIMEOUT_SEC", raising=False)
+    monkeypatch.delenv("SKILLGATE_JUDGE", raising=False)
+    monkeypatch.delenv("SKILLGATE_JUDGE_BACKEND", raising=False)
+    monkeypatch.delenv("SKILLGATE_JUDGE_MODEL", raising=False)
+    monkeypatch.delenv("SKILLGATE_JUDGE_WHY", raising=False)
     monkeypatch.delenv("CODEX_REASONING_EFFORT", raising=False)
     monkeypatch.delenv("CODEX_MODEL", raising=False)
     return ROOT

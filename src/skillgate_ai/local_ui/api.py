@@ -21,6 +21,7 @@ from skillgate_ai.config import ROOT_ENV_NAMES, get_llm_config, load_env
 from skillgate_ai.demo_files import ensure_demo_pdfs
 from skillgate_ai.errors import MissingLLMKeyError, SkillGateError
 from skillgate_ai.gate import run_check
+from skillgate_ai.judge import SkipJudge, resolve_judge
 from skillgate_ai.history import load_history
 from skillgate_ai.ingest import ingest_skill
 from skillgate_ai.live import create_control, drop_control, get_control
@@ -150,9 +151,17 @@ def meta_payload(state: UiState) -> dict[str, Any]:
     if state.initial_pack:
         pack = display_pack_label(state.initial_pack, state.root)
     pdf = pdf_demo_path(state)
+    try:
+        outcome = resolve_judge(cfg, harness_name="llm")
+    except MissingLLMKeyError:
+        judge_provider = "skip"
+    else:
+        judge_provider = "skip" if isinstance(outcome, SkipJudge) else "openai"
     return {
         "version": __version__,
         "has_any_key": cfg.has_any_key,
+        "has_openai_key": bool(cfg.openai_api_key),
+        "judge_provider": judge_provider,
         "demo_default": True,
         "account": False,
         "pack": pack,

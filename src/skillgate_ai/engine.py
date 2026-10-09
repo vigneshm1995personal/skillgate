@@ -15,6 +15,7 @@ from skillgate_ai.ingest import Skill, ingest_skill, ingest_skills
 from skillgate_ai.judge import Judge, SkipJudge, default_judge
 from skillgate_ai.live import KILL, CheckAborted, RunControl
 from skillgate_ai.observability import breadcrumb_task, report_eval_outcome, set_eval_passed, span
+from skillgate_ai.output_match import expected_output_mismatch_reason
 from skillgate_ai.pack import resolve_input_file
 from skillgate_ai.sandbox import Sandbox, open_sandbox, prepare_workspace
 from skillgate_ai.scorers import RunArtifacts, Score, score_task
@@ -22,11 +23,6 @@ from skillgate_ai.suite import SuiteSpec, TaskSpec, load_suite
 
 SKIP_FAILURE = "Skipped by user"
 KILL_FAILURE = "Killed by user"
-
-REASON_BINARY_OUTPUT = "Expected output is text/JSON, but the file is binary (JPEG)."
-REASON_MISSING_OUTPUT = "Expected output is missing."
-_TEXT_OUTPUT_SUFFIXES = {".json", ".txt", ".md", ".csv"}
-_BINARY_MAGICS = {"jpeg", "png", "pdf", "gif", "nul"}
 
 
 @dataclass
@@ -348,49 +344,16 @@ def _outcome_judge_outputs(task: TaskSpec, artifacts: RunArtifacts) -> list[dict
     return outputs
 
 
-def expected_output_mismatch_reason(
-    *,
-    golden: dict[str, Any] | None = None,
-    actual: dict[str, Any] | None = None,
-    artifacts: list[dict[str, Any]] | None = None,
-) -> str | None:
-    path: str | None = None
-    if isinstance(golden, dict):
-        path = str(golden.get("output_path") or golden.get("path") or "").strip() or None
-    rows = [item for item in (artifacts or []) if isinstance(item, dict)]
-    if not path and rows:
-        path = str(rows[0].get("path") or "").strip() or None
-    kind_hint = golden.get("kind") if isinstance(golden, dict) else None
-    suffix = Path(path or "").suffix.lower()
-    expected_text = kind_hint in {"json", "text"} or suffix in _TEXT_OUTPUT_SUFFIXES
-    if not expected_text:
-        return None
-    present: bool | None = None
-    kind: str | None = None
-    magic: str | None = None
-    if isinstance(actual, dict):
-        present = actual.get("present") if "present" in actual else actual.get("body") is not None
-        if actual.get("present") is False:
-            present = False
-        kind = actual.get("kind")
-        magic = actual.get("magic")
-        if present is None and actual.get("path"):
-            present = True
-    if present is None:
-        for item in rows:
-            if path and item.get("path") != path:
-                continue
-            present = bool(item.get("present"))
-            kind = item.get("kind")
-            magic = item.get("magic")
-            break
-    if present is False:
-        return REASON_MISSING_OUTPUT
-    if kind == "bytes" or (isinstance(magic, str) and magic in _BINARY_MAGICS):
-        if magic in (None, "jpeg", "nul"):
-            return REASON_BINARY_OUTPUT
-        return f"Expected output is text/JSON, but the file is binary ({str(magic).upper()})."
-    return None
+def _score_rows(scores: list[Score]) -> list[dict[str, Any]]:
+    return [
+        {
+            "scorer": item.scorer,
+            "passed": item.passed,
+            "headline": item.headline,
+            "detail": item.detail,
+        }
+        for item in scores
+    ]
 
 
 def _run_outcome_judge(
@@ -402,11 +365,15 @@ def _run_outcome_judge(
     skill_root: Path | None = None,
     path: dict[str, Any] | None = None,
     judge: Judge | None = None,
-) -> dict[str, Any] | None:
+) -> tuple[
+    dict[str, Any] | None,
+    str | None,
+    dict[str, Any] | None,
+    dict[str, Any] | None,
+]:
     """Optional Judge protocol. SkipJudge (default) does not own red/green."""
-    del scores, path
     if not is_live_harness(harness_name):
-        return None
+        return None, None, None, None
     outcome = judge if judge is not None else SkipJudge()
     golden_payload = None
     actual_payload = None
@@ -425,21 +392,38 @@ def _run_outcome_judge(
             actual_payload = actual_output_state(
                 case.golden.output_path, artifacts.workspace
             )
+    outputs = _outcome_judge_outputs(task, artifacts)
     judged = outcome.judge(
         task.prompt,
-        _outcome_judge_outputs(task, artifacts),
+        outputs,
         result.transcript,
         expect_skill=task.expect_skill,
         selected_skill=result.trigger.selected_skill,
         golden=golden_payload,
         actual_output=actual_payload,
+        scores=_score_rows(scores),
+        path=path,
+        workspace=artifacts.workspace,
+        skill_root=skill_root,
     )
-    if isinstance(judged, dict):
-        if golden_payload is not None:
-            judged["golden"] = golden_payload
-        if actual_payload is not None:
-            judged["actual_output"] = actual_payload
-    return judged
+    mismatch = expected_output_mismatch_reason(
+        golden=golden_payload if isinstance(golden_payload, dict) else None,
+        actual=actual_payload if isinstance(actual_payload, dict) else None,
+        artifacts=outputs,
+    )
+    return judged, mismatch, golden_payload, actual_payload
+
+
+def _apply_mismatch(
+    passed: bool,
+    failures: list[str],
+    mismatch: str | None,
+) -> tuple[bool, list[str]]:
+    if not mismatch:
+        return passed, failures
+    if mismatch in failures:
+        return False, failures
+    return False, [mismatch, *failures]
 
 
 def _live_verdict(
@@ -448,43 +432,61 @@ def _live_verdict(
     *,
     det_passed: bool,
     det_failures: list[str],
+    mismatch: str | None = None,
 ) -> tuple[bool, list[str], dict[str, Any] | None]:
-    """OSS default: deterministic scorers own red/green. A Judge with a bool
-    ``passed`` may override on live harnesses (private Jev injects this)."""
-    del expect_skill
+    """Skip leaves det in charge. Errors fail closed. No-trigger keeps det.
+    A completed bool ``passed`` overrides, including a low-confidence Pass.
+    Gate ``passed`` is the return value. Cell ``passed`` stays on the judge dict."""
     if not isinstance(judge, dict):
         return det_passed, det_failures, judge
+    warnings = [
+        str(item) for item in (judge.get("warnings") or []) if str(item).strip()
+    ]
+    stamped = {**judge, "warnings": warnings}
+    if judge.get("status") == "error":
+        failures = [str(item) for item in (judge.get("reasons") or []) if str(item).strip()]
+        if not failures:
+            failures = ["OpenAI scoring failed."]
+        passed, failures = _apply_mismatch(False, failures, mismatch)
+        return passed, failures, stamped
     if judge.get("status") == "skip" or judge.get("passed") is None:
         return det_passed, det_failures, judge
+    if expect_skill is None:
+        passed, failures = _apply_mismatch(det_passed, list(det_failures), mismatch)
+        return passed, failures, stamped
     passed = bool(judge.get("passed"))
     failures = [str(item) for item in (judge.get("reasons") or []) if str(item).strip()]
     if not passed and not failures:
-        failures = list(det_failures) or ["Judge failed this check."]
-    mismatch = expected_output_mismatch_reason(
-        golden=judge.get("golden") if isinstance(judge, dict) else None,
-        actual=judge.get("actual_output") if isinstance(judge, dict) else None,
-        artifacts=_judge_artifact_rows(judge),
-    )
-    if mismatch:
-        passed = False
-        if mismatch not in failures:
-            failures = [mismatch, *failures]
-    stamped = {**judge, "passed": passed, "reasons": list(failures)}
+        failures = list(det_failures) or ["OpenAI scoring failed this check."]
+    passed, failures = _apply_mismatch(passed, failures, mismatch)
     return passed, failures, stamped
 
 
-def _judge_artifact_rows(judge: dict[str, Any] | None) -> list[dict[str, Any]]:
-    if not isinstance(judge, dict):
-        return []
-    citations = judge.get("citations")
-    artifacts = None
-    if isinstance(citations, dict):
-        artifacts = citations.get("artifacts")
-    if not isinstance(artifacts, list):
-        artifacts = judge.get("artifacts")
-    if not isinstance(artifacts, list):
-        return []
-    return [item for item in artifacts if isinstance(item, dict)]
+def _maybe_explain_fail(
+    judge: Judge | None,
+    passed: bool,
+    failures: list[str],
+    judged: dict[str, Any] | None,
+    *,
+    check: str,
+    transcript_tail: str,
+    expected_output: Any = None,
+    actual_output: Any = None,
+) -> dict[str, Any] | None:
+    """Ask the scorer for a Fail sentence only after the gate verdict."""
+    if passed or judged is None or judge is None:
+        return judged
+    why = judge.explain_fail(
+        list(failures),
+        judged=judged,
+        check=check,
+        transcript_tail=transcript_tail,
+        expected_output=expected_output,
+        actual_output=actual_output,
+    )
+    if isinstance(why, str) and why.strip():
+        return {**judged, "why": why.strip()}
+    return judged
 
 
 def _run_task(
@@ -566,7 +568,7 @@ def _run_task(
             from skillgate_ai.metrics import count_path_steps, evaluate_task_metrics
 
             steps, errors, had_path = count_path_steps(spans, result.transcript)
-            judged = _run_outcome_judge(
+            judged, mismatch, golden_payload, actual_payload = _run_outcome_judge(
                 task,
                 artifacts,
                 result,
@@ -584,6 +586,17 @@ def _run_task(
                     task.expect_skill,
                     det_passed=det_passed,
                     det_failures=det_failures,
+                    mismatch=mismatch,
+                )
+                judged = _maybe_explain_fail(
+                    judge,
+                    passed,
+                    failures,
+                    judged,
+                    check=task.prompt,
+                    transcript_tail=result.transcript,
+                    expected_output=golden_payload,
+                    actual_output=actual_payload,
                 )
             else:
                 passed, failures = det_passed, det_failures

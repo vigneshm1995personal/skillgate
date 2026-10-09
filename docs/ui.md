@@ -15,6 +15,8 @@ This is a **local process**, not hosted `serve`. Default bind is `127.0.0.1:8765
 
 **The skill page is the product:** the skill, its checks (customer headlines), and **Run live** with your API key. `skillgate check` with a key present also runs live (exit 0/1). No key uses the built-in checker — that is not a live model. **Run live** with no key is HTTP 409. Labels are short paths like `skills/pdf`, not absolute machine paths.
 
+The wizard **Your API key** step and the skill-page key details write `OPENAI_API_KEY` (and the other live keys). An OpenAI key scores live checks; other keys only run them. The result panel names who scored the run in plain words (`OpenAI (your key)` or `Built-in checker`). Checking → slide → drawn Passed/Failed is unchanged.
+
 ## Intentional red path
 
 1. On the picker, open the muted **See a failing check** card (`skills/pdf-sabotaged`).

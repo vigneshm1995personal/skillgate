@@ -9,6 +9,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 from skillgate_ai.errors import MissingLLMKeyError
+from skillgate_ai.judge_bank import DEFAULT_MIN_CONFIDENCE as DEFAULT_JUDGE_MIN_CONFIDENCE
 
 ROOT_ENV_NAMES = (
     "CURSOR_API_KEY",
@@ -21,6 +22,11 @@ ROOT_ENV_NAMES = (
 DEFAULT_OPENAI_BASE_URL = "https://api.openai.com/v1"
 DEFAULT_GATEWAY_BASE_URL = "https://ai-gateway.vercel.sh/v1"
 DEFAULT_GATEWAY_MODEL = "openai/gpt-4o-mini"
+DEFAULT_JUDGE_MODEL = "gpt-6-luna"
+DEFAULT_JUDGE_BACKEND = "decisions"
+DEFAULT_JUDGE_PREF = "auto"
+DEFAULT_JUDGE_TIMEOUT_SEC = 20.0
+DEFAULT_JUDGE_REASONING_EFFORT = "low"
 
 CODEX_REASONING_EFFORTS = frozenset({"low", "medium", "high", "ultra"})
 DEFAULT_CODEX_REASONING_EFFORT = "medium"
@@ -86,6 +92,13 @@ class LLMConfig:
     cursor_model: str | None = None
     openai_api_key: str | None = None
     temperature: float = 0.0
+    judge_pref: str = DEFAULT_JUDGE_PREF
+    judge_backend: str = DEFAULT_JUDGE_BACKEND
+    judge_model: str = DEFAULT_JUDGE_MODEL
+    judge_timeout_sec: float = DEFAULT_JUDGE_TIMEOUT_SEC
+    judge_min_confidence: float = DEFAULT_JUDGE_MIN_CONFIDENCE
+    judge_why: bool = True
+    judge_reasoning_effort: str = DEFAULT_JUDGE_REASONING_EFFORT
 
     @property
     def has_any_key(self) -> bool:
@@ -148,7 +161,54 @@ def get_llm_config() -> LLMConfig:
         codex_model=_opt("CODEX_MODEL"),
         cursor_model=_opt("CURSOR_MODEL"),
         temperature=_env_temperature(),
+        judge_pref=_judge_pref(),
+        judge_backend=_judge_backend(),
+        judge_model=_opt("SKILLGATE_JUDGE_MODEL") or DEFAULT_JUDGE_MODEL,
+        judge_timeout_sec=_env_float("SKILLGATE_JUDGE_TIMEOUT_SEC", DEFAULT_JUDGE_TIMEOUT_SEC),
+        judge_min_confidence=_env_float(
+            "SKILLGATE_JUDGE_MIN_CONFIDENCE", DEFAULT_JUDGE_MIN_CONFIDENCE
+        ),
+        judge_why=_env_bool("SKILLGATE_JUDGE_WHY", True),
+        judge_reasoning_effort=_opt("SKILLGATE_JUDGE_REASONING_EFFORT")
+        or DEFAULT_JUDGE_REASONING_EFFORT,
     )
+
+
+def _judge_pref() -> str:
+    raw = (os.environ.get("SKILLGATE_JUDGE") or DEFAULT_JUDGE_PREF).strip().lower()
+    if raw in {"auto", "openai", "skip"}:
+        return raw
+    return DEFAULT_JUDGE_PREF
+
+
+def _judge_backend() -> str:
+    raw = (os.environ.get("SKILLGATE_JUDGE_BACKEND") or DEFAULT_JUDGE_BACKEND).strip().lower()
+    if raw in {"structured", "responses"}:
+        return "responses"
+    if raw == "decisions":
+        return "decisions"
+    return DEFAULT_JUDGE_BACKEND
+
+
+def _env_bool(name: str, default: bool) -> bool:
+    raw = os.environ.get(name, "").strip().lower()
+    if not raw:
+        return default
+    if raw in {"0", "false", "no", "off"}:
+        return False
+    if raw in {"1", "true", "yes", "on"}:
+        return True
+    return default
+
+
+def _env_float(name: str, default: float) -> float:
+    raw = os.environ.get(name, "").strip()
+    if not raw:
+        return default
+    try:
+        return float(raw)
+    except ValueError:
+        return default
 
 
 def _env_temperature() -> float:

@@ -64,6 +64,10 @@ def test_cli_imports_without_hosted() -> None:
     import skillgate_ai.cli
     import skillgate_ai.config
     import skillgate_ai.engine
+    import skillgate_ai.judge_bank
+    import skillgate_ai.judge_openai
+    import skillgate_ai.openai_http
+    import skillgate_ai.output_match
     import skillgate_ai.local_ui.server  # noqa: F401
 
 

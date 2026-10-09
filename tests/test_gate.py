@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import shutil
 from pathlib import Path
 
@@ -141,6 +142,32 @@ def test_live_flag_with_key_ignores_demo(
     assert result.demo_notice is None
     assert result.error is not None
     assert "live stub" in (result.error.get("message") or "")
+
+
+def test_openai_judge_without_key_exits_2(
+    project_root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("SKILLGATE_JUDGE", "openai")
+    dest = tmp_path / "pdf"
+    shutil.copytree(project_root / "skills" / "pdf", dest)
+    ensure_demo_pdfs(dest / "evals" / "fixtures")
+
+    class LiveStub:
+        name = "llm"
+
+        def run(self, *args, **kwargs):
+            raise AssertionError("live harness should not run without a scoring key")
+
+    monkeypatch.setattr(
+        "skillgate_ai.gate.live_harness_or_error", lambda *a, **k: LiveStub()
+    )
+    result = run_check(dest, live=True, source="test", root=project_root)
+    assert result.exit_code == 2
+    assert result.report is None
+    assert result.error is not None
+    assert "OpenAI" in (result.error.get("message") or "")
+    blob = json.dumps(result.error)
+    assert "sk-" not in blob
 
 
 def test_live_without_key_still_errors(

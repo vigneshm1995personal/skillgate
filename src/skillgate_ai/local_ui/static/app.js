@@ -4,7 +4,7 @@ const NAME_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const MOTION_MS = 350;
 const CHECKING_MIN_MS = 700;
 const SETUP_DONE_KEY = "skillgate-setup-done";
-let meta = { account: false, demo_default: true, packs: [], has_any_key: false, pdf_path: null };
+let meta = { account: false, demo_default: true, packs: [], has_any_key: false, has_openai_key: false, judge_provider: "skip", pdf_path: null };
 let wizard = blankWizard();
 let lastRoutePath = "";
 let lastRun = { path: "", snap: null };
@@ -111,13 +111,10 @@ function defaultDescription(name) {
   return `Produce ${n} notes, extracts, and local file outputs. Use when the user asks for ${n}, mentions invoices or documents, or wants the documented ${n} workflow.`;
 }
 
-function checkerLabel(report, snap) {
-  const name = String((report && report.harness) || "").toLowerCase();
-  if (name === "demo" || (snap && snap.demo_notice)) return "Built-in checker";
-  if (name === "llm") return "Your API key";
-  if (name === "codex") return "Codex (your API key)";
-  if (name === "cursor-agent") return "Cursor (your API key)";
-  if (snap && snap.error) return "Your API key";
+function scoredByLine(report) {
+  if (report && typeof report.scored_by === "string" && report.scored_by.trim()) {
+    return report.scored_by.trim();
+  }
   return "";
 }
 
@@ -340,7 +337,7 @@ function buildWizardPanel() {
     const card = $(`<div class="card">
       <h2>This is local</h2>
       <p>Skill Gate runs on this computer. No Skill Gate account.</p>
-      <p class="muted">Your API key is the model that runs live checks. Skip only if you want the built-in checker.</p>
+      <p class="muted">Your API key is the model that runs live checks. An OpenAI key also scores them. Skip only if you want the built-in checker.</p>
       <p><button type="button" id="next">Continue</button></p>
     </div>`);
     card.querySelector("#next").onclick = () => {
@@ -363,7 +360,7 @@ function buildWizardPanel() {
     }
     const form = $(`<div class="card">
       <h2>Your API key</h2>
-      <p class="muted">Cursor, Codex, Claude, OpenAI, or AI Gateway. This is the model that runs live checks. No Skill Gate account.</p>
+      <p class="muted">Paste an OpenAI key to run live checks and score them. Cursor, Codex, Claude, or AI Gateway also run live checks. No Skill Gate account.</p>
       ${keyFieldsHtml()}
       <p class="field-msg" id="step-msg" aria-live="polite"></p>
       <p><button type="button" id="save-key">Save key</button>
@@ -551,6 +548,81 @@ function checksTable(tasks) {
   return `<table><thead><tr><th>Check</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
 
+function happenedLine(task) {
+  const stamped = task && typeof task.happened === "string" ? task.happened.trim() : "";
+  if (stamped) return stamped;
+  if (task && task.passed) return "Output matched what was expected.";
+  return "This check did not pass.";
+}
+
+function detailInnerHtml(task) {
+  const judge = (task && task.judge) || {};
+  const answers = Array.isArray(task && task.check_answers) ? task.check_answers : [];
+  const rows = answers.filter((item) => item && typeof item === "object");
+  const parts = [];
+  if (task && task.check_kind === "openai") {
+    if (rows.length) {
+      parts.push("<dl class=\"check-answers\">");
+      rows.forEach((item) => {
+        const label = String(item.label || "").trim() || "Check";
+        const answer = String(item.answer || "").trim() || "Not available";
+        parts.push(`<div><dt>${esc(label)}</dt><dd>${esc(answer)}</dd></div>`);
+      });
+      parts.push("</dl>");
+    }
+  } else {
+    parts.push("<p class=\"muted\">What the built-in checker checked</p>");
+    if (rows.length) {
+      parts.push("<ul class=\"check-answers\">");
+      rows.forEach((item) => {
+        const label = String(item.label || "").trim() || "Check";
+        const answer = String(item.answer || "").trim();
+        parts.push(`<li>${esc(label)}${answer ? `: ${esc(answer)}` : ""}</li>`);
+      });
+      parts.push("</ul>");
+    } else {
+      parts.push("<p class=\"muted\">No extra detail for this check.</p>");
+    }
+  }
+  const warnings = Array.isArray(judge.warnings) ? judge.warnings : [];
+  warnings.forEach((item) => {
+    const text = String(item || "").trim();
+    if (text) parts.push(`<p class="warn">${esc(text)}</p>`);
+  });
+  if (!(task && task.passed)) {
+    const why = typeof judge.why === "string" ? judge.why.trim() : "";
+    if (why) parts.push(`<p class="fail-why">${esc(why)}</p>`);
+  }
+  return parts.join("");
+}
+
+function bindCheckRows(root) {
+  if (!root) return;
+  root.querySelectorAll("tr.check-row").forEach((row) => {
+    const btn = row.querySelector("button.check-toggle");
+    const id = (btn && btn.getAttribute("aria-controls")) || row.getAttribute("aria-controls");
+    const detail = id ? document.getElementById(id) : null;
+    if (!detail) return;
+    const setOpen = (open) => {
+      detail.hidden = !open;
+      if (btn) {
+        btn.setAttribute("aria-expanded", open ? "true" : "false");
+        btn.setAttribute("aria-label", open ? "Hide details" : "Show details");
+      }
+      row.setAttribute("aria-expanded", open ? "true" : "false");
+    };
+    const toggle = () => setOpen(detail.hidden);
+    if (btn) btn.addEventListener("click", (e) => { e.stopPropagation(); toggle(); });
+    row.addEventListener("click", toggle);
+    row.addEventListener("keydown", (e) => {
+      if (e.key !== "Enter" && e.key !== " ") return;
+      if (btn && e.target === btn) return;
+      e.preventDefault();
+      toggle();
+    });
+  });
+}
+
 function setRunButtonsDisabled(disabled) {
   const live = document.getElementById("live");
   const builtin = document.getElementById("builtin");
@@ -559,8 +631,13 @@ function setRunButtonsDisabled(disabled) {
 }
 
 function checkingLine(opts) {
-  if (opts && opts.live && !opts.demo) return "Run live uses your API key.";
-  return "Built-in checker. This is not a live model.";
+  if (opts && opts.live && !opts.demo) {
+    if (meta.judge_provider === "skip" || !meta.has_openai_key) {
+      return "The skill ran live. The built-in checker scored it.";
+    }
+    return "Run live uses your API key.";
+  }
+  return "Built-in checker scored this run. This is not a live model.";
 }
 
 function checkingPanel(opts) {
@@ -578,6 +655,7 @@ async function showChecking(opts) {
   const extra = document.getElementById("run-rows");
   if (extra) extra.innerHTML = "";
   if (!stage) return;
+  Array.from(stage.children).forEach((el) => el.classList.add("is-covered"));
   await swapIn(stage, checkingPanel(opts), 1, "run-panel");
 }
 
@@ -661,6 +739,7 @@ async function renderPack(params) {
     <details class="keys">
       <summary>${hasKey ? "Replace your API key" : "Add your API key"}</summary>
       <div class="stack">
+        <p class="muted">An OpenAI key scores live checks. Other keys only run them.</p>
         ${keyFieldsHtml()}
         <p><button type="button" class="secondary" id="save-key">Save key</button></p>
         <div id="key-err"></div>
@@ -688,14 +767,12 @@ async function renderPack(params) {
     } catch (e) { keyErr.innerHTML = showError(e); }
   };
   app.appendChild(head);
-  const stage = document.getElementById("run-stage");
   if (lastRun.path === path && lastRun.snap) {
     sawChecking = false;
     await paintResult(lastRun.snap, path, { replay: false });
-  } else if (stage) {
-    const idle = $(`<div>${checksTable(checksFromPack(pack))}</div>`);
-    idle.classList.add("run-panel");
-    stage.appendChild(idle);
+  } else {
+    const extra = document.getElementById("run-rows");
+    if (extra) extra.innerHTML = checksTable(checksFromPack(pack));
   }
 }
 
@@ -766,12 +843,19 @@ async function paintResult(snap, path, opts) {
     banner.classList.add("hidden");
   }
   const tasks = report.tasks || [];
-  const rows = tasks.map((t) => {
+  const rows = tasks.map((t, i) => {
     const mark = t.passed ? "PASS" : "FAIL";
     const cls = t.passed ? "pass" : "fail";
-    const why = (t.failures && t.failures[0]) || "";
     const extra = t.advice ? `<div class="muted">${esc(t.advice.why || "")}</div>` : "";
-    return `<tr><td class="${cls}">${mark}</td><td>${esc(checkHeadline(t))}${extra}</td><td>${esc(why)}</td></tr>`;
+    const hid = `check-detail-${i}`;
+    return `<tr class="check-row" tabindex="0" aria-expanded="false" aria-controls="${hid}">
+      <td class="${cls}"><button type="button" class="check-toggle" tabindex="-1" aria-expanded="false" aria-controls="${hid}" aria-label="Show details">${mark}</button></td>
+      <td>${esc(checkHeadline(t))}${extra}</td>
+      <td>${esc(happenedLine(t))}</td>
+    </tr>
+    <tr id="${hid}" class="check-detail" hidden>
+      <td colspan="3">${detailInnerHtml(t)}</td>
+    </tr>`;
   }).join("");
   const advice = report.advice;
   let adviceHtml = "";
@@ -787,10 +871,7 @@ async function paintResult(snap, path, opts) {
     </div>`;
   }
   const headline = gate === "green" ? "Passed" : "Failed";
-  const checker = checkerLabel(report, snap);
-  const checkerLine = checker === "Built-in checker"
-    ? "Built-in checker. This is not a live model."
-    : checker;
+  const checkerLine = scoredByLine(report);
   const panel = $(`<div class="success">
       ${resultMarkHtml(gate === "green", false)}
       <p><span class="gate ${esc(gate)}">${headline}</span>
@@ -822,6 +903,7 @@ async function paintResult(snap, path, opts) {
   if (extra) {
     extra.innerHTML = "";
     extra.appendChild(details);
+    bindCheckRows(extra);
   }
 }
 
