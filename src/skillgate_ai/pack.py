@@ -70,8 +70,6 @@ def list_pack_files(skill_path: str | Path) -> list[dict[str, Any]]:
             continue
         if any(part.lower() in _SKIP_DIR_NAMES for part in Path(rel).parts):
             continue
-        if rel == GOLDEN_DIR or rel.startswith(GOLDEN_DIR + "/"):
-            continue
         found.append({"path": rel, "bytes": path.stat().st_size})
     return found
 
@@ -442,11 +440,21 @@ def browser_files(skill_path: str | Path) -> list[dict[str, Any]]:
     return items
 
 
-def copy_skill_pack(source: str | Path, dest: str | Path) -> dict[str, Any]:
+def copy_skill_pack(
+    source: str | Path,
+    dest: str | Path,
+    *,
+    include_goldens: bool = False,
+) -> dict[str, Any]:
     """Recursive copy of a skill pack root, preserving the relative tree.
 
     Copies SKILL.md plus scripts/, assets/, references/, evals/fixtures/, and
     any other pack files. Skips VCS/cache dirs. Dest is replaced if present.
+
+    ``skill_pack_hash`` (the recorded pass) includes ``evals/goldens/``. Deploy
+    bundle and git publish pass ``include_goldens=True`` so the copied tree
+    hashes the same. Sandbox and editor installs keep goldens out so the
+    agent cannot read expected answers.
     """
     src = Path(source).expanduser().resolve()
     dst = Path(dest).expanduser().resolve()
@@ -457,7 +465,19 @@ def copy_skill_pack(source: str | Path, dest: str | Path) -> dict[str, Any]:
     dst.parent.mkdir(parents=True, exist_ok=True)
     if dst.exists():
         shutil.rmtree(dst)
-    shutil.copytree(src, dst, ignore=_pack_copy_ignore)
+
+    def ignore_keep(_directory: str, names: list[str]) -> set[str]:
+        return {
+            name
+            for name in names
+            if name.lower() in _SKIP_DIR_NAMES or name.lower() in _SKIP_FILE_NAMES
+        }
+
+    shutil.copytree(
+        src,
+        dst,
+        ignore=_pack_copy_ignore if not include_goldens else ignore_keep,
+    )
     return {
         "pack_path": str(src),
         "dest_path": str(dst),
