@@ -22,6 +22,7 @@ def _no_live_keys(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("CODEX_API_KEY", "")
     monkeypatch.setenv("OPENAI_API_KEY", "")
     monkeypatch.setenv("ANTHROPIC_API_KEY", "")
+    monkeypatch.setenv("SKILLGATE_MODE", "local")
     monkeypatch.delenv("SKILLGATE_JUDGE", raising=False)
     monkeypatch.delenv("SKILLGATE_JUDGE_BACKEND", raising=False)
     monkeypatch.delenv("SKILLGATE_JUDGE_MODEL", raising=False)

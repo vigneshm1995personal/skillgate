@@ -2,6 +2,10 @@
 .venv/
 venv/
 __pycache__/
+web/node_modules/
+web/dist/
+web/*.tsbuildinfo
+src/skillgate_ai/web_static/
 *.py[cod]
 *.egg-info/
 .eggs/

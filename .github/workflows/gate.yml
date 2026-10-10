@@ -12,7 +12,18 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
       - run: pip install -e ".[dev]"
+      - name: Web unit tests
+        working-directory: web
+        run: pnpm install --frozen-lockfile && pnpm test
       - run: pytest -q
 
   gate:
@@ -30,6 +41,22 @@ jobs:
           set +e
           skillgate check skills/pdf-sabotaged
           test $? -eq 1
+
+  web-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+      - name: Build React UI
+        working-directory: web
+        run: pnpm install --frozen-lockfile && pnpm build
 
   oss-surface:
     runs-on: ubuntu-latest

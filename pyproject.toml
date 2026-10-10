@@ -20,6 +20,9 @@ dependencies = [
   "python-dotenv>=1.0",
   "pypdf>=4.2",
   "reportlab>=4.2",
+  "fastapi>=0.115",
+  "uvicorn>=0.30",
+  "python-multipart>=0.0.9",
 ]
 
 [project.optional-dependencies]
@@ -33,7 +36,7 @@ skillgate = "skillgate_ai.cli:app"
 where = ["src"]
 
 [tool.setuptools.package-data]
-skillgate_ai = ["local_ui/static/*"]
+skillgate_ai = ["local_ui/static/*", "web_static/**"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

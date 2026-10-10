@@ -363,8 +363,8 @@ def ui_cmd(
     open_browser: bool = typer.Option(False, "--open", help="Open the loopback URL in a browser"),
     no_browser: bool = typer.Option(False, "--no-browser", help="Do not open a browser"),
 ) -> None:
-    """Local setup + skill page. No account. Run live uses your API key. Not hosted serve."""
-    from skillgate_ai.local_ui.server import serve_ui
+    """Local React UI. No account. Run uses your API key or the built-in checker."""
+    from skillgate_ai.server import serve_ui
 
     workspace = (root or project_root()).expanduser().resolve()
     load_env(workspace)
@@ -375,7 +375,7 @@ def ui_cmd(
             "not the hosted Skill Gate app."
         )
     console.print(
-        "Local Skill Gate UI — no account. Run live uses your API key. "
+        "Local Skill Gate UI — no account. Press Run to evaluate. "
         "CI/Docker still use `skillgate check`."
     )
     try:

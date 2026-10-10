@@ -115,6 +115,7 @@ def run_check(
     run_id: str | None = None,
     source: str = "cli",
     root: Path | None = None,
+    checks: list[dict[str, Any]] | None = None,
 ) -> CheckResult:
     """Run pack-local evals. Exit 0 green, 1 red, 2 live-without-key."""
     project = root if root is not None else project_root()
@@ -129,6 +130,10 @@ def run_check(
         spec, skill_from_pack, pack_root = resolve_pack_and_spec(target, project)
         if skill_from_pack is not None:
             skill_path = skill or skill_from_pack
+        if checks and pack_root is not None:
+            from skillgate_ai.case_pack import suite_from_checks
+
+            spec = suite_from_checks(pack_root, checks)
     except SkillGateError as exc:
         if suite_path.is_file():
             spec = None

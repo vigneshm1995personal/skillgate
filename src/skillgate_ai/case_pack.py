@@ -425,6 +425,17 @@ def trust_suite_for_skill(skill_path: str | Path) -> TrustSuite | None:
     return _template_trust(root)
 
 
+def suite_from_checks(skill_path: str | Path, checks: list[dict[str, Any]]) -> SuiteSpec:
+    """Build a suite from the Checks tab without writing evals/cases.yaml."""
+    root = Path(skill_path).expanduser().resolve()
+    skill_name = _skill_name(root)
+    if not checks:
+        raise SuiteError("Need at least one check to run.")
+    cases = [_case_from_check(root, dict(raw), skill_name) for raw in checks]
+    pack = CasePack(schema_version=1, skill=skill_name, cases=cases)
+    return suite_from_pack(pack, str(root))
+
+
 def expand_from_pack(skill_path: str | Path) -> SuiteSpec:
     root = Path(skill_path).expanduser().resolve()
     pack = load_case_pack(root)
