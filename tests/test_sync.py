@@ -75,6 +75,43 @@ def test_sync_never_deletes_unmanaged(project_root: Path, tmp_path: Path) -> Non
     assert (cursor_root / "other" / "SKILL.md").is_file()
 
 
+def test_sync_rejects_nested_symlink(tmp_path: Path) -> None:
+    from skillgate_ai.errors import SkillGateError
+    from skillgate_ai.sync import _reject_symlinks
+
+    skill = tmp_path / "evil"
+    skill.mkdir()
+    (skill / "SKILL.md").write_text(
+        "---\nname: evil\ndescription: sync skill with symlink\n---\n", encoding="utf-8"
+    )
+    target = tmp_path / "outside"
+    target.mkdir()
+    try:
+        os.symlink(target, skill / "link")
+    except (OSError, NotImplementedError):
+        pytest.skip("symlinks not supported here")
+    with pytest.raises(SkillGateError):
+        _reject_symlinks(skill)
+
+
+def test_sync_rejects_top_level_symlink(tmp_path: Path) -> None:
+    from skillgate_ai.errors import SkillGateError
+    from skillgate_ai.sync import _reject_symlinks
+
+    target = tmp_path / "real"
+    target.mkdir()
+    (target / "SKILL.md").write_text(
+        "---\nname: real\ndescription: real skill\n---\n", encoding="utf-8"
+    )
+    link = tmp_path / "evil"
+    try:
+        os.symlink(target, link)
+    except (OSError, NotImplementedError):
+        pytest.skip("symlinks not supported here")
+    with pytest.raises(SkillGateError):
+        _reject_symlinks(link)
+
+
 def test_sync_install_launchd_plist(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     from skillgate_ai import sync as sync_mod
 

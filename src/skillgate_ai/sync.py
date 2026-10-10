@@ -64,6 +64,10 @@ def _redact(stderr: str) -> str:
 
 def _reject_symlinks(skill_dir: Path) -> None:
     """Refuse to sync a skill that contains symlinks (a cloned repo is untrusted)."""
+    if skill_dir.is_symlink():
+        raise SkillGateError(
+            f"Skill '{skill_dir.name}' is a symlink. Symlinks are not allowed in synced skills."
+        )
     for root, dirs, files in os.walk(skill_dir, followlinks=False):
         for name in dirs + files:
             entry = Path(root) / name
