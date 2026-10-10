@@ -157,6 +157,7 @@ def test_helper_install_launchd_plist(
 ) -> None:
     home = tmp_path
     monkeypatch.setattr(Path, "home", lambda: home)
+    monkeypatch.setattr(helper_mod.sys, "platform", "darwin")
     dest = install_launchd_plist()
     assert dest.is_file()
     plist = plistlib.loads(dest.read_bytes())
