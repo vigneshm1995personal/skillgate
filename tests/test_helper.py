@@ -10,8 +10,9 @@ from pathlib import Path
 import pytest
 
 from skillgate_ai import helper as helper_mod
+from skillgate_ai.errors import SKILL_CHANGED_MESSAGE, customer_job_error
 from skillgate_ai.helper import connect, install_launchd_plist, process_job
-from skillgate_ai.pack import skill_pack_hash
+from skillgate_ai.pack import copy_skill_pack, skill_pack_hash
 
 
 def _write_skill(folder: Path, name: str) -> Path:
@@ -90,8 +91,42 @@ def test_helper_hash_mismatch_rejected(
     result = process_job("https://host.example", config, job)
     assert result["status"] == "failed"
     assert result["targets"][0]["status"] == "failed"
-    assert "version mismatch" in result["targets"][0]["error"]
+    assert result["targets"][0]["error"] == SKILL_CHANGED_MESSAGE
+    assert "version mismatch" not in result["targets"][0]["error"]
+    assert "WRONG" not in json.dumps(result)
     assert not (Path(os.environ["SKILLGATE_CURSOR_SKILLS"]) / "pdf").exists()
+
+
+def test_helper_verifies_goldens_in_recorded_hash(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, project_root: Path
+) -> None:
+    """Passes recorded with evals/goldens still verify; editor install omits goldens."""
+    skill_dir = _write_skill(tmp_path / "csv-clean", "csv-clean")
+    goldens = skill_dir / "evals" / "goldens"
+    goldens.mkdir(parents=True)
+    (goldens / "clean-messy.csv").write_text("item,amount\nalpha,1\n", encoding="utf-8")
+    recorded = skill_pack_hash(skill_dir)
+    skipped = tmp_path / "skipped" / "csv-clean"
+    copy_skill_pack(skill_dir, skipped)
+    assert skill_pack_hash(skipped) != recorded
+    monkeypatch.setattr(
+        helper_mod,
+        "_http_get",
+        lambda url, **kwargs: _bundle(skill_dir, "csv-clean", recorded),
+    )
+    config = {"url": "https://host.example", "token": "tok"}
+    job = {
+        "id": "j1",
+        "skill_name": "csv-clean",
+        "skill_md_hash": recorded,
+        "targets": ["cursor"],
+    }
+    result = process_job("https://host.example", config, job)
+    assert result["status"] == "installed"
+    installed = Path(os.environ["SKILLGATE_CURSOR_SKILLS"]) / "csv-clean"
+    assert (installed / "SKILL.md").is_file()
+    assert (installed / "scripts" / "run.py").is_file()
+    assert not (installed / "evals" / "goldens").exists()
 
 
 def test_helper_installs_and_reports(
@@ -136,3 +171,10 @@ def test_helper_install_launchd_plist_non_mac(
     monkeypatch.setattr(helper_mod.sys, "platform", "linux")
     with pytest.raises(helper_mod.SkillGateError):
         install_launchd_plist()
+
+
+def test_customer_job_error_hides_hashes() -> None:
+    leaked = "Skill hash mismatch while building bundle: 961b02b6 != efca8b89."
+    assert customer_job_error(leaked) == SKILL_CHANGED_MESSAGE
+    assert "961b02b6" not in customer_job_error(leaked)
+    assert customer_job_error("version mismatch") == SKILL_CHANGED_MESSAGE

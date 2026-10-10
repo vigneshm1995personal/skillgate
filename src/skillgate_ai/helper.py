@@ -22,7 +22,7 @@ import zipfile
 from pathlib import Path
 
 from skillgate_ai.deploy import get_adapter
-from skillgate_ai.errors import SkillGateError
+from skillgate_ai.errors import SKILL_CHANGED_MESSAGE, SkillGateError, customer_job_error
 from skillgate_ai.ingest import ingest_skill
 from skillgate_ai.pack import skill_pack_hash
 
@@ -69,9 +69,9 @@ def _http_error(exc: urllib.error.HTTPError) -> str:
         data = json.loads(exc.read().decode("utf-8"))
         detail = data.get("detail") if isinstance(data, dict) else None
         if isinstance(detail, dict) and detail.get("message"):
-            return str(detail["message"])
+            return customer_job_error(str(detail["message"]))
         if isinstance(detail, str):
-            return detail
+            return customer_job_error(detail)
     except (OSError, ValueError):
         pass
     return f"Request failed ({exc.code})."
@@ -135,9 +135,20 @@ def _auth_headers(config: dict) -> dict:
 
 def _friendly_reason(exc: BaseException) -> str:
     if isinstance(exc, SkillGateError):
-        return exc.message
+        return customer_job_error(exc.message)
     message = str(exc).strip() or exc.__class__.__name__
-    return message[:200]
+    return customer_job_error(message[:200]) or "Couldn't install this skill."
+
+
+def _mismatch_result(targets: list) -> dict:
+    return {
+        "status": "failed",
+        "error": SKILL_CHANGED_MESSAGE,
+        "targets": [
+            {"target": t, "status": "failed", "error": SKILL_CHANGED_MESSAGE}
+            for t in targets
+        ],
+    }
 
 
 def _extract_bundle(bundle: bytes, work: Path) -> Path:
@@ -178,14 +189,7 @@ def process_job(url: str, config: dict, job: dict) -> dict:
     expected_hash = job.get("skill_md_hash") or ""
     targets = [t for t in (job.get("targets") or []) if t]
     headers = {"Authorization": f"Bearer {config['token']}"}
-    mismatch: dict = {
-        "status": "failed",
-        "error": "version mismatch",
-        "targets": [
-            {"target": t, "status": "failed", "error": "Couldn't install — version mismatch"}
-            for t in targets
-        ],
-    }
+    mismatch = _mismatch_result(targets)
     bundle = _http_get(f"{url}/api/helper/bundles/{job_id}", headers=headers)
     with tempfile.TemporaryDirectory(prefix="sg-helper-") as td:
         root = Path(td)
@@ -205,11 +209,12 @@ def process_job(url: str, config: dict, job: dict) -> dict:
         try:
             loaded = ingest_skill(skill_dir)
         except SkillGateError as exc:
+            reason = _friendly_reason(exc)
             return {
                 "status": "failed",
-                "error": exc.message,
+                "error": reason,
                 "targets": [
-                    {"target": t, "status": "failed", "error": exc.message}
+                    {"target": t, "status": "failed", "error": reason}
                     for t in targets
                 ],
             }
@@ -246,11 +251,12 @@ def run_helper(config: dict, *, once: bool = False, sleep_sec: int = 5) -> None:
             try:
                 result = process_job(url, config, job)
             except SkillGateError as exc:
+                reason = _friendly_reason(exc)
                 result = {
                     "status": "failed",
-                    "error": exc.message,
+                    "error": reason,
                     "targets": [
-                        {"target": t, "status": "failed", "error": exc.message}
+                        {"target": t, "status": "failed", "error": reason}
                         for t in (job.get("targets") or [])
                     ],
                 }

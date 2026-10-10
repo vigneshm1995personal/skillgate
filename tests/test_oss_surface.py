@@ -60,6 +60,16 @@ def test_no_denied_imports() -> None:
     assert not leaks, "hosted imports:\n" + "\n".join(leaks)
 
 
+def test_helper_and_sync_stay_cli_only() -> None:
+    """Helper/sync ship in the library CLI, not the local UI."""
+    for rel in ("helper.py", "sync.py"):
+        path = ROOT / rel
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=rel)
+        imported = _imported_names(tree)
+        leaks = [name for name in imported if "local_ui" in name]
+        assert not leaks, f"{rel} imported local UI: {leaks}"
+
+
 def test_cli_imports_without_hosted() -> None:
     import skillgate_ai.cli
     import skillgate_ai.config
@@ -88,4 +98,3 @@ def test_static_index_is_packaged() -> None:
     index = files("skillgate_ai.local_ui").joinpath("static/index.html")
     text = index.read_text(encoding="utf-8")
     assert "no account" in text.lower()
-
