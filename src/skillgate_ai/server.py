@@ -7,7 +7,7 @@ from importlib.resources import files
 from pathlib import Path
 
 from fastapi import FastAPI
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse, Response
 from starlette.staticfiles import StaticFiles
 
 from skillgate_ai.api import create_app
@@ -50,8 +50,8 @@ def web_static_dir() -> Path | None:
 def attach_static(app: FastAPI, dist: Path | None = None) -> None:
     root = dist if dist is not None else web_static_dir()
 
-    @app.get("/")
-    def index() -> FileResponse | HTMLResponse:
+    @app.get("/", response_model=None)
+    def index() -> Response:
         if root is None or not (root / "index.html").is_file():
             return HTMLResponse(_MISSING_UI, status_code=503)
         return FileResponse(root / "index.html")
@@ -61,8 +61,8 @@ def attach_static(app: FastAPI, dist: Path | None = None) -> None:
         if assets.is_dir():
             app.mount("/assets", StaticFiles(directory=assets), name="assets")
 
-        @app.get("/{full_path:path}")
-        def spa(full_path: str) -> FileResponse | HTMLResponse:
+        @app.get("/{full_path:path}", response_model=None)
+        def spa(full_path: str) -> Response:
             if full_path.startswith("api/"):
                 return HTMLResponse("not found", status_code=404)
             candidate = (root / full_path).resolve()
@@ -75,8 +75,8 @@ def attach_static(app: FastAPI, dist: Path | None = None) -> None:
             return FileResponse(root / "index.html")
     else:
 
-        @app.get("/{full_path:path}")
-        def spa_missing(full_path: str) -> HTMLResponse:
+        @app.get("/{full_path:path}", response_model=None)
+        def spa_missing(full_path: str) -> Response:
             if full_path.startswith("api/"):
                 return HTMLResponse("not found", status_code=404)
             return HTMLResponse(_MISSING_UI, status_code=503)

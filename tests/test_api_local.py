@@ -156,3 +156,27 @@ def test_git_deploy_hidden_not_present(tmp_path: Path, monkeypatch) -> None:
     client = _client(tmp_path, monkeypatch)
     res = client.post("/api/deploy", json={"target": "git", "skill": "pdf", "mode": "git"})
     assert res.status_code == 404
+
+
+def test_ui_static_attaches_without_fastapi_error(tmp_path: Path, monkeypatch) -> None:
+    from skillgate_ai.server import attach_static, web_static_dir
+
+    monkeypatch.setenv("SKILLGATE_MODE", "local")
+    app = create_app(root=tmp_path)
+    attach_static(app)
+    client = TestClient(app)
+    status = client.get("/api/status")
+    assert status.status_code == 200
+    assert status.json()["mode"] == "local"
+    assert status.json()["auth_required"] is False
+    page = client.get("/")
+    dist = web_static_dir()
+    if dist is not None and (dist / "index.html").is_file():
+        assert page.status_code == 200
+        assert "<html" in page.text.lower()
+        spa = client.get("/skills/pdf")
+        assert spa.status_code == 200
+        assert "<html" in spa.text.lower()
+    else:
+        assert page.status_code == 503
+        assert "pnpm build" in page.text

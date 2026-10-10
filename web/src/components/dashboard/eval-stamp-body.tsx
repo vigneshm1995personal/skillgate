@@ -229,7 +229,7 @@ export function gateCoverageLine(
     return "Gate is green — Deploy is unlocked."
   }
   if (reportPassed === true && !isLiveHarness(harness)) {
-    return "Demo evals do not unlock Deploy. Run live Start Evaluations."
+    return "Gate is red — Deploy is blocked."
   }
   if (reportPassed === true && isLiveHarness(harness)) {
     return (

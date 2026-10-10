@@ -62,7 +62,7 @@ Until the first PyPI release, CI in this repo uses `pip install -e .`.
 - [`docs/quickstart.md`](docs/quickstart.md) — red sabotaged → green pdf
 - [`docs/pack.md`](docs/pack.md) — `evals/cases.yaml` schema 1, fixtures, goldens, history
 - [Extract plan](docs/plans/2026-10-03-skillgate-oss-extract.md) — allowlist / deny-list
-- [Local UI + setup wizard plan](docs/plans/2026-10-04-local-ui-setup-wizard.md) — `skillgate ui` (local stdlib UI; not hosted `serve`)
+- [Local UI + setup wizard plan](docs/plans/2026-10-04-local-ui-setup-wizard.md) — historical plan; `skillgate ui` now serves the React app
 - [Score live checks with your OpenAI key](docs/openai-judge.md) — optional; `OPENAI_API_KEY` scores live checks. Built-in checker if unset.
 - [OpenAI judge plan](docs/plans/openai-judge.md) — implementation plan
 - [`docs/ui.md`](docs/ui.md) — local React UI (`skillgate ui`), red path, Docker stays `check /pack`
