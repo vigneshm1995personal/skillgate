@@ -4,6 +4,8 @@ import io
 import json
 import os
 import plistlib
+import urllib.error
+import urllib.request
 import zipfile
 from pathlib import Path
 
@@ -11,7 +13,7 @@ import pytest
 
 from skillgate_ai import helper as helper_mod
 from skillgate_ai.errors import SKILL_CHANGED_MESSAGE, customer_job_error
-from skillgate_ai.helper import connect, install_launchd_plist, process_job
+from skillgate_ai.helper import connect, install_launchd_plist, process_job, run_helper
 from skillgate_ai.pack import copy_skill_pack, skill_pack_hash
 
 
@@ -179,3 +181,65 @@ def test_customer_job_error_hides_hashes() -> None:
     assert customer_job_error(leaked) == SKILL_CHANGED_MESSAGE
     assert "961b02b6" not in customer_job_error(leaked)
     assert customer_job_error("version mismatch") == SKILL_CHANGED_MESSAGE
+
+
+def test_http_get_wraps_urlerror(monkeypatch: pytest.MonkeyPatch) -> None:
+    def boom(*args, **kwargs):
+        raise urllib.error.URLError("timed out")
+
+    monkeypatch.setattr(urllib.request, "urlopen", boom)
+    with pytest.raises(helper_mod.SkillGateError) as exc:
+        helper_mod._http_get("https://host.example/bundle")
+    assert exc.value.message == helper_mod._UNREACHABLE
+    assert "timed out" not in exc.value.message
+    assert "URLError" not in exc.value.message
+
+
+def test_read_json_wraps_bad_payload(monkeypatch: pytest.MonkeyPatch) -> None:
+    class _Resp:
+        def read(self) -> bytes:
+            return b"not-json{"
+
+        def __enter__(self) -> "_Resp":
+            return self
+
+        def __exit__(self, *args) -> bool:
+            return False
+
+    monkeypatch.setattr(urllib.request, "urlopen", lambda *args, **kwargs: _Resp())
+    req = urllib.request.Request("https://host.example/poll", method="GET")
+    with pytest.raises(helper_mod.SkillGateError) as exc:
+        helper_mod._read_json(req, timeout=1)
+    assert exc.value.message == helper_mod._UNREACHABLE
+
+
+def test_run_helper_reports_network_error_after_claim(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    reported: list[dict] = []
+
+    def fake_post(url, payload, **kwargs):
+        if url.endswith("/api/helper/poll"):
+            return {
+                "job": {
+                    "id": "j1",
+                    "skill_name": "pdf",
+                    "skill_md_hash": "abc",
+                    "targets": ["cursor"],
+                }
+            }
+        reported.append(payload)
+        return {}
+
+    def boom(*args, **kwargs):
+        raise urllib.error.URLError("timed out")
+
+    monkeypatch.setattr(helper_mod, "_http_post", fake_post)
+    monkeypatch.setattr(urllib.request, "urlopen", boom)
+    run_helper({"url": "https://host.example", "token": "tok"}, once=True)
+    assert reported
+    assert reported[0]["status"] == "failed"
+    blob = json.dumps(reported[0])
+    assert "timed out" not in blob
+    assert "URLError" not in blob
+    assert "Couldn't reach Skill Gate" in reported[0]["error"]

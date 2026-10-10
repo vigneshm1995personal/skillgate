@@ -31,6 +31,8 @@ CONFIG_PATH = CONFIG_DIR / "helper.json"
 LAUNCH_AGENT_LABEL = "com.skillgate-ai.helper"
 _MAX_BUNDLE_BYTES = 100 * 1024 * 1024
 _MAX_BUNDLE_FILES = 2000
+_UNREACHABLE = "Couldn't reach Skill Gate. Try again."
+_INSTALL_FAILED = "Couldn't install this skill."
 
 
 def helper_config_path() -> Path:
@@ -44,24 +46,34 @@ def _http_post(url: str, payload: dict, *, headers: dict | None = None) -> dict:
     return _read_json(req, timeout=60)
 
 
+def _request_error(exc: BaseException) -> SkillGateError:
+    if isinstance(exc, urllib.error.HTTPError):
+        return SkillGateError(_http_error(exc))
+    return SkillGateError(_UNREACHABLE)
+
+
 def _http_get(url: str, *, headers: dict | None = None) -> bytes:
     req = urllib.request.Request(url, method="GET", headers=headers or {})
     try:
         with urllib.request.urlopen(req, timeout=120) as resp:
             return resp.read()
-    except urllib.error.HTTPError as exc:
-        raise SkillGateError(_http_error(exc)) from exc
+    except (urllib.error.URLError, TimeoutError, OSError) as exc:
+        raise _request_error(exc) from exc
 
 
 def _read_json(req: urllib.request.Request, *, timeout: int) -> dict:
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             body = resp.read()
-    except urllib.error.HTTPError as exc:
-        raise SkillGateError(_http_error(exc)) from exc
+    except (urllib.error.URLError, TimeoutError, OSError) as exc:
+        raise _request_error(exc) from exc
     if not body:
         return {}
-    return json.loads(body.decode("utf-8"))
+    try:
+        parsed = json.loads(body.decode("utf-8"))
+    except (json.JSONDecodeError, UnicodeDecodeError, ValueError) as exc:
+        raise SkillGateError(_UNREACHABLE) from exc
+    return parsed if isinstance(parsed, dict) else {}
 
 
 def _http_error(exc: urllib.error.HTTPError) -> str:
@@ -137,18 +149,21 @@ def _friendly_reason(exc: BaseException) -> str:
     if isinstance(exc, SkillGateError):
         return customer_job_error(exc.message)
     message = str(exc).strip() or exc.__class__.__name__
-    return customer_job_error(message[:200]) or "Couldn't install this skill."
+    return customer_job_error(message[:200]) or _INSTALL_FAILED
+
+
+def _failed_result(targets: list, error: str) -> dict:
+    return {
+        "status": "failed",
+        "error": error,
+        "targets": [
+            {"target": t, "status": "failed", "error": error} for t in targets
+        ],
+    }
 
 
 def _mismatch_result(targets: list) -> dict:
-    return {
-        "status": "failed",
-        "error": SKILL_CHANGED_MESSAGE,
-        "targets": [
-            {"target": t, "status": "failed", "error": SKILL_CHANGED_MESSAGE}
-            for t in targets
-        ],
-    }
+    return _failed_result(targets, SKILL_CHANGED_MESSAGE)
 
 
 def _extract_bundle(bundle: bytes, work: Path) -> Path:
@@ -196,11 +211,11 @@ def process_job(url: str, config: dict, job: dict) -> dict:
         _extract_bundle(bundle, root)
         manifest_path = root / "manifest.json"
         if not manifest_path.is_file():
-            return mismatch
+            return _failed_result(targets, _INSTALL_FAILED)
         try:
             manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
         except (OSError, ValueError):
-            return mismatch
+            return _failed_result(targets, _INSTALL_FAILED)
         if manifest.get("skill_md_hash") != expected_hash:
             return mismatch
         skill_dir = root / skill_name
@@ -209,15 +224,7 @@ def process_job(url: str, config: dict, job: dict) -> dict:
         try:
             loaded = ingest_skill(skill_dir)
         except SkillGateError as exc:
-            reason = _friendly_reason(exc)
-            return {
-                "status": "failed",
-                "error": reason,
-                "targets": [
-                    {"target": t, "status": "failed", "error": reason}
-                    for t in targets
-                ],
-            }
+            return _failed_result(targets, _friendly_reason(exc))
         results: list[dict] = []
         failed = False
         for target in targets:
@@ -251,15 +258,9 @@ def run_helper(config: dict, *, once: bool = False, sleep_sec: int = 5) -> None:
             try:
                 result = process_job(url, config, job)
             except SkillGateError as exc:
-                reason = _friendly_reason(exc)
-                result = {
-                    "status": "failed",
-                    "error": reason,
-                    "targets": [
-                        {"target": t, "status": "failed", "error": reason}
-                        for t in (job.get("targets") or [])
-                    ],
-                }
+                result = _failed_result(
+                    job.get("targets") or [], _friendly_reason(exc)
+                )
             try:
                 _http_post(f"{url}/api/helper/results/{job['id']}", result, headers=headers)
             except SkillGateError:
