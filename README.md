@@ -4,7 +4,7 @@ Apache-2.0 local gate for [Agent Skills](https://agentskills.io): **one pack on 
 
 PyPI distribution: **`skillgate-ai`** (`pip install skillgate` is a different project). CLI command: `skillgate`.
 
-Hosted product (SIWV, vault, Neon, dashboard) stays private at [`vigneshm1995personal/skillgate-ai`](https://github.com/vigneshm1995personal/skillgate-ai) and will never be made public.
+Hosted accounts, billing, Neon, and sandbox stay private at [`vigneshm1995personal/skillgate-ai`](https://github.com/vigneshm1995personal/skillgate-ai) (later `skillgate-cloud`). The engine, CLI, and React UI belong in this repo — see [one codebase plan](docs/plans/one-codebase.md).
 
 ## 10 minutes, no account
 
@@ -62,6 +62,7 @@ Until the first PyPI release, CI in this repo uses `pip install -e .`.
 - [`docs/quickstart.md`](docs/quickstart.md) — red sabotaged → green pdf
 - [`docs/pack.md`](docs/pack.md) — `evals/cases.yaml` schema 1, fixtures, goldens, history
 - [Extract plan](docs/plans/2026-10-03-skillgate-oss-extract.md) — allowlist / deny-list
+- [One codebase plan](docs/plans/one-codebase.md) — public core + thin private wrapper; one React UI; `mode: local | cloud`
 - [Local UI + setup wizard plan](docs/plans/2026-10-04-local-ui-setup-wizard.md) — `skillgate ui` (local stdlib UI; not hosted `serve`)
 - [Score live checks with your OpenAI key](docs/openai-judge.md) — optional; `OPENAI_API_KEY` scores live checks. Built-in checker if unset.
 - [OpenAI judge plan](docs/plans/openai-judge.md) — implementation plan
