@@ -62,6 +62,19 @@ def _redact(stderr: str) -> str:
     return "\n".join(lines[-5:]).strip()
 
 
+def _reject_symlinks(skill_dir: Path) -> None:
+    """Refuse to sync a skill that contains symlinks (a cloned repo is untrusted)."""
+    for root, dirs, files in os.walk(skill_dir, followlinks=False):
+        for name in dirs + files:
+            entry = Path(root) / name
+            if entry.is_symlink():
+                rel = entry.relative_to(skill_dir)
+                raise SkillGateError(
+                    f"Skill '{skill_dir.name}' contains a symlink ({rel.as_posix()}). "
+                    "Symlinks are not allowed in synced skills."
+                )
+
+
 def _skill_names(repo_root: Path, path_prefix: str) -> list[str]:
     prefix = (path_prefix or "skills").strip().strip("/") or "skills"
     skills_dir = repo_root / prefix
@@ -105,9 +118,12 @@ def _sync_one_target(
     managed_before = {name for name in _load_state(root) if name}
     managed_after = set(names)
     for name in sorted(managed_before - managed_after):
-        dest = (root / name).resolve()
-        if dest.is_dir() and dest.parent == root.resolve():
-            shutil.rmtree(dest, ignore_errors=True)
+        entry = root / name
+        if entry.is_symlink():
+            entry.unlink(missing_ok=True)
+            continue
+        if entry.is_dir() and entry.resolve().parent == root.resolve():
+            shutil.rmtree(entry, ignore_errors=True)
     installed = 0
     for name in names:
         source = repo_root / (path_prefix or "skills") / name
@@ -137,7 +153,14 @@ def sync_once(
     with tempfile.TemporaryDirectory(prefix="sg-sync-") as td:
         work = Path(td)
         _clone(repo_url, work)
+        skills_dir = work / (path_prefix or "skills")
+        if not skills_dir.is_dir():
+            raise SkillGateError(
+                f"That repo has no '{path_prefix or 'skills'}/' folder. Nothing was changed."
+            )
         names = _skill_names(work, path_prefix)
+        for name in names:
+            _reject_symlinks(work / (path_prefix or "skills") / name)
         roots = target_roots()
         per_target = {
             target: _sync_one_target(

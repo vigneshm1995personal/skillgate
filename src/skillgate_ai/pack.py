@@ -70,6 +70,8 @@ def list_pack_files(skill_path: str | Path) -> list[dict[str, Any]]:
             continue
         if any(part.lower() in _SKIP_DIR_NAMES for part in Path(rel).parts):
             continue
+        if rel == GOLDEN_DIR or rel.startswith(GOLDEN_DIR + "/"):
+            continue
         found.append({"path": rel, "bytes": path.stat().st_size})
     return found
 

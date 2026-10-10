@@ -16,6 +16,7 @@ import sys
 import tempfile
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 import zipfile
 from pathlib import Path
@@ -28,6 +29,8 @@ from skillgate_ai.pack import skill_pack_hash
 CONFIG_DIR = Path.home() / ".config" / "skillgate"
 CONFIG_PATH = CONFIG_DIR / "helper.json"
 LAUNCH_AGENT_LABEL = "com.skillgate-ai.helper"
+_MAX_BUNDLE_BYTES = 100 * 1024 * 1024
+_MAX_BUNDLE_FILES = 2000
 
 
 def helper_config_path() -> Path:
@@ -74,11 +77,21 @@ def _http_error(exc: urllib.error.HTTPError) -> str:
     return f"Request failed ({exc.code})."
 
 
+def _require_secure_url(base: str) -> None:
+    parsed = urllib.parse.urlparse(base)
+    if parsed.scheme == "https":
+        return
+    if parsed.scheme == "http" and parsed.hostname in {"127.0.0.1", "localhost", "::1"}:
+        return
+    raise SkillGateError("Use an https:// URL for the hosted Skill Gate (the device token is secret).")
+
+
 def connect(url: str, code: str, name: str | None = None) -> dict:
     """Exchange a one-time pairing code for a device token (stored 0600)."""
     base = (url or "").rstrip("/")
     if not base:
         raise SkillGateError("A hosted Skill Gate URL is required.")
+    _require_secure_url(base)
     payload = {"code": code}
     if name:
         payload["name"] = name
@@ -128,8 +141,33 @@ def _friendly_reason(exc: BaseException) -> str:
 
 
 def _extract_bundle(bundle: bytes, work: Path) -> Path:
-    with zipfile.ZipFile(io.BytesIO(bundle)) as zf:
-        zf.extractall(work)
+    """Extract a bundle defensively: no path traversal, no zip bombs.
+
+    ``zipfile`` sanitizes ``..`` and absolute members on modern Python, but a
+    bundle comes from a remote host, so validate each member's resolved target
+    stays under ``work`` and cap size / file counts explicitly.
+    """
+    if len(bundle) > _MAX_BUNDLE_BYTES:
+        raise SkillGateError("The skill bundle is too large to install.")
+    try:
+        with zipfile.ZipFile(io.BytesIO(bundle)) as zf:
+            infos = zf.infolist()
+            if len(infos) > _MAX_BUNDLE_FILES:
+                raise SkillGateError("The skill bundle has too many files.")
+            total = 0
+            for info in infos:
+                total += info.file_size
+                try:
+                    (work / info.filename).resolve().relative_to(work.resolve())
+                except ValueError as exc:
+                    raise SkillGateError(
+                        "The skill bundle contains an unsafe path."
+                    ) from exc
+            if total > _MAX_BUNDLE_BYTES:
+                raise SkillGateError("The skill bundle expands to too much data.")
+            zf.extractall(work)
+    except zipfile.BadZipFile as exc:
+        raise SkillGateError("The skill bundle is not a valid zip file.") from exc
     return work
 
 
