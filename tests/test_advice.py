@@ -59,3 +59,25 @@ def test_advise_nonzero_exit_does_not_suggest_another_check_path() -> None:
     assert "output_path" not in blob.lower()
     assert "2" in blob
     assert "unrecognized arguments" in blob.lower() or "failed" in blob.lower()
+
+
+def test_advise_ignores_agent_jsonl_stderr() -> None:
+    scores = [
+        Score(
+            scorer="task_completion",
+            passed=False,
+            detail="missing output/status.pdf",
+            headline="Task not completed",
+        )
+    ]
+    advice = advise_task(
+        _create_status_task(),
+        scores,
+        PDF,
+        "pdf",
+        returncode=1,
+        stderr='{"type":"error","message":"turn failed"}\n',
+    )
+    assert advice is not None
+    assert advice.headline != "The command failed"
+    assert "extracted.txt" not in f"{advice.headline} {advice.why} {advice.change}"

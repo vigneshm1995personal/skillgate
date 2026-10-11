@@ -92,7 +92,7 @@ def advise_task(
         )
 
     missing = (completion.detail if completion else "") or (rubric.detail if rubric else "missing output")
-    if returncode not in (None, 0):
+    if _is_script_failure(returncode, stderr):
         snippet = _command_fail_snippet(stderr)
         why = f"The command exited {returncode}."
         if snippet:
@@ -462,6 +462,15 @@ def _clip(text: str, limit: int) -> str:
     if len(text) <= limit:
         return text
     return text[: limit - 3].rsplit(" ", 1)[0] + "..."
+
+
+def _is_script_failure(returncode: int | None, stderr: str) -> bool:
+    if returncode in (None, 0):
+        return False
+    text = (stderr or "").lstrip()
+    if text.startswith("{") or text.startswith("["):
+        return False
+    return True
 
 
 def _command_fail_snippet(stderr: str) -> str:

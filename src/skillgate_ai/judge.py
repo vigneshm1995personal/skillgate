@@ -104,16 +104,26 @@ def resolve_judge(cfg: LLMConfig, *, harness_name: str) -> Judge:
 
 
 def _openai_judge(cfg: LLMConfig) -> Judge:
+    from skillgate_ai.config import DEFAULT_JUDGE_MODEL
     from skillgate_ai.judge_openai import DEFAULT_BASE_URL, make_openai_judge
 
     api_key = _judge_api_key(cfg)
+    backend = cfg.judge_backend
+    model = cfg.judge_model
     base_url = DEFAULT_BASE_URL
-    if not (cfg.openai_api_key or "").strip() and (cfg.gateway_api_key or "").strip():
+    gateway_only = not (cfg.openai_api_key or "").strip() and bool(
+        (cfg.gateway_api_key or "").strip()
+    )
+    if gateway_only:
         base_url = (cfg.gateway_base_url or "").rstrip("/") or DEFAULT_BASE_URL
+        if (backend or "decisions").strip().lower() in {"", "auto", "decisions"}:
+            backend = "structured"
+        if (model or "").strip() in {"", DEFAULT_JUDGE_MODEL}:
+            model = cfg.gateway_model
     return make_openai_judge(
         api_key=api_key,
-        backend=cfg.judge_backend,
-        model=cfg.judge_model,
+        backend=backend,
+        model=model,
         min_confidence=cfg.judge_min_confidence,
         why_enabled=cfg.judge_why,
         reasoning_effort=cfg.judge_reasoning_effort,

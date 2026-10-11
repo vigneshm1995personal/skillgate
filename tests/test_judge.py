@@ -82,6 +82,7 @@ def test_gateway_key_uses_openai_judge_via_gateway() -> None:
     assert judge.backend.api_key == "gw-test"
     assert judge.backend.base_url == "https://ai-gateway.vercel.sh/v1"
     assert "api.openai.com" not in judge.backend.base_url
+    assert judge.backend.name != "decisions"
 
 
 def test_judge_stamp_has_no_secret() -> None:

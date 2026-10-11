@@ -942,13 +942,15 @@ def _parse_run_lines(text: str) -> list[list[str]]:
 
 
 def _command_allowed(command: list[str], skill_name: str) -> bool:
-    if not command:
+    if len(command) < 2:
         return False
-    joined = " ".join(command)
-    if ".." in joined:
+    if command[0] not in {"python", "python3"}:
         return False
-    needle = f".skillgate/skills/{skill_name}/"
-    return command[0] in {"python", "python3"} and needle in joined
+    script = command[1].replace("\\", "/")
+    if script.startswith("-") or ".." in script:
+        return False
+    needle = f".skillgate/skills/{skill_name}/scripts/"
+    return script.startswith(needle) and script.endswith(".py")
 
 
 def _gateway_complete(

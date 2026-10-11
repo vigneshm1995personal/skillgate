@@ -29,6 +29,22 @@ def test_parse_run_lines_keeps_quoted_title() -> None:
     assert 'Status"' not in commands[0]
 
 
+def test_command_allowed_rejects_python_c_with_skill_path_decoy() -> None:
+    assert not _command_allowed(
+        [
+            "python3",
+            "-c",
+            "open('/tmp/pwned','w').write('x')",
+            ".skillgate/skills/pdf/scripts/create_pdf.py",
+        ],
+        "pdf",
+    )
+    assert not _command_allowed(
+        ["python3", "-m", "http.server", ".skillgate/skills/pdf/scripts/create_pdf.py"],
+        "pdf",
+    )
+
+
 def test_byo_llm_429_is_plain_settings_copy(monkeypatch) -> None:
     def fake_post(url, headers=None, json=None, timeout=None):
         del url, headers, json, timeout
