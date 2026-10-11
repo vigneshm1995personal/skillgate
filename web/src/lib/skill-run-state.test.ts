@@ -100,6 +100,20 @@ describe("deployAllowedForLiveGate", () => {
         gateRunning: false,
       })
     ).toBe(false)
+    const tryoutPass: RunRecord = {
+      ...tryoutFail,
+      id: "try-pass",
+      gate_decision: "pending",
+      report: { ...tryoutFail.report, passed_count: 1 },
+    }
+    expect(
+      deployAllowedForLiveGate({
+        skill: { name: "pdf" },
+        liveGate: tryoutPass,
+        gateRunning: false,
+        mode: "local",
+      })
+    ).toBe(false)
     expect(
       deployAllowedForLiveGate({
         skill: { name: "pdf" },

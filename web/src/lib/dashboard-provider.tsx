@@ -702,7 +702,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     if (stage !== "eval" || evalTab !== "checks") {
       return
     }
-    if (!skill || checks.length > 0 || seeding || intakeError) {
+    if (!skill || checks.length > 0 || seeding || intakeError || checksSource != null) {
       return
     }
     const skillId = skill.absolute || skill.id
@@ -710,7 +710,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       return
     }
     void selectSkill(skillId, { tab: "checks", fallbackSkill: skill })
-  }, [checks.length, evalTab, intakeError, seeding, selectSkill, skill, stage])
+  }, [checks.length, checksSource, evalTab, intakeError, seeding, selectSkill, skill, stage])
 
   const localHomeBooted = useRef(false)
   useEffect(() => {

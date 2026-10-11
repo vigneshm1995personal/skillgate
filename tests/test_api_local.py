@@ -9,7 +9,9 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 
 from skillgate_ai.api import create_app
+from skillgate_ai.api_payloads import history_row_to_run, local_gate
 from skillgate_ai.demo_files import ensure_demo_pdfs
+from skillgate_ai.history import append_eval
 from skillgate_ai.skill_md import write_skill_md
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -256,3 +258,80 @@ def test_zip_keeps_valid_skill_and_drops_traversal_members(
     assert not (tmp_path / "escape.txt").is_file()
     assert not (tmp_path.parent / "outside.txt").is_file()
     assert list(dest.rglob("outside.txt")) == []
+
+
+def test_local_gate_tryout_stays_pending() -> None:
+    assert local_gate(True, status="done", tryout=True) == (
+        "pending",
+        "Single-check runs do not unlock Deploy.",
+    )
+    row = history_row_to_run(
+        {"run_id": "try-1", "passed": True, "report": {"tryout": True, "task_count": 1}},
+        Path("/tmp/pdf"),
+    )
+    assert row["tryout"] is True
+    assert row["gate_decision"] == "pending"
+
+
+def test_tryout_history_does_not_unlock_deploy(tmp_path: Path, monkeypatch) -> None:
+    pack = _copy_pack(tmp_path)
+    hist_dir = pack / "evals" / "history"
+    for path in hist_dir.glob("*.jsonl"):
+        path.unlink()
+    append_eval(
+        pack,
+        run_id="try-pass",
+        passed=True,
+        report={"tryout": True, "skill": "pdf", "task_count": 1},
+    )
+    client = _client(tmp_path, monkeypatch)
+    hist = client.get("/api/history", params={"skill": "pdf"}).json()
+    assert hist["gate"] == "pending"
+    assert hist["last_run"] is None
+    skill = client.get("/api/skills/pdf").json()["skill"]
+    assert skill["gate"] == "pending"
+    assert skill["last_run"] is None
+
+    append_eval(
+        pack,
+        run_id="full-pass",
+        passed=True,
+        report={"skill": "pdf", "task_count": 8},
+    )
+    hist = client.get("/api/history", params={"skill": "pdf"}).json()
+    assert hist["gate"] == "cleared"
+    assert hist["last_run"]["id"] == "full-pass"
+
+    append_eval(
+        pack,
+        run_id="try-later",
+        passed=True,
+        report={"tryout": True, "skill": "pdf", "task_count": 1},
+    )
+    hist = client.get("/api/history", params={"skill": "pdf"}).json()
+    assert hist["gate"] == "cleared"
+    assert hist["last_run"]["id"] == "full-pass"
+    skill = client.get("/api/skills/pdf").json()["skill"]
+    assert skill["gate"] == "cleared"
+    assert skill["last_run"]["id"] == "full-pass"
+
+
+def test_generate_sample_writes_fixture(tmp_path: Path, monkeypatch) -> None:
+    _copy_pack(tmp_path)
+    client = _client(tmp_path, monkeypatch)
+    res = client.post(
+        "/api/skills/pack-file",
+        json={"skill": "pdf", "generate": True, "prompt": "Extract notes from a text file"},
+    )
+    assert res.status_code == 200
+    body = res.json()
+    assert body["file"]
+    written = tmp_path / "skills" / "pdf" / body["file"]["src"]
+    assert written.is_file()
+    photo = client.post(
+        "/api/skills/pack-file",
+        json={"skill": "pdf", "generate": True, "prompt": "Read the photo scan of the invoice"},
+    )
+    assert photo.status_code == 200
+    assert photo.json()["needs_upload"] is True
+    assert photo.json()["file"] is None

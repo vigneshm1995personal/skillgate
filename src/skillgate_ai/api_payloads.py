@@ -93,12 +93,17 @@ def local_gate(passed: bool | None, *, status: str, tryout: bool) -> tuple[str, 
     return "cleared", "Gate is green."
 
 
+def _row_is_tryout(row: dict[str, Any], report: dict[str, Any] | None) -> bool:
+    return bool(row.get("tryout") or (report or {}).get("tryout"))
+
+
 def history_row_to_run(row: dict[str, Any], skill_path: Path) -> dict[str, Any]:
     report = row.get("report") if isinstance(row.get("report"), dict) else None
     passed = row.get("passed")
     error = row.get("error") if isinstance(row.get("error"), dict) else None
     harness = (report or {}).get("harness")
-    decision, reason = local_gate(passed, status="error" if error else "done", tryout=False)
+    tryout = _row_is_tryout(row, report)
+    decision, reason = local_gate(passed, status="error" if error else "done", tryout=tryout)
     return {
         "id": row.get("run_id"),
         "status": "error" if error else "done",
@@ -115,21 +120,25 @@ def history_row_to_run(row: dict[str, Any], skill_path: Path) -> dict[str, Any]:
         "config": row.get("config"),
         "completed_count": (report or {}).get("task_count"),
         "task_count": (report or {}).get("task_count"),
-        "tryout": bool((report or {}).get("tryout")),
+        "tryout": tryout,
     }
+
+
+def _newest_full_run(runs: list[dict[str, Any]]) -> dict[str, Any] | None:
+    for item in runs:
+        if not item.get("tryout"):
+            return item
+    return None
 
 
 def skill_payload(state: AppState, path: Path) -> dict[str, Any]:
     loaded = ingest_skill(path)
     files = browser_files(path)
     hist = load_history(path, limit=50)
+    runs = [history_row_to_run(row, path) for row in reversed(hist)]
+    last_run = _newest_full_run(runs)
     last = hist[-1] if hist else None
-    last_run = history_row_to_run(last, path) if last else None
-    gate = "pending"
-    if last_run:
-        gate = last_run.get("gate_decision") or (
-            "cleared" if last_run.get("passed") else "blocked"
-        )
+    gate = (last_run or {}).get("gate_decision") or "pending"
     return {
         "id": loaded.name,
         "name": loaded.name,
@@ -160,7 +169,7 @@ def history_payload(state: AppState, skill_path: Path) -> dict[str, Any]:
     del state
     rows = load_history(skill_path, limit=50)
     runs = [history_row_to_run(row, skill_path) for row in reversed(rows)]
-    last_run = runs[0] if runs else None
+    last_run = _newest_full_run(runs)
     gate = last_run.get("gate_decision") if last_run else "pending"
     timeline = [
         {

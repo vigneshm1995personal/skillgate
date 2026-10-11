@@ -35,6 +35,7 @@ def append_eval(
         "report": report,
         "error": error,
         "config": config,
+        "tryout": bool((report or {}).get("tryout")),
     }
     payload = json.dumps(row, ensure_ascii=True) + "\n"
     try:

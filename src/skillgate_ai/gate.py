@@ -116,6 +116,7 @@ def run_check(
     source: str = "cli",
     root: Path | None = None,
     checks: list[dict[str, Any]] | None = None,
+    tryout: bool = False,
 ) -> CheckResult:
     """Run pack-local evals. Exit 0 green, 1 red, 2 live-without-key."""
     project = root if root is not None else project_root()
@@ -212,11 +213,14 @@ def run_check(
                 passed=report.passed,
             )
             persist_root = Path(report.skill_path) if report.skill_path else pack_root
+            payload = report_to_dict(report)
+            if tryout:
+                payload["tryout"] = True
             persist_eval(
                 pack_root=persist_root,
                 run_id=rid,
                 passed=report.passed,
-                report=report_to_dict(report),
+                report=payload,
                 config=run_cfg,
             )
     except SkillGateError as exc:

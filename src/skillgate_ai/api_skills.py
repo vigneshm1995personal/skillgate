@@ -16,7 +16,13 @@ from skillgate_ai.catalog import catalog_entries, find_skill, import_from_agent_
 from skillgate_ai.deploy import get_adapter
 from skillgate_ai.errors import SkillGateError
 from skillgate_ai.ingest import ingest_skill
-from skillgate_ai.pack import pack_file_path, pack_preview, write_pack_file
+from skillgate_ai.pack import (
+    CannotSynthesizeFixture,
+    pack_file_path,
+    pack_preview,
+    write_pack_file,
+    write_sample_fixture,
+)
 
 
 def register_skill_routes(app: FastAPI) -> None:
@@ -73,6 +79,22 @@ def register_skill_routes(app: FastAPI) -> None:
         state = state_of(request)
         body = await request.json()
         skill_path = find_skill(state.root, str(body.get("skill") or ""))
+        if body.get("generate"):
+            try:
+                written = write_sample_fixture(
+                    skill_path,
+                    dest=str(body.get("path") or body.get("filename") or "").strip() or None,
+                    prompt=str(body.get("prompt") or ""),
+                    description=ingest_skill(skill_path).description,
+                )
+            except CannotSynthesizeFixture as exc:
+                return {
+                    "skill": skill_payload(state, skill_path),
+                    "file": None,
+                    "needs_upload": True,
+                    "message": str(exc),
+                }
+            return {"skill": skill_payload(state, skill_path), "file": written}
         rel = str(body.get("path") or body.get("filename") or "").strip()
         content = body.get("content")
         if content is None:
