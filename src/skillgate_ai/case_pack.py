@@ -32,6 +32,7 @@ from skillgate_ai.suite import DEFAULT_TASK_TIMEOUT_SEC, SuiteSpec, _normalize_s
 CASES_REL = "evals/cases.yaml"
 PIN_NEEDS_EXPECTED = "Add expected output for this check, then save."
 PIN_NEEDS_EXPECTED_HINT = "Open Dataset and fill Expected output."
+NO_TRIGGER_OUTPUT_WARNING = "Expected output on a no-trigger check is ignored."
 GOLDEN_TAIL_CHARS = 8000
 _OUTPUT_MAGICS = (
     (b"\xff\xd8\xff", "jpeg", "image/jpeg"),
@@ -218,7 +219,7 @@ def suite_from_pack(pack: CasePack, skill_rel: str) -> SuiteSpec:
     raw_tasks: list[dict[str, Any]] = []
     for case in pinned:
         scorers: list[dict[str, Any]] = [{"type": "skill_trigger"}]
-        if case.golden:
+        if case.golden and case.should_trigger:
             expects: list[dict[str, Any]] = []
             if case.contains:
                 for item in case.contains:
@@ -289,6 +290,9 @@ def checks_from_pack(pack: CasePack, *, include_drafts: bool = False) -> list[di
             "golden_kind": case.golden.kind if case.golden else None,
             "bank_status": case.status,
         }
+        warning = no_trigger_output_warning(case)
+        if warning:
+            check["warning"] = warning
         effective = merge_budgets(pack.budgets, case.budgets)
         if effective is not None:
             check["budgets"] = effective.to_sparse_dict()
@@ -627,6 +631,14 @@ def _validate_pack_on_disk(root: Path, pack: CasePack) -> None:
 MISSING_GOLDEN_REASON = "This check is missing its expected output file."
 
 
+def no_trigger_output_warning(case: PackCase) -> str | None:
+    if case.should_trigger:
+        return None
+    if case.golden is None and not case.contains:
+        return None
+    return NO_TRIGGER_OUTPUT_WARNING
+
+
 def task_missing_golden(root: Path, task_id: str) -> bool:
     """True when this pinned case names an expected-output file that is not on disk."""
     try:
@@ -634,7 +646,7 @@ def task_missing_golden(root: Path, task_id: str) -> bool:
     except (SuiteError, OSError, ValueError):
         return False
     case = case_for_task(pack, task_id)
-    if case is None or case.golden is None:
+    if case is None or case.golden is None or not case.should_trigger:
         return False
     return not (root / case.golden.path).is_file()
 

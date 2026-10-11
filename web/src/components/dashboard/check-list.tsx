@@ -7,7 +7,13 @@ import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui
 import { Input } from "@/components/ui/input"
 import { Spinner } from "@/components/ui/spinner"
 import { Textarea } from "@/components/ui/textarea"
-import { canPinCheck, expectedFieldValue, isPinnedCheck } from "@/lib/case-pack"
+import {
+  canPinCheck,
+  expectedFieldValue,
+  isPinnedCheck,
+  noTriggerOutputWarning,
+  showsExpectedOutputFields,
+} from "@/lib/case-pack"
 import { useDashboard } from "@/lib/dashboard-provider"
 import { checkHeadline, scorerCodeToPlain } from "@/lib/check-results"
 import { harnessDisplayName } from "@/lib/eval-config"
@@ -65,6 +71,7 @@ export function CheckList({
         const canPin = canPinCheck(check)
         const task = matchTask(check, index, checkRun, skillName)
         const overBudget = task?.metrics?.status === "fail"
+        const ignoredOutput = noTriggerOutputWarning(check)
         return (
           <div
             key={check.id ?? index}
@@ -169,42 +176,48 @@ export function CheckList({
                   This should trigger the skill
                 </FieldLabel>
               </Field>
-              <Field data-disabled={running || undefined}>
-                <FieldLabel htmlFor={`check-expected-${index}`}>
-                  Expected
-                </FieldLabel>
-                <Input
-                  id={`check-expected-${index}`}
-                  value={expectedFieldValue(check)}
-                  placeholder="Hello Skill Gate"
-                  disabled={running}
-                  onChange={(event) => {
-                    const contains = event.target.value
-                    updateCheck(index, {
-                      contains,
-                      ...(!(check.output_path || "").trim() && contains.trim()
-                        ? { output_path: skillOutputPath(skill) }
-                        : {}),
-                    })
-                  }}
-                />
-              </Field>
-              <Field data-disabled={running || undefined}>
-                <FieldLabel htmlFor={`check-output-${index}`}>
-                  Output file (optional)
-                </FieldLabel>
-                <Input
-                  id={`check-output-${index}`}
-                  value={check.output_path ?? ""}
-                  placeholder={skillOutputPath(skill)}
-                  disabled={running}
-                  onChange={(event) =>
-                    updateCheck(index, {
-                      output_path: event.target.value,
-                    })
-                  }
-                />
-              </Field>
+              {showsExpectedOutputFields(check) ? (
+                <>
+                  <Field data-disabled={running || undefined}>
+                    <FieldLabel htmlFor={`check-expected-${index}`}>
+                      Expected
+                    </FieldLabel>
+                    <Input
+                      id={`check-expected-${index}`}
+                      value={expectedFieldValue(check)}
+                      placeholder="Hello Skill Gate"
+                      disabled={running}
+                      onChange={(event) => {
+                        const contains = event.target.value
+                        updateCheck(index, {
+                          contains,
+                          ...(!(check.output_path || "").trim() && contains.trim()
+                            ? { output_path: skillOutputPath(skill) }
+                            : {}),
+                        })
+                      }}
+                    />
+                  </Field>
+                  <Field data-disabled={running || undefined}>
+                    <FieldLabel htmlFor={`check-output-${index}`}>
+                      Output file (optional)
+                    </FieldLabel>
+                    <Input
+                      id={`check-output-${index}`}
+                      value={check.output_path ?? ""}
+                      placeholder={skillOutputPath(skill)}
+                      disabled={running}
+                      onChange={(event) =>
+                        updateCheck(index, {
+                          output_path: event.target.value,
+                        })
+                      }
+                    />
+                  </Field>
+                </>
+              ) : ignoredOutput ? (
+                <p className="text-sm text-muted-foreground">{ignoredOutput}</p>
+              ) : null}
               <CheckInputControls
                 check={check}
                 index={index}

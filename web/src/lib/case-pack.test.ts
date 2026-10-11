@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest"
 
-import { canPinCheck, expectedFieldValue } from "./case-pack"
+import {
+  canPinCheck,
+  expectedFieldValue,
+  noTriggerOutputWarning,
+  showsExpectedOutputFields,
+} from "./case-pack"
 
 describe("canPinCheck", () => {
   it("allows a completion check that already has a golden file", () => {
@@ -42,5 +47,39 @@ describe("expectedFieldValue", () => {
         golden_path: "evals/goldens/extract-hello.txt",
       })
     ).toBe("Hello Skill Gate")
+  })
+})
+
+describe("no-trigger expected output", () => {
+  const leftover = {
+    id: "no-trigger-unrelated",
+    prompt: "Write a pytest for a FastAPI /health endpoint. Do not touch any PDFs.",
+    should_trigger: false,
+    output_path: "output/notes.txt",
+    contains: "Meeting notes",
+    golden_path: "evals/goldens/trigger-notes-pdf.txt",
+  }
+
+  it("hides expected-output fields on a no-trigger check", () => {
+    expect(showsExpectedOutputFields(leftover)).toBe(false)
+    expect(
+      showsExpectedOutputFields({
+        prompt: "Extract notes.pdf",
+        should_trigger: true,
+        output_path: "output/notes.txt",
+      })
+    ).toBe(true)
+  })
+
+  it("warns in plain words that leftover output on a no-trigger check is ignored", () => {
+    const warning = noTriggerOutputWarning(leftover)
+    expect(warning).toMatch(/ignored/i)
+    expect(warning).not.toMatch(/output_path|golden|contains/)
+    expect(
+      noTriggerOutputWarning({
+        prompt: leftover.prompt,
+        should_trigger: false,
+      })
+    ).toBeNull()
   })
 })

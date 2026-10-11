@@ -1,5 +1,8 @@
 import type { Check } from "@/lib/types"
 
+export const NO_TRIGGER_OUTPUT_WARNING =
+  "Expected output on a no-trigger check is ignored."
+
 export function isPinnedCheck(check: Check): boolean {
   return check.bank_status === "pinned"
 }
@@ -26,6 +29,26 @@ export function canPinCheck(check: Check): boolean {
 
 export function pinnedCaseCount(checks: Check[]): number {
   return checks.filter(isPinnedCheck).length
+}
+
+export function showsExpectedOutputFields(
+  check: Pick<Check, "should_trigger">
+): boolean {
+  return check.should_trigger !== false
+}
+
+export function noTriggerOutputWarning(
+  check: Pick<Check, "should_trigger" | "output_path" | "contains" | "golden_path">
+): string | null {
+  if (showsExpectedOutputFields(check)) {
+    return null
+  }
+  const leftover = Boolean(
+    String(check.output_path || "").trim() ||
+      String(check.contains || "").trim() ||
+      String(check.golden_path || "").trim()
+  )
+  return leftover ? NO_TRIGGER_OUTPUT_WARNING : null
 }
 
 export function expectedFieldValue(
