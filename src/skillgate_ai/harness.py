@@ -600,13 +600,13 @@ def live_harness_or_error(kind: str, cfg: LLMConfig) -> Harness:
 def auto_live_harness_name(cfg: LLMConfig) -> str:
     """Harness Auto Start will run — picker catalog key. Never ``demo``.
 
-    Same name as ``live_harness_or_error("auto")``. Empty keys still return
-    ``cursor-agent`` for UI chrome (status has no live catalog either way).
+    Same name as ``live_harness_or_error("auto")``. Empty keys return ``auto``
+    so UI chrome does not invent Cursor.
     """
     try:
         return live_harness_or_error("auto", cfg).name
     except MissingLLMKeyError:
-        return "cursor-agent"
+        return "auto"
 
 
 def _codex_auth_key(cfg: LLMConfig) -> str | None:

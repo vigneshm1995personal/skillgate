@@ -8,7 +8,7 @@ The local wizard (`skillgate ui`) writes this same layout: `name` in frontmatter
 ```
 my-skill/
   SKILL.md
-  scripts/agent_entry.py     # demo harness runs this when the skill triggers
+  scripts/agent_entry.py     # optional skill scripts the live harness can run
   evals/
     cases.yaml               # schema: 1 — the source of record
     fixtures/                # inputs (PDFs, CSV, …)

@@ -131,7 +131,11 @@ export function harnessDisplayName(
       llm: "LLM",
       "cursor-agent": "Cursor",
     }
-    return `Auto · ${labels[resolvedHarness || ""] || "Cursor"}`
+    const resolved = labels[resolvedHarness || ""]
+    if (!resolved) {
+      return "Auto"
+    }
+    return `Auto · ${resolved}`
   }
   if (pref === "cursor-agent") {
     return "Cursor"

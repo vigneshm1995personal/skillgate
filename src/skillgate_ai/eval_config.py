@@ -293,7 +293,11 @@ def harness_display_name(pref: str | None, resolved: str | None = None) -> str:
             "llm": "LLM",
             "cursor-agent": "Cursor",
         }
-        return f"Auto · {labels.get((resolved or '').strip().lower(), 'Cursor')}"
+        resolved_key = (resolved or "").strip().lower()
+        label = labels.get(resolved_key)
+        if label:
+            return f"Auto · {label}"
+        return "Auto"
     names = {
         "cursor-agent": "Cursor",
         "codex": "Codex",

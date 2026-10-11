@@ -89,3 +89,25 @@ def test_quickstart_does_not_promise_fixture_checks_without_a_key() -> None:
     text = QUICKSTART.read_text(encoding="utf-8").lower()
     assert "without that key, fixture checks" not in text
     assert "fixture checks (file exists, contains, page count) still decide pass/fail" not in text
+
+
+def test_openai_judge_docs_do_not_say_fixture_checks_decide_pass_fail() -> None:
+    text = (ROOT / "docs" / "openai-judge.md").read_text(encoding="utf-8").lower()
+    assert "fixture checks decide pass/fail" not in text
+    assert "otherwise fixture checks" not in text
+    assert "fixture checks decide the result" not in text
+
+
+def test_pack_docs_drop_demo_harness() -> None:
+    text = (ROOT / "docs" / "pack.md").read_text(encoding="utf-8").lower()
+    assert "demo harness" not in text
+
+
+def test_oct_extract_plans_are_marked_historical() -> None:
+    for name in (
+        "2026-10-03-skillgate-oss-extract.md",
+        "2026-10-04-local-ui-setup-wizard.md",
+    ):
+        text = (ROOT / "docs" / "plans" / name).read_text(encoding="utf-8")
+        head = "\n".join(text.splitlines()[:8]).lower()
+        assert "historical" in head, name

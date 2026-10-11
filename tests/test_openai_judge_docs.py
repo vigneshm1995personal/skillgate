@@ -21,6 +21,9 @@ def test_openai_judge_docs_are_plain() -> None:
     assert "task_completion.choice" not in text
     assert "built-in checker" not in lower
     assert "--harness demo" not in lower
+    assert "fixture checks decide pass/fail" not in lower
+    assert "otherwise fixture checks" not in lower
+    assert "fixture checks decide the result" not in lower
 
 
 def test_openai_judge_plan_drops_builtin_checker_and_demo_harness() -> None:

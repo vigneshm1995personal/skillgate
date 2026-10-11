@@ -153,6 +153,7 @@ def run_check(
     skill_label = skill_path.name if skill_path else suite_path.stem
     run_cfg: EvalRunConfig | None = None
     demo_notice: str | None = None
+    started = False
     try:
         run_cfg = resolve_eval_config(
             harness_pref=harness,
@@ -179,6 +180,7 @@ def run_check(
             suite=suite_path.stem,
             sandbox=sandbox_kind,
         ):
+            started = True
             report = run_eval(
                 None if spec is not None else suite_path,
                 spec=spec,
@@ -220,7 +222,8 @@ def run_check(
         persist_root = skill_path or pack_root
         err = {"message": exc.message, "hint": exc.hint}
         if (
-            run_cfg is not None
+            started
+            and run_cfg is not None
             and not isinstance(exc, (EvalConfigError, MissingLLMKeyError))
             and persist_root
         ):

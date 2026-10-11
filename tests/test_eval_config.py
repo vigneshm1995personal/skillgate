@@ -254,6 +254,16 @@ def test_harness_display_name_does_not_alias_demo_to_auto() -> None:
     assert "demo" not in harness_display_name("llm").lower()
 
 
+def test_auto_without_a_key_does_not_claim_cursor() -> None:
+    from skillgate_ai.harness import auto_live_harness_name
+
+    cfg = _llm_config()
+    assert auto_live_harness_name(cfg) == "auto"
+    assert harness_display_name("auto") == "Auto"
+    assert "Cursor" not in harness_display_name("auto")
+    assert harness_display_name("auto", "llm") == "Auto · LLM"
+
+
 def test_attach_stamped_config_replaces_auto_request() -> None:
     from skillgate_ai.api_runs import attach_stamped_config
 

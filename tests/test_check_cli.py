@@ -43,22 +43,80 @@ def test_check_live_without_key_errors(project_root: Path) -> None:
     assert "BYO LLM" not in result.stdout
 
 
+def _wipe_history(pack: Path) -> None:
+    hist = pack / "evals" / "history"
+    if hist.is_dir():
+        for path in hist.glob("*.jsonl"):
+            path.unlink()
+
+
 def test_live_missing_key_is_not_recorded_as_failed_check(
     project_root: Path, tmp_path: Path
 ) -> None:
     pack = tmp_path / "pdf"
     shutil.copytree(project_root / "skills" / "pdf", pack)
     ensure_demo_pdfs(pack / "evals" / "fixtures")
+    _wipe_history(pack)
     hist = pack / "evals" / "history"
-    if hist.is_dir():
-        for path in hist.glob("*.jsonl"):
-            path.unlink()
     assert latest_check_passed(pack) is None
     result = runner.invoke(app, ["check", str(pack)])
     assert result.exit_code == 2
     assert "No model key" in result.stdout
     assert latest_check_passed(pack) is None
     assert not hist.exists() or not any(hist.glob("*.jsonl"))
+
+
+def test_unknown_harness_is_not_recorded_and_does_not_block_deploy(
+    project_root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from skillgate_ai.history import append_eval
+
+    monkeypatch.setenv("SKILLGATE_ROOT", str(tmp_path))
+    monkeypatch.setenv("SKILLGATE_CURSOR_SKILLS", str(tmp_path / "cursor-skills"))
+    set_vault_key(tmp_path, "OPENAI_API_KEY", "sk-test-not-a-real-key")
+    pack = tmp_path / "pdf"
+    shutil.copytree(project_root / "skills" / "pdf", pack)
+    ensure_demo_pdfs(pack / "evals" / "fixtures")
+    _wipe_history(pack)
+    append_eval(pack, run_id="green", passed=True)
+    assert latest_check_passed(pack) is True
+    result = runner.invoke(app, ["check", str(pack), "--harness", "demo"])
+    assert result.exit_code != 0
+    assert "Unknown harness" in plain_text(result.stdout + result.stderr)
+    assert latest_check_passed(pack) is True
+    hist = pack / "evals" / "history"
+    rows = []
+    if hist.is_dir():
+        for path in hist.glob("*.jsonl"):
+            rows.extend(path.read_text(encoding="utf-8").splitlines())
+    assert any("green" in line for line in rows)
+    assert not any('"run_id":' in line and "green" not in line for line in rows if line.strip())
+    deploy = runner.invoke(app, ["deploy", str(pack)])
+    assert deploy.exit_code == 0, deploy.stdout
+    assert (tmp_path / "cursor-skills" / "pdf" / "SKILL.md").is_file()
+
+
+def test_invalid_config_is_not_recorded_and_does_not_block_gate(
+    project_root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from skillgate_ai.history import append_eval
+
+    monkeypatch.setenv("SKILLGATE_ROOT", str(tmp_path))
+    set_vault_key(tmp_path, "OPENAI_API_KEY", "sk-test-not-a-real-key")
+    pack = tmp_path / "pdf"
+    shutil.copytree(project_root / "skills" / "pdf", pack)
+    ensure_demo_pdfs(pack / "evals" / "fixtures")
+    _wipe_history(pack)
+    append_eval(pack, run_id="green", passed=True)
+    result = runner.invoke(app, ["check", str(pack), "--timeout", "99999"])
+    assert result.exit_code == 2, result.stdout
+    assert latest_check_passed(pack) is True
+    hist = pack / "evals" / "history"
+    blob = ""
+    if hist.is_dir():
+        blob = "\n".join(path.read_text(encoding="utf-8") for path in hist.glob("*.jsonl"))
+    assert "green" in blob
+    assert blob.count('"run_id"') == 1
 
 
 def test_check_with_key_runs_live(

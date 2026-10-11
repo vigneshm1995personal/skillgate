@@ -8,7 +8,7 @@ export type EvalTab = "skill" | "checks" | "gate"
 
 export type LiveHarnessId = "cursor-agent" | "codex" | "claude"
 
-export type ResolvedHarnessId = LiveHarnessId | "llm"
+export type ResolvedHarnessId = LiveHarnessId | "llm" | "auto"
 
 export type HarnessPref = "auto" | LiveHarnessId
 
@@ -19,16 +19,16 @@ export function resolvedHarnessName(
   if (pref === "cursor-agent" || pref === "codex" || pref === "claude") {
     return pref
   }
-  if (status?.default_harness === "codex") {
-    return "codex"
+  const resolved = (status?.default_harness || "").toLowerCase()
+  if (
+    resolved === "codex" ||
+    resolved === "claude" ||
+    resolved === "llm" ||
+    resolved === "cursor-agent"
+  ) {
+    return resolved
   }
-  if (status?.default_harness === "claude") {
-    return "claude"
-  }
-  if (status?.default_harness === "llm") {
-    return "llm"
-  }
-  return "cursor-agent"
+  return "auto"
 }
 
 const LIVE_HARNESSES = new Set(["cursor-agent", "codex", "claude", "llm"])

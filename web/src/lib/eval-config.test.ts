@@ -6,6 +6,7 @@ import {
   configLabel,
   stampRunConfig,
   emptyCatalogHint,
+  draftConfigSummary,
   harnessDisplayName,
   knownModelsForHarness,
   modelSelectValue,
@@ -135,6 +136,14 @@ describe("configLabel", () => {
   it("does not alias a removed demo harness to Auto", () => {
     expect(harnessDisplayName("demo")).not.toBe("Auto")
     expect(configLabel({ harness: "demo" })).not.toBe("Auto")
+  })
+
+  it("shows Auto on a fresh project, not Auto · Cursor", () => {
+    expect(harnessDisplayName("auto")).toBe("Auto")
+    expect(harnessDisplayName("auto", "auto")).toBe("Auto")
+    expect(harnessDisplayName("auto", "")).toBe("Auto")
+    expect(draftConfigSummary("auto", { model: "", timeoutSec: "" })).toBe("Auto")
+    expect(harnessDisplayName("auto", "llm")).toBe("Auto · LLM")
   })
 
   it("shows the actual LLM model via gateway, not Auto · Cursor", () => {

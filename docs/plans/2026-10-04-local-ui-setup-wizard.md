@@ -1,5 +1,7 @@
 # Local UI + setup wizard — Implementation Plan
 
+> **Historical (2026-10-04).** This plan described the first local UI. It is not current product docs. Skill Gate 0.5 is live-only (no demo harness). See [`0.5-decisions.md`](0.5-decisions.md).
+
 > **This document is Phase 1 (plan only) for OSS `vigneshm1995personal/skillgate`.** Do **not** implement `skillgate ui`, HTTP routes, or Docker UI in this PR. Do **not** copy the private hosted dashboard. Do **not** flip this repo public.
 
 **Goal:** Give a stranger a **local** front for the same CLI/engine they already have: pick or create one skill pack on disk, write `SKILL.md` + `evals/cases.yaml`, run `check`, see GREEN/RED rows, apply the sabotaged-description fix. Still **no Skill Gate account**, no Neon, no SIWV, no hosted Jev.
