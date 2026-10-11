@@ -113,7 +113,7 @@ export function DeployPage() {
     !isLiveHarness(last.report?.harness || last.harness) &&
     status?.mode !== "local"
   ) {
-    note = `Demo runs do not unlock Deploy. Run live Start Evaluations for ${skillName}.`
+    note = `Demo runs do not unlock Deploy. Press Start for ${skillName}.`
   } else if (deployLast) {
     note = `Last install: ${deployLast}. Pass the checks to unlock Install.`
   } else if (skill) {

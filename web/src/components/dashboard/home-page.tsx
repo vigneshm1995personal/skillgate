@@ -33,7 +33,7 @@ import {
 } from "@/components/ui/table"
 import { PageHeader } from "@/components/dashboard/chrome"
 import { useDashboard } from "@/lib/dashboard-provider"
-import { relativeTime } from "@/lib/time"
+import { absoluteTime, relativeTime } from "@/lib/time"
 import type { AnalyticsDeploy, AnalyticsRun } from "@/lib/types"
 
 export function HomePage() {
@@ -71,7 +71,7 @@ export function HomePage() {
     <div className="flex flex-col gap-8">
       <PageHeader
         title="Home"
-        description="Where the workspace stands: eval runs, gate outcomes, deployments, and eval spend."
+        description="Where the workspace stands: runs, gate outcomes, deployments, and spend."
         action={
           <>
             <Button
@@ -94,7 +94,7 @@ export function HomePage() {
         <div className="flex flex-col gap-4">
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <KpiCard
-              label="Eval runs"
+              label="Runs"
               value={String(totals.runs)}
               hint={`${totals.runs_7d} in 7d · ${totals.runs_30d} in 30d`}
             />
@@ -123,7 +123,7 @@ export function HomePage() {
               }
             />
             <KpiCard
-              label="Eval spend"
+              label="Spend"
               value={formatCost(usage.cost_usd) ?? "—"}
               hint={
                 <>
@@ -212,7 +212,7 @@ export function HomePage() {
                           </TableCell>
                           <TableCell
                             className="pr-6 text-right text-muted-foreground tabular-nums"
-                            title={run.created_at ?? undefined}
+                            title={absoluteTime(run.created_at)}
                           >
                             {relativeTime(run.created_at)}
                           </TableCell>
@@ -288,7 +288,7 @@ function DeployRow({ deploy }: { deploy: AnalyticsDeploy }) {
       </TableCell>
       <TableCell
         className="pr-6 text-right text-muted-foreground tabular-nums"
-        title={deploy.created_at ?? undefined}
+        title={absoluteTime(deploy.created_at)}
       >
         {relativeTime(deploy.created_at)}
       </TableCell>
@@ -302,9 +302,7 @@ function ResultBadge({ run }: { run: AnalyticsRun }) {
   }
   if (run.passed) {
     return (
-      <Badge variant="secondary" className="font-medium text-success">
-        Pass
-      </Badge>
+      <Badge variant="success">Pass</Badge>
     )
   }
   return <Badge variant="destructive">Fail</Badge>

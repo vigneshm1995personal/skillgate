@@ -117,6 +117,7 @@
 }
 
 .hero h1 {
+  font-family: var(--font-display), serif;
   font-size: clamp(44px, 6.8vw, 72px);
   font-weight: 580;
   letter-spacing: -0.055em;

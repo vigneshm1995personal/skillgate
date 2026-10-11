@@ -182,7 +182,7 @@ export function LandingPage({ configured }: { configured?: boolean }) {
             <div className={styles.bandDualHead}>
               <h2 id="band-trail">Keep the trail</h2>
               <p>
-                Each version has a pack hash. Deploys and fails show in History.
+                Each version is recorded. Deploys and fails show in History.
               </p>
             </div>
             <div className={styles.dualGrid}>
@@ -190,12 +190,12 @@ export function LandingPage({ configured }: { configured?: boolean }) {
                 <div className={styles.frame}>
                   <img
                     src="/landing/f-skill-versions.png"
-                    alt="Skill Versions — semver and pack hash"
+                    alt="Skill Versions"
                     width={465}
                     height={354}
                   />
                 </div>
-                <p className={styles.dualLabel}>Versions · semver + pack hash</p>
+                <p className={styles.dualLabel}>Versions</p>
               </div>
               <div>
                 <div className={styles.frame}>

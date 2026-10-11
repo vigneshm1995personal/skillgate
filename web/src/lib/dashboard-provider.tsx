@@ -432,7 +432,7 @@ export function DashboardProvider({
       }
       const yamlText = text.trim()
       if (!yamlText) {
-        toast.add({ title: "Paste YAML to import.", type: "error" })
+        toast.add({ title: "Paste a list to import.", type: "error" })
         return
       }
       try {
@@ -443,7 +443,7 @@ export function DashboardProvider({
         setChecksSource("yaml")
         setChecksNote(data.note || "")
         setChecksWarning("")
-        toast.add({ title: "YAML loaded into checks", type: "success" })
+        toast.add({ title: "List loaded into checks", type: "success" })
       } catch (err) {
         const error = asApiError(err)
         toast.add({ title: error.message, type: "error" })

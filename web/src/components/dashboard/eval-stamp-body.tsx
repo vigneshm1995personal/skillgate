@@ -56,7 +56,7 @@ export function EvalCheckingPanel({
 }) {
   return (
     <div className="flex flex-col gap-2">
-      <p className="font-heading text-4xl font-medium tracking-tight">
+      <p className="font-display text-4xl font-medium tracking-tight">
         Checking
       </p>
       <div className={cn("eval-check-progress", !total && "is-busy")}>
@@ -180,7 +180,7 @@ export function EvalPassFailPanel({
         <EvalResultMark kind={kind} mode={mode} />
         <p
           className={cn(
-            "font-heading text-4xl font-medium tracking-tight",
+            "font-display text-4xl font-medium tracking-tight",
             kind === "pass" ? "text-success" : "text-destructive"
           )}
         >

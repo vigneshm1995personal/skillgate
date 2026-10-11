@@ -135,7 +135,7 @@ export function RepositoryPage() {
         description={
           isLocalMode(status)
             ? "Skills in this project. Connect Cursor, Codex, or Claude to import. Open one to read SKILL.md. Run never starts until you press it."
-            : "Every skill on disk, with last gate, evals, versions, and deploys. Last eval is the latest full run; single checks don't count."
+            : "Every skill on disk, with last gate, runs, versions, and deploys. Last run is the latest full run; single checks don't count."
         }
         action={
           <div className="flex flex-wrap gap-2">

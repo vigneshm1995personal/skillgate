@@ -240,7 +240,7 @@ export function EvalPage() {
     ? `${lastResult?.completed_count ?? 0}/${lastResult?.task_count ?? checks.length} done`
     : isLocalMode(status)
       ? "Run"
-      : "Start Evaluations"
+      : "Start"
   const seedCopy = seedNoticeCopy(checksSource, checksNote)
   const seedingCopy = seedingSpinnerCopy({
     seedingAssist,
@@ -301,7 +301,7 @@ export function EvalPage() {
             {status.missing_key_hint ||
               (isLocalMode(status)
                 ? "Add a key in Settings, then press Run."
-                : "Add a key in Settings to run live. Auto/Cursor Start Evaluations need a key.")}{" "}
+                : "Add a key in Settings to run live. Start needs a key.")}{" "}
             <Button
               id="btn-open-settings"
               variant="link"
@@ -334,7 +334,7 @@ export function EvalPage() {
           {status.missing_key_hint ||
             (isLocalMode(status)
               ? "Add a key in Settings, then press Run."
-              : "Add a key in Settings to run live. Auto/Cursor Start Evaluations need a key.")}
+              : "Add a key in Settings to run live. Start needs a key.")}
         </p>
       ) : null}
 
@@ -369,7 +369,7 @@ export function EvalPage() {
                     openRepository(null)
                   }}
                 >
-                  Browse all in Repository
+                  Browse all skills
                 </Button>
               </CardAction>
             </CardHeader>
@@ -465,7 +465,7 @@ export function EvalPage() {
                     className="underline underline-offset-2"
                     onClick={() => openRepository(null)}
                   >
-                    browse all in Repository
+                    browse all skills
                   </button>
                   .
                 </p>
@@ -888,13 +888,13 @@ export function EvalPage() {
               <Accordion className="rounded-lg border px-2">
                 <AccordionItem value="yaml">
                   <AccordionTrigger className="py-1.5">
-                    Import checks from YAML
+                    Import a list
                   </AccordionTrigger>
                   <AccordionContent>
                     <FieldGroup>
                       <Field>
                         <FieldLabel htmlFor="yaml-in">
-                          Import YAML
+                          Paste a list
                         </FieldLabel>
                         <Textarea
                           id="yaml-in"
@@ -914,7 +914,7 @@ export function EvalPage() {
                         disabled={running || seeding || !skill}
                         onClick={() => void importYaml(yamlDraft)}
                       >
-                        Load YAML
+                        Load list
                       </Button>
                       {yaml ? (
                         <pre

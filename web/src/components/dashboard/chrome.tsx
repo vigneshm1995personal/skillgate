@@ -101,11 +101,7 @@ export function GateBadge({
 }) {
   const tone = gateTone(gate, passed)
   if (tone === "green") {
-    return (
-      <Badge variant="secondary" className="font-medium text-success">
-        Ready
-      </Badge>
-    )
+    return <Badge variant="success">Ready</Badge>
   }
   if (tone === "red") {
     return <Badge variant="destructive">Blocked</Badge>
@@ -165,7 +161,7 @@ export function stageTitle(stage: Stage) {
     case "deploy":
       return "Deploy"
     case "repository":
-      return "Skill Repository"
+      return "Skills"
     case "history":
       return "History"
     case "settings":

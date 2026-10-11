@@ -31,6 +31,12 @@ function DashboardMain() {
 
   return (
     <div className="flex h-svh overflow-hidden bg-background">
+      <a
+        href="#main"
+        className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-md focus:bg-background focus:px-3 focus:py-2 focus:text-sm focus:ring-2 focus:ring-ring"
+      >
+        Skip to main content
+      </a>
       <div className="hidden md:block">
         <AppSidebar className="h-svh" />
       </div>
@@ -51,7 +57,10 @@ function DashboardMain() {
             </Alert>
           </div>
         ) : null}
-        <main className="min-w-0 flex-1 overflow-x-clip overflow-y-auto px-4 py-6 sm:px-6 sm:py-8 lg:px-10 lg:py-10">
+        <main
+          id="main"
+          className="min-w-0 flex-1 overflow-x-clip overflow-y-auto px-4 py-6 sm:px-6 sm:py-8 lg:px-10 lg:py-10"
+        >
           {stage === "home" ? <HomePage /> : null}
           {stage === "eval" ? <EvalPage /> : null}
           {stage === "deploy" ? <DeployPage /> : null}
