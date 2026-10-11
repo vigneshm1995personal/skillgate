@@ -30,6 +30,8 @@ ROOT = SRC.parent
 DEFAULT_DEST = SRC / "skillgate_ai" / "web_static"
 DEFAULT_WEB_DIST = ROOT / "web" / "dist"
 DEFAULT_WEB_DIR = ROOT / "web"
+DEFAULT_EXAMPLES_DEST = SRC / "skillgate_ai" / "examples"
+EXAMPLE_NAMES = ("pdf", "pdf-sabotaged")
 
 
 def web_tree_present(web_dir: Path = DEFAULT_WEB_DIR) -> bool:
@@ -69,16 +71,37 @@ def bundle_web_static(
     return None
 
 
+def bundle_examples(*, dest: Path = DEFAULT_EXAMPLES_DEST) -> Path | None:
+    dest = dest.resolve()
+    copied = False
+    for name in EXAMPLE_NAMES:
+        src = ROOT / "skills" / name
+        if not (src / "SKILL.md").is_file():
+            continue
+        target = dest / name
+        if target.exists():
+            shutil.rmtree(target)
+        shutil.copytree(
+            src,
+            target,
+            ignore=shutil.ignore_patterns(".git", "__pycache__", ".skillgate", "*.jsonl"),
+        )
+        copied = True
+    return dest if copied or dest.exists() else None
+
+
 class build_py(_build_py):
     def run(self) -> None:
         editable = bool(getattr(self, "editable_mode", False))
         # CLI Docker has no web/; PyPI `python -m build` does.
         required = (not editable) and web_tree_present()
         bundle_web_static(required=required)
+        bundle_examples()
         super().run()
 
 
 class sdist(_sdist):
     def run(self) -> None:
         bundle_web_static(required=True)
+        bundle_examples()
         super().run()

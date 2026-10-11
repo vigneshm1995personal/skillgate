@@ -174,7 +174,11 @@ export const api = {
     }),
   me: () => request<AuthMePayload>("/api/auth/me"),
   signOut: () =>
-    request<Record<string, never>>("/api/auth/signout", { method: "POST" }),
+    request<Record<string, never>>("/api/auth/signout", {
+      method: "POST",
+      headers: jsonHeaders,
+      body: "{}",
+    }),
   skills: () =>
     request<{ skills: SkillPayload[]; catalog_error?: CatalogError | null }>(
       "/api/skills"
@@ -396,10 +400,14 @@ export const api = {
   skipRun: (id: string) =>
     request<RunControlResponse>(`/api/runs/${encodeURIComponent(id)}/skip`, {
       method: "POST",
+      headers: jsonHeaders,
+      body: "{}",
     }),
   killRun: (id: string) =>
     request<RunControlResponse>(`/api/runs/${encodeURIComponent(id)}/kill`, {
       method: "POST",
+      headers: jsonHeaders,
+      body: "{}",
     }),
   deploy: (
     target: DeployTarget | "git",

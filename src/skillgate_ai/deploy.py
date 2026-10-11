@@ -73,8 +73,9 @@ class _PackAdapter:
                 "This skill needs a simple folder name before Install.",
                 hint="Use lowercase letters, numbers, and hyphens.",
             )
-        if not force and latest_check_passed(source) is False:
-            raise refuse_ungated_install(name)
+        latest = latest_check_passed(source)
+        if not force and latest is not True:
+            raise refuse_ungated_install(name, never_checked=latest is None)
         if not source.is_dir() or not (source / "SKILL.md").is_file():
             raise DeployError(
                 "The gated skill folder is gone. Pass the checks again, then install.",
@@ -177,7 +178,15 @@ def latest_check_passed(pack: Path) -> bool | None:
     return bool(row.get("passed"))
 
 
-def refuse_ungated_install(skill_name: str, *, exit_code: int = 1) -> DeployError:
+def refuse_ungated_install(
+    skill_name: str, *, exit_code: int = 1, never_checked: bool = False
+) -> DeployError:
+    if never_checked:
+        return DeployError(
+            "Run the checks first (`skillgate check` or press Run), then install.",
+            hint=f"`{skill_name}` has no passing check in this folder.",
+            exit_code=exit_code,
+        )
     return DeployError(
         f"Not installing `{skill_name}` because the latest check did not pass.",
         hint="Fix the skill, or pass --force to install anyway.",

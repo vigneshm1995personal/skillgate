@@ -146,7 +146,7 @@ export function harnessDisplayName(
     return "LLM"
   }
   if (pref === "demo" || pref === "eval") {
-    return "Built-in checker"
+    return "Auto"
   }
   return pref
 }
@@ -242,7 +242,7 @@ export function configLabel(config?: EvalRunConfig | null): string {
   }
   const parts: string[] = [
     harnessDisplayName(
-      config.harness || config.harness_pref || "demo",
+      config.harness || config.harness_pref || "auto",
       config.harness
     ),
   ]

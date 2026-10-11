@@ -130,19 +130,19 @@ describe("deployAllowedForLiveGate", () => {
     ).toBe(false)
   })
 
-  it("unlocks a green built-in checker run in local mode", () => {
-    const demoGreen: RunRecord = {
-      id: "demo-green",
+  it("unlocks a green live run in local mode", () => {
+    const liveGreen: RunRecord = {
+      id: "live-green",
       status: "done",
       skill: "pdf",
-      harness: "demo",
+      harness: "llm",
       gate_decision: "cleared",
-      report: { skill: "pdf", passed_count: 2, task_count: 2, tasks: [], harness: "demo" },
+      report: { skill: "pdf", passed_count: 2, task_count: 2, tasks: [], harness: "llm" },
     }
     expect(
       deployAllowedForLiveGate({
         skill: { name: "pdf" },
-        liveGate: demoGreen,
+        liveGate: liveGreen,
         gateRunning: false,
         mode: "local",
       })
@@ -150,11 +150,11 @@ describe("deployAllowedForLiveGate", () => {
     expect(
       deployAllowedForLiveGate({
         skill: { name: "pdf" },
-        liveGate: demoGreen,
+        liveGate: liveGreen,
         gateRunning: false,
         mode: "cloud",
       })
-    ).toBe(false)
+    ).toBe(true)
   })
 })
 
@@ -196,14 +196,14 @@ describe("display name vs slug identity", () => {
       id: "idea-green",
       status: "done",
       skill: "idea-brainstorming",
-      harness: "demo",
+      harness: "llm",
       gate_decision: "cleared",
       report: {
         skill: "idea-brainstorming",
         passed_count: 1,
         task_count: 1,
         tasks: [],
-        harness: "demo",
+        harness: "llm",
       },
     }
     expect(

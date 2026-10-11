@@ -4,7 +4,7 @@ const NAME_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const MOTION_MS = 350;
 const CHECKING_MIN_MS = 700;
 const SETUP_DONE_KEY = "skillgate-setup-done";
-let meta = { account: false, demo_default: true, packs: [], has_any_key: false, has_openai_key: false, judge_provider: "skip", pdf_path: null };
+let meta = { account: false, demo_default: false, packs: [], has_any_key: false, has_openai_key: false, judge_provider: "skip", pdf_path: null };
 let wizard = blankWizard();
 let lastRoutePath = "";
 let lastRun = { path: "", snap: null };
@@ -337,7 +337,7 @@ function buildWizardPanel() {
     const card = $(`<div class="card">
       <h2>This is local</h2>
       <p>Skill Gate runs on this computer. No Skill Gate account.</p>
-      <p class="muted">Your API key is the model that runs live checks. An OpenAI key also scores them. Skip only if you want the built-in checker.</p>
+      <p class="muted">Your API key is the model that runs live checks. An OpenAI key also scores them. Run needs a key in Settings.</p>
       <p><button type="button" id="next">Continue</button></p>
     </div>`);
     card.querySelector("#next").onclick = () => {
@@ -364,8 +364,8 @@ function buildWizardPanel() {
       ${keyFieldsHtml()}
       <p class="field-msg" id="step-msg" aria-live="polite"></p>
       <p><button type="button" id="save-key">Save key</button>
-      <button type="button" class="secondary" id="skip">Skip — use the built-in checker</button></p>
-      <p class="muted">Skip is the only way onto the built-in checker. That is not a live model.</p>
+      <button type="button" class="secondary" id="skip">Continue without a key</button></p>
+      <p class="muted">Run stays off until you add a key in Settings.</p>
       <div id="key-err"></div>
     </div>`);
     form.querySelector("#skip").onclick = () => goFirstSkill();
@@ -374,7 +374,7 @@ function buildWizardPanel() {
       const keyErr = form.querySelector("#key-err");
       const body = keyPayloadFrom(form);
       if (!Object.keys(body).length) {
-        msg.textContent = "Add a key to save, or skip to use the built-in checker.";
+        msg.textContent = "Add a key in Settings, or continue without one (Run stays off).";
         return;
       }
       try {
@@ -571,7 +571,7 @@ function detailInnerHtml(task) {
       parts.push("</dl>");
     }
   } else {
-    parts.push("<p class=\"muted\">What the built-in checker checked</p>");
+    parts.push("<p class=\"muted\">What the checks recorded</p>");
     if (rows.length) {
       parts.push("<ul class=\"check-answers\">");
       rows.forEach((item) => {
@@ -633,11 +633,11 @@ function setRunButtonsDisabled(disabled) {
 function checkingLine(opts) {
   if (opts && opts.live && !opts.demo) {
     if (meta.judge_provider === "skip" || !meta.has_openai_key) {
-      return "The skill ran live. The built-in checker scored it.";
+      return "The skill ran live. Checks scored this run.";
     }
     return "Run live uses your API key.";
   }
-  return "Built-in checker scored this run. This is not a live model.";
+  return "Checks scored this run.";
 }
 
 function checkingPanel(opts) {
@@ -726,15 +726,14 @@ async function renderPack(params) {
   const hasKey = !!meta.has_any_key;
   const keyLine = hasKey
     ? "Run live uses your API key."
-    : "Built-in checker. This is not a live model.";
+    : "Add a key in Settings, then press Run.";
   const head = $(`<section>
     <h1>${esc(pack.skill.name)}</h1>
     <p class="muted">${esc(pack.display_path || pack.skill.name)}</p>
     <p>${esc(pack.skill.description)}</p>
     <p class="muted">${esc(keyLine)}</p>
     <p class="row">
-      <button type="button" id="live">Run live</button>
-      ${hasKey ? "" : `<button type="button" class="secondary" id="builtin">Run with built-in checker</button>`}
+      <button type="button" id="live"${hasKey ? "" : " disabled"}>Run</button>
     </p>
     <details class="keys">
       <summary>${hasKey ? "Replace your API key" : "Add your API key"}</summary>
@@ -749,9 +748,8 @@ async function renderPack(params) {
     <div id="run-err"></div>
     <div id="results"><div id="run-stage"></div><div id="run-rows"></div></div>
   </section>`);
-  head.querySelector("#live").onclick = () => startCheck(path, { live: true });
-  const builtin = head.querySelector("#builtin");
-  if (builtin) builtin.onclick = () => startCheck(path, { live: false, demo: true });
+  const liveBtn = head.querySelector("#live");
+  if (liveBtn && hasKey) liveBtn.onclick = () => startCheck(path, { live: true });
   head.querySelector("#save-key").onclick = async () => {
     const keyErr = head.querySelector("#key-err");
     const body = keyPayloadFrom(head);
@@ -781,8 +779,7 @@ async function startCheck(path, opts) {
   const stage = document.getElementById("run-stage");
   err.innerHTML = "";
   banner.classList.add("hidden");
-  const body = { path, live: !!opts.live };
-  if (opts.demo) body.demo = true;
+  const body = { path, live: true };
   setRunButtonsDisabled(true);
   try {
     const started = await api("POST", "/api/check", body);
@@ -865,7 +862,7 @@ async function paintResult(snap, path, opts) {
       <p>${esc(advice.why || "")}</p>
       <p>${esc(advice.change || "")}</p>
       ${advice.demo_note ? `<p class="muted">${esc(advice.demo_note)}</p>` : ""}
-      <p>Corrected description (not the current one):</p>
+      <p>Paste this description into SKILL.md:</p>
       <pre id="paste">${esc(advice.paste || advice.description || "")}</pre>
       <button type="button" id="apply">Apply description fix on this pack</button>
     </div>`;
@@ -892,7 +889,6 @@ async function paintResult(snap, path, opts) {
           description: advice.description || advice.paste,
         });
         if (meta.has_any_key) startCheck(path, { live: true });
-        else startCheck(path, { live: false, demo: true });
       } catch (e) {
         details.insertAdjacentHTML("afterbegin", showError(e));
       }

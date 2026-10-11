@@ -367,7 +367,7 @@ def _trigger_fix(
         restore = reference.name
     note = (
         "Copy this into SKILL.md below, then run `skillgate check` on this same skill — "
-        "don’t switch to the good pdf twin."
+        "don’t switch to a working copy of this skill."
         if restore or "sabotag" in skill.name
         else "Copy this into SKILL.md below, then run `skillgate check`."
     )

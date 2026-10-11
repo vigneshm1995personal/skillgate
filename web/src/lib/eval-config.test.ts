@@ -130,8 +130,8 @@ describe("configLabel", () => {
     )
   })
 
-  it("names the built-in checker instead of demo", () => {
-    expect(configLabel({ harness: "demo" })).toBe("Built-in checker")
-    expect(configLabel({ harness: "eval" })).toBe("Built-in checker")
+  it("names Auto instead of a removed demo harness", () => {
+    expect(configLabel({ harness: "demo" })).toBe("Auto")
+    expect(configLabel({ harness: "eval" })).toBe("Auto")
   })
 })

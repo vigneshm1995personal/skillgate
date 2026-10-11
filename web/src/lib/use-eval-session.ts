@@ -319,7 +319,6 @@ export function useEvalSession(opts: EvalSessionOpts) {
         const live = liveFlag === true
         const payload = {
           live,
-          demo: !live,
           harness: harnessPref,
           skill: skillId || skill?.absolute || skill?.id,
           suite: null as string | null,

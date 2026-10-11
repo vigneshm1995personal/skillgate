@@ -241,11 +241,11 @@ def test_config_label_includes_harness_and_timeout() -> None:
     assert "medium" in label
 
 
-def test_config_label_uses_built_in_checker_for_demo() -> None:
-    label = config_label(EvalRunConfig(harness="demo", timeout_effective=12))
-    assert "Built-in checker" in label
+def test_config_label_does_not_say_demo() -> None:
+    label = config_label(EvalRunConfig(harness="llm", timeout_effective=12))
+    assert "LLM" in label
     assert "demo" not in label.lower()
-    assert "eval" not in label.lower()
+    assert "Built-in checker" not in label
 
 
 def test_fingerprint_changes_on_judge_backend() -> None:

@@ -42,7 +42,7 @@ def format_cli(report: SuiteReport) -> str:
         if report.advice and report.advice.paste:
             if report.advice.demo_note:
                 lines.append(report.advice.demo_note)
-            lines.append("Corrected SKILL.md description (not the current one):")
+            lines.append("Paste this description into SKILL.md:")
             lines.append(report.advice.paste.rstrip())
     return "\n".join(lines)
 
@@ -301,13 +301,13 @@ def scored_by_line(report: SuiteReport) -> str:
     skip = (
         saw_skip
         or str(stamp.get("provider") or "") == "skip"
-        or str(stamp.get("display_name") or "") == "Built-in checker"
+        or str(stamp.get("display_name") or "") == "Checks"
     )
     live = is_live_harness(report.harness)
     if skip:
         if live:
-            return "The skill ran live. The built-in checker scored it."
-        return "Built-in checker scored this run. This is not a live model."
+            return "The skill ran live. Checks scored this run."
+        return "Checks scored this run."
     name = str(stamp.get("display_name") or "").strip()
     if name:
         return f"{name} scored this run."
@@ -344,7 +344,7 @@ def _cell_answer(cell: dict) -> str:
 
 
 def _task_check_answers(task: TaskReport) -> tuple[list[dict[str, str]], str]:
-    """Plain expandable answers. OpenAI cells, else what the built-in checker checked."""
+    """Plain expandable answers. OpenAI cells, else what the checks recorded."""
     judge = task.judge if isinstance(task.judge, dict) else {}
     raw = judge.get("cells") if isinstance(judge, dict) else None
     cells: list[dict] = []

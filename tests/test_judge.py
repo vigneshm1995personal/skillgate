@@ -38,7 +38,7 @@ def test_skip_judge_does_not_pass_or_fail() -> None:
     assert judged["status"] == "skip"
     assert judged["passed"] is None
     assert judged["cells"] == []
-    assert judged["display_name"] == "Built-in checker"
+    assert judged["display_name"] == "Checks"
 
 
 def test_resolve_judge_auto_skips_without_key() -> None:

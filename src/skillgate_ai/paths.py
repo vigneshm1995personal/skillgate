@@ -44,3 +44,11 @@ def project_root() -> Path:
         if is_skill_pack(candidate):
             return candidate
     return cwd
+
+
+def is_under_root(path: str | Path, root: str | Path) -> bool:
+    try:
+        Path(path).expanduser().resolve().relative_to(Path(root).expanduser().resolve())
+        return True
+    except (ValueError, OSError):
+        return False

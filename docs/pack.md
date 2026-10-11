@@ -55,6 +55,6 @@ Paths in `files[].src` and `golden.path` are **relative to the skill folder**.
 
 `skillgate check` appends one JSONL line under `<pack>/evals/history/YYYYMMDD.jsonl` (same payload as `report_to_dict`). `*.jsonl` is gitignored. If the pack is mounted read-only, history is skipped on `EACCES`.
 
-## Demo harness
+## Live check
 
-With no model key, `check` uses the built-in checker: tokenize name+description, then run `scripts/agent_entry.py` in a tempdir sandbox. Same scorers as a live run.
+`skillgate check` always runs a live harness (Cursor / Codex / Claude / OpenAI-compatible). No key → exit 2; add a key in Settings or `skillgate keys set`. Deterministic scorers (file exists, contains, page count, skill trigger) still grade the live run’s files.

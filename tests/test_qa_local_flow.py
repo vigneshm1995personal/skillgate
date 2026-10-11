@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 import shutil
-import time
 from pathlib import Path
 
 from fastapi.testclient import TestClient
 
+from skillgate_ai import __version__
 from skillgate_ai.api import create_app
 from skillgate_ai.demo_files import ensure_demo_pdfs
+from skillgate_ai.history import append_eval
 from skillgate_ai.pack import copy_skill_pack
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -80,19 +81,7 @@ def _client(paths: dict[str, Path], monkeypatch) -> TestClient:
     monkeypatch.setenv("SKILLGATE_CURSOR_SKILLS", str(paths["cursor"]))
     monkeypatch.setenv("SKILLGATE_CODEX_SKILLS", str(paths["codex"]))
     monkeypatch.setenv("SKILLGATE_CLAUDE_SKILLS", str(paths["claude"]))
-    return TestClient(create_app(root=paths["root"]))
-
-
-def _wait_run(client: TestClient, run_id: str, timeout: float = 120) -> dict:
-    deadline = time.time() + timeout
-    snapshot = None
-    while time.time() < deadline:
-        snapshot = client.get(f"/api/runs/{run_id}").json()
-        if snapshot.get("status") != "running":
-            return snapshot
-        time.sleep(0.2)
-    assert snapshot is not None
-    return snapshot
+    return TestClient(create_app(root=paths["root"]), base_url="http://127.0.0.1:8765")
 
 
 def test_copy_skill_pack_keeps_goldens(tmp_path: Path) -> None:
@@ -114,7 +103,7 @@ def test_fake_home_import_list_open_run_deploy(tmp_path: Path, monkeypatch) -> N
 
     status = client.get("/api/status")
     assert status.status_code == 200
-    assert status.json().get("version") == "0.4.1"
+    assert status.json().get("version") == __version__
     assert "skillgate check" not in (status.json().get("missing_key_hint") or "").lower()
     assert "skillgate check" not in (status.json().get("missing_key_message") or "").lower()
 
@@ -206,17 +195,12 @@ def test_fake_home_import_list_open_run_deploy(tmp_path: Path, monkeypatch) -> N
         json={
             "skill": "idea-brainstorming",
             "checks": idea_checks[:1],
-            "live": False,
-            "demo": True,
         },
     )
-    assert idea_run.status_code == 200
-    idea_snap = _wait_run(client, idea_run.json()["id"])
-    assert idea_snap["status"] == "done"
-    assert idea_snap.get("error") in (None, {})
-    assert (idea_snap.get("skill") or idea_snap["report"]["skill"]) == "idea-brainstorming"
-    assert idea_snap["passed"] in {True, False}
-    assert idea_snap["gate_decision"] in {"cleared", "blocked", "pending"}
+    assert idea_run.status_code == 409
+    idea_detail = idea_run.json().get("detail") or {}
+    assert "No model key" in (idea_detail.get("message") or "")
+    assert "skillgate keys set" in (idea_detail.get("hint") or "")
 
     gen = client.post("/api/evals/generate", json={"skill": "pdf"})
     assert gen.status_code == 200
@@ -275,19 +259,14 @@ def test_fake_home_import_list_open_run_deploy(tmp_path: Path, monkeypatch) -> N
     run_checks = hello or checks[:1]
     started = client.post(
         "/api/runs",
-        json={"skill": "pdf", "checks": run_checks, "live": False, "demo": True},
+        json={"skill": "pdf", "checks": run_checks},
     )
-    assert started.status_code == 200
-    snapshot = _wait_run(client, started.json()["id"])
-    assert snapshot["status"] == "done"
-    assert snapshot.get("error") in (None, {})
-    report = snapshot["report"]
-    assert report
-    assert report["tasks"]
-    assert report.get("scored_by")
-    assert "Built-in checker" in (report.get("scored_by") or "")
-    assert snapshot["passed"] in {True, False}
-    assert snapshot["gate_decision"] in {"cleared", "blocked", "pending"}
+    assert started.status_code == 409
+    pdf_detail = started.json().get("detail") or {}
+    assert "No model key" in (pdf_detail.get("message") or "")
+
+    append_eval(dest, run_id="green-pdf", passed=True)
+    append_eval(idea, run_id="green-idea", passed=True)
 
     history = client.get("/api/history", params={"skill": "pdf"})
     assert history.status_code == 200
@@ -298,7 +277,7 @@ def test_fake_home_import_list_open_run_deploy(tmp_path: Path, monkeypatch) -> N
         for item in (hist.get("timeline") or [])
     )
     assert "demo" not in harness_blob.lower()
-    assert "Built-in checker" in harness_blob
+    assert "built-in checker" not in harness_blob.lower()
 
     deploy = client.post(
         "/api/deploy",
@@ -335,23 +314,7 @@ def test_fake_home_import_list_open_run_deploy(tmp_path: Path, monkeypatch) -> N
     idea_installed = paths["cursor"] / "idea-brainstorming"
     assert (idea_installed / "SKILL.md").is_file()
     assert "Idea brainstorming" in (idea_installed / "SKILL.md").read_text(encoding="utf-8")
-
-    golden = dest / "evals" / "goldens" / "extract-hello.txt"
-    if hello and golden.is_file():
-        golden.unlink()
-        started = client.post(
-            "/api/runs",
-            json={"skill": "pdf", "checks": hello, "live": False, "demo": True},
-        )
-        assert started.status_code == 200
-        missing = _wait_run(client, started.json()["id"])
-        assert missing["status"] == "done"
-        assert missing.get("error") in (None, {})
-        task = missing["report"]["tasks"][0]
-        assert task["passed"] is False
-        blob = " ".join(task.get("failures") or [])
-        assert "expected output" in blob.lower()
-        assert "evals/goldens" not in blob
+    assert not (idea_installed / "evals").exists()
 
 
 def test_pin_without_expected_offers_dataset_fix(tmp_path: Path, monkeypatch) -> None:

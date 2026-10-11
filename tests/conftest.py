@@ -20,16 +20,29 @@ os.environ["CURSOR_API_KEY"] = ""
 os.environ["CODEX_API_KEY"] = ""
 os.environ["OPENAI_API_KEY"] = ""
 os.environ["ANTHROPIC_API_KEY"] = ""
+os.environ["SKILLGATE_OPENAI_API_KEY"] = ""
+os.environ["SKILLGATE_AI_GATEWAY_API_KEY"] = ""
+os.environ["SKILLGATE_CURSOR_API_KEY"] = ""
+os.environ["SKILLGATE_CODEX_API_KEY"] = ""
+os.environ["SKILLGATE_ANTHROPIC_API_KEY"] = ""
 
 
 @pytest.fixture(autouse=True)
 def _no_live_keys(monkeypatch: pytest.MonkeyPatch) -> None:
+    from skillgate_ai.keys import reset_key_env_bindings
+
+    reset_key_env_bindings()
     monkeypatch.setattr("skillgate_ai.harness._codex_session_ok", lambda cfg: False)
     monkeypatch.setenv("AI_GATEWAY_API_KEY", "")
     monkeypatch.setenv("CURSOR_API_KEY", "")
     monkeypatch.setenv("CODEX_API_KEY", "")
     monkeypatch.setenv("OPENAI_API_KEY", "")
     monkeypatch.setenv("ANTHROPIC_API_KEY", "")
+    monkeypatch.setenv("SKILLGATE_OPENAI_API_KEY", "")
+    monkeypatch.setenv("SKILLGATE_AI_GATEWAY_API_KEY", "")
+    monkeypatch.setenv("SKILLGATE_CURSOR_API_KEY", "")
+    monkeypatch.setenv("SKILLGATE_CODEX_API_KEY", "")
+    monkeypatch.setenv("SKILLGATE_ANTHROPIC_API_KEY", "")
     monkeypatch.setenv("SKILLGATE_MODE", "local")
     monkeypatch.delenv("SKILLGATE_JUDGE", raising=False)
     monkeypatch.delenv("SKILLGATE_JUDGE_BACKEND", raising=False)

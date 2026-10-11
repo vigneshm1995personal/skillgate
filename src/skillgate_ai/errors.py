@@ -109,11 +109,11 @@ def harness_http_error(status: int, *, openai: bool = True) -> HarnessError:
         if openai:
             return HarnessError(
                 BAD_OPENAI_KEY_MESSAGE,
-                hint="Check OPENAI_API_KEY or AI_GATEWAY_API_KEY and SKILLGATE_MODEL in `.env`.",
+                hint="Check the OpenAI or gateway key in Settings (`skillgate keys set`).",
             )
         return HarnessError(
             "Anthropic did not accept this API key.",
-            hint="Check ANTHROPIC_API_KEY in `.env`.",
+            hint="Check the Anthropic key in Settings (`skillgate keys set`).",
         )
     return HarnessError(friendly_http_status(status, openai=openai))
 

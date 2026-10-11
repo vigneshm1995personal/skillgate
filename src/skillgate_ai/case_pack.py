@@ -153,6 +153,12 @@ def load_case_pack(skill_path: str | Path) -> CasePack | None:
         pack = CasePack.model_validate(raw)
     except Exception as exc:
         raise SuiteError(friendly_validation_error(exc, kind="Case pack", raw=raw)) from None
+    folder = root.name
+    if pack.skill != folder:
+        raise SuiteError(
+            f"This check file is for `{pack.skill}`, but the folder is `{folder}`.",
+            hint="Set `skill:` in evals/cases.yaml to the folder name.",
+        )
     _validate_pack_on_disk(root, pack)
     return pack
 

@@ -23,14 +23,12 @@ def start_run(state: AppState, body: dict[str, Any]) -> dict[str, Any]:
     if not skill_raw:
         fail(400, "Pick a skill first.")
     skill_path = find_skill(state.root, skill_raw)
-    live = bool(body.get("live"))
-    demo = bool(body.get("demo"))
     tryout = bool(body.get("tryout"))
     checks = body.get("checks") if isinstance(body.get("checks"), list) else None
-    if live and not get_llm_config().has_any_key:
+    if not get_llm_config(state.root).has_any_key:
         raise MissingLLMKeyError(
-            "No API key found. Run live needs your API key.",
-            hint="Add a key in Settings, then press Run. Or run with the built-in checker — that is not a live model.",
+            "No model key found.",
+            hint="Add a key in Settings (`skillgate ui`) or run `skillgate keys set`.",
         )
     config = body.get("config") if isinstance(body.get("config"), dict) else {}
     with state.lock:
@@ -78,8 +76,6 @@ def start_run(state: AppState, body: dict[str, Any]) -> dict[str, Any]:
             result = run_check(
                 skill_path,
                 harness=str(body.get("harness") or "auto"),
-                live=live,
-                demo=demo or (not live and not get_llm_config().has_any_key),
                 on_progress=on_progress,
                 control=control,
                 run_id=run_id,

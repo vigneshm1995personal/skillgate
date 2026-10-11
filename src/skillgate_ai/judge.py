@@ -55,8 +55,8 @@ class SkipJudge:
             "cells": [],
             "provider": "skip",
             "backend": "skip",
-            "display_name": "Built-in checker",
-            "reason": "Built-in checker owns this check.",
+            "display_name": "Checks",
+            "reason": "Checks scored this run.",
         }
 
     def explain_fail(
@@ -80,7 +80,7 @@ def default_judge() -> SkipJudge:
 def missing_openai_judge_key() -> MissingLLMKeyError:
     return MissingLLMKeyError(
         "No OpenAI API key found. Scoring with OpenAI needs your key.",
-        hint="Add OPENAI_API_KEY in .env, or skip scoring and use the built-in checker.",
+        hint="Add an OpenAI key in Settings (`skillgate keys set`), or set SKILLGATE_JUDGE=skip.",
     )
 
 
@@ -141,7 +141,7 @@ def judge_stamp(judge: Judge | None) -> dict[str, str]:
         return {
             "provider": "skip",
             "backend": "skip",
-            "display_name": "Built-in checker",
+            "display_name": "Checks",
         }
     from skillgate_ai.judge_openai import DISPLAY_NAME, OutcomeJudge
 

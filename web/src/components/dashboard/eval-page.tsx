@@ -227,13 +227,15 @@ export function EvalPage() {
   const anyNeedsInput = checks.some((check) =>
     checkNeedsInput(check, fixtureInherit, skill)
   )
-  const startTitle = !skill
-    ? "Pick a skill first."
-    : checks.length === 0
-      ? "Add at least one check before starting evaluations."
-      : startBlocked
-        ? startBlockReason || START_NEEDS_UPLOAD
-        : undefined
+  const startTitle = !status?.has_key
+    ? "Add a key in Settings, then press Run."
+    : !skill
+      ? "Pick a skill first."
+      : checks.length === 0
+        ? "Add at least one check before starting evaluations."
+        : startBlocked
+          ? startBlockReason || START_NEEDS_UPLOAD
+          : undefined
   const runLabel = running
     ? `${lastResult?.completed_count ?? 0}/${lastResult?.task_count ?? checks.length} done`
     : isLocalMode(status)
@@ -298,7 +300,7 @@ export function EvalPage() {
           <AlertDescription id="missing-key-hint">
             {status.missing_key_hint ||
               (isLocalMode(status)
-                ? "Add a key in Settings to run live. Run still works with the built-in checker — that is not a live model."
+                ? "Add a key in Settings (`skillgate keys set`), then press Run."
                 : "Add a key in Settings to run live. Auto/Cursor Start Evaluations need a key.")}{" "}
             <Button
               id="btn-open-settings"
@@ -331,7 +333,7 @@ export function EvalPage() {
         <p id="missing-key-hint" className="sr-only">
           {status.missing_key_hint ||
             (isLocalMode(status)
-              ? "Add a key in Settings to run live. Run still works with the built-in checker — that is not a live model."
+              ? "Add a key in Settings (`skillgate keys set`), then press Run."
               : "Add a key in Settings to run live. Auto/Cursor Start Evaluations need a key.")}
         </p>
       ) : null}
@@ -938,7 +940,8 @@ export function EvalPage() {
                   seeding ||
                   !skill ||
                   checks.length === 0 ||
-                  startBlocked
+                  startBlocked ||
+                  !status?.has_key
                 }
                 title={startTitle}
                 onClick={() => void startEvaluations()}

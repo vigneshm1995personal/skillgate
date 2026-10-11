@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 import threading
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -45,37 +44,10 @@ def fail(status: int, message: str, hint: str | None = None, **extra: Any) -> No
     raise HTTPException(status_code=status, detail=detail)
 
 
-def env_file_keys(root: Path) -> set[str]:
-    path = root / ".env"
-    found: set[str] = set()
-    if not path.is_file():
-        return found
-    for line in path.read_text(encoding="utf-8").splitlines():
-        stripped = line.strip()
-        if not stripped or stripped.startswith("#") or "=" not in line:
-            continue
-        key = line.split("=", 1)[0].strip()
-        value = line.split("=", 1)[1].strip()
-        if key in SETTINGS_KEYS and value:
-            found.add(key)
-    return found
-
-
 def keys_payload(state: AppState) -> dict[str, Any]:
-    from skillgate_ai.config import load_env
+    from skillgate_ai.keys import key_presence
 
-    load_env(state.root)
-    from_file = env_file_keys(state.root)
-    keys: dict[str, Any] = {}
-    for name in SETTINGS_KEYS:
-        env_set = bool(os.environ.get(name, "").strip())
-        saved = name in from_file
-        keys[name] = {
-            "set": env_set or saved,
-            "from_vault": saved,
-            "from_env": env_set and not saved,
-        }
-    return keys
+    return key_presence(state.root)
 
 
 def is_relative(path: Path, root: Path) -> bool:

@@ -9,7 +9,7 @@ from skillgate_ai.deploy import claude_skills_root, codex_skills_root, cursor_sk
 from skillgate_ai.errors import SkillGateError
 from skillgate_ai.ingest import NAME_RE, folder_slug, ingest_skill
 from skillgate_ai.pack import copy_skill_pack as copy_pack
-from skillgate_ai.paths import is_skill_pack
+from skillgate_ai.paths import is_skill_pack, is_under_root
 
 SOURCE_ROOTS = (
     ("workspace", None),
@@ -129,8 +129,13 @@ def find_skill(root: Path, name: str) -> Path:
     if not text:
         raise SkillGateError("A skill name is required.")
     supplied = Path(text).expanduser()
-    if supplied.is_absolute() and (supplied / "SKILL.md").is_file():
-        return supplied.resolve()
+    looks_like_path = supplied.is_absolute() or "/" in text or "\\" in text or ".." in text
+    if looks_like_path:
+        resolved = supplied.resolve() if supplied.is_absolute() else (root / text).resolve()
+        if not is_under_root(resolved, root):
+            raise SkillGateError("That path is outside this project.")
+        if (resolved / "SKILL.md").is_file():
+            return resolved
     if NAME_RE.match(text):
         workspace = workspace_skills_root(root) / text
         if (workspace / "SKILL.md").is_file():

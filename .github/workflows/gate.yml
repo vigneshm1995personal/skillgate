@@ -34,13 +34,13 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install -e .
-      - run: skillgate check skills/pdf
-      - run: skillgate check skills/pdf-sabotaged --expect-fail
-      - name: sabotaged must be red without expect-fail
+      - run: skillgate example pdf --dest /tmp/example-pdf
+      - run: skillgate ingest /tmp/example-pdf
+      - name: keyless check exits 2
         run: |
           set +e
-          skillgate check skills/pdf-sabotaged
-          test $? -eq 1
+          skillgate check /tmp/example-pdf
+          test $? -eq 2
 
   web-build:
     runs-on: ubuntu-latest
@@ -108,9 +108,10 @@ jobs:
           test "$user" = "appuser" -o "$user" = "1001:1001"
           test "$entry" = '["skillgate"]'
           test "$cmd" = '["check","/pack"]'
-      - name: pdf green / sabotaged red
+      - name: example + ingest; keyless check exits 2
         run: |
-          docker run --rm -v "$PWD/skills/pdf:/pack" skillgate:test
+          docker run --rm skillgate:test example pdf --dest /tmp/example-pdf
+          docker run --rm -v "$PWD/skills/pdf:/pack" skillgate:test ingest /pack
           set +e
-          docker run --rm -v "$PWD/skills/pdf-sabotaged:/pack" skillgate:test
-          test $? -eq 1
+          docker run --rm -v "$PWD/skills/pdf:/pack" skillgate:test
+          test $? -eq 2

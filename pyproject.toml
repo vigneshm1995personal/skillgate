@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "skillgate-ai"
-version = "0.4.2"
-description = "Local skill gate: pack on disk + skillgate check (exit 0/1), no account"
+version = "0.5.0"
+description = "Local skill gate: pack on disk + live skillgate check (exit 0/1/2), no account"
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "Apache-2.0" }
@@ -48,6 +48,7 @@ skillgate_ai = [
   "local_ui/static/*",
   "web_static/*",
   "web_static/**/*",
+  "examples/**/*",
 ]
 
 [tool.pytest.ini_options]

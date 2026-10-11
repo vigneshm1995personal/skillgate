@@ -275,7 +275,7 @@ export function scoredByFromJudge(judge: JudgeResult | null | undefined): string
     judge.status === "completed" ||
     (judge.answers && Object.keys(judge.answers).length > 0)
   ) {
-    return "The built-in checker scored this run."
+    return "Checks scored this run."
   }
   return ""
 }
@@ -527,9 +527,11 @@ export function plainAdviceCopy(text?: string | null): string {
     /\bbefore opening the skill\b/gi,
     "before it reads the instructions"
   )
-  out = out.replace(/\bthe good pdf twin\b/gi, "a working copy of this skill")
-  out = out.replace(/\ba good pdf twin\b/gi, "a working copy of this skill")
-  out = out.replace(/\bgood pdf twin\b/gi, "a working copy of this skill")
+  out = out.replace(
+    /\bdon['’]t switch to the good pdf[- ]?twin\b/gi,
+    "don't switch to a working copy of this skill"
+  )
+  out = out.replace(/\bthe good pdf[- ]?twin\b/gi, "a working copy of this skill")
   out = out.replace(/\bthe a working copy\b/gi, "a working copy")
   out = out.replace(/,?\s*then run `?skillgate check`[^.]*\.?/gi, ".")
   out = out.replace(/\brun `?skillgate check`[^.]*\.?/gi, "")

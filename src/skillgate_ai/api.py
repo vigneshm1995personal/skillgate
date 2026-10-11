@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 from typing import Any
 
@@ -23,10 +22,12 @@ from skillgate_ai.api_runs import register_run_routes
 from skillgate_ai.api_shims import register_hosted_shims
 from skillgate_ai.api_skills import register_skill_routes
 from skillgate_ai.catalog import catalog_entries
-from skillgate_ai.config import ROOT_ENV_NAMES, get_llm_config, load_env, merge_env_file, missing_key_error
+from skillgate_ai.config import ROOT_ENV_NAMES, get_llm_config, load_env, missing_key_error
+from skillgate_ai.keys import clear_vault_key, set_vault_key
+from skillgate_ai.local_guard import LocalUIGuard
 from skillgate_ai.deploy import deploy_status
 from skillgate_ai.errors import MissingLLMKeyError, SkillGateError
-from skillgate_ai.mode import current_mode, is_local, slots_for
+from skillgate_ai.mode import current_mode, slots_for
 from skillgate_ai.paths import project_root
 
 
@@ -36,6 +37,7 @@ def create_app(*, root: Path | None = None, pack: Path | None = None) -> FastAPI
     load_env(workspace)
     app = FastAPI(title="Skill Gate", version=__version__)
     app.state.ui = AppState(root=workspace)
+    app.add_middleware(LocalUIGuard)
     app.add_middleware(
         CORSMiddleware,
         allow_origin_regex=r"http://(127\.0\.0\.1|localhost)(:\d+)?",
@@ -71,7 +73,7 @@ def _register_core_routes(app: FastAPI) -> None:
     def status(request: Request) -> dict[str, Any]:
         state = state_of(request)
         load_env(state.root)
-        cfg = get_llm_config()
+        cfg = get_llm_config(state.root)
         mode = current_mode()
         missing = missing_key_error()
         skills = catalog_entries(state.root)
@@ -84,16 +86,8 @@ def _register_core_routes(app: FastAPI) -> None:
             "live_backends": cfg.live_backends,
             "available_harnesses": cfg.available_harnesses,
             "default_harness": cfg.default_harness,
-            "missing_key_message": (
-                "No model key yet. Run still uses the built-in checker — that is not a live model."
-                if is_local(mode) and not cfg.has_any_key
-                else (None if cfg.has_any_key else missing.message)
-            ),
-            "missing_key_hint": (
-                "Add a key in Settings to run live."
-                if is_local(mode) and not cfg.has_any_key
-                else (None if cfg.has_any_key else missing.hint)
-            ),
+            "missing_key_message": None if cfg.has_any_key else missing.message,
+            "missing_key_hint": None if cfg.has_any_key else missing.hint,
             "auth_required": False,
             "siwv_configured": False,
             "auth_open": False,
@@ -127,9 +121,7 @@ def _register_core_routes(app: FastAPI) -> None:
             fail(400, "Paste a key before saving.")
         if any(ch in value for ch in "\r\n"):
             fail(400, "API keys cannot contain line breaks.")
-        merge_env_file(state.root / ".env", {name: value})
-        os.environ[name] = value
-        load_env(state.root)
+        set_vault_key(state.root, name, value)
         return {"keys": keys_payload(state)}
 
     @app.delete("/api/settings/keys/{name}")
@@ -137,7 +129,5 @@ def _register_core_routes(app: FastAPI) -> None:
         state = state_of(request)
         if name not in SETTINGS_KEYS:
             fail(400, "Unknown key name.")
-        merge_env_file(state.root / ".env", {name: ""})
-        os.environ.pop(name, None)
-        load_env(state.root)
+        clear_vault_key(state.root, name)
         return {"keys": keys_payload(state)}

@@ -291,12 +291,12 @@ def harness_display_name(pref: str | None, resolved: str | None = None) -> str:
         "codex": "Codex",
         "claude": "Claude",
         "llm": "LLM",
-        "demo": "Built-in checker",
-        "eval": "Built-in checker",
+        "demo": "Auto",
+        "eval": "Auto",
     }
     if key in names:
         return names[key]
-    return (pref or resolved or "Built-in checker").strip() or "Built-in checker"
+    return (pref or resolved or "Auto").strip() or "Auto"
 
 
 def config_label(run: EvalRunConfig | dict[str, Any] | None) -> str:

@@ -15,6 +15,7 @@ from skillgate_ai.config import load_env
 from skillgate_ai.errors import SkillGateError
 from skillgate_ai.gate import run_check
 from skillgate_ai.ingest import ingest_skill
+from skillgate_ai.keys import bind_key_env, reset_key_env_bindings
 from skillgate_ai.paths import is_skill_pack, project_root, resolve_user_path
 from skillgate_ai.report import format_cli, format_github, report_to_dict
 from skillgate_ai.suite import discover_suites
@@ -67,8 +68,6 @@ def ingest(
 
 
 def _present_check(result) -> None:
-    if result.demo_notice:
-        console.print(f"[dim]{result.demo_notice}[/dim]\n")
     if result.error:
         console.print(result.error["message"])
         hint = result.error.get("hint")
@@ -78,14 +77,31 @@ def _present_check(result) -> None:
         console.print(format_cli(result.report))
 
 
+def _parse_targets(*values: str | None, default: str = "cursor") -> list[str]:
+    found: list[str] = []
+    for raw in values:
+        if not raw:
+            continue
+        for part in raw.split(","):
+            name = part.strip().lower()
+            if name and name not in found:
+                found.append(name)
+    if found:
+        return found
+    return [part.strip() for part in default.split(",") if part.strip()]
+
+
+def _bind_key_env(key_env: list[str] | None) -> None:
+    reset_key_env_bindings()
+    bind_key_env(key_env)
+
+
 def _run_gate(
     *,
     target: Path,
     skill: Path | None,
     harness: str,
     sandbox: str,
-    demo: bool,
-    live: bool,
     expect_fail: bool,
     summary: str,
     json_out: bool,
@@ -93,14 +109,14 @@ def _run_gate(
     timeout: int | None,
     temperature: float | None,
     reasoning_effort: str | None,
+    key_env: list[str] | None = None,
 ) -> None:
+    _bind_key_env(key_env)
     result = run_check(
         target,
         skill=skill,
         harness=harness,
         sandbox=sandbox,
-        demo=demo,
-        live=live,
         expect_fail=expect_fail,
         model=model,
         timeout=timeout,
@@ -116,11 +132,6 @@ def _run_gate(
         if result.expect_fail_notice:
             console.print(result.expect_fail_notice)
         raise typer.Exit(result.exit_code)
-    if result.demo_notice:
-        if machine:
-            sys.stderr.write(f"{result.demo_notice}\n")
-        else:
-            console.print(f"[dim]{result.demo_notice}[/dim]\n")
     if result.error:
         if machine:
             _emit_json(
@@ -157,8 +168,9 @@ def _run_gate(
     raise typer.Exit(result.exit_code)
 
 
-_HARNESS_HELP = "auto | cursor-agent | codex | llm | demo"
+_HARNESS_HELP = "auto | cursor-agent | codex | llm"
 _SANDBOX_HELP = "local | docker"
+_KEY_ENV_HELP = "Use this process env name as a Skill Gate key (repeatable). Example: --key-env OPENAI_API_KEY"
 
 
 @app.command("check")
@@ -166,16 +178,10 @@ def check_pack(
     pack: Path = typer.Argument(..., help="Skill pack directory (SKILL.md + evals/)"),
     harness: str = typer.Option("auto", "--harness", help=_HARNESS_HELP),
     sandbox: str = typer.Option("local", "--sandbox", help=_SANDBOX_HELP),
-    demo: bool = typer.Option(
-        False, "--demo", help="Force the built-in checker. This is not a live model."
-    ),
-    live: bool = typer.Option(
-        False, "--live", help="Require your API key; do not fall back to the built-in checker"
-    ),
     expect_fail: bool = typer.Option(
         False,
         "--expect-fail",
-        help="Exit 0 only if the suite is red (sabotaged / intentional-fail demo)",
+        help="Exit 0 only if the suite is red (sabotaged / intentional-fail)",
     ),
     summary: str = typer.Option("cli", "--summary", help="cli | github | json"),
     json_out: bool = typer.Option(False, "--json", help="Machine JSON (not the primary UX)"),
@@ -185,15 +191,14 @@ def check_pack(
     reasoning_effort: str | None = typer.Option(
         None, "--reasoning-effort", help="Codex reasoning: low | medium | high | ultra"
     ),
+    key_env: list[str] | None = typer.Option(None, "--key-env", help=_KEY_ENV_HELP),
 ) -> None:
-    """Run pack-local evals/cases.yaml. Exit 0 if green, 1 if red. No account required."""
+    """Run pack-local evals/cases.yaml. Exit 0 if green, 1 if red, 2 if no key."""
     _run_gate(
         target=pack,
         skill=None,
         harness=harness,
         sandbox=sandbox,
-        demo=demo,
-        live=live,
         expect_fail=expect_fail,
         summary=summary,
         json_out=json_out,
@@ -201,6 +206,7 @@ def check_pack(
         timeout=timeout,
         temperature=temperature,
         reasoning_effort=reasoning_effort,
+        key_env=key_env,
     )
 
 
@@ -210,16 +216,10 @@ def run_suite(
     skill: Path | None = typer.Option(None, "--skill", help="Override the skill folder"),
     harness: str = typer.Option("auto", "--harness", help=_HARNESS_HELP),
     sandbox: str = typer.Option("local", "--sandbox", help=_SANDBOX_HELP),
-    demo: bool = typer.Option(
-        False, "--demo", help="Force the built-in checker. This is not a live model."
-    ),
-    live: bool = typer.Option(
-        False, "--live", help="Require your API key; do not fall back to the built-in checker"
-    ),
     expect_fail: bool = typer.Option(
         False,
         "--expect-fail",
-        help="Exit 0 only if the suite is red (sabotaged / intentional-fail demo)",
+        help="Exit 0 only if the suite is red (sabotaged / intentional-fail)",
     ),
     summary: str = typer.Option("cli", "--summary", help="cli | github | json"),
     json_out: bool = typer.Option(False, "--json", help="Machine JSON (not the primary UX)"),
@@ -229,6 +229,7 @@ def run_suite(
     reasoning_effort: str | None = typer.Option(
         None, "--reasoning-effort", help="Codex reasoning: low | medium | high | ultra"
     ),
+    key_env: list[str] | None = typer.Option(None, "--key-env", help=_KEY_ENV_HELP),
 ) -> None:
     """Run an eval pack or suite YAML. Prefer `skillgate check` for CI."""
     notice = "Prefer `skillgate check` for CI."
@@ -241,8 +242,6 @@ def run_suite(
         skill=skill,
         harness=harness,
         sandbox=sandbox,
-        demo=demo,
-        live=live,
         expect_fail=expect_fail,
         summary=summary,
         json_out=json_out,
@@ -250,13 +249,17 @@ def run_suite(
         timeout=timeout,
         temperature=temperature,
         reasoning_effort=reasoning_effort,
+        key_env=key_env,
     )
 
 
 @app.command()
 def deploy(
     pack: Path = typer.Argument(..., help="Gated skill pack to copy"),
-    target: str = typer.Option("cursor", "--target", help="cursor | claude | codex"),
+    target: str | None = typer.Option(None, "--target", help="cursor | claude | codex (comma ok)"),
+    targets: str | None = typer.Option(
+        None, "--targets", help="Same as --target; one name or a comma list"
+    ),
     force: bool = typer.Option(
         False,
         "--force",
@@ -265,43 +268,37 @@ def deploy(
 ) -> None:
     """Copy a skill pack into a local agent skills directory.
 
-    Refuses to install unless the latest `skillgate check` on this pack passed.
-    If this pack has never been checked, deploy runs the check first.
-    Pass --force to install anyway.
+    Refuses unless this pack already has a passing check. Does not run check.
+    Copies skill files only (not evals/). Pass --force to install anyway.
     """
     from skillgate_ai.deploy import get_adapter, latest_check_passed, refuse_ungated_install
 
     root = _boot()
     path = resolve_user_path(pack, root)
+    selected = _parse_targets(target, targets, default="cursor")
     try:
-        adapter = get_adapter(target)
+        adapters = [get_adapter(name) for name in selected]
         loaded = ingest_skill(path)
         if not force:
             latest = latest_check_passed(path)
-            fail_exit = 1
-            if latest is None:
-                checked = run_check(path, source="cli", root=root)
-                _present_check(checked)
-                latest = bool(
-                    checked.exit_code == 0
-                    and checked.report is not None
-                    and checked.report.passed
+            if latest is not True:
+                raise refuse_ungated_install(
+                    loaded.name, never_checked=latest is None
                 )
-                fail_exit = checked.exit_code or 1
-            if not latest:
-                raise refuse_ungated_install(loaded.name, exit_code=fail_exit)
-        result = adapter.install(skill=loaded, source=path, force=force)
+        for adapter in adapters:
+            result = adapter.install(skill=loaded, source=path, force=force)
+            console.print(result["message"])
     except SkillGateError as exc:
         console.print(exc.render())
         raise typer.Exit(exc.exit_code) from None
-    console.print(result["message"])
 
 
 @app.command()
 def sync(
     repo: str = typer.Option(..., "--repo", help="Git repo URL with skills/ inside"),
-    targets: str = typer.Option(
-        "cursor,codex,claude", "--targets", help="Comma-separated targets"
+    target: str | None = typer.Option(None, "--target", help="Same as --targets"),
+    targets: str | None = typer.Option(
+        None, "--targets", help="Comma-separated targets (default cursor,codex,claude)"
     ),
     interval: int = typer.Option(0, "--interval", help="Seconds between syncs (0 = once)"),
     install_launchd: bool = typer.Option(
@@ -311,7 +308,7 @@ def sync(
     """Pull a skills repo and copy its skills into local agent dirs."""
     from skillgate_ai.sync import install_launchd_plist, run_sync_loop, sync_once
 
-    selected = [t.strip() for t in targets.split(",") if t.strip()]
+    selected = _parse_targets(target, targets, default="cursor,codex,claude")
     try:
         if install_launchd:
             path = install_launchd_plist(
@@ -408,6 +405,114 @@ def list_assets() -> None:
             console.print(f"  {suite.name}")
 
 
+keys_app = typer.Typer(
+    add_completion=False,
+    no_args_is_help=True,
+    help="Set keys in this project. Never reads OPENAI_API_KEY from the shell unless --key-env.",
+)
+app.add_typer(keys_app, name="keys")
+
+
+@keys_app.command("set")
+def keys_set(
+    name: str = typer.Argument(..., help="CURSOR_API_KEY | CODEX_API_KEY | OPENAI_API_KEY | …"),
+    value: str = typer.Argument(..., help="The secret. Not printed later."),
+) -> None:
+    """Write a key into `.skillgate/keys` (mode 0600)."""
+    from skillgate_ai.keys import set_vault_key
+
+    root = _boot()
+    try:
+        set_vault_key(root, name, value)
+    except SkillGateError as exc:
+        console.print(exc.render())
+        raise typer.Exit(exc.exit_code) from None
+    console.print(f"Saved {name} in Settings (`.skillgate/keys`).")
+
+
+@keys_app.command("clear")
+def keys_clear(
+    name: str = typer.Argument(..., help="Key name to remove"),
+) -> None:
+    """Remove a key from `.skillgate/keys`."""
+    from skillgate_ai.keys import clear_vault_key
+
+    root = _boot()
+    try:
+        clear_vault_key(root, name)
+    except SkillGateError as exc:
+        console.print(exc.render())
+        raise typer.Exit(exc.exit_code) from None
+    console.print(f"Cleared {name}.")
+
+
+@keys_app.command("list")
+def keys_list() -> None:
+    """Show which keys are set. Never prints values."""
+    from skillgate_ai.keys import key_presence
+
+    root = _boot()
+    presence = key_presence(root)
+    found = False
+    for name, meta in presence.items():
+        if not meta["set"]:
+            continue
+        found = True
+        source = "Settings" if meta["from_vault"] else "SKILLGATE_* / --key-env"
+        console.print(f"{name}  ({source})")
+    if not found:
+        console.print("No keys set. Use `skillgate keys set` or Settings in `skillgate ui`.")
+
+
+@app.command("init")
+def init_cmd(
+    dest: Path | None = typer.Argument(None, help="Workspace folder (default: current directory)"),
+) -> None:
+    """Create a Skill Gate workspace (`skills/` and ignore `.skillgate/`)."""
+    from skillgate_ai.workspace import init_workspace
+
+    root = (dest or Path.cwd()).expanduser().resolve()
+    try:
+        init_workspace(root)
+    except SkillGateError as exc:
+        console.print(exc.render())
+        raise typer.Exit(exc.exit_code) from None
+    console.print(f"Workspace ready at {root}")
+
+
+@app.command("new")
+def new_cmd(
+    name: str = typer.Argument(..., help="Skill folder name (lowercase, hyphens)"),
+) -> None:
+    """Create `skills/NAME` with SKILL.md and starter checks (same as the UI)."""
+    from skillgate_ai.workspace import new_skill
+
+    root = _boot()
+    try:
+        dest = new_skill(root, name)
+    except SkillGateError as exc:
+        console.print(exc.render())
+        raise typer.Exit(exc.exit_code) from None
+    console.print(f"Created {dest}")
+
+
+@app.command("example")
+def example_cmd(
+    name: str = typer.Argument(..., help="pdf | pdf-sabotaged"),
+    dest: Path | None = typer.Option(None, "--dest", help="Folder to write (default: ./NAME)"),
+) -> None:
+    """Copy a packaged example skill into this folder."""
+    from skillgate_ai.examples import copy_example
+
+    target = (dest or Path.cwd() / name).expanduser().resolve()
+    try:
+        written = copy_example(name, target)
+    except SkillGateError as exc:
+        console.print(exc.render())
+        raise typer.Exit(exc.exit_code) from None
+    console.print(f"Wrote {written}")
+
+
 @app.command("ui")
 def ui_cmd(
     host: str = typer.Option("127.0.0.1", "--host", help="Bind address (default loopback)"),
@@ -417,9 +522,12 @@ def ui_cmd(
     open_browser: bool = typer.Option(False, "--open", help="Open the loopback URL in a browser"),
     no_browser: bool = typer.Option(False, "--no-browser", help="Do not open a browser"),
 ) -> None:
-    """Local React UI. No account. Run uses your API key or the built-in checker."""
+    """Local React UI. No account. Run needs a key in Settings."""
     from skillgate_ai.server import serve_ui
 
+    if port < 1 or port > 65535:
+        console.print("Port must be between 1 and 65535.")
+        raise typer.Exit(2)
     workspace = (root or project_root()).expanduser().resolve()
     load_env(workspace)
     should_open = open_browser and not no_browser

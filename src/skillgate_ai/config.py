@@ -1,4 +1,4 @@
-"""Model-key configuration from `.env` / process env."""
+"""Model-key configuration from the Skill Gate key store and SKILLGATE_* env."""
 
 from __future__ import annotations
 
@@ -64,11 +64,13 @@ def _opt(name: str) -> str | None:
     return value or None
 
 
-def _base_url() -> str:
-    explicit = os.environ.get("AI_GATEWAY_BASE_URL", "").strip()
+def _base_url(keys: dict[str, str] | None = None) -> str:
+    explicit = os.environ.get("AI_GATEWAY_BASE_URL", "").strip() or os.environ.get(
+        "SKILLGATE_AI_GATEWAY_BASE_URL", ""
+    ).strip()
     if explicit:
         return explicit.rstrip("/")
-    if _opt("AI_GATEWAY_API_KEY"):
+    if keys and keys.get("AI_GATEWAY_API_KEY"):
         return DEFAULT_GATEWAY_BASE_URL
     return DEFAULT_OPENAI_BASE_URL
 
@@ -114,15 +116,15 @@ class LLMConfig:
     def live_backends(self) -> list[str]:
         found = []
         if self.cursor_api_key:
-            found.append("cursor-agent (CURSOR_API_KEY)")
+            found.append("cursor-agent")
         if self.codex_api_key:
-            found.append("codex (CODEX_API_KEY or OPENAI_API_KEY)")
+            found.append("codex")
         if self.gateway_api_key:
-            found.append("OpenAI-compatible (AI_GATEWAY_API_KEY)")
+            found.append("OpenAI-compatible")
         elif self.openai_api_key:
-            found.append("OpenAI-compatible (OPENAI_API_KEY)")
+            found.append("OpenAI-compatible")
         if self.anthropic_api_key:
-            found.append("anthropic (ANTHROPIC_API_KEY)")
+            found.append("anthropic")
         return found
 
     @property
@@ -139,18 +141,22 @@ class LLMConfig:
         return auto_live_harness_name(self)
 
 
-def get_llm_config() -> LLMConfig:
-    openai_key = _opt("OPENAI_API_KEY")
+def get_llm_config(root: Path | None = None) -> LLMConfig:
+    from skillgate_ai.keys import resolve_provider_keys
+    from skillgate_ai.paths import project_root
+
+    keys = resolve_provider_keys(root if root is not None else project_root())
+    openai_key = keys.get("OPENAI_API_KEY")
     return LLMConfig(
-        cursor_api_key=_opt("CURSOR_API_KEY"),
-        gateway_api_key=_opt("AI_GATEWAY_API_KEY"),
+        cursor_api_key=keys.get("CURSOR_API_KEY"),
+        gateway_api_key=keys.get("AI_GATEWAY_API_KEY"),
         openai_api_key=openai_key,
-        gateway_base_url=_base_url(),
+        gateway_base_url=_base_url(keys),
         gateway_model=os.environ.get("SKILLGATE_MODEL", DEFAULT_GATEWAY_MODEL),
-        anthropic_api_key=_opt("ANTHROPIC_API_KEY"),
+        anthropic_api_key=keys.get("ANTHROPIC_API_KEY"),
         anthropic_model=os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-4-20250514"),
         cursor_agent_bin=os.environ.get("CURSOR_AGENT_BIN", "agent"),
-        codex_api_key=_opt("CODEX_API_KEY") or openai_key,
+        codex_api_key=keys.get("CODEX_API_KEY") or openai_key,
         codex_bin=os.environ.get("CODEX_BIN", "codex"),
         harness_pref=os.environ.get("SKILLGATE_HARNESS", "auto").strip().lower() or "auto",
         sandbox_pref=os.environ.get("SKILLGATE_SANDBOX", "local").strip().lower() or "local",
@@ -224,32 +230,24 @@ def _env_temperature() -> float:
     return value
 
 
+NO_KEY_MESSAGE = "No model key found."
+NO_KEY_HINT = (
+    "Add a key in Settings (`skillgate ui`) or run `skillgate keys set`.\n"
+    "CI: set SKILLGATE_OPENAI_API_KEY, or pass --key-env OPENAI_API_KEY."
+)
+
+
 def missing_key_error(*, live: bool = True, for_codex: bool = False) -> MissingLLMKeyError:
     del live
     if for_codex:
         hint = (
-            "Codex CLI needs a key or a ChatGPT login (`codex login`).\n"
-            "  CODEX_API_KEY        Codex CLI harness (preferred)\n"
-            "  OPENAI_API_KEY       used when CODEX_API_KEY is unset\n"
-            "  or run `codex login` and confirm `codex login status` says Logged in.\n"
-            "Skill Gate does not read Codex auth files. Auto still requires an env key.\n"
-            "See `.env.example`. For offline checks with no key, the demo harness is default."
+            "Codex CLI needs a key in Settings (`skillgate keys set CODEX_API_KEY`) "
+            "or a ChatGPT login (`codex login`).\n"
+            "CI: set SKILLGATE_CODEX_API_KEY or pass --key-env CODEX_API_KEY."
         )
     else:
-        hint = (
-            "Add one of these in `.env` or GitHub Actions secrets:\n"
-            "  CURSOR_API_KEY      Cursor Agent\n"
-            "  CODEX_API_KEY       Codex CLI\n"
-            "  OPENAI_API_KEY      OpenAI-compatible chat / Codex fallback\n"
-            "  AI_GATEWAY_API_KEY  optional OpenAI-compatible HTTP base\n"
-            "  ANTHROPIC_API_KEY   Anthropic\n"
-            "See `.env.example`. Built-in checks need no key (`skillgate check`).\n"
-            "Live checks require a key you own — Skill Gate does not ship a model."
-        )
-    return MissingLLMKeyError(
-        "No model key found. Skill Gate does not ship a hosted model.",
-        hint=hint,
-    )
+        hint = NO_KEY_HINT
+    return MissingLLMKeyError(NO_KEY_MESSAGE, hint=hint)
 
 
 def merge_env_file(path: Path, updates: dict[str, str]) -> None:

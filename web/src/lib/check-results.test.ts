@@ -162,9 +162,9 @@ describe("scoredByLine", () => {
     ).toBe("OpenAI (your key) scored this run.")
   })
 
-  it("maps a built-in checker without hard-coding the UI to one scorer", () => {
+  it("maps skip scoring without hard-coding the UI to one scorer", () => {
     expect(scoredByFromJudge(passTask.judge)).toBe(
-      "The built-in checker scored this run."
+      "Checks scored this run."
     )
     expect(
       scoredByFromJudge({

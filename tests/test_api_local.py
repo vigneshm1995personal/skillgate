@@ -30,7 +30,7 @@ def _client(tmp: Path, monkeypatch) -> TestClient:
     monkeypatch.setenv("SKILLGATE_CODEX_SKILLS", str(tmp / "codex-skills"))
     monkeypatch.setenv("SKILLGATE_CLAUDE_SKILLS", str(tmp / "claude-skills"))
     app = create_app(root=tmp)
-    return TestClient(app)
+    return TestClient(app, base_url="http://127.0.0.1:8765")
 
 
 def test_status_local_hides_paid_slots(tmp_path: Path, monkeypatch) -> None:
@@ -84,36 +84,22 @@ def test_generate_does_not_start_a_run(tmp_path: Path, monkeypatch) -> None:
     assert len(after.json()["skills"]) == len(before.json()["skills"])
 
 
-def test_run_is_explicit_and_uses_built_in_checker(tmp_path: Path, monkeypatch) -> None:
+def test_run_without_key_is_conflict(tmp_path: Path, monkeypatch) -> None:
     _copy_pack(tmp_path)
     client = _client(tmp_path, monkeypatch)
     gen = client.post("/api/evals/generate", json={"skill": "pdf"})
     checks = gen.json()["checks"]
     started = client.post(
         "/api/runs",
-        json={"skill": "pdf", "checks": checks, "live": False, "demo": True},
+        json={"skill": "pdf", "checks": checks},
     )
-    assert started.status_code == 200
-    run_id = started.json()["id"]
-    deadline = time.time() + 120
-    snapshot = None
-    while time.time() < deadline:
-        snapshot = client.get(f"/api/runs/{run_id}").json()
-        if snapshot.get("status") != "running":
-            break
-        time.sleep(0.2)
-    assert snapshot is not None
-    assert snapshot["status"] == "done"
-    assert snapshot["passed"] is True
-    assert snapshot["gate_decision"] == "cleared"
-    report = snapshot["report"]
-    assert report["gate"] == "green"
-    task = report["tasks"][0]
-    assert "happened" in task
-    assert "check_answers" in task or task.get("passed") is True
+    assert started.status_code == 409
+    detail = started.json()["detail"]
+    assert "No model key" in (detail.get("message") or "")
+    assert "skillgate keys set" in (detail.get("hint") or "")
 
 
-def test_settings_keys_write_dotenv(tmp_path: Path, monkeypatch) -> None:
+def test_settings_keys_write_vault(tmp_path: Path, monkeypatch) -> None:
     client = _client(tmp_path, monkeypatch)
     listed = client.get("/api/settings/keys")
     assert listed.status_code == 200
@@ -121,11 +107,14 @@ def test_settings_keys_write_dotenv(tmp_path: Path, monkeypatch) -> None:
     saved = client.put("/api/settings/keys/OPENAI_API_KEY", json={"value": "sk-test-local"})
     assert saved.status_code == 200
     assert saved.json()["keys"]["OPENAI_API_KEY"]["from_vault"] is True
-    env_text = (tmp_path / ".env").read_text(encoding="utf-8")
-    assert "OPENAI_API_KEY=sk-test-local" in env_text
+    vault = (tmp_path / ".skillgate" / "keys").read_text(encoding="utf-8")
+    assert "OPENAI_API_KEY=sk-test-local" in vault
+    assert not (tmp_path / ".env").exists() or "sk-test-local" not in (
+        tmp_path / ".env"
+    ).read_text(encoding="utf-8")
     cleared = client.delete("/api/settings/keys/OPENAI_API_KEY")
     assert cleared.status_code == 200
-    assert "sk-test-local" not in (tmp_path / ".env").read_text(encoding="utf-8")
+    assert "sk-test-local" not in (tmp_path / ".skillgate" / "keys").read_text(encoding="utf-8")
 
 
 def test_import_from_cursor_skills(tmp_path: Path, monkeypatch) -> None:
@@ -147,6 +136,9 @@ def test_import_from_cursor_skills(tmp_path: Path, monkeypatch) -> None:
 
 def test_deploy_copies_into_agent_folder(tmp_path: Path, monkeypatch) -> None:
     pack = _copy_pack(tmp_path)
+    from skillgate_ai.history import append_eval
+
+    append_eval(pack, run_id="green", passed=True)
     cursor_root = tmp_path / "cursor-skills"
     monkeypatch.setenv("SKILLGATE_CURSOR_SKILLS", str(cursor_root))
     client = _client(tmp_path, monkeypatch)
@@ -154,6 +146,7 @@ def test_deploy_copies_into_agent_folder(tmp_path: Path, monkeypatch) -> None:
     assert res.status_code == 200
     assert res.json()["mode"] == "local"
     assert (cursor_root / "pdf" / "SKILL.md").is_file()
+    assert not (cursor_root / "pdf" / "evals").exists()
     assert pack.is_dir()
 
 
@@ -170,7 +163,7 @@ def test_ui_static_attaches_without_fastapi_error(tmp_path: Path, monkeypatch) -
     monkeypatch.setenv("SKILLGATE_MODE", "local")
     app = create_app(root=tmp_path)
     attach_static(app)
-    client = TestClient(app)
+    client = TestClient(app, base_url="http://127.0.0.1:8765")
     status = client.get("/api/status")
     assert status.status_code == 200
     assert status.json()["mode"] == "local"

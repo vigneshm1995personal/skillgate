@@ -74,22 +74,20 @@ def test_scored_by_skip_on_live_does_not_deny_live_model() -> None:
         ],
     )
     line = scored_by_line(report)
-    assert line == "The skill ran live. The built-in checker scored it."
+    assert line == "The skill ran live. Checks scored this run."
     assert "not a live model" not in line.lower()
     text = format_cli(report)
     assert "not a live model" not in text.lower()
     assert "ran live" in text
 
 
-def test_scored_by_demo_still_says_not_a_live_model() -> None:
+def test_scored_by_skip_without_live_harness() -> None:
     report = _report(
         harness="demo",
         config={"judge": {"provider": "skip", "display_name": "Built-in checker"}},
         tasks=[_task(judge=None)],
     )
-    assert scored_by_line(report) == (
-        "Built-in checker scored this run. This is not a live model."
-    )
+    assert scored_by_line(report) == "Checks scored this run."
 
 
 def test_scored_by_openai_with_answers() -> None:
@@ -210,6 +208,4 @@ def test_report_json_includes_scored_by() -> None:
         tasks=[_task(judge=None)],
     )
     payload = report_to_dict(report)
-    assert payload["scored_by"] == (
-        "Built-in checker scored this run. This is not a live model."
-    )
+    assert payload["scored_by"] == "Checks scored this run."

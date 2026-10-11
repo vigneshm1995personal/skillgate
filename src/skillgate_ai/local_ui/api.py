@@ -17,9 +17,10 @@ from skillgate_ai.advice import (
     rewrite_skill_description,
 )
 from skillgate_ai.case_pack import CasePack, dataset_view, save_case_pack
-from skillgate_ai.config import ROOT_ENV_NAMES, get_llm_config, load_env, merge_env_file
+from skillgate_ai.config import ROOT_ENV_NAMES, get_llm_config, load_env
 from skillgate_ai.demo_files import ensure_demo_pdfs
 from skillgate_ai.errors import MissingLLMKeyError, SkillGateError
+from skillgate_ai.keys import set_vault_key
 from skillgate_ai.gate import run_check
 from skillgate_ai.judge import SkipJudge, resolve_judge
 from skillgate_ai.history import load_history
@@ -146,7 +147,7 @@ def pdf_demo_path(state: UiState) -> Path | None:
 
 def meta_payload(state: UiState) -> dict[str, Any]:
     load_env(state.root)
-    cfg = get_llm_config()
+    cfg = get_llm_config(state.root)
     pack = None
     if state.initial_pack:
         pack = display_pack_label(state.initial_pack, state.root)
@@ -162,7 +163,7 @@ def meta_payload(state: UiState) -> dict[str, Any]:
         "has_any_key": cfg.has_any_key,
         "has_openai_key": bool(cfg.openai_api_key),
         "judge_provider": judge_provider,
-        "demo_default": True,
+        "demo_default": False,
         "account": False,
         "pack": pack,
         "pdf_path": display_pack_label(pdf, state.root) if pdf else None,
@@ -334,9 +335,8 @@ def _put_env(state: UiState, payload: dict[str, Any]) -> tuple[int, dict[str, An
     if unknown:
         raise SkillGateError(
             f"Unknown env names: {', '.join(sorted(unknown))}",
-            hint="Only API keys from .env.example are allowed.",
+            hint="Only API keys from Settings are allowed.",
         )
-    updates: dict[str, str] = {}
     for key in ALLOWED_ENV:
         if key not in payload:
             continue
@@ -346,14 +346,12 @@ def _put_env(state: UiState, payload: dict[str, Any]) -> tuple[int, dict[str, An
                 "API keys cannot contain line breaks.",
                 hint="Paste a single-line key.",
             )
-        updates[key] = value
-    dest = state.root / ".env"
-    merge_env_file(dest, updates)
-    load_env(state.root)
-    return 200, {"ok": True, "has_any_key": get_llm_config().has_any_key}, "application/json"
+        if value:
+            set_vault_key(state.root, key, value)
+    return 200, {"ok": True, "has_any_key": get_llm_config(state.root).has_any_key}, "application/json"
 
 
-LIVE_NO_KEY = "No API key found. Run live needs your API key."
+LIVE_NO_KEY = "No model key found."
 LIVE_FAIL = "Your API key could not run this check."
 
 
@@ -366,12 +364,11 @@ def _customer_live_error(error: dict[str, Any] | None) -> dict[str, Any] | None:
 
 def _start_check(state: UiState, payload: dict[str, Any]) -> tuple[int, dict[str, Any], str]:
     pack = resolve_user_path(str(payload.get("path") or ""), state, must_exist=True)
-    live = bool(payload.get("live"))
     load_env(state.root)
-    if live and not get_llm_config().has_any_key:
+    if not get_llm_config(state.root).has_any_key:
         raise MissingLLMKeyError(
             LIVE_NO_KEY,
-            hint="Add a key, then click Run live. Or run with the built-in checker — that is not a live model.",
+            hint="Add a key in Settings (`skillgate ui`) or run `skillgate keys set`.",
         )
     with state.lock:
         if (
@@ -396,8 +393,6 @@ def _start_check(state: UiState, payload: dict[str, Any]) -> tuple[int, dict[str
             result = run_check(
                 pack,
                 harness=str(payload.get("harness") or "auto"),
-                live=live,
-                demo=bool(payload.get("demo")),
                 expect_fail=bool(payload.get("expect_fail")),
                 on_progress=on_progress,
                 control=control,
@@ -406,7 +401,7 @@ def _start_check(state: UiState, payload: dict[str, Any]) -> tuple[int, dict[str
                 root=state.root,
             )
             err = result.error
-            if live and err:
+            if err and "api key" in str(err.get("message") or "").lower():
                 err = _customer_live_error(err)
             payload_out: dict[str, Any] = {
                 "run_id": run_id,
@@ -418,9 +413,7 @@ def _start_check(state: UiState, payload: dict[str, Any]) -> tuple[int, dict[str
             }
             record.payload = payload_out
         except Exception as exc:  # noqa: BLE001 — surface to the poller
-            message = LIVE_FAIL if live else str(exc)
-            if isinstance(exc, SkillGateError):
-                message = LIVE_FAIL if live else exc.message
+            message = exc.message if isinstance(exc, SkillGateError) else str(exc)
             record.error = message
             record.payload = {
                 "run_id": run_id,
