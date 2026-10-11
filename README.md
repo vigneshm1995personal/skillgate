@@ -71,3 +71,26 @@ Until the first PyPI release, CI in this repo uses `pip install -e .`.
 BYO keys (Cursor / Codex / OpenAI-compatible / Anthropic) run the **live** check. An **OpenAI** key also scores live checks. Skip keys for the built-in checker (not a live model). See `.env.example` and [`docs/openai-judge.md`](docs/openai-judge.md).
 
 Optional Action secret: `OPENAI_API_KEY` (not required to merge).
+
+## Sync &amp; Mac helper (optional, no account)
+
+Pull a skills repo and copy its skills into your local editor folders:
+
+```bash
+skillgate sync --repo https://github.com/you/skills.git --targets cursor,codex,claude
+```
+
+It only touches the skill dirs it manages — unrelated folders in your skills
+roots are never deleted. Add a hands-off LaunchAgent (macOS only):
+
+```bash
+skillgate sync --repo https://github.com/you/skills.git --install-launchd
+```
+
+Connect a Mac to a hosted Skill Gate to receive installs:
+
+```bash
+skillgate connect --url https://your-host.example --code ABCDEFGH --name "My Mac"
+skillgate helper            # polls outbound only; no listening ports
+skillgate helper --install-launchd
+```

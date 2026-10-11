@@ -245,6 +245,92 @@ def deploy(
     console.print(result["message"])
 
 
+@app.command()
+def sync(
+    repo: str = typer.Option(..., "--repo", help="Git repo URL with skills/ inside"),
+    targets: str = typer.Option(
+        "cursor,codex,claude", "--targets", help="Comma-separated targets"
+    ),
+    interval: int = typer.Option(0, "--interval", help="Seconds between syncs (0 = once)"),
+    install_launchd: bool = typer.Option(
+        False, "--install-launchd", help="Install a macOS LaunchAgent for sync"
+    ),
+) -> None:
+    """Pull a skills repo and copy its skills into local agent dirs."""
+    from skillgate_ai.sync import install_launchd_plist, run_sync_loop, sync_once
+
+    selected = [t.strip() for t in targets.split(",") if t.strip()]
+    try:
+        if install_launchd:
+            path = install_launchd_plist(
+                repo_url=repo, targets=selected, interval=interval
+            )
+            console.print(f"Installed sync LaunchAgent at {path}")
+            raise typer.Exit(0)
+        if interval and interval > 0:
+            run_sync_loop(repo, targets=selected, interval=interval)
+        else:
+            result = sync_once(repo, targets=selected)
+            for name in result["skills"]:
+                console.print(f"synced  {name}")
+            for target_key, summary in result["targets"].items():
+                console.print(
+                    f"{target_key}  installed={summary['installed']} "
+                    f"removed={summary['removed']} → {summary['target_root']}"
+                )
+    except SkillGateError as exc:
+        console.print(exc.render())
+        raise typer.Exit(exc.exit_code) from exc
+
+
+@app.command()
+def connect(
+    url: str = typer.Option(..., "--url", help="Hosted Skill Gate URL"),
+    code: str = typer.Option(..., "--code", help="One-time pairing code"),
+    name: str | None = typer.Option(None, "--name", help="Nickname for this Mac"),
+) -> None:
+    """Pair this Mac with a hosted Skill Gate (stores a token at 0600)."""
+    from skillgate_ai.helper import connect as connect_helper
+
+    try:
+        config = connect_helper(url, code, name)
+    except SkillGateError as exc:
+        console.print(exc.render())
+        raise typer.Exit(exc.exit_code) from exc
+    console.print(f"Connected {config['name']} ({config['device_id']}).")
+    console.print("Run `skillgate helper` to receive deploy jobs.")
+
+
+@app.command()
+def helper(
+    once: bool = typer.Option(False, "--once", help="Poll once and exit"),
+    install_launchd: bool = typer.Option(
+        False, "--install-launchd", help="Install a macOS LaunchAgent for the helper"
+    ),
+) -> None:
+    """Poll a hosted Skill Gate for deploy jobs and install skills (outbound only)."""
+    from skillgate_ai.helper import (
+        install_launchd_plist,
+        load_helper_config,
+        run_helper,
+    )
+
+    try:
+        if install_launchd:
+            path = install_launchd_plist()
+            console.print(f"Installed helper LaunchAgent at {path}")
+            raise typer.Exit(0)
+        config = load_helper_config()
+        if config is None:
+            raise SkillGateError(
+                "Not connected. Run `skillgate connect --url <hosted> --code <code>` first."
+            )
+        run_helper(config, once=once)
+    except SkillGateError as exc:
+        console.print(exc.render())
+        raise typer.Exit(exc.exit_code) from exc
+
+
 @app.command("list")
 def list_assets() -> None:
     """Show skills/ and evals/ (skill-first paths)."""
