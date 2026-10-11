@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import shlex
 import shutil
 import subprocess
 from dataclasses import dataclass
@@ -554,7 +555,7 @@ class LLMHarness:
                 stdout += proc.stdout
                 stderr += proc.stderr
                 returncode = proc.returncode
-                transcript.append(f"ran {command} exit={proc.returncode}")
+                transcript.append(f"ran {' '.join(command)} exit={proc.returncode}")
         _write_selection(sandbox.workspace, selected)
         text = "\n".join(transcript)
         return HarnessResult(
@@ -914,13 +915,29 @@ def _infer_from_reads(paths: list[str], skills: list[Skill]) -> str | None:
     return None
 
 
+def _byo_provider_error(status: int) -> HarnessError:
+    if status == 429:
+        message = (
+            "Your model provider refused the request (out of credit or rate-limited)."
+        )
+    elif status == 401:
+        message = "Your model provider did not accept this key."
+    else:
+        message = "Your model provider refused the request."
+    return HarnessError(message, hint="Check your key in Settings.")
+
+
 def _parse_run_lines(text: str) -> list[list[str]]:
     commands: list[list[str]] = []
     for line in text.splitlines():
         stripped = line.strip()
         if stripped.upper().startswith("RUN:"):
             payload = stripped[4:].strip()
-            commands.append(payload.split())
+            try:
+                argv = shlex.split(payload)
+            except ValueError:
+                argv = payload.split()
+            commands.append(argv)
     return commands
 
 
@@ -977,10 +994,7 @@ def _gateway_complete_response(
     except httpx.HTTPError as exc:
         raise HarnessError(f"BYO LLM request failed: {exc}") from exc
     if response.status_code >= 400:
-        raise HarnessError(
-            f"BYO LLM returned {response.status_code}",
-            hint="Check OPENAI_API_KEY or AI_GATEWAY_API_KEY and SKILLGATE_MODEL in `.env`.",
-        )
+        raise _byo_provider_error(response.status_code)
     data = response.json()
     try:
         text = data["choices"][0]["message"]["content"]

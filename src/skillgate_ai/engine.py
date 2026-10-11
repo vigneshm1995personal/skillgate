@@ -627,6 +627,8 @@ def _run_task(
                     result.trigger.selected_skill,
                     reference=reference,
                     sibling_prompts=sibling_prompts,
+                    returncode=result.returncode,
+                    stderr=result.stderr or "",
                 )
                 if primary
                 else None

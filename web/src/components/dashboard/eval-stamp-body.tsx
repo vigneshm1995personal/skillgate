@@ -3,6 +3,7 @@ import { CheckIcon } from "lucide-react"
 import { cn } from "cn"
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import {
   Empty,
@@ -15,6 +16,7 @@ import { EvalResultMark } from "@/components/dashboard/eval-result-mark"
 import { GateBadge } from "@/components/dashboard/chrome"
 import type { EvalMarkMode } from "@/components/dashboard/eval-result-shell"
 import { plainConfigDiff } from "@/lib/eval-config"
+import { useDashboard } from "@/lib/dashboard-provider"
 import { isLiveHarness, type ConfigDiffEntry, type RunRecord } from "@/lib/types"
 
 export function RunChecksEmpty() {
@@ -111,12 +113,26 @@ export function EvalErrorPanel({
   hint?: string | null
   stampLine: string
 }) {
+  const { setStage } = useDashboard()
+  const showSettings = /settings/i.test(`${message} ${hint || ""}`)
   return (
     <Alert variant="destructive">
       <AlertTitle>Couldn’t finish this run</AlertTitle>
       <AlertDescription>
         {message}
         {hint ? <p className="mt-2 whitespace-pre-wrap">{hint}</p> : null}
+        {showSettings ? (
+          <p className="mt-2">
+            <Button
+              id="btn-open-settings-error"
+              variant="link"
+              size="xs"
+              onClick={() => setStage("settings")}
+            >
+              Open Settings
+            </Button>
+          </p>
+        ) : null}
         {stampLine ? (
           <p className="mt-2" id="run-config">
             {stampLine}

@@ -487,6 +487,15 @@ export function customerGateCopy(text: string): string {
   if (/missing golden/i.test(value) || /evals\/goldens/i.test(value)) {
     return "This check is missing its expected output file."
   }
+  if (/BYO LLM returned 429/i.test(value) || /returned 429\b/.test(value)) {
+    return "Your model provider refused the request (out of credit or rate-limited)."
+  }
+  if (
+    /OPENAI_API_KEY or AI_GATEWAY_API_KEY/i.test(value) ||
+    (/SKILLGATE_MODEL/.test(value) && /\.env/.test(value))
+  ) {
+    return "Check your key in Settings."
+  }
   value = value.replace(/\bevals\/(?:goldens|fixtures)\/(\S+?)(?=[.,;:]?(?:\s|$))/gi, "$1")
   value = value.replace(/\bevals\/[\w./-]+/g, "the expected file")
   return scorerCodeToPlain(value)

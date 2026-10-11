@@ -185,6 +185,14 @@ function segmentTranscript(transcript: string): Segment[] {
       flush(trimmed.slice(2).trim())
       continue
     }
+    if (trimmed.toUpperCase().startsWith("RUN:")) {
+      flush(trimmed.slice(4).trim())
+      continue
+    }
+    if (/^ran\s+\S+/.test(trimmed) && /exit=\d+/.test(trimmed)) {
+      flush(trimmed.replace(/^ran\s+/i, "").replace(/\s+exit=\d+\s*$/i, "").trim())
+      continue
+    }
     // "changed /path" style from some harnesses
     if (/^changed\s+\S+/.test(trimmed)) {
       flush(trimmed)
@@ -301,7 +309,12 @@ export function countHarnessCommands(transcript: string | null | undefined): num
   }
   return text.split("\n").filter((line) => {
     const t = line.trim()
-    return t.startsWith("$ ") || /^changed\s+\S+/.test(t)
+    return (
+      t.startsWith("$ ") ||
+      t.toUpperCase().startsWith("RUN:") ||
+      (/^ran\s+\S+/.test(t) && /exit=\d+/.test(t)) ||
+      /^changed\s+\S+/.test(t)
+    )
   }).length
 }
 
@@ -806,8 +819,13 @@ export function pickTimelineSteps(opts: {
     const fromJsonl = parseTranscriptSteps(opts.transcript, { passed: opts.passed })
     if (fromJsonl.length) return fromJsonl
   }
-  if (!opts.spans?.length) return []
-  return spansToTimelineSteps(collapseAssistantSpans(opts.spans), { passed: opts.passed })
+  if (opts.spans?.length) {
+    const fromSpans = spansToTimelineSteps(collapseAssistantSpans(opts.spans), {
+      passed: opts.passed,
+    })
+    if (fromSpans.length) return fromSpans
+  }
+  return parseTranscriptSteps(opts.transcript, { passed: opts.passed })
 }
 
 // ---------------------------------------------------------------------------

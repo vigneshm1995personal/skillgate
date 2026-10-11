@@ -817,3 +817,22 @@ describe("spansToTimelineSteps titles", () => {
     expect(JSON.stringify(steps)).not.toMatch(/SKILLGATE_TASK/)
   })
 })
+
+describe("llm harness RUN steps", () => {
+  const transcript = [
+    "selected: pdf",
+    'RUN: python3 .skillgate/skills/pdf/scripts/create_pdf.py --title "Q3 Status" output/status.pdf',
+    "ran python3 .skillgate/skills/pdf/scripts/create_pdf.py --title Q3 Status output/status.pdf exit=2",
+  ].join("\n")
+
+  it("shows RUN commands even when the only span is eval.check", () => {
+    const steps = pickTimelineSteps({
+      transcript,
+      spans: [{ name: "eval.check" }],
+    })
+    expect(steps.length).toBeGreaterThan(0)
+    const blob = JSON.stringify(steps)
+    expect(blob).toMatch(/create_pdf/)
+    expect(blob).not.toMatch(/No agent steps/)
+  })
+})

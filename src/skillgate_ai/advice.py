@@ -49,6 +49,8 @@ def advise_task(
     *,
     reference: Skill | None = None,
     sibling_prompts: list[str] | None = None,
+    returncode: int | None = None,
+    stderr: str = "",
 ) -> FixAdvice | None:
     failed = [s for s in scores if not s.passed]
     if not failed:
@@ -90,28 +92,29 @@ def advise_task(
         )
 
     missing = (completion.detail if completion else "") or (rubric.detail if rubric else "missing output")
-    skill_named = _named_output_path(skill.description or "", skill.body or "")
-    check_path = _task_output_path(task)
-    if skill_named and check_path and skill_named != check_path:
-        change = (
-            f"Align this check's output_path to `{skill_named}` from SKILL.md. "
-            f"Gate looked for `{check_path}`; do not rewrite the skill to that path."
+    if returncode not in (None, 0):
+        snippet = _command_fail_snippet(stderr)
+        why = f"The command exited {returncode}."
+        if snippet:
+            why = f"{why} {snippet}"
+        return FixAdvice(
+            headline="The command failed",
+            why=why,
+            change="The script failed. Fix the command or the script, then run this check again.",
+            paste=_suggested_steps(task, why),
+            target="body",
         )
-        paste = _suggested_steps(task, missing, write_to=skill_named)
-    else:
-        change = (
-            "Add a numbered step in SKILL.md that writes the exact output path, "
-            "or bundle a script under scripts/ and tell the agent to run it."
-        )
-        paste = _suggested_steps(task, missing)
     return FixAdvice(
         headline=completion.headline if completion else (rubric.headline if rubric else "Task failed"),
         why=(
             f"The skill triggered (or was expected to), but the work didn’t land. {missing}. "
             f"Request was: “{task.prompt}”."
         ),
-        change=change,
-        paste=paste,
+        change=(
+            "Add a numbered step in SKILL.md that writes the exact output path, "
+            "or bundle a script under scripts/ and tell the agent to run it."
+        ),
+        paste=_suggested_steps(task, missing),
         target="body",
     )
 
@@ -461,9 +464,17 @@ def _clip(text: str, limit: int) -> str:
     return text[: limit - 3].rsplit(" ", 1)[0] + "..."
 
 
-def _named_output_path(description: str, body: str) -> str | None:
-    match = re.search(r"(output/[A-Za-z0-9_.-]+)", f"{description}\n{body}")
-    return match.group(1) if match else None
+def _command_fail_snippet(stderr: str) -> str:
+    lines = [line.strip() for line in (stderr or "").splitlines() if line.strip()]
+    for line in reversed(lines):
+        lower = line.lower()
+        if lower.startswith("usage:"):
+            continue
+        if "error:" in lower:
+            return line.split("error:", 1)[-1].strip()
+        if "unrecognized" in lower:
+            return line
+    return (lines[-1] if lines else "")[:200]
 
 
 def _task_output_path(task: TaskSpec) -> str | None:

@@ -471,6 +471,19 @@ describe("customerGateCopy", () => {
     expect(
       customerGateCopy("Missing fixture evals/fixtures/hello.pdf for this check.")
     ).not.toMatch(/evals\//)
+    expect(customerGateCopy("BYO LLM returned 429")).toMatch(
+      /out of credit|rate-limited/i
+    )
+    expect(
+      customerGateCopy(
+        "Check OPENAI_API_KEY or AI_GATEWAY_API_KEY and SKILLGATE_MODEL in `.env`."
+      )
+    ).toMatch(/Settings/)
+    expect(
+      customerGateCopy(
+        "Check OPENAI_API_KEY or AI_GATEWAY_API_KEY and SKILLGATE_MODEL in `.env`."
+      )
+    ).not.toMatch(/OPENAI_API_KEY|\.env/)
   })
 })
 

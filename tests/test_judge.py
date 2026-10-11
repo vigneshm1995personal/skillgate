@@ -70,9 +70,18 @@ def test_resolve_judge_openai_without_key() -> None:
     assert "OpenAI API key" in caught.value.message
 
 
-def test_gateway_key_is_not_an_openai_judge_key() -> None:
-    judge = resolve_judge(_cfg(gateway_api_key="gw-test"), harness_name="llm")
-    assert isinstance(judge, SkipJudge)
+def test_gateway_key_uses_openai_judge_via_gateway() -> None:
+    judge = resolve_judge(
+        _cfg(
+            gateway_api_key="gw-test",
+            gateway_base_url="https://ai-gateway.vercel.sh/v1",
+        ),
+        harness_name="llm",
+    )
+    assert isinstance(judge, OutcomeJudge)
+    assert judge.backend.api_key == "gw-test"
+    assert judge.backend.base_url == "https://ai-gateway.vercel.sh/v1"
+    assert "api.openai.com" not in judge.backend.base_url
 
 
 def test_judge_stamp_has_no_secret() -> None:

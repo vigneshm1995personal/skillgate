@@ -84,16 +84,21 @@ def missing_openai_judge_key() -> MissingLLMKeyError:
     )
 
 
+def _judge_api_key(cfg: LLMConfig) -> str:
+    return (cfg.openai_api_key or cfg.gateway_api_key or "").strip()
+
+
 def resolve_judge(cfg: LLMConfig, *, harness_name: str) -> Judge:
     """Pick Skip vs OpenAI. Demo / non-live always skip."""
     pref = (cfg.judge_pref or "auto").strip().lower() or "auto"
     if pref == "skip" or not is_live_harness(harness_name):
         return SkipJudge()
+    key = _judge_api_key(cfg)
     if pref == "openai":
-        if not cfg.openai_api_key:
+        if not key:
             raise missing_openai_judge_key()
         return _openai_judge(cfg)
-    if cfg.openai_api_key:
+    if key:
         return _openai_judge(cfg)
     return SkipJudge()
 
@@ -101,15 +106,19 @@ def resolve_judge(cfg: LLMConfig, *, harness_name: str) -> Judge:
 def _openai_judge(cfg: LLMConfig) -> Judge:
     from skillgate_ai.judge_openai import DEFAULT_BASE_URL, make_openai_judge
 
+    api_key = _judge_api_key(cfg)
+    base_url = DEFAULT_BASE_URL
+    if not (cfg.openai_api_key or "").strip() and (cfg.gateway_api_key or "").strip():
+        base_url = (cfg.gateway_base_url or "").rstrip("/") or DEFAULT_BASE_URL
     return make_openai_judge(
-        api_key=cfg.openai_api_key or "",
+        api_key=api_key,
         backend=cfg.judge_backend,
         model=cfg.judge_model,
         min_confidence=cfg.judge_min_confidence,
         why_enabled=cfg.judge_why,
         reasoning_effort=cfg.judge_reasoning_effort,
         timeout_sec=cfg.judge_timeout_sec,
-        base_url=DEFAULT_BASE_URL,
+        base_url=base_url,
     )
 
 
