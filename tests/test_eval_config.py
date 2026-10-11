@@ -326,9 +326,9 @@ def test_config_label_names_openai_scorer_not_model_id() -> None:
         },
     )
     label = config_label(run)
-    assert "Scored by the judge" in label
+    assert "OpenAI (your key)" in label
     assert "gpt-6-luna" not in label
-    assert "OpenAI Decisions" not in label
+    assert customer_config_label(run) == "Scored by the judge"
 
 
 def test_stamp_resolved_default_llm_model_is_not_user_picked() -> None:

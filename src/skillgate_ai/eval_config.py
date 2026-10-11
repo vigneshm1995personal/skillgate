@@ -437,9 +437,7 @@ def config_label(run: EvalRunConfig | dict[str, Any] | None) -> str:
         parts.append(f"temp {cfg.temperature}")
     judge = cfg.judge or {}
     if str(judge.get("provider") or "").lower() not in {"", "skip"}:
-        from skillgate_ai.judge_copy import customer_scorer_name, scored_by_phrase
-
-        parts.append(scored_by_phrase(customer_scorer_name(judge)))
+        parts.append(str(judge.get("display_name") or "").strip() or "the judge")
     return " · ".join(parts)
 
 
