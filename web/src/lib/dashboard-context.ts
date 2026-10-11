@@ -90,6 +90,8 @@ export type DashboardContextValue = {
   addCheck: (draft?: Partial<Check>) => void
   updateCheck: (index: number, patch: Partial<Check>) => void
   removeCheck: (index: number) => void
+  packJudge: Check["judge"]
+  setPackJudge: (next: Check["judge"]) => void
   applySkill: (next: SkillPayload) => void
   importYaml: (text: string) => Promise<void>
   startEvaluations: () => Promise<void>

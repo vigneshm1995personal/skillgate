@@ -77,7 +77,10 @@ def test_cli_imports_without_hosted() -> None:
     import skillgate_ai.config
     import skillgate_ai.engine
     import skillgate_ai.judge_bank
+    import skillgate_ai.judge_copy
     import skillgate_ai.judge_openai
+    import skillgate_ai.judge_spec
+    import skillgate_ai.judge_providers.jev
     import skillgate_ai.local_ui.server
     import skillgate_ai.mode
     import skillgate_ai.openai_http

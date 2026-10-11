@@ -172,6 +172,44 @@ export const api = {
     request<SettingsKeysPayload>(`/api/settings/keys/${encodeURIComponent(name)}`, {
       method: "DELETE",
     }),
+  settingsJudge: () =>
+    request<{
+      judge: {
+        provider: string
+        chosen: boolean
+        region: string | null
+        model: string | null
+        base_url: string | null
+        decisions_path: string | null
+      }
+    }>("/api/settings/judge"),
+  setSettingsJudge: (body: {
+    provider: string
+    region?: string | null
+    model?: string | null
+    base_url?: string | null
+    decisions_path?: string | null
+  }) =>
+    request<{
+      judge: {
+        provider: string
+        chosen: boolean
+        region: string | null
+        model: string | null
+        base_url: string | null
+        decisions_path: string | null
+      }
+    }>("/api/settings/judge", {
+      method: "PUT",
+      headers: jsonHeaders,
+      body: JSON.stringify(body),
+    }),
+  pingJudge: () =>
+    request<{ ok: boolean; message: string }>("/api/judge/ping", {
+      method: "POST",
+      headers: jsonHeaders,
+      body: "{}",
+    }),
   me: () => request<AuthMePayload>("/api/auth/me"),
   signOut: () =>
     request<Record<string, never>>("/api/auth/signout", {
@@ -298,6 +336,7 @@ export const api = {
     skill: string
     checks?: Check[]
     case_ids?: string[]
+    pack_judge?: Check["judge"]
   }) =>
     request<{
       pack: unknown
@@ -305,6 +344,7 @@ export const api = {
       checks: Check[]
       yaml: string
       skill?: SkillPayload
+      pack_judge?: Check["judge"]
     }>("/api/evals/pin", {
       method: "POST",
       headers: jsonHeaders,

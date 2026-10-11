@@ -530,6 +530,172 @@ def example_cmd(
     console.print(f"Wrote {written}")
 
 
+judge_app = typer.Typer(
+    add_completion=False,
+    no_args_is_help=True,
+    help="Show extra scoring questions and pick who scores live checks.",
+)
+judge_provider_app = typer.Typer(
+    add_completion=False,
+    no_args_is_help=True,
+    help="Scoring provider (OpenAI, Jev, AWS, Other).",
+)
+app.add_typer(judge_app, name="judge")
+judge_app.add_typer(judge_provider_app, name="provider")
+
+
+def _resolve_pack_arg(pack: Path | None) -> Path:
+    root = _boot()
+    if pack is not None:
+        return resolve_user_path(pack, root)
+    if is_skill_pack(root):
+        return root
+    pdf = root / "skills" / "pdf"
+    if is_skill_pack(pdf):
+        return pdf
+    raise SkillGateError("Pass a skill pack (folder with SKILL.md and evals/).", exit_code=2)
+
+
+@judge_app.command("show")
+def judge_show(
+    pack: Path | None = typer.Argument(None, help="Skill pack (default: this folder or skills/pdf)"),
+    case_id: str | None = typer.Option(None, "--case", help="Case id"),
+    json_out: bool = typer.Option(False, "--json", help="Resolved spec JSON"),
+) -> None:
+    """Print built-in questions, then extras."""
+    from skillgate_ai.case_pack import load_case_pack, pack_judge_dict
+    from skillgate_ai.judge_spec import resolve_judge_spec
+    from skillgate_ai.project_config import load_project_judge
+
+    try:
+        dest = _resolve_pack_arg(pack)
+        loaded = load_case_pack(dest)
+        case_block = None
+        if loaded is not None and case_id:
+            for case in loaded.cases:
+                if case.id == case_id and case.judge is not None:
+                    case_block = case.judge.to_sparse_dict()
+                    break
+        spec = resolve_judge_spec(
+            project=load_project_judge(_boot()),
+            pack=pack_judge_dict(loaded),
+            case=case_block,
+        )
+    except SkillGateError as exc:
+        console.print(exc.render())
+        raise typer.Exit(exc.exit_code) from None
+    if json_out:
+        _emit_json(
+            {
+                "questions": [
+                    {
+                        "id": q.id,
+                        "type": q.type,
+                        "ask": q.ask,
+                        "on_fail": q.on_fail,
+                        "builtin": q.builtin,
+                    }
+                    for q in spec.questions
+                ]
+            }
+        )
+        return
+    console.print("Skill Gate questions (always asked)")
+    for question in spec.builtins:
+        severity = "Warn only" if question.on_fail == "warn" else "Fail the check"
+        console.print(f"  {question.label}  {severity}")
+    extras = spec.extras
+    if extras:
+        console.print("Your questions")
+        for question in extras:
+            kind = {"predicate": "yes/no", "choice": "pick one", "score": "score"}[question.type]
+            severity = "Warn only" if question.on_fail == "warn" else "Fail the check"
+            console.print(f"  {question.id}  {kind}  {severity}")
+    else:
+        console.print("No extra questions.")
+
+
+@judge_app.command("reset")
+def judge_reset(
+    pack: Path | None = typer.Argument(None, help="Skill pack"),
+) -> None:
+    """Drop extras and Fail vs warn overrides. Built-ins stay."""
+    from skillgate_ai.case_pack import reset_pack_judge
+
+    try:
+        dest = _resolve_pack_arg(pack)
+        reset_pack_judge(dest)
+    except SkillGateError as exc:
+        console.print(exc.render())
+        raise typer.Exit(exc.exit_code) from None
+    console.print("Extra scoring questions removed. Skill Gate’s six stay.")
+
+
+@judge_provider_app.command("show")
+def judge_provider_show() -> None:
+    """Who scores live checks."""
+    from skillgate_ai.config import get_llm_config
+    from skillgate_ai.judge_copy import CHOSEN_LABELS, DEFAULT_NAME
+
+    root = _boot()
+    cfg = get_llm_config(root)
+    if cfg.judge_chosen and cfg.judge_provider in CHOSEN_LABELS:
+        console.print(f"Scoring with {CHOSEN_LABELS[cfg.judge_provider]} (your key)")
+        return
+    if cfg.openai_api_key or cfg.gateway_api_key:
+        console.print(f"Scoring with {DEFAULT_NAME}")
+        return
+    console.print("No scoring provider — file checks only.")
+
+
+@judge_provider_app.command("set")
+def judge_provider_set(
+    provider: str = typer.Argument(..., help="auto | openai | jev | aws | compatible"),
+    base_url: str | None = typer.Option(None, "--base-url"),
+    region: str | None = typer.Option(None, "--region"),
+    model: str | None = typer.Option(None, "--model"),
+    decisions_path: str | None = typer.Option(None, "--decisions-path"),
+) -> None:
+    """Write `.skillgate/judge`. Does not print keys."""
+    from skillgate_ai.judge_settings import save_judge_settings
+
+    root = _boot()
+    try:
+        settings = save_judge_settings(
+            root,
+            provider=provider,
+            region=region,
+            model=model,
+            base_url=base_url,
+            decisions_path=decisions_path,
+        )
+    except SkillGateError as exc:
+        console.print(exc.render())
+        raise typer.Exit(exc.exit_code) from None
+    if settings.chosen:
+        from skillgate_ai.judge_copy import CHOSEN_LABELS
+
+        console.print(f"Scoring provider: {CHOSEN_LABELS.get(settings.provider, settings.provider)}")
+    else:
+        console.print("Scoring provider: Auto")
+
+
+@judge_provider_app.command("test")
+def judge_provider_test() -> None:
+    """Test the scoring connection. Never prints the key."""
+    from skillgate_ai.config import get_llm_config
+    from skillgate_ai.judge import ping_judge
+
+    root = _boot()
+    try:
+        result = ping_judge(get_llm_config(root))
+    except SkillGateError as exc:
+        console.print(exc.render())
+        raise typer.Exit(exc.exit_code) from None
+    console.print(str(result.get("message") or ""))
+    raise typer.Exit(0 if result.get("ok") else 1)
+
+
 @app.command("ui")
 def ui_cmd(
     host: str = typer.Option("127.0.0.1", "--host", help="Bind address (default loopback)"),

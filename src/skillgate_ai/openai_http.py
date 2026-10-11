@@ -59,27 +59,45 @@ def is_quota_exhausted(response: httpx.Response) -> bool:
     return response.status_code == 429 and openai_error_code(response) in _QUOTA_CODES
 
 
-def user_message_for_status(status: int, *, error_code: str | None = None) -> str:
+def user_message_for_status(
+    status: int,
+    *,
+    error_code: str | None = None,
+    who: str = "the judge",
+) -> str:
+    label = "The judge" if who == "the judge" else who
     if status == 401:
-        return "OpenAI did not accept this API key."
+        return f"{label} did not accept this API key."
     if status == 403:
-        return "OpenAI scoring is not enabled for this key."
+        return f"{label} scoring is not enabled for this key."
     if status == 404:
-        return "OpenAI has no scoring endpoint for this key."
+        return f"{label} has no scoring endpoint for this key."
     if status == 429 and error_code in _QUOTA_CODES:
-        return OUT_OF_CREDITS
+        if who == "OpenAI":
+            return OUT_OF_CREDITS
+        return f"{label} is out of credits. Add credits, then try again."
     if status == 429:
-        return "OpenAI rate limit or quota. Wait and retry, or check billing."
+        return f"{label} rate-limited this request. Wait and retry, or check billing."
     if status == 400:
-        return "OpenAI rejected this scoring request."
-    return f"OpenAI scoring failed (HTTP {status})."
+        return f"{label} rejected this scoring request."
+    return f"{label} couldn't score this check (HTTP {status})."
 
 
-def _status_error(response: httpx.Response, *, model: str) -> dict[str, Any]:
+def _status_error(
+    response: httpx.Response,
+    *,
+    model: str,
+    who: str = "the judge",
+) -> dict[str, Any]:
     code = openai_error_code(response)
-    reason = user_message_for_status(response.status_code, error_code=code)
-    _LOG.warning("OpenAI scoring HTTP %s", response.status_code)
-    return {"status": "error", "reason": reason, "model": model}
+    reason = user_message_for_status(response.status_code, error_code=code, who=who)
+    _LOG.warning("scoring HTTP %s", response.status_code)
+    return {
+        "status": "error",
+        "reason": reason,
+        "model": model,
+        "http_status": response.status_code,
+    }
 
 
 def post_openai(
@@ -138,12 +156,14 @@ def post_openai_json(
     model: str,
     post: PostFn | None = None,
     retries: bool = True,
+    who: str = "the judge",
 ) -> dict[str, Any]:
     """POST JSON. Transport/HTTP/parse failures return ``status=error``."""
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
     }
+    label = "The judge" if who == "the judge" else who
     try:
         response = post_openai(
             url,
@@ -154,11 +174,11 @@ def post_openai_json(
             retries=retries,
         )
     except httpx.TimeoutException:
-        return {"status": "error", "reason": "OpenAI scoring timed out.", "model": model}
+        return {"status": "error", "reason": f"{label} scoring timed out.", "model": model}
     except httpx.HTTPError:
         return {"status": "error", "reason": OFFLINE_MESSAGE, "model": model}
     if response.status_code >= 400:
-        return _status_error(response, model=model)
+        return _status_error(response, model=model, who=who)
     try:
         data = response.json()
     except ValueError:

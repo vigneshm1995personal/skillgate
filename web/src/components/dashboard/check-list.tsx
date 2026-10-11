@@ -1,4 +1,8 @@
 import { CheckInputControls } from "@/components/dashboard/check-input"
+import {
+  PackScoringExtras,
+  ScoringQuestions,
+} from "@/components/dashboard/scoring-questions"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -47,6 +51,8 @@ export function CheckList({
   onSkill,
   onPin,
   onRunCheck,
+  packJudge,
+  onPackJudge,
 }: {
   checks: Check[]
   running: boolean
@@ -60,11 +66,22 @@ export function CheckList({
   onSkill?: (skill: SkillPayload) => void
   onPin?: (index: number) => void
   onRunCheck?: (check: Check) => void
+  packJudge?: Check["judge"]
+  onPackJudge?: (next: Check["judge"]) => void
 }) {
   const hasKey = Boolean(useDashboard().status?.has_key)
   const skillName = skill?.name
   return (
     <div id="check-list" className="flex flex-col gap-3">
+      {onPackJudge ? (
+        <div className="flex flex-col gap-3 rounded-xl border p-4">
+          <PackScoringExtras
+            packJudge={packJudge}
+            disabled={running}
+            onPackJudge={onPackJudge}
+          />
+        </div>
+      ) : null}
       {checks.map((check, index) => {
         const checkRun = runForCheck(check, lastResult, tryoutResult)
         const status = statusForCheck(check, index, checkRun, skillName)
@@ -118,6 +135,7 @@ export function CheckList({
                     Run this check
                   </Button>
                 ) : null}
+              {check.locked ? null : (
               <Button
                 variant="ghost"
                 size="xs"
@@ -126,6 +144,7 @@ export function CheckList({
               >
                 Remove
               </Button>
+              )}
               </div>
             </div>
             <CheckLiveProgress
@@ -233,6 +252,13 @@ export function CheckList({
                 check={check}
                 disabled={running}
                 onUpdate={(patch) => updateCheck(index, patch)}
+              />
+              <ScoringQuestions
+                index={index}
+                packJudge={packJudge}
+                checkJudge={check.judge}
+                disabled={running}
+                onCheckJudge={(next) => updateCheck(index, { judge: next })}
               />
               {onPin && check.bank_status !== "pinned" ? (
                 <div className="flex justify-end">

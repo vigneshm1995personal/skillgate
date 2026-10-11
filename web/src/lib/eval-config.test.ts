@@ -241,6 +241,15 @@ describe("configLabel", () => {
     ).toBe("LLM · GPT-4.1 · 300s")
   })
 
+  it("names a chosen scoring provider on History", () => {
+    expect(
+      customerConfigLabel({
+        harness: "llm",
+        judge: { provider: "jev", chosen: true, display_name: "Jev" },
+      })
+    ).toBe("Scored by Jev")
+  })
+
   it("does not treat an openai/ model id as the scorer", () => {
     expect(
       customerConfigLabel({

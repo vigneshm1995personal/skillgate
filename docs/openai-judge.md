@@ -17,7 +17,16 @@ Scorers such as “does the output contain this text?” and page counts still a
 skillgate keys set OPENAI_API_KEY
 ```
 
-Or paste the OpenAI key in `skillgate ui` (Settings). Other keys run live checks; an OpenAI or AI Gateway key also scores them.
+Or paste the OpenAI key in `skillgate ui` (Settings). Other keys run live checks. An OpenAI key scores them when the scoring provider is Auto or OpenAI. Other providers (Jev, AWS, Other) need their own key — they never reuse OpenAI.
+
+Pick a scoring provider in Settings or:
+
+```bash
+skillgate judge provider set openai|jev|aws|compatible
+skillgate judge provider test
+```
+
+Add extra scoring questions on top of Skill Gate’s six in the Checks editor or in `evals/cases.yaml` (`judge.extra_questions`). Built-in questions cannot be deleted; they can be Warn only. Seed pdf cases cannot be removed.
 
 Override if you need it:
 
@@ -39,7 +48,7 @@ If the scorer is not very sure about a Pass, the check still Passes. You will se
 ```yaml
 - uses: actions/setup-python@v5
   with: { python-version: "3.12" }
-- run: pip install skillgate-ai==0.5.1
+- run: pip install skillgate-ai==0.6.0
 - run: skillgate check . --key-env OPENAI_API_KEY
   env:
     OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}

@@ -13,10 +13,13 @@ from skillgate_ai.case_pack import (
     checks_from_pack,
     dataset_view,
     load_case_pack,
+    pack_judge_dict,
     pin_case_ids,
     pin_checks,
+    save_pack_judge,
 )
 from skillgate_ai.catalog import find_skill
+from skillgate_ai.errors import SuiteError
 from skillgate_ai.fixture_bind import apply_inherit, expand_from_folder
 
 
@@ -56,6 +59,7 @@ def register_eval_routes(app: FastAPI) -> None:
             "source": source,
             "warning": None,
             "fixture_defaults": skill.get("fixture_defaults") or [],
+            "pack_judge": pack_judge_dict(pack),
         }
 
     @app.post("/api/evals/pin")
@@ -72,8 +76,13 @@ def register_eval_routes(app: FastAPI) -> None:
                 pack = pin_case_ids(skill_path, [str(item) for item in case_ids])
             else:
                 fail(400, "Pin needs checks or case ids.")
+            if isinstance(body.get("pack_judge"), dict) or body.get("pack_judge") is None:
+                if "pack_judge" in body:
+                    pack = save_pack_judge(skill_path, body.get("pack_judge"))
         except ValueError as exc:
             fail(400, str(exc), hint=PIN_NEEDS_EXPECTED_HINT)
+        except SuiteError as exc:
+            fail(400, exc.message, hint=exc.hint)
         yaml_out = (
             (skill_path / CASES_REL).read_text(encoding="utf-8")
             if (skill_path / CASES_REL).is_file()
@@ -85,6 +94,7 @@ def register_eval_routes(app: FastAPI) -> None:
             "checks": checks_from_pack(pack, include_drafts=True),
             "yaml": yaml_out,
             "skill": skill_payload(state, skill_path),
+            "pack_judge": pack_judge_dict(pack),
         }
 
     @app.get("/api/evals/dataset")

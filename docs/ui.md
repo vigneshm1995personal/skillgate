@@ -24,7 +24,7 @@ This is a **local process**, not hosted `serve`. Default bind is `127.0.0.1:8765
 
 **Deploy** copies a green-gated skill (skill files only, not `evals/`) into those same agent folders. Keys stay in this project’s `.skillgate/keys` (Settings). `skillgate check` still exits 0, 1, or 2 with no account.
 
-The result panel names who scored the run in plain words (`OpenAI (your key)` or `Checks scored this run.`). Checking → slide → drawn Passed/Failed is unchanged.
+The result panel names who scored the run in plain words (`Scored by the judge`, or `Scored by OpenAI` / `Jev` / `AWS` / `Other` if you picked a provider in Settings, or `Checks scored this run.`). Checking → slide → drawn Passed/Failed is unchanged.
 
 ## Intentional red path
 

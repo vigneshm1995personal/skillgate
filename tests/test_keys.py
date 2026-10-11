@@ -23,6 +23,17 @@ from skillgate_ai.keys import (
 runner = CliRunner()
 
 
+def test_ambient_aws_key_is_ignored(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("SKILLGATE_ROOT", str(tmp_path))
+    monkeypatch.setenv("AWS_ACCESS_KEY_ID", "AKIAAAMBIENT")
+    monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "ambient-secret")
+    reset_key_env_bindings()
+    assert "AWS_ACCESS_KEY_ID" not in resolve_provider_keys(tmp_path)
+    cfg = get_llm_config(tmp_path)
+    assert cfg.aws_access_key_id is None
+    assert cfg.aws_secret_access_key is None
+
+
 def test_ambient_openai_key_is_ignored(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("SKILLGATE_ROOT", str(tmp_path))
     monkeypatch.setenv("OPENAI_API_KEY", "sk-ambient-must-be-ignored")

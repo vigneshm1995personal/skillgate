@@ -271,15 +271,12 @@ def config_fingerprint(run: EvalRunConfig | None) -> str | None:
     timeout = run.timeout_effective
     if timeout is None:
         timeout = run.timeout_sec or 0
-    judge = run.judge or {}
     payload = {
         "harness": run.harness or "",
         "model": run.model or "",
         "timeout_sec": timeout,
         "temperature": run.temperature,
         "reasoning_effort": effort,
-        "judge_backend": str(judge.get("backend") or ""),
-        "judge_model": str(judge.get("model") or ""),
     }
     blob = json.dumps(payload, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(blob.encode("utf-8")).hexdigest()[:16]
@@ -386,6 +383,12 @@ def customer_config_label(
         return harness_display_name(harness)
     if cfg is None:
         return ""
+    judge = cfg.judge or {}
+    from skillgate_ai.judge_copy import customer_scorer_name, scored_by_phrase
+
+    provider = str(judge.get("provider") or "").lower()
+    if provider and provider != "skip":
+        return scored_by_phrase(customer_scorer_name(judge))
     if _is_openai_scorer(cfg, raw_label):
         return "Scored by the judge"
     if harness:
@@ -433,8 +436,10 @@ def config_label(run: EvalRunConfig | dict[str, Any] | None) -> str:
     elif cfg.temperature not in (0, 0.0) and (cfg.applied or {}).get("temperature"):
         parts.append(f"temp {cfg.temperature}")
     judge = cfg.judge or {}
-    if str(judge.get("provider") or "") == "openai":
-        parts.append(str(judge.get("display_name") or "OpenAI (your key)"))
+    if str(judge.get("provider") or "").lower() not in {"", "skip"}:
+        from skillgate_ai.judge_copy import customer_scorer_name, scored_by_phrase
+
+        parts.append(scored_by_phrase(customer_scorer_name(judge)))
     return " · ".join(parts)
 
 

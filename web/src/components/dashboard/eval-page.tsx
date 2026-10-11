@@ -191,6 +191,8 @@ export function EvalPage() {
     uploadZip,
     updateCheck,
     removeCheck,
+    packJudge,
+    setPackJudge,
     applySkill,
     startEvaluations,
     runThisCheck,
@@ -849,6 +851,8 @@ export function EvalPage() {
                     tryoutResult={tryoutResult}
                     updateCheck={updateCheck}
                     removeCheck={removeCheck}
+                    packJudge={packJudge}
+                    onPackJudge={setPackJudge}
                     onSkill={applySkill}
                     onPin={(index) => void pinCheckAt(index)}
                     onRunCheck={(check) => void runThisCheck(check)}

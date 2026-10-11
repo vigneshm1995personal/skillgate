@@ -165,3 +165,41 @@ def _register_core_routes(app: FastAPI) -> None:
             fail(400, "Unknown key name.")
         clear_vault_key(state.root, name)
         return {"keys": keys_payload(state)}
+
+    @app.get("/api/settings/judge")
+    def get_judge_settings(request: Request) -> dict[str, Any]:
+        from skillgate_ai.judge_settings import load_judge_settings
+
+        state = state_of(request)
+        settings = load_judge_settings(state.root)
+        return {"judge": settings.to_public_dict()}
+
+    @app.put("/api/settings/judge")
+    async def put_judge_settings(request: Request) -> dict[str, Any]:
+        from skillgate_ai.judge_settings import save_judge_settings
+
+        state = state_of(request)
+        body = await request.json() or {}
+        try:
+            settings = save_judge_settings(
+                state.root,
+                provider=str(body.get("provider") or "auto"),
+                region=body.get("region"),
+                model=body.get("model"),
+                base_url=body.get("base_url"),
+                decisions_path=body.get("decisions_path"),
+            )
+        except SkillGateError as exc:
+            fail(400, exc.message, hint=exc.hint)
+        return {"judge": settings.to_public_dict()}
+
+    @app.post("/api/judge/ping")
+    def ping_scoring(request: Request) -> dict[str, Any]:
+        from skillgate_ai.judge import ping_judge
+
+        state = state_of(request)
+        try:
+            result = ping_judge(get_llm_config(state.root))
+        except SkillGateError as exc:
+            fail(400, exc.message, hint=exc.hint)
+        return result

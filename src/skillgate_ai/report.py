@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from skillgate_ai.engine import EvalProgress, SuiteReport, TaskProgress, TaskReport
-from skillgate_ai.eval_config import customer_run_details, is_openai_scorer_text
+from skillgate_ai.eval_config import customer_run_details
 from skillgate_ai.harness import is_live_harness
 from skillgate_ai.metrics import suite_metrics_summary
 
@@ -270,9 +270,15 @@ def _has_choice_answers(judge: dict) -> bool:
 
 def scored_by_line(report: SuiteReport) -> str:
     """Who scored, from actual answers — not the pre-run stamp."""
-    openai_scored = False
-    openai_reason: str | None = None
-    openai_failed = False
+    from skillgate_ai.judge_copy import (
+        couldnt_score_line,
+        customer_scorer_name,
+        scored_by_phrase,
+    )
+
+    scored_stamp: dict | None = None
+    failed_stamp: dict | None = None
+    failed_reason: str | None = None
     saw_skip = False
     for task in report.tasks:
         judge = task.judge if isinstance(task.judge, dict) else None
@@ -280,24 +286,21 @@ def scored_by_line(report: SuiteReport) -> str:
             continue
         provider = str(judge.get("provider") or "")
         status = str(judge.get("status") or "")
-        display = str(judge.get("display_name") or "")
-        if provider == "openai" or display.startswith("OpenAI"):
-            if status == "completed" and _has_choice_answers(judge):
-                openai_scored = True
-            elif status == "error":
-                openai_failed = True
-                reasons = [
-                    str(item).strip() for item in (judge.get("reasons") or []) if str(item).strip()
-                ]
-                if reasons and openai_reason is None:
-                    openai_reason = reasons[0]
+        if status == "completed" and _has_choice_answers(judge):
+            scored_stamp = judge
+        elif status == "error" and failed_stamp is None:
+            failed_stamp = judge
+            reasons = [
+                str(item).strip() for item in (judge.get("reasons") or []) if str(item).strip()
+            ]
+            if reasons:
+                failed_reason = reasons[0]
         if status == "skip" or provider == "skip":
             saw_skip = True
-    if openai_scored:
-        return "Scored by the judge"
-    if openai_failed:
-        extra = openai_reason or "Scoring failed."
-        return f"The judge couldn't score this run. {extra}"
+    if scored_stamp is not None:
+        return scored_by_phrase(customer_scorer_name(scored_stamp))
+    if failed_stamp is not None:
+        return couldnt_score_line(failed_stamp, failed_reason)
     stamp = _judge_stamp(report)
     skip = (
         saw_skip
@@ -309,11 +312,8 @@ def scored_by_line(report: SuiteReport) -> str:
         if live:
             return "The skill ran live. Checks scored this run."
         return "Checks scored this run."
-    name = str(stamp.get("display_name") or "").strip()
-    if name:
-        if is_openai_scorer_text(name):
-            return "Scored by the judge"
-        return f"{name} scored this run."
+    if stamp:
+        return scored_by_phrase(customer_scorer_name(stamp))
     return ""
 
 

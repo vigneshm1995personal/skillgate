@@ -18,6 +18,7 @@ export type EvalRunConfig = {
     display_name?: string
     backend?: string
     model?: string
+    chosen?: boolean | string
   } | null
 }
 
@@ -312,6 +313,36 @@ export function userPickedModel(config?: EvalRunConfig | null): boolean {
   return Boolean(config?.applied?.model)
 }
 
+function stampIsChosen(judge?: EvalRunConfig["judge"]): boolean {
+  const raw = judge?.chosen
+  return raw === true || raw === "true" || raw === "1"
+}
+
+function scoredByFromStamp(judge?: EvalRunConfig["judge"]): string {
+  if (!judge) {
+    return ""
+  }
+  const provider = (judge.provider || "").toLowerCase()
+  if (!provider || provider === "skip") {
+    return ""
+  }
+  if (stampIsChosen(judge)) {
+    if (provider === "openai") {
+      return "Scored by OpenAI"
+    }
+    if (provider === "jev") {
+      return "Scored by Jev"
+    }
+    if (provider === "aws") {
+      return "Scored by AWS"
+    }
+    if (provider === "compatible") {
+      return "Scored by Other"
+    }
+  }
+  return JUDGE_SCORED
+}
+
 export function customerConfigLabel(
   config?: EvalRunConfig | null,
   harness?: string | null
@@ -323,12 +354,11 @@ export function customerConfigLabel(
   if (isLegacyRunCopy(config.label, resolved)) {
     return OLDER_RUN_LABEL
   }
-  const judge = config.judge
-  if (
-    (judge?.provider || "").toLowerCase() === "openai" ||
-    isJudgeScorerCopy(judge?.display_name) ||
-    isJudgeScorerCopy(config.label)
-  ) {
+  const fromStamp = scoredByFromStamp(config.judge)
+  if (fromStamp) {
+    return fromStamp
+  }
+  if (isJudgeScorerCopy(config.judge?.display_name) || isJudgeScorerCopy(config.label)) {
     return JUDGE_SCORED
   }
   return ""

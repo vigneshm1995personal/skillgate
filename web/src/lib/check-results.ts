@@ -247,19 +247,31 @@ export function extraFailWhy(task: TaskResult): string | null {
   return why
 }
 
-function isOpenAIJudge(judge: JudgeResult | null | undefined): boolean {
+function stampIsChosen(judge: JudgeResult | null | undefined): boolean {
+  const raw = judge?.chosen
+  return raw === true || raw === "true" || raw === "1"
+}
+
+function customerScorerName(judge: JudgeResult | null | undefined): string {
   const provider = trimText(judge?.provider).toLowerCase()
-  const backend = trimText(judge?.backend).toLowerCase()
-  const model = trimText(judge?.model).toLowerCase()
-  if (
-    provider === "openai" ||
-    backend === "decisions" ||
-    backend === "structured" ||
-    provider.includes("openai")
-  ) {
-    return true
+  if (provider === "skip") {
+    return "Checks"
   }
-  return model.includes("gpt-6") || model.startsWith("gpt-")
+  if (stampIsChosen(judge)) {
+    if (provider === "openai") {
+      return "OpenAI"
+    }
+    if (provider === "jev") {
+      return "Jev"
+    }
+    if (provider === "aws") {
+      return "AWS"
+    }
+    if (provider === "compatible") {
+      return "Other"
+    }
+  }
+  return "the judge"
 }
 
 export function customerScoredBy(line: string): string {
@@ -270,8 +282,20 @@ export function customerScoredBy(line: string): string {
   if (isLegacyRunCopy(text)) {
     return OLDER_RUN_LABEL
   }
+  if (/^scored by the judge\b/i.test(text)) {
+    return JUDGE_SCORED
+  }
+  if (
+    /^scored by (openai|jev|aws|other|checks)\b/i.test(text) &&
+    !/decisions/i.test(text)
+  ) {
+    return text.replace(/^scored by/i, "Scored by")
+  }
   if (/couldn['’]t score/i.test(text)) {
-    return text.replace(/^OpenAI couldn't score this run/i, "The judge couldn't score this run")
+    return text
+      .replace(/^OpenAI couldn't score this run/i, "The judge couldn't score this run")
+      .replace(/^OpenAI\b/i, "The judge")
+      .replace(/OpenAI Decisions/gi, "the judge")
   }
   if (isJudgeScorerCopy(text) || /via (?:vercel )?ai gateway/i.test(text)) {
     return JUDGE_SCORED
@@ -285,7 +309,7 @@ export function customerScoredBy(line: string): string {
       .replace(/\s*\(your key\)/gi, "")
       .replace(/\s+via\s+.+$/i, "")
       .trim()
-    if (!name || isJudgeScorerCopy(name)) {
+    if (!name || isJudgeScorerCopy(name) || /decisions|gateway/i.test(name)) {
       return JUDGE_SCORED
     }
     return `Scored by ${name}`
@@ -297,20 +321,20 @@ export function scoredByFromJudge(judge: JudgeResult | null | undefined): string
   if (!judge) {
     return ""
   }
-  if (isOpenAIJudge(judge)) {
-    return JUDGE_SCORED
-  }
   const provider = trimText(judge.provider).toLowerCase()
-  const model = trimText(judge.model).toLowerCase()
+  if (provider === "skip" || judge.status === "skip") {
+    return "Scored by Checks"
+  }
+  const name = customerScorerName(judge)
+  if (judge.status === "error") {
+    const who = name === "the judge" ? "The judge" : name
+    return `${who} couldn't score this run.`
+  }
   if (
-    provider === "jev" ||
-    provider === "evaluate" ||
-    model.includes("jev") ||
-    model.includes("typesafe") ||
     judge.status === "completed" ||
     (judge.answers && Object.keys(judge.answers).length > 0)
   ) {
-    return "Scored by Checks"
+    return name === "the judge" ? "Scored by the judge" : `Scored by ${name}`
   }
   return ""
 }
@@ -335,6 +359,24 @@ function cellWouldPass(id: string, choice: string): boolean {
   return PASS_LOCK[id]?.includes(choice.trim().toLowerCase()) ?? false
 }
 
+function hasConfidenceChannel(judge: JudgeResult | null | undefined): boolean {
+  if (judge?.supports_confidence === true) {
+    return true
+  }
+  if (judge?.supports_confidence === false) {
+    return false
+  }
+  const backend = trimText(judge?.backend).toLowerCase()
+  if (["structured", "responses", "aws", "jev", "skip"].includes(backend)) {
+    return false
+  }
+  const provider = trimText(judge?.provider).toLowerCase()
+  if (provider === "jev" || provider === "aws" || provider === "skip") {
+    return false
+  }
+  return provider === "openai" || backend === "decisions"
+}
+
 export function lowConfidenceWarning(task: TaskResult): string | null {
   if (workDidNotHappen(task)) {
     return null
@@ -344,12 +386,7 @@ export function lowConfidenceWarning(task: TaskResult): string | null {
   if (!answers) {
     return null
   }
-  const backend = trimText(judge?.backend).toLowerCase()
-  if (backend === "structured") {
-    return null
-  }
-  const openai = isOpenAIJudge(judge)
-  if (!openai) {
+  if (!hasConfidenceChannel(judge)) {
     return null
   }
   let numeric: number | null = null
@@ -399,7 +436,7 @@ export function openedCheckAnswers(task: TaskResult): OpenedAnswer[] {
     return []
   }
   const unchecked = workDidNotHappen(task)
-  return CHECK_QUESTION_ORDER.map((id) => {
+  const builtins = CHECK_QUESTION_ORDER.map((id) => {
     const question = task.judge?.questions?.[id]
     const choice =
       trimText(answers?.[id]?.choice) || trimText(cells?.[id]?.choice)
@@ -409,6 +446,37 @@ export function openedCheckAnswers(task: TaskResult): OpenedAnswer[] {
       answer: unchecked ? "Not checked" : choice || "—",
     }
   })
+  const seen = new Set<string>(CHECK_QUESTION_ORDER)
+  seen.add("path_efficiency")
+  const extras: OpenedAnswer[] = []
+  const extraIds = [
+    ...Object.keys(answers ?? {}),
+    ...Object.keys(cells ?? {}),
+    ...Object.keys(task.judge?.questions ?? {}),
+  ]
+  for (const id of extraIds) {
+    if (seen.has(id)) {
+      continue
+    }
+    seen.add(id)
+    const question = task.judge?.questions?.[id]
+    const cell = cells?.[id]
+    const choice =
+      trimText(answers?.[id]?.choice) ||
+      trimText(cell?.choice) ||
+      (typeof answers?.[id]?.probability === "number"
+        ? String(answers?.[id]?.probability)
+        : "")
+    extras.push({
+      id,
+      label:
+        trimText(question?.instructions) ||
+        trimText(cell?.label) ||
+        id,
+      answer: unchecked ? "Not checked" : choice || "—",
+    })
+  }
+  return [...builtins, ...extras]
 }
 
 function looksLikeDidntStart(text: string): boolean {

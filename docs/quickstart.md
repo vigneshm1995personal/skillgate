@@ -10,7 +10,7 @@ Requires **Python 3.11+**.
 python3 -m venv .venv
 source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install skillgate-ai
-skillgate version           # 0.5.1
+skillgate version           # 0.6.0
 ```
 
 (`pip install skillgate` is a different product.) From a clone of this repo you can use `pip install -e .` instead.
@@ -45,7 +45,7 @@ skillgate check pdf-sabotaged --expect-fail
 echo $?    # 0
 ```
 
-Live scoring with your OpenAI key is optional — see [openai-judge.md](https://github.com/vigneshm1995personal/skillgate/blob/main/docs/openai-judge.md). Every check is a live model run; without a key, `skillgate check` exits 2.
+Live scoring is optional — pick OpenAI, Jev, AWS, or Other in Settings. See [openai-judge.md](https://github.com/vigneshm1995personal/skillgate/blob/main/docs/openai-judge.md). Every check is a live model run; without a key, `skillgate check` exits 2. Default results say “Scored by the judge” unless you picked a provider.
 
 ## Deploy (after a green check)
 
@@ -88,7 +88,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: { python-version: "3.12" }
-      - run: pip install skillgate-ai==0.5.1
+      - run: pip install skillgate-ai==0.6.0
       - run: skillgate check . --key-env OPENAI_API_KEY
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}

@@ -33,6 +33,8 @@ const CUSTOMER_DENY = [
   "gpt-6-luna",
   "Gate pre-selected skill",
   "skip catalog discovery",
+  "Decisions",
+  "Bedrock",
 ] as const
 
 const componentsRoot = join(dirname(fileURLToPath(import.meta.url)), "../components")
@@ -82,6 +84,16 @@ describe("settings footer", () => {
     )
     expect(src).toMatch(/status\?\.version/)
     expect(src).toMatch(/status\?\.build/)
+  })
+
+  it("names Jev as a scoring provider the user can pick", () => {
+    const src = readFileSync(
+      join(componentsRoot, "dashboard/settings-page.tsx"),
+      "utf8"
+    )
+    expect(src).toMatch(/label: "Jev"/)
+    expect(src).not.toMatch(/Decisions/)
+    expect(src).not.toMatch(/Bedrock/)
   })
 })
 

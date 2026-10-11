@@ -214,7 +214,7 @@ describe("scoredByLine", () => {
   })
 
   it("maps skip scoring without hard-coding the UI to one scorer", () => {
-    expect(scoredByFromJudge(passTask.judge)).toBe("Scored by Checks")
+    expect(scoredByFromJudge(passTask.judge)).toBe("Scored by the judge")
     expect(
       scoredByFromJudge({
         provider: "openai",
@@ -328,6 +328,49 @@ describe("openedCheckAnswers / low confidence", () => {
       "Delivered a good result?",
     ])
     expect(rows[1].answer).toBe("Correct")
+  })
+
+  it("appends extra scoring answers after the built-in five", () => {
+    const rows = openedCheckAnswers({
+      ...passTask,
+      judge: {
+        ...passTask.judge,
+        answers: {
+          ...passTask.judge!.answers!,
+          numbers_match: { probability: 0.9 },
+        },
+        questions: {
+          numbers_match: { instructions: "Do the totals match?" },
+        },
+      },
+    })
+    expect(rows.map((row) => row.label)).toEqual([
+      "Got the job done?",
+      "Got it right?",
+      "Followed the rules?",
+      "Used the right evidence/actions?",
+      "Delivered a good result?",
+      "Do the totals match?",
+    ])
+  })
+
+  it("names a chosen scoring provider and not Auto OpenAI", () => {
+    expect(
+      scoredByFromJudge({
+        provider: "jev",
+        chosen: true,
+        status: "completed",
+        answers: passTask.judge?.answers,
+      })
+    ).toBe("Scored by Jev")
+    expect(
+      scoredByFromJudge({
+        provider: "openai",
+        chosen: false,
+        status: "completed",
+        answers: passTask.judge?.answers,
+      })
+    ).toBe("Scored by the judge")
   })
 
   it("warns on low confidence for an otherwise-Pass OpenAI cell and not for Jev", () => {

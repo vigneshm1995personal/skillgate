@@ -58,7 +58,7 @@ Public image tag:
 ```bash
 docker run --rm -v "$PWD/pdf:/pack:ro" \
   -e SKILLGATE_OPENAI_API_KEY \
-  ghcr.io/vigneshm1995personal/skillgate:v0.5.1
+  ghcr.io/vigneshm1995personal/skillgate:v0.6.0
 ```
 
 A `:ro` mount skips writing `evals/history/*.jsonl` (not writable). Compose mounts the pack read-write so history can append.
@@ -70,7 +70,7 @@ Working directory is the skill pack. Exit 1 fails the job. No account. Needs Pyt
 ```yaml
 - uses: actions/setup-python@v5
   with: { python-version: "3.12" }
-- run: pip install skillgate-ai==0.5.1
+- run: pip install skillgate-ai==0.6.0
 - run: skillgate check . --key-env OPENAI_API_KEY
   env:
     OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
@@ -83,11 +83,11 @@ Or set `SKILLGATE_OPENAI_API_KEY` in the job env instead of `--key-env`.
 - [`docs/quickstart.md`](docs/quickstart.md) — keys, example pdf, live check
 - [`docs/pack.md`](docs/pack.md) — `evals/cases.yaml` schema 1, fixtures, goldens, history
 - [`docs/plans/0.5-decisions.md`](docs/plans/0.5-decisions.md) — 0.5 live-only / explicit keys
-- [Score live checks with your OpenAI key](docs/openai-judge.md) — optional; OpenAI key scores live checks
+- [Score live checks](docs/openai-judge.md) — optional; pick OpenAI, Jev, AWS, or Other in Settings
 - [`docs/ui.md`](docs/ui.md) — local React UI (`skillgate ui`), red path, Docker stays `check /pack`
 - [`docs/proof/PUBLISH.md`](docs/proof/PUBLISH.md) — secret scan, tag, PyPI Trusted Publishing, GHCR
 
-Keys live in `{project}/.skillgate/keys` (gitignored, mode 0600). Ambient `OPENAI_API_KEY` / `AI_GATEWAY_API_KEY` are ignored unless you pass `--key-env`. See `.env.example` for non-secret config.
+Keys live in `{project}/.skillgate/keys` (gitignored, mode 0600). Ambient `OPENAI_API_KEY` / `AI_GATEWAY_API_KEY` / `AWS_*` are ignored unless you pass `--key-env`. See `.env.example` for non-secret config. Pick who scores in Settings (`skillgate judge provider set`). Default results say **Scored by the judge** unless you picked a provider.
 
 ## Layout
 
