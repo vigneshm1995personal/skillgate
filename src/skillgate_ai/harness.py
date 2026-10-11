@@ -20,11 +20,10 @@ from skillgate_ai.config import (
     normalize_codex_reasoning_effort,
 )
 from skillgate_ai.errors import (
-    BAD_OPENAI_KEY_MESSAGE,
     HarnessError,
     MissingLLMKeyError,
-    friendly_http_status,
-    friendly_transport_error,
+    OFFLINE_MESSAGE,
+    harness_http_error,
 )
 from skillgate_ai.ingest import Skill
 from skillgate_ai.sandbox import Sandbox, running_python
@@ -991,21 +990,11 @@ def _gateway_complete_response(
         payload["max_tokens"] = max_tokens
     try:
         response = httpx.post(url, headers=headers, json=payload, timeout=timeout_sec)
-    except httpx.HTTPError as exc:
-        raise HarnessError(friendly_transport_error(exc)) from None
+    except httpx.HTTPError:
+        raise HarnessError(OFFLINE_MESSAGE) from None
     if response.status_code >= 400:
         openai = "openai.com" in url or bool(cfg.openai_api_key)
-        message = (
-            BAD_OPENAI_KEY_MESSAGE
-            if response.status_code == 401 and openai
-            else friendly_http_status(response.status_code, openai=openai)
-        )
-        hint = (
-            "Check OPENAI_API_KEY or AI_GATEWAY_API_KEY and SKILLGATE_MODEL in `.env`."
-            if response.status_code == 401
-            else None
-        )
-        raise HarnessError(message, hint=hint)
+        raise harness_http_error(response.status_code, openai=openai)
     data = response.json()
     try:
         text = data["choices"][0]["message"]["content"]
@@ -1038,18 +1027,10 @@ def _anthropic_complete_response(cfg: LLMConfig, prompt: str, timeout_sec: int) 
             json=payload,
             timeout=timeout_sec,
         )
-    except httpx.HTTPError as exc:
-        raise HarnessError(friendly_transport_error(exc)) from None
+    except httpx.HTTPError:
+        raise HarnessError(OFFLINE_MESSAGE) from None
     if response.status_code >= 400:
-        message = (
-            "Anthropic did not accept this API key."
-            if response.status_code == 401
-            else friendly_http_status(response.status_code, openai=False)
-        )
-        raise HarnessError(
-            message,
-            hint="Check ANTHROPIC_API_KEY in `.env`." if response.status_code == 401 else None,
-        )
+        raise harness_http_error(response.status_code, openai=False)
     data = response.json()
     try:
         text = "".join(part.get("text", "") for part in data.get("content", []))

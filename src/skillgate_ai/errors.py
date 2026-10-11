@@ -20,22 +20,6 @@ _HEX_DIGEST = re.compile(r"\b[0-9a-f]{8,64}\b", re.IGNORECASE)
 OFFLINE_MESSAGE = "Couldn't reach the model service. Check your internet connection."
 BAD_OPENAI_KEY_MESSAGE = "OpenAI did not accept this API key."
 
-_DNS_MARKERS = (
-    "name resolution",
-    "nodename nor servname",
-    "temporary failure",
-    "errno -2",
-    "errno -3",
-    "errno 8",
-    "network is unreachable",
-    "connection refused",
-    "connection reset",
-    "timed out",
-    "timeout",
-    "failed to resolve",
-    "name or service not known",
-)
-
 
 def customer_job_error(message: str | None) -> str:
     """Customer-facing install error. Hashes and internal words stay in logs."""
@@ -120,16 +104,18 @@ def friendly_os_error(exc: BaseException, *, what: str) -> str:
     return f"Couldn't {what}."
 
 
-def is_offline_error(exc: BaseException) -> bool:
-    blob = " ".join(_exception_text(exc)).lower()
-    if any(marker in blob for marker in _DNS_MARKERS):
-        return True
-    name = type(exc).__name__.lower()
-    return any(token in name for token in ("connect", "timeout", "network", "dns"))
-
-
-def friendly_transport_error(_exc: BaseException) -> str:
-    return OFFLINE_MESSAGE
+def harness_http_error(status: int, *, openai: bool = True) -> HarnessError:
+    if status == 401:
+        if openai:
+            return HarnessError(
+                BAD_OPENAI_KEY_MESSAGE,
+                hint="Check OPENAI_API_KEY or AI_GATEWAY_API_KEY and SKILLGATE_MODEL in `.env`.",
+            )
+        return HarnessError(
+            "Anthropic did not accept this API key.",
+            hint="Check ANTHROPIC_API_KEY in `.env`.",
+        )
+    return HarnessError(friendly_http_status(status, openai=openai))
 
 
 def friendly_http_status(status: int, *, openai: bool = True) -> str:
@@ -259,15 +245,3 @@ def _task_id_at(raw: dict[str, Any] | None, index: int) -> str | None:
         if value is not None and str(value).strip():
             return str(value).strip()
     return None
-
-
-def _exception_text(exc: BaseException) -> list[str]:
-    parts = [str(exc), type(exc).__name__]
-    cause = getattr(exc, "__cause__", None) or getattr(exc, "__context__", None)
-    if isinstance(cause, BaseException) and cause is not exc:
-        parts.extend(_exception_text(cause))
-    args = getattr(exc, "args", ())
-    for arg in args:
-        if arg is not None:
-            parts.append(str(arg))
-    return parts

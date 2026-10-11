@@ -177,17 +177,11 @@ def latest_check_passed(pack: Path) -> bool | None:
     return bool(row.get("passed"))
 
 
-def refuse_ungated_install(pack: Path, skill_name: str) -> DeployError:
-    """Friendly block when the latest check is missing or red."""
-    latest = latest_check_passed(pack)
-    if latest is False:
-        return DeployError(
-            f"Not installing `{skill_name}` because the latest check did not pass.",
-            hint="Run `skillgate check` until the gate is green, or pass --force to install anyway.",
-        )
+def refuse_ungated_install(skill_name: str, *, exit_code: int = 1) -> DeployError:
     return DeployError(
-        f"Not installing `{skill_name}` because this pack has not passed `skillgate check`.",
-        hint="Run `skillgate check` first, or pass --force to install anyway.",
+        f"Not installing `{skill_name}` because the latest check did not pass.",
+        hint="Fix the skill, or pass --force to install anyway.",
+        exit_code=exit_code,
     )
 
 

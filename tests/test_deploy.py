@@ -114,6 +114,31 @@ def test_deploy_refuses_failed_latest_check(
     assert not (skills_root / "pdf-sabotaged").exists()
 
 
+def test_deploy_uses_newer_ts_not_later_filename(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    pack = tmp_path / "pdf-sabotaged"
+    shutil.copytree(ROOT / "skills" / "pdf-sabotaged", pack)
+    _wipe_history(pack)
+    hist = pack / "evals" / "history"
+    hist.mkdir(parents=True, exist_ok=True)
+    (hist / "20261011.jsonl").write_text(
+        '{"ts":"2026-10-11T01:00:00+00:00","run_id":"old-utc","passed":true,"gate":"green"}\n',
+        encoding="utf-8",
+    )
+    (hist / "20261010.jsonl").write_text(
+        '{"ts":"2026-10-11T01:30:00+00:00","run_id":"new-local","passed":false,"gate":"red"}\n',
+        encoding="utf-8",
+    )
+    skills_root = tmp_path / "cursor-skills"
+    monkeypatch.setenv("SKILLGATE_CURSOR_SKILLS", str(skills_root))
+    assert latest_check_passed(pack) is False
+    result = runner.invoke(app, ["deploy", str(pack)])
+    assert result.exit_code == 1, result.stdout
+    assert "did not pass" in result.stdout
+    assert not (skills_root / "pdf-sabotaged").exists()
+
+
 def test_deploy_force_installs_failed_skill(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

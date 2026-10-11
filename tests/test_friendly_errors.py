@@ -11,9 +11,7 @@ from skillgate_ai.config import LLMConfig
 from skillgate_ai.errors import (
     BAD_OPENAI_KEY_MESSAGE,
     OFFLINE_MESSAGE,
-    friendly_transport_error,
     friendly_validation_error,
-    is_offline_error,
 )
 from skillgate_ai.harness import LLMHarness
 from skillgate_ai.sandbox import LocalSandbox
@@ -42,11 +40,27 @@ def _cfg(**overrides: object) -> LLMConfig:
     return LLMConfig(**fields)  # type: ignore[arg-type]
 
 
-def test_dns_failure_is_offline_message() -> None:
+def test_dns_failure_is_offline_message(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     exc = httpx.ConnectError("[Errno -3] Temporary failure in name resolution")
-    assert is_offline_error(exc)
-    assert friendly_transport_error(exc) == OFFLINE_MESSAGE
-    assert "Errno" not in friendly_transport_error(exc)
+
+    def fake_post(*_args, **_kwargs):
+        raise exc
+
+    monkeypatch.setattr("skillgate_ai.harness.httpx.post", fake_post)
+    sandbox = LocalSandbox(tmp_path)
+    try:
+        from skillgate_ai.errors import HarnessError
+
+        with pytest.raises(HarnessError) as caught:
+            LLMHarness(_cfg()).run(sandbox, "hello", [], timeout_sec=5)
+    finally:
+        sandbox.close()
+    assert "Errno" in str(exc)
+    assert caught.value.message == OFFLINE_MESSAGE
+    assert "Errno" not in caught.value.message
+    assert "BYO" not in caught.value.message
 
 
 def test_schema_validation_names_schema_not_pydantic() -> None:

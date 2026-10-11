@@ -66,6 +66,18 @@ def ingest(
     console.print(loaded.description)
 
 
+def _present_check(result) -> None:
+    if result.demo_notice:
+        console.print(f"[dim]{result.demo_notice}[/dim]\n")
+    if result.error:
+        console.print(result.error["message"])
+        hint = result.error.get("hint")
+        if hint:
+            console.print(hint)
+    elif result.report is not None:
+        console.print(format_cli(result.report))
+
+
 def _run_gate(
     *,
     target: Path,
@@ -97,10 +109,18 @@ def _run_gate(
         source="cli",
     )
     machine = json_out or summary == "json"
-    if result.demo_notice and not machine:
-        console.print(f"[dim]{result.demo_notice}[/dim]\n")
-    elif result.demo_notice:
-        sys.stderr.write(f"{result.demo_notice}\n")
+    if not machine and summary != "github":
+        _present_check(result)
+        if result.error or result.report is None:
+            raise typer.Exit(result.exit_code)
+        if result.expect_fail_notice:
+            console.print(result.expect_fail_notice)
+        raise typer.Exit(result.exit_code)
+    if result.demo_notice:
+        if machine:
+            sys.stderr.write(f"{result.demo_notice}\n")
+        else:
+            console.print(f"[dim]{result.demo_notice}[/dim]\n")
     if result.error:
         if machine:
             _emit_json(
@@ -121,7 +141,7 @@ def _run_gate(
         raise typer.Exit(result.exit_code)
     if machine:
         _emit_json(report_to_dict(report))
-    elif summary == "github":
+    else:
         text = format_github(report)
         console.print(text)
         gh = os.environ.get("GITHUB_STEP_SUMMARY")
@@ -129,8 +149,6 @@ def _run_gate(
             path = Path(gh)
             prev = path.read_text(encoding="utf-8") if path.exists() else ""
             path.write_text(prev + text, encoding="utf-8")
-    else:
-        console.print(format_cli(report))
     if result.expect_fail_notice:
         if machine:
             sys.stderr.write(f"{result.expect_fail_notice}\n")
@@ -254,26 +272,18 @@ def deploy(
         loaded = ingest_skill(path)
         if not force:
             latest = latest_check_passed(path)
-            if latest is False:
-                raise refuse_ungated_install(path, loaded.name)
-            if latest is not True:
+            fail_exit = 1
+            if latest is None:
                 checked = run_check(path, source="cli", root=root)
-                if checked.demo_notice:
-                    console.print(f"[dim]{checked.demo_notice}[/dim]\n")
-                if checked.error:
-                    console.print(checked.error["message"])
-                    hint = checked.error.get("hint")
-                    if hint:
-                        console.print(hint)
-                    console.print(f"Not installing `{loaded.name}` because the check did not pass.")
-                    console.print("Fix the skill, or pass --force to install anyway.")
-                    raise typer.Exit(checked.exit_code)
-                if checked.report is not None:
-                    console.print(format_cli(checked.report))
-                if checked.exit_code != 0 or checked.report is None or not checked.report.passed:
-                    console.print(f"Not installing `{loaded.name}` because the check did not pass.")
-                    console.print("Fix the skill, or pass --force to install anyway.")
-                    raise typer.Exit(1 if checked.exit_code == 0 else checked.exit_code)
+                _present_check(checked)
+                latest = bool(
+                    checked.exit_code == 0
+                    and checked.report is not None
+                    and checked.report.passed
+                )
+                fail_exit = checked.exit_code or 1
+            if not latest:
+                raise refuse_ungated_install(loaded.name, exit_code=fail_exit)
         result = get_adapter(target).install(skill=loaded, source=path)
     except SkillGateError as exc:
         console.print(exc.render())

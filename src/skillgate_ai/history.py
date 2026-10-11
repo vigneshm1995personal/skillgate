@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -57,13 +57,27 @@ def append_eval(
     return dest
 
 
+def _row_ts(item: dict[str, Any]) -> datetime:
+    raw = item.get("ts")
+    if isinstance(raw, str) and raw.strip():
+        try:
+            parsed = datetime.fromisoformat(raw)
+        except ValueError:
+            pass
+        else:
+            if parsed.tzinfo is None:
+                parsed = parsed.replace(tzinfo=timezone.utc)
+            return parsed
+    return datetime.min.replace(tzinfo=timezone.utc)
+
+
 def load_history(pack_root: str | Path, *, limit: int = 50) -> list[dict[str, Any]]:
-    """Newest-last rows from JSONL files. Missing dir → empty list."""
+    """Newest-last rows by ``ts``. Missing dir → empty list."""
     dest_dir = history_dir(pack_root)
     if not dest_dir.is_dir():
         return []
     rows: list[dict[str, Any]] = []
-    for path in sorted(dest_dir.glob("*.jsonl")):
+    for path in dest_dir.glob("*.jsonl"):
         try:
             text = path.read_text(encoding="utf-8")
         except OSError:
@@ -78,6 +92,7 @@ def load_history(pack_root: str | Path, *, limit: int = 50) -> list[dict[str, An
                 continue
             if isinstance(item, dict):
                 rows.append(item)
+    rows.sort(key=_row_ts)
     if limit > 0:
         return rows[-limit:]
     return rows
