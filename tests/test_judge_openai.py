@@ -466,6 +466,32 @@ def test_gateway_decisions_posts_luna_decisions_not_responses() -> None:
     assert "reasoning" not in post.calls[0]["json"]
 
 
+def test_gateway_why_call_uses_language_model_not_decisions() -> None:
+    post = FakePost(
+        [
+            FakeResponse(200, decisions_payload({"correctness": "Incorrect"})),
+            FakeResponse(200, why_payload("The numbers were wrong.")),
+        ]
+    )
+    passed, _failures, judged = _gated(
+        make_openai_judge(
+            api_key="gw-test",
+            backend="decisions",
+            model="openai/gpt-6-luna-decisions",
+            base_url="https://ai-gateway.vercel.sh/v1",
+            why_enabled=True,
+            post=post,
+        )
+    )
+    assert passed is False
+    assert judged["why"] == "The numbers were wrong."
+    assert post.calls[0]["url"].endswith("/v1/decisions")
+    assert post.calls[0]["json"]["model"] == "openai/gpt-6-luna-decisions"
+    assert post.calls[1]["url"].endswith("/v1/responses")
+    assert post.calls[1]["json"]["model"] == "openai/gpt-6-luna"
+    assert post.calls[1]["json"]["model"].endswith("-decisions") is False
+
+
 def test_gateway_mini_responses_omits_reasoning() -> None:
     body = json.dumps(PASS_CHOICES)
     post = FakePost([FakeResponse(200, {"output_text": body, "model": "openai/gpt-4o-mini"})])

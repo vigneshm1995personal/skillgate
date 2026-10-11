@@ -1,18 +1,16 @@
 # Score live checks with your OpenAI key
 
-Optional. Deterministic fixture checks still need **no key**. Live checks still run with Cursor, Codex, Claude, or OpenAI. **Scoring** with OpenAI uses **your** `OPENAI_API_KEY` only. Skill Gate does not ship a model or an account.
+Optional. Deterministic fixture checks still need **no key**. Live checks still run with Cursor, Codex, Claude, or OpenAI. **Scoring** uses OpenAI’s scoring API (`POST /v1/decisions`): your `OPENAI_API_KEY` talks to OpenAI directly; `AI_GATEWAY_API_KEY` without an OpenAI key uses that same API on AI Gateway. Skill Gate does not ship a model or an account.
 
 ## What you get
 
-When `OPENAI_API_KEY` is set and you run a live check (`skillgate check --live`, or Run live in the local UI), Skill Gate asks OpenAI the same fixed questions on each live task. The check Passes only when those answers meet the bar (job done, correct, followed the rules, and so on). The built-in checker stays in charge when:
+When an OpenAI or AI Gateway key is set and you run a live check (`skillgate check --live`, or Run live in the local UI), Skill Gate asks the same fixed questions on each live task. The check Passes only when those answers meet the bar (job done, correct, followed the rules, and so on). An OpenAI key is never rerouted through the gateway. The built-in checker stays in charge when:
 
-- there is no OpenAI key
+- there is no OpenAI key and no AI Gateway key
 - you set `SKILLGATE_JUDGE=skip`
 - you use the built-in / demo path (`--demo`, or Skip in the wizard)
 
-The built-in checker only runs fixture checks such as “does the output contain this text?” and page counts. It does **not** compare the full output to the expected file. Scoring with your OpenAI key does read the expected and actual text (and a few images) and judges whether the work is done.
-
-`AI_GATEWAY_API_KEY` without `OPENAI_API_KEY` scores through the same OpenAI scoring API on AI Gateway (`POST /v1/decisions`). An OpenAI key still talks to OpenAI directly and is never rerouted through the gateway.
+The built-in checker only runs fixture checks such as “does the output contain this text?” and page counts. It does **not** compare the full output to the expected file. Scoring does read the expected and actual text (and a few images) and judges whether the work is done.
 
 ## Setup
 
@@ -21,13 +19,13 @@ The built-in checker only runs fixture checks such as “does the output contain
 OPENAI_API_KEY=sk-...
 ```
 
-Or paste the OpenAI key in `skillgate ui` (wizard **Your API key**, or the skill page **Add your API key**). Other keys run live checks; an OpenAI key also scores them.
+Or paste the OpenAI key in `skillgate ui` (Settings, or the skill page **Add your API key**). Other keys run live checks; an OpenAI or AI Gateway key also scores them.
 
 Override if you need it:
 
 | Env | Meaning |
 | --- | --- |
-| `SKILLGATE_JUDGE=auto` | Default. Score when an OpenAI key is present; otherwise the built-in checker. |
+| `SKILLGATE_JUDGE=auto` | Default. Score when an OpenAI or AI Gateway key is present; otherwise the built-in checker. |
 | `SKILLGATE_JUDGE=openai` | Require scoring. Missing key → exit 2. |
 | `SKILLGATE_JUDGE=skip` | Never score with OpenAI. The built-in checker decides the result. |
 | `SKILLGATE_JUDGE_BACKEND=decisions` | Default scoring service. |

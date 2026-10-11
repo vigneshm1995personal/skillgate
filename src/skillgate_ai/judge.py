@@ -118,7 +118,11 @@ def _openai_judge(cfg: LLMConfig) -> Judge:
     if not api_key:
         api_key = (cfg.gateway_api_key or "").strip()
         base_url = (cfg.gateway_base_url or "").rstrip("/") or DEFAULT_BASE_URL
-        if (model or "").strip() in {"", DEFAULT_JUDGE_MODEL}:
+        backend_name = (backend or "decisions").strip().lower()
+        if backend_name not in {"structured", "responses"} and (model or "").strip() in {
+            "",
+            DEFAULT_JUDGE_MODEL,
+        }:
             model = GATEWAY_DECISIONS_MODEL
     return make_openai_judge(
         api_key=api_key,

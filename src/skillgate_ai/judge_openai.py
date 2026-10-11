@@ -57,6 +57,13 @@ def _decisions_model(model: str) -> str:
     return DEFAULT_MODEL
 
 
+def _responses_model(model: str) -> str:
+    slug = (model or "").strip() or DEFAULT_MODEL
+    if slug.endswith("-decisions"):
+        return slug[: -len("-decisions")]
+    return slug
+
+
 def _model_supports_reasoning(model: str) -> bool:
     slug = (model or "").strip().lower().rsplit("/", 1)[-1]
     return slug.startswith(("o1", "o3", "o4", "gpt-5", "gpt-6"))
@@ -784,10 +791,11 @@ class OutcomeJudge:
             user_blob["expected_output"] = expected
         if actual is not None:
             user_blob["actual_output"] = actual
+        why_model = _responses_model(self.backend.model)
         payload = {
-            "model": self.backend.model,
+            "model": why_model,
             "max_output_tokens": WHY_MAX_OUTPUT_TOKENS,
-            **_reasoning_field(self.backend.model, self.reasoning_effort),
+            **_reasoning_field(why_model, self.reasoning_effort),
             "input": [
                 {
                     "role": "system",
