@@ -93,7 +93,7 @@ def resolve_pack_and_spec(target: Path, root: Path):
         return expand_from_pack(path), path, path
     raise SkillGateError(
         f"Not a skill pack or suite: {target}",
-        hint="Pass a folder with SKILL.md + evals/cases.yaml, or a suite YAML.",
+        hint="Pass a skill folder with SKILL.md, or a suite YAML.",
     )
 
 
@@ -128,13 +128,22 @@ def run_check(
     pack_root: Path | None = None
     skill_path = skill
     try:
-        spec, skill_from_pack, pack_root = resolve_pack_and_spec(target, project)
-        if skill_from_pack is not None:
-            skill_path = skill or skill_from_pack
-        if checks and pack_root is not None:
-            from skillgate_ai.case_pack import suite_from_checks
+        if suite_path.is_dir() and (suite_path / "SKILL.md").is_file():
+            prepare_pack_fixtures(suite_path)
+            skill_path = skill or suite_path
+            pack_root = suite_path
+            if checks:
+                from skillgate_ai.case_pack import suite_from_checks
 
-            spec = suite_from_checks(pack_root, checks)
+                spec = suite_from_checks(suite_path, checks)
+            else:
+                from skillgate_ai.case_pack import expand_from_pack
+
+                spec = expand_from_pack(suite_path)
+        else:
+            spec, skill_from_pack, pack_root = resolve_pack_and_spec(target, project)
+            if skill_from_pack is not None:
+                skill_path = skill or skill_from_pack
     except SkillGateError as exc:
         if suite_path.is_file():
             spec = None

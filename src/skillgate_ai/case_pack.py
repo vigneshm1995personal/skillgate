@@ -440,7 +440,10 @@ def expand_from_pack(skill_path: str | Path) -> SuiteSpec:
     root = Path(skill_path).expanduser().resolve()
     pack = load_case_pack(root)
     if pack is None:
-        raise SuiteError(f"No case pack at {root / CASES_REL}")
+        raise SuiteError(
+            "This skill has no checks yet.",
+            hint="Add a check, then press Run.",
+        )
     return suite_from_pack(pack, str(root))
 
 

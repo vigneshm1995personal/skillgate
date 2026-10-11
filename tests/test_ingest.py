@@ -94,3 +94,27 @@ def test_lenient_broken_skill_has_warning(tmp_path: Path) -> None:
     assert loaded.name == "broken-skill"
     assert loaded.warning
     assert "header" in loaded.warning.lower() or "couldn" in loaded.warning.lower()
+
+
+def test_lenient_undecodable_skill_md_has_warning(tmp_path: Path) -> None:
+    folder = tmp_path / "binary-notes"
+    folder.mkdir()
+    (folder / "SKILL.md").write_bytes(b"\xff\xfe not utf-8 \x80\x81")
+    loaded = ingest_skill(folder, strict=False)
+    assert loaded.name == "binary-notes"
+    assert loaded.warning
+    assert "couldn" in loaded.warning.lower()
+
+
+def test_lenient_space_folder_uses_slug(tmp_path: Path) -> None:
+    folder = tmp_path / "Idea brainstorming"
+    folder.mkdir()
+    (folder / "SKILL.md").write_text(
+        "---\nname: Idea brainstorming\n"
+        "description: Brainstorm product ideas with the user.\n"
+        "---\n\n# Go\n",
+        encoding="utf-8",
+    )
+    loaded = ingest_skill(folder, strict=False)
+    assert loaded.name == "idea-brainstorming"
+    assert loaded.display_name == "Idea brainstorming"

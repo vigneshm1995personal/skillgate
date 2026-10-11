@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react"
 
 import { toast } from "@/components/ui/toast"
 import { api, isTransientFetchError, pollRun } from "@/lib/api"
-import { asApiError, collectChecksForRun, SIGNED_OUT_CHECK } from "@/lib/dashboard-helpers"
+import { asApiError, collectChecksForRun, matchesSkill, SIGNED_OUT_CHECK } from "@/lib/dashboard-helpers"
 import { draftToApiConfig, type EvalConfigDraft } from "@/lib/eval-config"
 import { mergeEvalSnapshot, seededRunningReport } from "@/lib/eval-row-state"
 import {
@@ -109,10 +109,10 @@ export function useEvalSession(opts: EvalSessionOpts) {
 
   const skillKey = skillSlotKey(skill)
   const slot = slots[skillKey] ?? emptySkillRunSlot()
-  const liveGateResult = liveGateRun(slot, skill?.name)
+  const liveGateResult = liveGateRun(slot, skillKey)
   const tryoutResult = slot.tryout
-  const viewingPinnedHistory = pinBelongsToSkill(slot.pin, skill?.name)
-  const lastResult = shownGateRun(slot, skill?.name)
+  const viewingPinnedHistory = pinBelongsToSkill(slot.pin, skillKey)
+  const lastResult = shownGateRun(slot, skillKey)
   const lastAdvice: Advice | null = lastResult?.report?.advice ?? null
   const gateRunning = slot.runningPurpose === "gate"
   const tryoutRunning = slot.runningPurpose === "tryout"
@@ -219,7 +219,7 @@ export function useEvalSession(opts: EvalSessionOpts) {
   const applyResult = useCallback(
     async (data: RunRecord, purpose: RunPurpose = "gate") => {
       const name =
-        data.report?.skill || data.skill || skillRef.current?.name || ""
+        data.report?.skill || data.skill || skillSlotKey(skillRef.current) || ""
       const tryout = purpose === "tryout" || isTryoutRun(data)
       if (name) {
         patchSlot(name, (current) =>
@@ -233,7 +233,7 @@ export function useEvalSession(opts: EvalSessionOpts) {
       }
       await Promise.all([
         refreshWorkspaceHistory(),
-        refreshSkillHistory(name || skill?.name),
+        refreshSkillHistory(name || skillKey),
         tryout ? Promise.resolve([]) : refreshSkills(),
         tryout ? Promise.resolve(null) : refreshAnalytics(),
       ])
@@ -247,7 +247,7 @@ export function useEvalSession(opts: EvalSessionOpts) {
       setCopiedFix,
       setEvalTab,
       setStage,
-      skill?.name,
+      skillKey,
     ]
   )
 
@@ -263,7 +263,7 @@ export function useEvalSession(opts: EvalSessionOpts) {
       live?: boolean
       tryout?: boolean
     } = {}) => {
-      const name = skill?.name || ""
+      const name = skillSlotKey(skill)
       const purpose: RunPurpose = tryout ? "tryout" : "gate"
       const current = slotsRef.current[name] ?? emptySkillRunSlot()
       if (name && current.runningPurpose === purpose) {
@@ -291,9 +291,9 @@ export function useEvalSession(opts: EvalSessionOpts) {
         current_task_id: null,
         tryout,
         report: checkList.length
-          ? { ...seededRunningReport(checkList, skill?.name), tryout }
+          ? { ...seededRunningReport(checkList, name), tryout }
           : tryout
-            ? { ...seededRunningReport([], skill?.name), tryout: true }
+            ? { ...seededRunningReport([], name), tryout: true }
             : null,
         harness: resolvedHarness,
         config: requestedConfig,
@@ -301,7 +301,7 @@ export function useEvalSession(opts: EvalSessionOpts) {
         timeout_sec: apiConfig.timeout_sec,
         temperature: apiConfig.temperature,
         reasoning_effort: apiConfig.reasoning_effort,
-        skill: skill?.name,
+        skill: name,
       }
       if (name) {
         patchSlot(name, (slot) =>
@@ -355,7 +355,7 @@ export function useEvalSession(opts: EvalSessionOpts) {
             status: "error",
             error: { message, hint: error.hint },
             harness: error.harness || resolvedHarness,
-            skill: skill?.name,
+            skill: name,
             tryout,
             config: error.config || requestedConfig,
             model: error.model ?? apiConfig.model,
@@ -417,9 +417,7 @@ export function useEvalSession(opts: EvalSessionOpts) {
         const data = await api.getRun(item.id)
         const skillName = data.skill || data.report?.skill || item.skill || null
         if (skillName) {
-          const match = skills.find(
-            (s) => s.name === skillName || s.id === skillName || s.absolute === skillName
-          )
+          const match = skills.find((s) => matchesSkill(s, skillName))
           if (match) {
             setSkill(match)
           }
@@ -572,7 +570,7 @@ export function useEvalSession(opts: EvalSessionOpts) {
       const pending: Array<[string, { skillName: string; purpose: RunPurpose }]> =
         [...pollMetaRef.current.entries()]
       if (pending.length === 0) {
-        const name = skillRef.current?.name
+        const name = skillSlotKey(skillRef.current)
         const current = name ? slotsRef.current[name] : null
         if (current?.runningPurpose === "gate" && current.gate?.id) {
           pending.push([

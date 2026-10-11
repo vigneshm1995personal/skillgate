@@ -480,6 +480,9 @@ describe("plainAdviceCopy", () => {
     )
     expect(plainAdviceCopy("Stay on `pdf-sabotaged`.")).toBe("Stay on pdf-sabotaged.")
     expect(
+      plainAdviceCopy("Replace the description, then run `skillgate check` on this same skill.")
+    ).toBe("Replace the description.")
+    expect(
       plainAdviceCopy("don't switch to the a working copy of this skill")
     ).toBe("don't switch to a working copy of this skill")
   })

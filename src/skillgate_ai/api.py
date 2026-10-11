@@ -90,7 +90,7 @@ def _register_core_routes(app: FastAPI) -> None:
                 else (None if cfg.has_any_key else missing.message)
             ),
             "missing_key_hint": (
-                "Add a key in Settings to run live. `skillgate check` still exits 0 or 1 with no account."
+                "Add a key in Settings to run live."
                 if is_local(mode) and not cfg.has_any_key
                 else (None if cfg.has_any_key else missing.hint)
             ),

@@ -38,6 +38,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Spinner } from "@/components/ui/spinner"
 import { Textarea } from "@/components/ui/textarea"
 import { api, ApiError } from "@/lib/api"
+import { matchesSkill } from "@/lib/dashboard-helpers"
 import { useDashboard } from "@/lib/dashboard-provider"
 import { skillOutputPath, type Check, type DatasetCase, type DatasetFilePreview, type DatasetView } from "@/lib/types"
 
@@ -362,14 +363,8 @@ export function DatasetViewer({
 }) {
   const { pinDatasetChecks, skill, skills } = useDashboard()
   const outputSkill =
-    (skill &&
-    (skill.absolute === skillId || skill.id === skillId || skill.name === skillId)
-      ? skill
-      : null) ||
-    skills.find(
-      (item) =>
-        item.absolute === skillId || item.id === skillId || item.name === skillId
-    ) ||
+    (skill && matchesSkill(skill, skillId) ? skill : null) ||
+    skills.find((item) => matchesSkill(item, skillId)) ||
     null
   const [view, setView] = useState<DatasetView | null>(null)
   const [drafts, setDrafts] = useState<Record<string, RowDraft>>({})

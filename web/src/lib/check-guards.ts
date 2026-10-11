@@ -286,7 +286,10 @@ export function needsFixtureNotice(
   skill: SkillPayload | null,
   checks: Check[]
 ): boolean {
-  if (!skill || SEED_TEMPLATE_SKILLS.has(skill.name)) {
+  if (
+    !skill ||
+    SEED_TEMPLATE_SKILLS.has(skill.slug || skill.id || "")
+  ) {
     return false
   }
   if (datasetPackFiles(skill.pack_files).length) {

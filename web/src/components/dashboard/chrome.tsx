@@ -3,6 +3,7 @@ import { cn } from "cn"
 
 import { Badge } from "@/components/ui/badge"
 import { useDashboard } from "@/lib/dashboard-provider"
+import { skillSlotKey } from "@/lib/skill-run-state"
 import type { Stage } from "@/lib/types"
 
 export function PageHeader({
@@ -165,8 +166,9 @@ export function stageTitle(stage: Stage) {
 export function useGateLabel() {
   const { liveGateResult, skillHistory, gateRunning, skill } = useDashboard()
   const runSkill = liveGateResult?.report?.skill || liveGateResult?.skill
+  const identity = skillSlotKey(skill)
   const scoped =
-    !liveGateResult || !skill?.name || !runSkill || runSkill === skill.name
+    !liveGateResult || !identity || !runSkill || runSkill === identity
   const record = scoped ? liveGateResult : null
   if (gateRunning || record?.status === "running") {
     return "Running"

@@ -196,6 +196,24 @@ def _skill_md(name: str) -> str:
     )
 
 
+def test_paste_display_name_uses_folder_slug(tmp_path: Path, monkeypatch) -> None:
+    client = _client(tmp_path, monkeypatch)
+    res = client.post("/api/skills/paste", json={"markdown": _skill_md("Idea brainstorming")})
+    assert res.status_code == 200, res.text
+    data = res.json()
+    assert data["slug"] == "idea-brainstorming"
+    assert data["id"] == "idea-brainstorming"
+    assert data["name"] == "Idea brainstorming"
+    dest = tmp_path / "skills" / "idea-brainstorming"
+    assert dest.is_dir()
+    assert (dest / "SKILL.md").is_file()
+    assert (dest / "evals" / "cases.yaml").is_file()
+    listed = client.get("/api/skills")
+    assert listed.status_code == 200
+    names = {item["name"] for item in listed.json()["skills"]}
+    assert "Idea brainstorming" in names
+
+
 def test_paste_rejects_names_that_escape_skills(tmp_path: Path, monkeypatch) -> None:
     marker = tmp_path / "keep-me.txt"
     marker.write_text("safe\n", encoding="utf-8")

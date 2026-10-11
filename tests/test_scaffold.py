@@ -43,6 +43,47 @@ def test_trigger_only_pack_greens_without_keys(tmp_path: Path, project_root: Pat
     assert result.report is not None and result.report.passed
 
 
+def test_scaffold_accepts_display_name_frontmatter(tmp_path: Path) -> None:
+    dest = tmp_path / "idea-brainstorming"
+    dest.mkdir()
+    (dest / "SKILL.md").write_text(
+        "---\nname: Idea brainstorming\n"
+        "description: Brainstorm product ideas with the user when they ask.\n"
+        "---\n\n# Go\n",
+        encoding="utf-8",
+    )
+    pack = scaffold_trigger_cases(dest)
+    assert pack.skill == "idea-brainstorming"
+    assert (dest / "evals" / "cases.yaml").is_file()
+
+
+def test_run_uses_inline_checks_when_skill_has_no_dataset(
+    tmp_path: Path, project_root: Path
+) -> None:
+    dest = create_pack(tmp_path, "idea-notes")
+    empty = run_check(dest, source="ui", root=project_root, demo=True)
+    assert empty.error
+    blob = f"{empty.error.get('message') or ''} {empty.error.get('hint') or ''}"
+    assert "evals/" not in blob
+    result = run_check(
+        dest,
+        source="ui",
+        root=project_root,
+        demo=True,
+        checks=[
+            {
+                "id": "should-trigger-1",
+                "prompt": "Brainstorm product ideas for a notes app.",
+                "should_trigger": True,
+            }
+        ],
+    )
+    assert result.error is None, result.error
+    assert result.report is not None
+    assert result.report.skill == "idea-notes"
+    assert result.report.passed in {True, False}
+
+
 def test_invalid_cases_yaml_is_suite_error(tmp_path: Path) -> None:
     dest = create_pack(tmp_path, "bad-yaml")
     cases = dest / "evals" / "cases.yaml"

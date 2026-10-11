@@ -56,6 +56,11 @@ def _fake_home(tmp_path: Path) -> dict[str, Path]:
         "vercel-react-best-practices",
         "Apply Vercel React best practices when building React apps.",
     )
+    _write_skill(
+        cursor / "Design Tokens",
+        "Design Tokens",
+        "Apply design tokens when the user asks for color, type, or spacing.",
+    )
     broken = cursor / "broken-notes"
     broken.mkdir(parents=True, exist_ok=True)
     (broken / "SKILL.md").write_text("# no header\n", encoding="utf-8")
@@ -117,6 +122,11 @@ def test_fake_home_import_list_open_run_deploy(tmp_path: Path, monkeypatch) -> N
     assert broken.get("warning")
     assert listed.status_code == 200
 
+    status = client.get("/api/status")
+    assert status.status_code == 200
+    assert "skillgate check" not in (status.json().get("missing_key_hint") or "").lower()
+    assert "skillgate check" not in (status.json().get("missing_key_message") or "").lower()
+
     sources = client.get("/api/skills/import-sources")
     assert sources.status_code == 200
     by_id = {item["id"]: item for item in sources.json()["sources"]}
@@ -140,6 +150,10 @@ def test_fake_home_import_list_open_run_deploy(tmp_path: Path, monkeypatch) -> N
     idea = paths["root"] / "skills" / "idea-brainstorming"
     assert (idea / "SKILL.md").is_file()
     assert "Idea brainstorming" in (idea / "SKILL.md").read_text(encoding="utf-8")
+    tokens = paths["root"] / "skills" / "design-tokens"
+    assert tokens.is_dir()
+    assert (tokens / "SKILL.md").is_file()
+    assert not (paths["root"] / "skills" / "Design Tokens").exists()
 
     after = client.get("/api/skills")
     assert after.status_code == 200
@@ -160,6 +174,33 @@ def test_fake_home_import_list_open_run_deploy(tmp_path: Path, monkeypatch) -> N
     idea_open = client.get("/api/skills/idea-brainstorming")
     assert idea_open.status_code == 200
     assert idea_open.json()["skill"]["name"] == "Idea brainstorming"
+    assert idea_open.json()["skill"]["slug"] == "idea-brainstorming"
+
+    idea_gen = client.post("/api/evals/generate", json={"skill": "idea-brainstorming"})
+    assert idea_gen.status_code == 200
+    idea_checks = idea_gen.json()["checks"] or [
+        {
+            "id": "should-trigger-1",
+            "prompt": "Brainstorm product ideas for a notes app.",
+            "should_trigger": True,
+        }
+    ]
+    idea_run = client.post(
+        "/api/runs",
+        json={
+            "skill": "idea-brainstorming",
+            "checks": idea_checks[:1],
+            "live": False,
+            "demo": True,
+        },
+    )
+    assert idea_run.status_code == 200
+    idea_snap = _wait_run(client, idea_run.json()["id"])
+    assert idea_snap["status"] == "done"
+    assert idea_snap.get("error") in (None, {})
+    assert (idea_snap.get("skill") or idea_snap["report"]["skill"]) == "idea-brainstorming"
+    assert idea_snap["passed"] in {True, False}
+    assert idea_snap["gate_decision"] in {"cleared", "blocked", "pending"}
 
     gen = client.post("/api/evals/generate", json={"skill": "pdf"})
     assert gen.status_code == 200
@@ -195,6 +236,15 @@ def test_fake_home_import_list_open_run_deploy(tmp_path: Path, monkeypatch) -> N
     installed = paths["cursor"] / "pdf"
     assert (installed / "SKILL.md").is_file()
     assert (installed / "evals" / "goldens" / "extract-hello.txt").is_file()
+
+    idea_deploy = client.post(
+        "/api/deploy",
+        json={"target": "cursor", "skill": "idea-brainstorming", "mode": "local"},
+    )
+    assert idea_deploy.status_code == 200, idea_deploy.text
+    idea_installed = paths["cursor"] / "idea-brainstorming"
+    assert (idea_installed / "SKILL.md").is_file()
+    assert "Idea brainstorming" in (idea_installed / "SKILL.md").read_text(encoding="utf-8")
 
     golden = dest / "evals" / "goldens" / "extract-hello.txt"
     if hello and golden.is_file():

@@ -15,23 +15,32 @@ export function asApiError(err: unknown): ApiError {
   return new ApiError("Something went wrong.")
 }
 
+export function matchesSkill(
+  skill: Pick<SkillPayload, "slug" | "id" | "absolute"> | null | undefined,
+  key: string
+): boolean {
+  const needle = key.trim()
+  if (!skill || !needle) {
+    return false
+  }
+  return [skill.slug, skill.id, skill.absolute].some(
+    (value) => (value || "").trim() === needle
+  )
+}
+
 export function isSameSkill(
   current: SkillPayload | null,
   skillId: string,
   fallback?: SkillPayload
 ): boolean {
-  if (!current) {
-    return false
-  }
-  const currentIds = [current.absolute, current.id, current.name].filter(Boolean)
-  if (currentIds.includes(skillId)) {
+  if (matchesSkill(current, skillId)) {
     return true
   }
-  if (!fallback) {
+  if (!current || !fallback) {
     return false
   }
   return Boolean(
-    (fallback.name && fallback.name === current.name) ||
+    (fallback.slug && fallback.slug === current.slug) ||
       (fallback.id && fallback.id === current.id) ||
       (fallback.absolute && fallback.absolute === current.absolute)
   )

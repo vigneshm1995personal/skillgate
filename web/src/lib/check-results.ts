@@ -519,6 +519,9 @@ export function plainAdviceCopy(text?: string | null): string {
   out = out.replace(/\ba good pdf twin\b/gi, "a working copy of this skill")
   out = out.replace(/\bgood pdf twin\b/gi, "a working copy of this skill")
   out = out.replace(/\bthe a working copy\b/gi, "a working copy")
+  out = out.replace(/,?\s*then run `?skillgate check`[^.]*\.?/gi, ".")
+  out = out.replace(/\brun `?skillgate check`[^.]*\.?/gi, "")
+  out = out.replace(/\s*`?skillgate check`\s*/g, " ")
   out = out.replace(
     /Replace the `description:` in the skill/gi,
     "Replace the skill's description"

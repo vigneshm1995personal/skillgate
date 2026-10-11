@@ -22,7 +22,7 @@ export function emptySkillRunSlot(): SkillRunSlot {
 }
 
 export function skillSlotKey(
-  skill?: Pick<SkillPayload, "name"> | string | null
+  skill?: Pick<SkillPayload, "slug" | "id" | "name"> | string | null
 ): string {
   if (!skill) {
     return ""
@@ -30,7 +30,7 @@ export function skillSlotKey(
   if (typeof skill === "string") {
     return skill.trim()
   }
-  return (skill.name || "").trim()
+  return (skill.slug || skill.id || skill.name || "").trim()
 }
 
 export function isTryoutRun(
@@ -91,7 +91,7 @@ export function liveGateRun(slot: SkillRunSlot, skillName?: string | null): RunR
 }
 
 export function deployAllowedForLiveGate(opts: {
-  skill: Pick<SkillPayload, "name"> | null | undefined
+  skill: Pick<SkillPayload, "slug" | "id" | "name"> | null | undefined
   liveGate: RunRecord | null | undefined
   gateRunning: boolean
   mode?: "local" | "cloud" | null
@@ -106,7 +106,7 @@ export function deployAllowedForLiveGate(opts: {
   if (liveGate.status === "running" || liveGate.status === "error") {
     return false
   }
-  const name = skill.name
+  const name = skillSlotKey(skill)
   const runSkill = runSkillName(liveGate)
   if (runSkill && runSkill !== name) {
     return false

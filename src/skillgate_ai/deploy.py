@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import NotRequired, Protocol, TypedDict
 
 from skillgate_ai.errors import DeployError, IngestError
-from skillgate_ai.ingest import Skill, ingest_skill
+from skillgate_ai.ingest import NAME_RE, Skill, folder_slug, ingest_skill
 from skillgate_ai.pack import copy_skill_pack
 
 
@@ -69,17 +69,15 @@ class _PackAdapter:
 
     def install(self, *, skill: Skill, source: Path) -> DeployResult:
         source = source.expanduser().resolve()
-        name = (skill.name or "").strip()
-        if not name:
-            raise DeployError("Skill name is missing.")
-        if source.name != name:
+        name = (skill.name or folder_slug(source) or "").strip()
+        if not NAME_RE.match(name):
             raise DeployError(
-                f"Skill folder {source.name!r} does not match name {name!r}.",
-                hint="The gated folder must match the skill name.",
+                "This skill needs a simple folder name before Install.",
+                hint="Use lowercase letters, numbers, and hyphens.",
             )
         if not source.is_dir() or not (source / "SKILL.md").is_file():
             raise DeployError(
-                "The gated skill folder is gone. Re-run `skillgate check`, then install.",
+                "The gated skill folder is gone. Pass the checks again, then install.",
             )
         dest = (self.skills_root() / name).resolve()
         if source == dest:

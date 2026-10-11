@@ -68,7 +68,7 @@ export function FixtureBindAccordion({
     ? "Add a sample file to this skill to bind completion checks"
     : inherit
       ? names.join(", ")
-      : `Not using pack files: ${names.join(", ")}`
+      : `Not using skill files: ${names.join(", ")}`
 
   return (
     <Accordion defaultValue={[]} id="fixture-bind-accordion">

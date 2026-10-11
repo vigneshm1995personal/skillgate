@@ -176,9 +176,50 @@ describe("runForCheck", () => {
 })
 
 describe("skillSlotKey", () => {
-  it("keys slots by skill name", () => {
+  it("keys slots by folder slug, not the display name", () => {
     expect(skillSlotKey({ name: "pdf" })).toBe("pdf")
     expect(skillSlotKey("csv-clean")).toBe("csv-clean")
+    expect(
+      skillSlotKey({
+        name: "Idea brainstorming",
+        slug: "idea-brainstorming",
+        id: "idea-brainstorming",
+      })
+    ).toBe("idea-brainstorming")
     expect(TRYOUT_LABEL).toContain("doesn't change Deploy")
+  })
+})
+
+describe("display name vs slug identity", () => {
+  it("unlocks Install when the run is stamped with the folder slug", () => {
+    const ideaGreen: RunRecord = {
+      id: "idea-green",
+      status: "done",
+      skill: "idea-brainstorming",
+      harness: "demo",
+      gate_decision: "cleared",
+      report: {
+        skill: "idea-brainstorming",
+        passed_count: 1,
+        task_count: 1,
+        tasks: [],
+        harness: "demo",
+      },
+    }
+    expect(
+      deployAllowedForLiveGate({
+        skill: {
+          name: "Idea brainstorming",
+          slug: "idea-brainstorming",
+          id: "idea-brainstorming",
+        },
+        liveGate: ideaGreen,
+        gateRunning: false,
+        mode: "local",
+      })
+    ).toBe(true)
+    expect(liveGateRun({ ...emptySkillRunSlot(), gate: ideaGreen }, "idea-brainstorming")?.id).toBe(
+      "idea-green"
+    )
   })
 })

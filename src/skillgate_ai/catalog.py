@@ -172,9 +172,17 @@ def import_from_agent_folders(
             continue
         parent = source_dir(source, root=root)
         for skill_dir in _iter_skill_dirs(parent):
-            dest = dest_parent / skill_dir.name
+            slug = folder_slug(skill_dir)
+            dest = dest_parent / slug
             if dest.exists():
-                skipped.append({"name": skill_dir.name, "source": source, "reason": "already here"})
+                skipped.append(
+                    {
+                        "name": skill_dir.name,
+                        "slug": slug,
+                        "source": source,
+                        "reason": "already here",
+                    }
+                )
                 continue
             try:
                 copy_pack(skill_dir, dest, include_goldens=True)
@@ -199,7 +207,7 @@ def import_from_agent_folders(
             imported.append(
                 {
                     "name": loaded.display_name or dest.name,
-                    "slug": dest.name,
+                    "slug": loaded.name or dest.name,
                     "source": source,
                     "warning": loaded.warning,
                 }

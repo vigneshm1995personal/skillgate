@@ -16,6 +16,7 @@ import {
   collectChecksForRun,
   deployLabel,
   isSameSkill,
+  matchesSkill,
   shouldSeedChecks,
   uniqueCheckId,
 } from "@/lib/dashboard-helpers"
@@ -26,6 +27,7 @@ import {
   DEFAULT_EVAL_CONFIG_DRAFT,
   type EvalConfigDraft,
 } from "@/lib/eval-config"
+import { skillSlotKey } from "@/lib/skill-run-state"
 import { useEvalSession } from "@/lib/use-eval-session"
 import { resolvedHarnessName, skillOutputPath } from "@/lib/types"
 import type {
@@ -224,12 +226,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       const targetTab = opts.tab ?? "checks"
       const nextSkill =
         opts.fallbackSkill ||
-        skills.find(
-          (item) =>
-            item.absolute === skillId ||
-            item.id === skillId ||
-            item.name === skillId
-        )
+        skills.find((item) => matchesSkill(item, skillId))
       const sameSkill = isSameSkill(skillRef.current, skillId, opts.fallbackSkill)
       if (!sameSkill) {
         setSkillHistory(null)
@@ -296,11 +293,11 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
           }
           return
         }
-        const hist = await refreshSkillHistory(data.skill.name)
+        const hist = await refreshSkillHistory(skillSlotKey(data.skill))
         if (mySeq !== seedSeq.current) {
           return
         }
-        applySkillHistory(hist, data.skill.name)
+        applySkillHistory(hist, skillSlotKey(data.skill))
         setStage("eval")
       } catch (err) {
         if (mySeq !== seedSeq.current) {
@@ -316,8 +313,8 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
         setEvalTab("skill")
         if (nextSkill) {
           setSkill(nextSkill)
-          const hist = await refreshSkillHistory(nextSkill.name)
-          applySkillHistory(hist, nextSkill.name)
+          const hist = await refreshSkillHistory(skillSlotKey(nextSkill))
+          applySkillHistory(hist, skillSlotKey(nextSkill))
         }
         setIntakeError(
           error.hint ? `${error.message}\n${error.hint}` : error.message
@@ -659,12 +656,12 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
         return
       }
       try {
-        const data = await api.deploy(target, skill.name, "local")
+        const data = await api.deploy(target, skillSlotKey(skill), "local")
         setDeployLast(deployLabel(target))
         const label = deployLabel(target) ?? target
         toast.add({ title: data.note || data.dest || `Installed to ${label}`, type: "success" })
         await Promise.all([
-          refreshSkillHistory(skill.name),
+          refreshSkillHistory(skillSlotKey(skill)),
           refreshWorkspaceHistory(),
           refreshSkills(),
         ])
@@ -681,14 +678,14 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       return
     }
     try {
-      const data = await api.deploy("git", skill.name, "git")
+      const data = await api.deploy("git", skillSlotKey(skill), "git")
       setDeployLast("git")
       toast.add({
         title: data.note || data.url || data.dest || "Published to git",
         type: "success",
       })
       await Promise.all([
-        refreshSkillHistory(skill.name),
+        refreshSkillHistory(skillSlotKey(skill)),
         refreshWorkspaceHistory(),
         refreshSkills(),
       ])

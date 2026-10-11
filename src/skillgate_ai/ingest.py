@@ -165,7 +165,7 @@ def _ingest_lenient(folder: Path) -> Skill:
         )
     try:
         text = skill_md.read_text(encoding="utf-8")
-    except OSError:
+    except (OSError, UnicodeError):
         return Skill(
             path=folder,
             name=slug,
