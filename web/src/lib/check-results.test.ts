@@ -171,7 +171,7 @@ describe("scoredByLine", () => {
         task_count: 1,
         tasks: [passTask],
       })
-    ).toBe("Scored by OpenAI")
+    ).toBe("Scored by OpenAI Decisions")
   })
 
   it("hides leftover skip-judge copy from older JSONL rows", () => {
@@ -205,7 +205,7 @@ describe("scoredByLine", () => {
         status: "completed",
         answers: passTask.judge?.answers,
       })
-    ).toBe("Scored by OpenAI")
+    ).toBe("Scored by OpenAI Decisions")
     expect(
       scoredByFromJudge({
         provider: "openai",
@@ -215,7 +215,7 @@ describe("scoredByLine", () => {
         status: "completed",
         answers: passTask.judge?.answers,
       })
-    ).toBe("Scored by OpenAI")
+    ).toBe("Scored by OpenAI Decisions")
   })
 
   it("does not show gateway plumbing or raw model ids", () => {
@@ -227,7 +227,7 @@ describe("scoredByLine", () => {
       status: "completed",
       answers: passTask.judge?.answers,
     })
-    expect(line).toBe("Scored by OpenAI")
+    expect(line).toBe("Scored by OpenAI Decisions")
     expect(line).not.toMatch(/gateway|openai\/|your key/i)
     expect(
       scoredByLine({

@@ -312,7 +312,7 @@ function customerLabelFromRaw(raw: string, harness?: string | null): string {
   }
   const modelHit = raw.match(/gpt-[\w.-]+/i)
   const model = modelHit ? friendlyModelName(modelHit[0]) : ""
-  const scored = looksOpenAIScorer(raw) ? "Scored by OpenAI" : ""
+  const scored = looksOpenAIScorer(raw) ? "Scored by OpenAI Decisions" : ""
   if (model && scored) {
     return `${model} · ${scored}`
   }
@@ -339,7 +339,7 @@ export function customerConfigLabel(
     (judge?.provider || "").toLowerCase() === "openai" ||
     looksOpenAIScorer(judge?.display_name)
   const fromLabel = looksOpenAIScorer(config.label)
-  const scored = fromJudge || fromLabel ? "Scored by OpenAI" : ""
+  const scored = fromJudge || fromLabel ? "Scored by OpenAI Decisions" : ""
   if (model && scored) {
     return `${model} · ${scored}`
   }

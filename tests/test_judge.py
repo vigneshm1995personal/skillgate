@@ -2,13 +2,18 @@ from __future__ import annotations
 
 import pytest
 
-from skillgate_ai.config import LLMConfig
+from skillgate_ai.config import (
+    DEFAULT_GATEWAY_MODEL,
+    DEFAULT_JUDGE_BACKEND,
+    DEFAULT_JUDGE_MODEL,
+    LLMConfig,
+)
 from skillgate_ai.errors import MissingLLMKeyError
 from skillgate_ai.engine import _live_verdict, _maybe_explain_fail
 from skillgate_ai.output_match import REASON_MISSING_OUTPUT
 from skillgate_ai.judge import SkipJudge, judge_stamp, resolve_judge
 from skillgate_ai.judge_bank import LOW_CONFIDENCE_WARNING
-from skillgate_ai.judge_openai import OutcomeJudge, make_openai_judge
+from skillgate_ai.judge_openai import GATEWAY_DECISIONS_MODEL, OutcomeJudge, make_openai_judge
 
 
 def _cfg(**overrides: object) -> LLMConfig:
@@ -116,6 +121,34 @@ def test_openai_key_keeps_judge_on_openai_decisions() -> None:
     assert judge.backend.api_key == "sk-test"
     assert judge.backend.base_url.endswith("api.openai.com/v1")
     assert judge.backend.model == "gpt-6-luna"
+
+
+def test_default_scoring_uses_decisions_not_the_task_model() -> None:
+    assert DEFAULT_JUDGE_BACKEND == "decisions"
+    assert DEFAULT_JUDGE_MODEL == "gpt-6-luna"
+    assert DEFAULT_GATEWAY_MODEL == "openai/gpt-4o-mini"
+
+    direct = resolve_judge(
+        _cfg(openai_api_key="sk-test", gateway_model=DEFAULT_GATEWAY_MODEL),
+        harness_name="llm",
+    )
+    assert isinstance(direct, OutcomeJudge)
+    assert direct.backend.name == "decisions"
+    assert direct.backend.model == DEFAULT_JUDGE_MODEL
+    assert direct.backend.model != DEFAULT_GATEWAY_MODEL
+
+    gateway = resolve_judge(
+        _cfg(
+            gateway_api_key="gw-test",
+            gateway_base_url="https://ai-gateway.vercel.sh/v1",
+            gateway_model=DEFAULT_GATEWAY_MODEL,
+        ),
+        harness_name="llm",
+    )
+    assert isinstance(gateway, OutcomeJudge)
+    assert gateway.backend.name == "decisions"
+    assert gateway.backend.model == GATEWAY_DECISIONS_MODEL
+    assert gateway.backend.model != DEFAULT_GATEWAY_MODEL
 
 
 def test_judge_stamp_has_no_secret() -> None:

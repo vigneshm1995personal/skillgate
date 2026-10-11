@@ -274,7 +274,7 @@ export function customerScoredBy(line: string): string {
     return text
   }
   if (/openai/i.test(text) || /via (?:vercel )?ai gateway/i.test(text)) {
-    return "Scored by OpenAI"
+    return "Scored by OpenAI Decisions"
   }
   if (/checks scored/i.test(text)) {
     return "Scored by Checks"
@@ -295,7 +295,7 @@ export function scoredByFromJudge(judge: JudgeResult | null | undefined): string
     return ""
   }
   if (isOpenAIJudge(judge)) {
-    return "Scored by OpenAI"
+    return "Scored by OpenAI Decisions"
   }
   const provider = trimText(judge.provider).toLowerCase()
   const model = trimText(judge.model).toLowerCase()

@@ -273,7 +273,6 @@ def scored_by_line(report: SuiteReport) -> str:
     openai_scored = False
     openai_reason: str | None = None
     openai_failed = False
-    openai_name = ""
     saw_skip = False
     for task in report.tasks:
         judge = task.judge if isinstance(task.judge, dict) else None
@@ -285,8 +284,6 @@ def scored_by_line(report: SuiteReport) -> str:
         if provider == "openai" or display.startswith("OpenAI"):
             if status == "completed" and _has_choice_answers(judge):
                 openai_scored = True
-                if display.strip():
-                    openai_name = display.strip()
             elif status == "error":
                 openai_failed = True
                 reasons = [
@@ -297,7 +294,7 @@ def scored_by_line(report: SuiteReport) -> str:
         if status == "skip" or provider == "skip":
             saw_skip = True
     if openai_scored:
-        return f"{openai_name or 'OpenAI (your key)'} scored this run."
+        return "Scored by OpenAI Decisions"
     if openai_failed:
         extra = openai_reason or "OpenAI scoring failed."
         return f"OpenAI couldn't score this run. {extra}"

@@ -105,7 +105,32 @@ def test_scored_by_openai_with_answers() -> None:
             )
         ],
     )
-    assert scored_by_line(report) == "OpenAI (your key) scored this run."
+    assert scored_by_line(report) == "Scored by OpenAI Decisions"
+    text = format_cli(report)
+    assert "Scored by OpenAI Decisions" in text
+    assert "OpenAI (your key) scored this run." not in text
+    gateway = _report(
+        harness="llm",
+        config={
+            "judge": {
+                "provider": "openai",
+                "display_name": "OpenAI Decisions via Vercel AI Gateway (your key)",
+            }
+        },
+        tasks=[
+            _task(
+                judge={
+                    "status": "completed",
+                    "provider": "openai",
+                    "display_name": "OpenAI Decisions via Vercel AI Gateway (your key)",
+                    "answers": {"task_completion": {"choice": "Fully completed"}},
+                }
+            )
+        ],
+    )
+    assert scored_by_line(gateway) == "Scored by OpenAI Decisions"
+    assert "Scored by OpenAI Decisions" in format_cli(gateway)
+    assert "via Vercel" not in scored_by_line(gateway)
 
 
 def test_happened_never_blank_on_pass() -> None:

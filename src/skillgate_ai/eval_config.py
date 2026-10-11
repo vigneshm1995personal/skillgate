@@ -376,7 +376,7 @@ def customer_config_label(
     display = str(judge.get("display_name") or "")
     provider = str(judge.get("provider") or "")
     if provider.lower() == "openai" or "openai" in display.lower():
-        parts.append("Scored by OpenAI")
+        parts.append("Scored by OpenAI Decisions")
     if parts:
         return " · ".join(parts)
     if harness:

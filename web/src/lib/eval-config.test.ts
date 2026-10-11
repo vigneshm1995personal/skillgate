@@ -194,7 +194,7 @@ describe("configLabel", () => {
     expect(customer).not.toMatch(/via gateway|openai\//)
   })
 
-  it("shows GPT-4o mini · Scored by OpenAI on the skill Runs table", () => {
+  it("shows GPT-4o mini · Scored by OpenAI Decisions on the skill Runs table", () => {
     expect(
       customerConfigLabel({
         harness: "llm",
@@ -209,7 +209,17 @@ describe("configLabel", () => {
             "OpenAI Decisions via Vercel AI Gateway (your key)",
         },
       })
-    ).toBe("GPT-4o mini · Scored by OpenAI")
+    ).toBe("GPT-4o mini · Scored by OpenAI Decisions")
+    expect(
+      customerConfigLabel({
+        harness: "llm",
+        model: "gpt-4o-mini",
+        judge: {
+          provider: "openai",
+          display_name: "OpenAI (your key)",
+        },
+      })
+    ).toBe("GPT-4o mini · Scored by OpenAI Decisions")
   })
 
   it("does not treat an openai/ model id as the scorer", () => {

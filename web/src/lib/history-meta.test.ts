@@ -31,7 +31,7 @@ describe("historyMeta", () => {
       config_label:
         "LLM · openai/gpt-4o-mini via gateway · 300s · OpenAI Decisions via Vercel AI Gateway (your key)",
     })
-    expect(meta.config).toBe("GPT-4o mini · Scored by OpenAI")
+    expect(meta.config).toBe("GPT-4o mini · Scored by OpenAI Decisions")
     expect(meta.configRaw).toContain("openai/gpt-4o-mini")
     expect(meta.configRaw).toContain("via gateway")
   })

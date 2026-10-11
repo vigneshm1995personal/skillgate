@@ -346,10 +346,23 @@ def test_customer_config_label_is_plain_model_and_scorer() -> None:
     assert "openai/gpt-4o-mini" in raw
     assert "via gateway" in raw
     customer = customer_config_label(run)
-    assert customer == "GPT-4o mini · Scored by OpenAI"
+    assert customer == "GPT-4o mini · Scored by OpenAI Decisions"
     assert "via gateway" not in customer
     assert "openai/" not in customer
     assert "300s" not in customer
+    direct = customer_config_label(
+        EvalRunConfig(
+            harness="llm",
+            model="gpt-4o-mini",
+            judge={
+                "provider": "openai",
+                "backend": "decisions",
+                "display_name": "OpenAI (your key)",
+                "model": "gpt-6-luna",
+            },
+        )
+    )
+    assert direct == "GPT-4o mini · Scored by OpenAI Decisions"
 
 
 def test_from_dict_drops_judge_api_key() -> None:
