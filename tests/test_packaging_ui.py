@@ -40,3 +40,15 @@ def test_bundle_copies_built_dist(tmp_path: Path) -> None:
     assert (dest / "index.html").is_file()
     assert "Skill Gate" in (dest / "index.html").read_text(encoding="utf-8")
     assert (dest / "assets" / "app.js").is_file()
+
+
+def test_bundle_is_optional_without_web(tmp_path: Path) -> None:
+    module = _load_build()
+    out = module.bundle_web_static(
+        dest=tmp_path / "web_static",
+        web_dist=tmp_path / "dist",
+        web_dir=tmp_path / "missing-web",
+        required=False,
+    )
+    assert out is None
+    assert module.web_tree_present(tmp_path / "missing-web") is False

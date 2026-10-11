@@ -20,6 +20,8 @@ def test_dockerfile_is_cli_not_serve() -> None:
         assert f"ENV {needle}" not in text
     assert "COPY .env" not in text
     assert "COPY .pypirc" not in text
+    assert "COPY web" not in text
+    assert "pnpm" not in text.lower()
 
 
 def test_compose_and_dockerignore_exist() -> None:
