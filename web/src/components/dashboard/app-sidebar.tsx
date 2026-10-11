@@ -57,22 +57,27 @@ export function AppSidebar({
   return (
     <aside
       className={cn(
-        "flex h-full w-60 shrink-0 flex-col border-r bg-sidebar text-sidebar-foreground",
+        "flex h-full w-60 shrink-0 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground",
         className
       )}
     >
-      <div className="flex items-center gap-2.5 px-4 py-5">
+      <div className="sg-ink-bar" />
+      <div className="flex items-center gap-2.5 px-4 py-6">
         <img
           alt=""
           src="/skill-gate-mark.png"
-          className="size-8 shrink-0 rounded-lg object-contain ring-1 ring-black/10 dark:ring-white/10"
+          className="size-8 shrink-0 rounded-sm object-contain ring-1 ring-white/20"
         />
         <div className="min-w-0">
-          <p className="truncate text-sm font-medium tracking-tight">Skill Gate</p>
-          <p className="truncate text-xs text-muted-foreground">Evaluate, Gate, Deploy</p>
+          <p className="truncate font-display text-[1.05rem] font-medium tracking-tight">
+            Skill Gate
+          </p>
+          <p className="truncate text-[11px] tracking-[0.08em] text-sidebar-foreground/70 uppercase">
+            Eval · Gate · Deploy
+          </p>
         </div>
       </div>
-      <Separator />
+      <Separator className="bg-sidebar-border" />
       <ScrollArea className="min-h-0 flex-1">
         <div className="flex flex-col gap-0.5 px-2 pt-3">
           {slotOn(status, "analyticsHome") ? (
@@ -146,9 +151,9 @@ export function AppSidebar({
       </ScrollArea>
       <div className="mt-auto flex flex-col gap-3 p-3">
         {skill ? (
-          <div className="rounded-xl border bg-background p-3">
+          <div className="rounded-sm border border-sidebar-border bg-sidebar-accent/60 p-3">
             <p className="text-sm font-medium">{skill.name}</p>
-            <p className="mt-1 text-xs text-muted-foreground">
+            <p className="mt-1 text-xs text-sidebar-foreground/70">
               {gateRunning || liveGateResult?.status === "running"
                 ? `Evaluating — ${liveGateResult?.completed_count ?? 0}/${liveGateResult?.task_count ?? liveGateResult?.report?.task_count ?? "?"} done`
                 : "Deploy follows this skill’s last gate."}

@@ -1,7 +1,7 @@
 import { isLiveHarness, type Check, type RunRecord, type SkillPayload } from "@/lib/types"
 
 /** Shown on single-check try-outs. Never the Deploy source of record. */
-export const TRYOUT_LABEL = "Single check — doesn't change Deploy"
+export const TRYOUT_LABEL = "Single check — doesn't change Install"
 
 export type RunPurpose = "gate" | "tryout"
 

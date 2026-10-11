@@ -1,16 +1,16 @@
 /* Skill Gate — Mockup F minimal linear story */
 .root {
-  --sg-bg: #050506;
-  --sg-bg-elevated: #0a0a0c;
-  --sg-card: #101014;
-  --sg-card-border: rgba(255, 255, 255, 0.08);
-  --sg-text: #f4f4f5;
-  --sg-muted: #8b8b96;
-  --sg-dim: #5c5c68;
-  --sg-green: #4ade80;
-  --sg-green-dim: rgba(74, 222, 128, 0.14);
-  --sg-red: #f87171;
-  --sg-red-dim: rgba(248, 113, 113, 0.12);
+  --sg-bg: #2a1c16;
+  --sg-bg-elevated: #36241c;
+  --sg-card: #3f2c22;
+  --sg-card-border: rgba(250, 237, 214, 0.12);
+  --sg-text: #faedd6;
+  --sg-muted: #d4b89a;
+  --sg-dim: #b08968;
+  --sg-green: #6fbf8a;
+  --sg-green-dim: rgba(111, 191, 138, 0.16);
+  --sg-red: #c45c45;
+  --sg-red-dim: rgba(196, 92, 69, 0.16);
   --sg-mono: "SF Mono", "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
 
   min-height: 100svh;

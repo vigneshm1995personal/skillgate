@@ -608,6 +608,7 @@ export type FeatureSlots = {
 
 export type StatusPayload = {
   version: string
+  build?: string | null
   mode?: ProductMode
   slots?: FeatureSlots
   has_key: boolean

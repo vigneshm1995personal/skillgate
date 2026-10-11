@@ -1,3 +1,4 @@
+import { isLegacyRunCopy, OLDER_RUN_LABEL } from "@/lib/eval-config"
 import { pathOpenedCaption } from "@/lib/metrics-label"
 import type { JudgeAnswer, JudgeResult, Report, TaskResult } from "@/lib/types"
 
@@ -286,7 +287,7 @@ export function scoredByLine(
 ): string {
   const stamped = trimText(report?.scored_by)
   if (stamped) {
-    return stamped
+    return isLegacyRunCopy(stamped) ? OLDER_RUN_LABEL : stamped
   }
   for (const task of report?.tasks ?? []) {
     const line = scoredByFromJudge(task.judge)
@@ -480,7 +481,7 @@ export function customerGateCopy(text: string): string {
     return "This run didn't include every check from the saved Dataset."
   }
   if (/gate is red/i.test(value) || /clear gate green/i.test(value)) {
-    return "Pass the checks to unlock Install."
+    return "Get a passing run to unlock Install."
   }
   if (/gate is green/i.test(value)) {
     return "Checks passed — Install is unlocked."

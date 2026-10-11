@@ -246,6 +246,20 @@ export function stampRunConfig(
   return reportConfig || runConfig || null
 }
 
+export const OLDER_RUN_LABEL = "Older run (before live-only checks)"
+
+export function isLegacyRunCopy(
+  text?: string | null,
+  harness?: string | null
+): boolean {
+  const h = (harness || "").toLowerCase()
+  if (h === "skip" || h === "demo") {
+    return true
+  }
+  const lower = (text || "").toLowerCase()
+  return lower.includes("checker") || lower.includes("live model")
+}
+
 function isStaleAutoLabel(label: string, harness?: string): boolean {
   if (!LIVE_HARNESS_NAMES.has((harness || "").toLowerCase())) {
     return false
@@ -256,6 +270,9 @@ function isStaleAutoLabel(label: string, harness?: string): boolean {
 export function configLabel(config?: EvalRunConfig | null): string {
   if (!config) {
     return ""
+  }
+  if (isLegacyRunCopy(config.label, config.harness)) {
+    return OLDER_RUN_LABEL
   }
   if (config.label && !isStaleAutoLabel(config.label, config.harness)) {
     return collapseDuplicateTimeout(

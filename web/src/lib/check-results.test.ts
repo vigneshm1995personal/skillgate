@@ -162,6 +162,27 @@ describe("scoredByLine", () => {
     ).toBe("OpenAI (your key) scored this run.")
   })
 
+  it("hides leftover skip-judge copy from older JSONL rows", () => {
+    expect(
+      scoredByLine({
+        scored_by: "This is not a live model.",
+        skill: "pdf",
+        passed_count: 1,
+        task_count: 1,
+        tasks: [passTask],
+      })
+    ).toBe("Older run (before live-only checks)")
+    expect(
+      scoredByLine({
+        scored_by: "Built-in checker scored this run.",
+        skill: "pdf",
+        passed_count: 1,
+        task_count: 1,
+        tasks: [passTask],
+      })
+    ).toBe("Older run (before live-only checks)")
+  })
+
   it("maps skip scoring without hard-coding the UI to one scorer", () => {
     expect(scoredByFromJudge(passTask.judge)).toBe(
       "Checks scored this run."
@@ -470,7 +491,7 @@ describe("customerGateCopy", () => {
       customerGateCopy("This run used draft checks, not the saved Dataset.")
     ).toBe("This run used the current checks, which aren't the saved Dataset yet.")
     expect(customerGateCopy("Gate is red — Deploy is blocked.")).toBe(
-      "Pass the checks to unlock Install."
+      "Get a passing run to unlock Install."
     )
     expect(
       customerGateCopy("Case extract-hello is missing golden file evals/goldens/extract-hello.txt.")

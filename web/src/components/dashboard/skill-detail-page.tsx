@@ -299,7 +299,7 @@ export function SkillDetailPage({ name }: { name: string }) {
         <CardHeader>
             <CardTitle>Runs</CardTitle>
             <CardDescription>
-            Full runs decide the gate. Single checks are labeled and excluded from the last run.
+            A complete run sets Install. Running one example by itself is labeled and doesn't count.
             </CardDescription>
         </CardHeader>
         <CardContent>

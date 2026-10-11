@@ -186,7 +186,7 @@ describe("skillSlotKey", () => {
         id: "idea-brainstorming",
       })
     ).toBe("idea-brainstorming")
-    expect(TRYOUT_LABEL).toContain("doesn't change Deploy")
+    expect(TRYOUT_LABEL).toContain("doesn't change Install")
   })
 })
 

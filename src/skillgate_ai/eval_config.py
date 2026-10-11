@@ -309,6 +309,39 @@ def harness_display_name(pref: str | None, resolved: str | None = None) -> str:
     return (pref or resolved or "Auto").strip() or "Auto"
 
 
+OLDER_RUN_LABEL = "Older run (before live-only checks)"
+
+
+def is_legacy_run_config(
+    run: EvalRunConfig | dict[str, Any] | None, harness: str | None = None
+) -> bool:
+    cfg = coerce_eval_config(run)
+    key = (harness or (cfg.harness if cfg else "") or "").strip().lower()
+    if key in {"skip", "demo"}:
+        return True
+    stored = ""
+    provider = ""
+    if isinstance(run, dict):
+        stored = str(run.get("label") or "")
+        judge = run.get("judge") if isinstance(run.get("judge"), dict) else {}
+        provider = str(judge.get("provider") or "")
+    elif cfg is not None:
+        judge = cfg.judge or {}
+        provider = str(judge.get("provider") or "")
+    blob = f"{stored} {provider}".lower()
+    return "checker" in blob or provider.lower() == "skip"
+
+
+def customer_config_label(
+    run: EvalRunConfig | dict[str, Any] | None, harness: str | None = None
+) -> str:
+    if is_legacy_run_config(run, harness):
+        return OLDER_RUN_LABEL
+    if run is None and harness:
+        return harness_display_name(harness)
+    return config_label(run)
+
+
 def config_label(run: EvalRunConfig | dict[str, Any] | None) -> str:
     cfg = coerce_eval_config(run)
     if cfg is None:

@@ -62,6 +62,16 @@ def test_pack_file_outside_skill_is_400(tmp_path: Path, monkeypatch) -> None:
     assert not (tmp_path / "outside.txt").exists()
 
 
+def test_status_includes_build_for_qa(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("SKILLGATE_BUILD", "deadbeefcafebabe")
+    client = _client(tmp_path, monkeypatch)
+    data = client.get("/api/status").json()
+    from skillgate_ai import __version__
+
+    assert data["version"] == __version__
+    assert data["build"] == "deadbeefcafe"
+
+
 def test_status_local_hides_paid_slots(tmp_path: Path, monkeypatch) -> None:
     client = _client(tmp_path, monkeypatch)
     res = client.get("/api/status")
@@ -303,7 +313,7 @@ def test_zip_keeps_valid_skill_and_drops_traversal_members(
 def test_local_gate_tryout_stays_pending() -> None:
     assert local_gate(True, status="done", tryout=True) == (
         "pending",
-        "Single-check runs do not unlock Deploy.",
+        "Single-check runs do not unlock Install.",
     )
     row = history_row_to_run(
         {"run_id": "try-1", "passed": True, "report": {"tryout": True, "task_count": 1}},

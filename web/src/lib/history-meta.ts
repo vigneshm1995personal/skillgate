@@ -1,5 +1,9 @@
 import { deployLabel } from "@/lib/dashboard-helpers"
-import { harnessDisplayName } from "@/lib/eval-config"
+import {
+  harnessDisplayName,
+  isLegacyRunCopy,
+  OLDER_RUN_LABEL,
+} from "@/lib/eval-config"
 import type { TimelineItem } from "@/lib/types"
 
 export function historyMeta(
@@ -21,10 +25,13 @@ export function historyMeta(
   }
   const skill = item.skill || "—"
   const version = item.semver ? `v${item.semver}` : ""
-  const config =
+  const rawConfig =
     item.config_label ||
     harnessDisplayName(item.harness || "", item.harness || "") ||
     "—"
+  const config = isLegacyRunCopy(rawConfig, item.harness)
+    ? OLDER_RUN_LABEL
+    : rawConfig
   const fingerprint = item.config_fingerprint || item.hash || ""
   return { skill, version, config, fingerprint }
 }

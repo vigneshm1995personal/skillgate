@@ -56,7 +56,7 @@ export function EvalCheckingPanel({
 }) {
   return (
     <div className="flex flex-col gap-2">
-      <p className="font-display text-4xl font-medium tracking-tight">
+      <p className="font-display text-5xl font-medium tracking-tight">
         Checking
       </p>
       <div className={cn("eval-check-progress", !total && "is-busy")}>
@@ -70,7 +70,11 @@ export function EvalCheckingPanel({
           }
         />
       </div>
-      <p className="text-sm text-muted-foreground" id="run-progress">
+      <p
+        className="text-sm text-muted-foreground"
+        id="run-progress"
+        aria-live="polite"
+      >
         {total ? `${completed}/${total} checks` : "Running your checks"}
       </p>
       <div className="flex flex-wrap items-center gap-2">
@@ -138,7 +142,7 @@ export function EvalErrorPanel({
             {stampLine}
           </p>
         ) : null}
-        <p className="mt-2">Pass the checks to unlock Install.</p>
+        <p className="mt-2">Get a passing run to unlock Install.</p>
       </AlertDescription>
     </Alert>
   )
@@ -180,7 +184,7 @@ export function EvalPassFailPanel({
         <EvalResultMark kind={kind} mode={mode} />
         <p
           className={cn(
-            "font-display text-4xl font-medium tracking-tight",
+            "font-display text-5xl font-medium tracking-tight",
             kind === "pass" ? "text-success" : "text-destructive"
           )}
         >
@@ -242,7 +246,7 @@ export function gateCoverageLine(
     return "Checks passed — Install is unlocked."
   }
   if (reportPassed === true && !isLiveHarness(harness)) {
-    return "Pass the checks to unlock Install."
+    return "Get a passing run to unlock Install."
   }
   if (reportPassed === true && isLiveHarness(harness)) {
     return (
@@ -254,10 +258,10 @@ export function gateCoverageLine(
     return (
       lastResult.gate_reason ||
       lastResult.regression?.reason ||
-      "Pass the checks to unlock Install."
+      "Get a passing run to unlock Install."
     )
   }
-  return "Pass the checks to unlock Install."
+  return "Get a passing run to unlock Install."
 }
 
 function isRegressionCopy(reason?: string | null): boolean {

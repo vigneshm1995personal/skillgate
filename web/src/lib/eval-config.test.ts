@@ -133,6 +133,19 @@ describe("configLabel", () => {
     )
   })
 
+  it("renders leftover skip-judge labels as an older run", () => {
+    expect(
+      configLabel({
+        label: "Built-in checker · 300s",
+        harness: "skip",
+        timeout_effective: 300,
+      })
+    ).toBe("Older run (before live-only checks)")
+    expect(configLabel({ harness: "demo", timeout_effective: 300 })).toBe(
+      "Older run (before live-only checks)"
+    )
+  })
+
   it("does not alias a removed demo harness to Auto", () => {
     expect(harnessDisplayName("demo")).not.toBe("Auto")
     expect(configLabel({ harness: "demo" })).not.toBe("Auto")

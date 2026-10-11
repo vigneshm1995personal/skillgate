@@ -18,6 +18,10 @@ const CUSTOMER_DENY = [
   "pack hash",
   "semver + pack hash",
   "built-in checker",
+  "This is not a live model",
+  "Full runs decide the gate",
+  "not the live Deploy gate",
+  "Pass the checks to unlock Install.",
 ] as const
 
 const componentsRoot = join(dirname(fileURLToPath(import.meta.url)), "../components")
@@ -56,6 +60,17 @@ describe("skill run rows", () => {
     expect(src).toMatch(/tabIndex=\{run\.id \? 0/)
     expect(src).toMatch(/onKeyDown/)
     expect(src).toMatch(/event\.key !== "Enter"/)
+  })
+})
+
+describe("settings footer", () => {
+  it("shows the package version and a build id for QA", () => {
+    const src = readFileSync(
+      join(componentsRoot, "dashboard/settings-page.tsx"),
+      "utf8"
+    )
+    expect(src).toMatch(/status\?\.version/)
+    expect(src).toMatch(/status\?\.build/)
   })
 })
 

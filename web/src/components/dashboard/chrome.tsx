@@ -17,12 +17,10 @@ export function PageHeader({
 }) {
   return (
     <div className="flex flex-wrap items-start justify-between gap-4">
-      <div className="flex max-w-2xl flex-col gap-2">
-        <h1 className="font-heading text-3xl font-medium tracking-tight">
-          {title}
-        </h1>
+      <div className="flex max-w-2xl flex-col gap-3">
+        <h1 className="sg-page-title">{title}</h1>
         {description ? (
-          <p className="text-base text-pretty text-muted-foreground">
+          <p className="max-w-xl text-base text-pretty text-muted-foreground">
             {description}
           </p>
         ) : null}
@@ -138,10 +136,10 @@ export function NavRow({
       id={id}
       onClick={onClick}
       className={cn(
-        "flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors",
+        "flex w-full items-center gap-2.5 rounded-sm px-3 py-2 text-sm transition-colors",
         active
           ? "bg-sidebar-accent font-medium text-sidebar-accent-foreground"
-          : "text-sidebar-foreground hover:bg-sidebar-accent/70"
+          : "text-sidebar-foreground/85 hover:bg-sidebar-accent/80 hover:text-sidebar-foreground"
       )}
       aria-current={active ? "page" : undefined}
     >

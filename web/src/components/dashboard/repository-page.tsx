@@ -135,7 +135,7 @@ export function RepositoryPage() {
         description={
           isLocalMode(status)
             ? "Skills in this project. Connect Cursor, Codex, or Claude to import. Open one to read SKILL.md. Run never starts until you press it."
-            : "Every skill on disk, with last gate, runs, versions, and deploys. Last run is the latest full run; single checks don't count."
+            : "Every skill on disk, with last gate, runs, versions, and deploys. Last run is the last complete run."
         }
         action={
           <div className="flex flex-wrap gap-2">
@@ -206,7 +206,7 @@ export function RepositoryPage() {
                 <EmptyMedia variant="icon">
                   <FolderIcon />
                 </EmptyMedia>
-                <EmptyTitle>No skills in the repository</EmptyTitle>
+                <EmptyTitle>No skills yet</EmptyTitle>
                 <EmptyDescription>
                   Connect Cursor, Codex, or Claude, or paste a SKILL.md on Evaluate.
                 </EmptyDescription>
@@ -224,7 +224,7 @@ export function RepositoryPage() {
                   <TableHead>Gate</TableHead>
                   <TableHead>Runs</TableHead>
                   <TableHead>Versions</TableHead>
-                  <TableHead title="Latest full run. Single checks are excluded.">
+                  <TableHead title="Last complete run">
                     Last run
                   </TableHead>
                   <TableHead />

@@ -87,10 +87,10 @@ export function DeployPage() {
   const git = status?.deploy?.git
   const gitConfigured = Boolean(git?.configured)
 
-  let note = "Pick a skill on Evaluate, then pass the checks to unlock Install."
+  let note = "Pick a skill on Evaluate, then get a passing run to unlock Install."
   let title = deployAllowed ? "Ready" : "Blocked"
   if (!skill) {
-    note = "Pick a skill on Evaluate. Pass the checks to unlock Install."
+    note = "Pick a skill on Evaluate. Get a passing run to unlock Install."
   } else if (deployAllowed && lastDeploy?.mode === "git" && (lastDeploy.url || lastDeploy.dest_label || lastDeploy.dest_path)) {
     note = lastDeploy.url
       ? `Published ${skillName} to git.`
@@ -113,11 +113,11 @@ export function DeployPage() {
     !isLiveHarness(last.report?.harness || last.harness) &&
     status?.mode !== "local"
   ) {
-    note = `Demo runs do not unlock Deploy. Press Start for ${skillName}.`
+    note = `Demo runs do not unlock Install. Press Start for ${skillName}.`
   } else if (deployLast) {
-    note = `Last install: ${deployLast}. Pass the checks to unlock Install.`
+    note = `Last install: ${deployLast}. Get a passing run to unlock Install.`
   } else if (skill) {
-    note = "Pass the checks to unlock Install."
+    note = "Get a passing run to unlock Install."
   }
 
   const stampMetrics =

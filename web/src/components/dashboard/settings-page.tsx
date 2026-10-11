@@ -272,6 +272,10 @@ export function SettingsPage() {
           ) : null}
         </CardContent>
       </Card>
+      <p className="text-xs text-muted-foreground" id="settings-build">
+        Skill Gate {status?.version || "0.5.0"}
+        {status?.build ? ` · ${status.build}` : ""}
+      </p>
     </div>
   )
 }

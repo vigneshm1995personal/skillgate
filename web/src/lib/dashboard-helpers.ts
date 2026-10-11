@@ -109,14 +109,24 @@ export function collectChecksForRun(
   checks: Check[],
   skill: SkillPayload | null
 ): Check[] {
-  return checks.map((check, index) => ({
-    id: check.id || `check-${index + 1}`,
-    prompt: check.prompt,
-    should_trigger: check.should_trigger !== false,
-    output_path: check.output_path || (check.contains ? skillOutputPath(skill) : null),
-    contains: check.contains || null,
-    min_pages: check.min_pages || null,
-    files: check.files || [],
-    needs_upload: Boolean(check.needs_upload),
-  }))
+  return checks.map((check, index) => {
+    const goldenPath = (check.golden_path || "").trim() || null
+    const hasExpected = Boolean(
+      (check.contains || "").toString().trim() || goldenPath
+    )
+    return {
+      ...check,
+      id: check.id || `check-${index + 1}`,
+      prompt: check.prompt,
+      should_trigger: check.should_trigger !== false,
+      output_path:
+        check.output_path || (hasExpected ? skillOutputPath(skill) : null),
+      contains: check.contains || null,
+      min_pages: check.min_pages || null,
+      files: check.files || [],
+      needs_upload: Boolean(check.needs_upload),
+      golden_path: goldenPath,
+      golden_kind: check.golden_kind || null,
+    }
+  })
 }

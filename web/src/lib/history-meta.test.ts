@@ -22,4 +22,31 @@ describe("historyMeta", () => {
       }).config
     ).toBe("Install to Cursor")
   })
+
+  it("renders leftover skip-judge rows as an older run", () => {
+    expect(
+      historyMeta({
+        kind: "run",
+        skill: "pdf",
+        harness: "skip",
+        config_label: "Skip · 300s",
+      }).config
+    ).toBe("Older run (before live-only checks)")
+    expect(
+      historyMeta({
+        kind: "run",
+        skill: "pdf",
+        harness: "llm",
+        config_label: "Built-in checker · 300s",
+      }).config
+    ).toBe("Older run (before live-only checks)")
+    expect(
+      historyMeta({
+        kind: "run",
+        skill: "pdf",
+        harness: "demo",
+        config_label: "Demo · 300s",
+      }).config
+    ).toBe("Older run (before live-only checks)")
+  })
 })

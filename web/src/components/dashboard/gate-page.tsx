@@ -264,20 +264,20 @@ export function GatePage({ embedded = false }: { embedded?: boolean }) {
               <CardTitle>Result</CardTitle>
               <CardDescription>
                 {viewingHistorical
-                  ? `Historical run ${lastResult?.id} — not the live Deploy gate.`
-                  : `Last eval for ${skill?.name ?? "the selected skill"} decides Deploy.`}
+                  ? `This is an older run. Install still follows the latest result.`
+                  : `The latest result for ${skill?.name ?? "the selected skill"} sets Install.`}
               </CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col gap-4" id="gate">
               {viewingHistorical ? (
                 <Alert>
-                  <AlertTitle>Historical run</AlertTitle>
+                  <AlertTitle>Older run</AlertTitle>
                   <AlertDescription>
                     Showing {lastResult?.id}
                     {lastResult?.created_at
                       ? ` · ${lastResult.created_at.replace("T", " ").replace("+00:00", " UTC")}`
                       : ""}
-                    . Live Deploy still follows the skill&apos;s latest gate.
+                    . Install still follows the latest result.
                   </AlertDescription>
                 </Alert>
               ) : null}
@@ -335,7 +335,7 @@ export function GatePage({ embedded = false }: { embedded?: boolean }) {
                                   report?.harness || scopedResult.harness
                                 )
                               )
-                            : "Pass the checks to unlock Install."
+                            : "Get a passing run to unlock Install."
                         }
                         passWarnings={passWarnings}
                         errorNote={errorNote || null}
