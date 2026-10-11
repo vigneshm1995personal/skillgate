@@ -63,6 +63,39 @@ def test_versions_history_matrix(tmp_path: Path) -> None:
     assert len(result.payload["arms"]) == 2
 
 
+def test_versions_history_includes_skill_pack_hash_from_skill_path(tmp_path: Path) -> None:
+    pack = _pack(tmp_path)
+    fp = "same-fp"
+    append_eval(
+        pack,
+        run_id="run-a",
+        passed=True,
+        report={
+            "pack_fingerprint": fp,
+            "pack_case_ids": ["c1"],
+            "skill_path": str(pack),
+            "tasks": [{"id": "c1", "passed": True}],
+        },
+    )
+    append_eval(
+        pack,
+        run_id="run-b",
+        passed=True,
+        report={
+            "pack_fingerprint": fp,
+            "pack_case_ids": ["c1"],
+            "skill_path": str(pack),
+            "tasks": [{"id": "c1", "passed": True}],
+        },
+    )
+    from skillgate_ai.pack import skill_pack_hash
+
+    expected = skill_pack_hash(pack)
+    result = run_versions_compare(pack, run_ids=["run-a", "run-b"], root=tmp_path)
+    for arm in result.payload["arms"]:
+        assert arm.get("skill_pack_hash") == expected
+
+
 def test_versions_fingerprint_mismatch(tmp_path: Path) -> None:
     pack = _pack(tmp_path)
     append_eval(

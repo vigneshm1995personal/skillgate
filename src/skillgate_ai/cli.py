@@ -891,7 +891,7 @@ def compare_models_cmd(
     """Run the same Dataset on multiple harness setups."""
     from skillgate_ai.compare import (
         CompareError,
-        _arm_ids,
+        arm_id_for_index,
         parse_arm_file,
         parse_arm_spec,
         run_models_compare,
@@ -903,12 +903,11 @@ def compare_models_cmd(
     path = _resolve_pack_arg(pack)
     specs = []
     idx = 0
-    ids = _arm_ids(max(4, len(arm) + len(arm_file)))
     for raw in arm:
-        specs.append(parse_arm_spec(raw, arm_id=ids[idx], index=idx))
+        specs.append(parse_arm_spec(raw, arm_id=arm_id_for_index(idx), index=idx))
         idx += 1
     for file_path in arm_file:
-        specs.append(parse_arm_file(file_path, arm_id=ids[idx], index=idx))
+        specs.append(parse_arm_file(file_path, arm_id=arm_id_for_index(idx), index=idx))
         idx += 1
     if len(specs) < 2 and not dry_run:
         console.print("Add at least two --arm or --arm-file values.")

@@ -15,6 +15,7 @@ from skillgate_ai.eval_config import harness_display_name
 from skillgate_ai.gate import run_check
 from skillgate_ai.compare_control import clear_compare_cancel, create_compare_control
 from skillgate_ai.history import append_compare, load_compares, load_history
+from skillgate_ai.pack import skill_pack_hash
 from skillgate_ai.live import create_control, drop_control
 
 MAX_ARMS = 4
@@ -112,6 +113,18 @@ def arm_id_for_index(index: int) -> str:
     if index < 0 or index >= MAX_ARMS:
         raise CompareError(f"Compare supports at most {MAX_ARMS} arms.")
     return chr(ord("a") + index)
+
+
+def _skill_pack_hash_from_report(report: dict[str, Any]) -> str | None:
+    stored = report.get("skill_pack_hash")
+    if isinstance(stored, str) and stored:
+        return stored
+    skill_path = report.get("skill_path")
+    if isinstance(skill_path, str) and skill_path:
+        path = Path(skill_path)
+        if path.is_dir():
+            return skill_pack_hash(path)
+    return None
 
 
 def _usage_from_report(report: dict[str, Any] | None) -> dict[str, Any] | None:
@@ -343,10 +356,11 @@ def run_versions_compare(
     git_refs: list[str] | None = None,
     root: Path,
     rerun: bool = False,
+    compare_id: str | None = None,
     run_check_fn: Callable[..., Any] | None = None,
 ) -> CompareResult:
     pack = pack.expanduser().resolve()
-    compare_id = uuid.uuid4().hex[:12]
+    compare_id = compare_id or uuid.uuid4().hex[:12]
     if git_refs and len(git_refs) == 2:
         from skillgate_ai.compare_git import run_git_versions_compare
 
@@ -410,8 +424,8 @@ def run_versions_compare(
             "duration_sec": None,
             "task_by_id": tasks,
         }
-        sph = report.get("skill_pack_hash")
-        if isinstance(sph, str) and sph:
+        sph = _skill_pack_hash_from_report(report)
+        if sph:
             arm_row["skill_pack_hash"] = sph
         arm_rows.append(arm_row)
     payload: dict[str, Any] = {

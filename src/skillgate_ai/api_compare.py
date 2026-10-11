@@ -185,6 +185,7 @@ def _start_versions_compare(state: AppState, body: dict[str, Any]) -> dict[str, 
                 git_refs=git_refs if isinstance(git_refs, list) else None,
                 root=state.root,
                 rerun=bool(body.get("rerun")),
+                compare_id=compare_id,
             )
             payload = scrub_compare_payload(result.payload)
             payload["status"] = str(result.payload.get("status") or "done")

@@ -85,7 +85,6 @@ def run_git_versions_compare(
     if len(refs) != 2:
         raise CompareError("Pick exactly two git refs.")
     git_root = find_git_root(pack)
-    arms: list[CompareArmSpec] = []
     arm_rows: list[dict[str, Any]] = []
     pack_fp: str | None = None
     pack_case_ids: list[str] = []
@@ -104,7 +103,6 @@ def run_git_versions_compare(
                 label=label,
                 harness_pref="auto",
             )
-            arms.append(spec)
             runner = run_check_fn
             from skillgate_ai.compare import run_check as default_run
 
