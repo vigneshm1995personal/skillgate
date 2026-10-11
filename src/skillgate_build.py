@@ -45,17 +45,19 @@ def bundle_web_static(
     web_dir: Path = DEFAULT_WEB_DIR,
     required: bool = False,
 ) -> Path | None:
-    """Place ``index.html`` under ``dest``. Build with pnpm when ``web/dist`` is missing."""
+    """Place ``index.html`` under ``dest``.
+
+    When ``web/`` and pnpm are present, always rebuild so a leftover
+    ``web_static`` cannot ship an older asset hash than ``pnpm build``.
+    Docker copies ``src/`` only — then the committed ``web_static`` is used.
+    """
     dest = dest.resolve()
     web_dist = web_dist.resolve()
-    if (dest / "index.html").is_file() and not (web_dist / "index.html").is_file():
-        return dest
-    if not (web_dist / "index.html").is_file():
-        package_json = web_dir / "package.json"
-        pnpm = shutil.which("pnpm")
-        if package_json.is_file() and pnpm:
-            subprocess.check_call([pnpm, "--dir", str(web_dir), "install", "--frozen-lockfile"])
-            subprocess.check_call([pnpm, "--dir", str(web_dir), "build"])
+    package_json = web_dir / "package.json"
+    pnpm = shutil.which("pnpm")
+    if package_json.is_file() and pnpm:
+        subprocess.check_call([pnpm, "--dir", str(web_dir), "install", "--frozen-lockfile"])
+        subprocess.check_call([pnpm, "--dir", str(web_dir), "build"])
     if (web_dist / "index.html").is_file():
         if dest.exists():
             shutil.rmtree(dest)
@@ -93,9 +95,11 @@ def bundle_examples(*, dest: Path = DEFAULT_EXAMPLES_DEST) -> Path | None:
 class build_py(_build_py):
     def run(self) -> None:
         editable = bool(getattr(self, "editable_mode", False))
-        # CLI Docker has no web/; PyPI `python -m build` does.
-        required = (not editable) and web_tree_present()
-        bundle_web_static(required=required)
+        # Wheels/sdists rebuild from web/. Editable installs keep the
+        # committed tree so CI can diff git vs a fresh `pnpm build`.
+        # CLI Docker has no web/; it packages the committed folder.
+        if not editable:
+            bundle_web_static(required=web_tree_present())
         bundle_examples()
         super().run()
 

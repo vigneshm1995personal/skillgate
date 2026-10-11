@@ -5,7 +5,6 @@ __pycache__/
 web/node_modules/
 web/dist/
 web/*.tsbuildinfo
-src/skillgate_ai/web_static/
 src/skillgate_ai/examples/
 *.py[cod]
 *.egg-info/
