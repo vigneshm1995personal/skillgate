@@ -250,3 +250,31 @@ def missing_key_error(*, live: bool = True, for_codex: bool = False) -> MissingL
         "No model key found. Skill Gate is BYOLLM — it does not ship a hosted model.",
         hint=hint,
     )
+
+
+def merge_env_file(path: Path, updates: dict[str, str]) -> None:
+    """Write or clear known keys in a ``.env`` file. Empty value removes the key."""
+    existing = path.read_text(encoding="utf-8").splitlines() if path.is_file() else []
+    written: set[str] = set()
+    out: list[str] = []
+    for line in existing:
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#") or "=" not in line:
+            out.append(line)
+            continue
+        key = line.split("=", 1)[0].strip()
+        if key in updates:
+            value = updates[key]
+            if value:
+                out.append(f"{key}={value}")
+            written.add(key)
+            continue
+        out.append(line)
+    for key, value in updates.items():
+        if key not in written and value:
+            out.append(f"{key}={value}")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    text = "\n".join(out)
+    if text and not text.endswith("\n"):
+        text += "\n"
+    path.write_text(text, encoding="utf-8")

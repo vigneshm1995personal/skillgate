@@ -17,7 +17,7 @@ from skillgate_ai.advice import (
     rewrite_skill_description,
 )
 from skillgate_ai.case_pack import CasePack, dataset_view, save_case_pack
-from skillgate_ai.config import ROOT_ENV_NAMES, get_llm_config, load_env
+from skillgate_ai.config import ROOT_ENV_NAMES, get_llm_config, load_env, merge_env_file
 from skillgate_ai.demo_files import ensure_demo_pdfs
 from skillgate_ai.errors import MissingLLMKeyError, SkillGateError
 from skillgate_ai.gate import run_check
@@ -189,33 +189,6 @@ def pack_payload(state: UiState, raw_path: str | None) -> dict[str, Any]:
         "history_tail": load_history(path, limit=20),
         "is_seed_sabotaged": path.name == "pdf-sabotaged",
     }
-
-
-def merge_env_file(path: Path, updates: dict[str, str]) -> None:
-    existing = path.read_text(encoding="utf-8").splitlines() if path.is_file() else []
-    written: set[str] = set()
-    out: list[str] = []
-    for line in existing:
-        stripped = line.strip()
-        if not stripped or stripped.startswith("#") or "=" not in line:
-            out.append(line)
-            continue
-        key = line.split("=", 1)[0].strip()
-        if key in updates:
-            value = updates[key]
-            if value:
-                out.append(f"{key}={value}")
-            written.add(key)
-            continue
-        out.append(line)
-    for key, value in updates.items():
-        if key not in written and value:
-            out.append(f"{key}={value}")
-    path.parent.mkdir(parents=True, exist_ok=True)
-    text = "\n".join(out)
-    if text and not text.endswith("\n"):
-        text += "\n"
-    path.write_text(text, encoding="utf-8")
 
 
 def handle(

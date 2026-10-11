@@ -19,7 +19,7 @@ import {
 } from "@/components/dashboard/chrome"
 import { useDashboard } from "@/lib/dashboard-provider"
 import { slotOn } from "@/lib/mode"
-import { CI_URL, type Stage } from "@/lib/types"
+import { type Stage } from "@/lib/types"
 
 export function AppSidebar({
   className,
@@ -51,7 +51,7 @@ export function AppSidebar({
   }
   const gateLabel = useGateLabel()
   const timelineCount = history?.timeline.length ?? 0
-  const ciUrl = status?.ci.url ?? CI_URL
+  const ciUrl = (status?.ci.url || "").trim()
 
   return (
     <aside
@@ -130,15 +130,17 @@ export function AppSidebar({
             label="Settings"
             onClick={() => go("settings")}
           />
-          <a
-            href={ciUrl}
-            target="_blank"
-            rel="noreferrer"
-            className="ml-9 mt-0.5 flex items-center gap-1.5 px-3 py-1 text-xs text-muted-foreground hover:text-sidebar-foreground"
-          >
-            <GitBranchIcon className="size-3.5 shrink-0" />
-            <span className="truncate">GitHub Action</span>
-          </a>
+          {ciUrl ? (
+            <a
+              href={ciUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="ml-9 mt-0.5 flex items-center gap-1.5 px-3 py-1 text-xs text-muted-foreground hover:text-sidebar-foreground"
+            >
+              <GitBranchIcon className="size-3.5 shrink-0" />
+              <span className="truncate">GitHub Action</span>
+            </a>
+          ) : null}
         </div>
       </ScrollArea>
       <div className="mt-auto flex flex-col gap-3 p-3">
@@ -167,7 +169,8 @@ export function AppSidebar({
           <p className="text-sm font-medium">{status?.version ? `v${status.version}` : "Skill Gate"}</p>
           {status && !status.has_key ? (
             <p className="text-xs text-muted-foreground">
-              No key · Auto/Cursor fail; Codex may use CLI login
+              {status.missing_key_message ||
+                "No model key yet. The built-in checker still works."}
             </p>
           ) : null}
         </div>

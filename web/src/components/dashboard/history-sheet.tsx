@@ -8,16 +8,17 @@ import {
 } from "@/components/ui/sheet"
 import { HistoryList } from "@/components/dashboard/history-page"
 import { useDashboard } from "@/lib/dashboard-provider"
+import { slotOn } from "@/lib/mode"
 
 export function HistorySheet() {
-  const { historyOpen, setHistoryOpen, setStage } = useDashboard()
+  const { historyOpen, setHistoryOpen, setStage, status } = useDashboard()
 
   return (
     <Sheet
       open={historyOpen}
       onOpenChange={(open) => {
         setHistoryOpen(open)
-        if (open) {
+        if (open && slotOn(status, "sharedHistory")) {
           setStage("history")
         }
       }}

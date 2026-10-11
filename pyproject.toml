@@ -34,9 +34,21 @@ skillgate = "skillgate_ai.cli:app"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+include = ["skillgate_ai*"]
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.cmdclass]
+build_py = "skillgate_build.build_py"
+sdist = "skillgate_build.sdist"
 
 [tool.setuptools.package-data]
-skillgate_ai = ["local_ui/static/*", "web_static/**"]
+skillgate_ai = [
+  "local_ui/static/*",
+  "web_static/*",
+  "web_static/**/*",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -19,14 +19,16 @@ import {
   shouldSeedChecks,
   uniqueCheckId,
 } from "@/lib/dashboard-helpers"
-import { authenticFixtureDefaults, resolvedHarnessName, skillOutputPath, startBlockedMessage } from "@/lib/types"
+import { authenticFixtureDefaults, startBlockedMessage } from "@/lib/check-guards"
+import { type DashboardContextValue } from "@/lib/dashboard-context"
+import { slotOn } from "@/lib/mode"
 import {
   DEFAULT_EVAL_CONFIG_DRAFT,
   type EvalConfigDraft,
 } from "@/lib/eval-config"
 import { useEvalSession } from "@/lib/use-eval-session"
+import { resolvedHarnessName, skillOutputPath } from "@/lib/types"
 import type {
-  Advice,
   AnalyticsPayload,
   CatalogError,
   Check,
@@ -34,118 +36,17 @@ import type {
   EvalTab,
   HarnessPref,
   HistoryPayload,
-  RunRecord,
   SkillPayload,
-  SkillUpdatesPayload,
   Stage,
   StatusPayload,
-  TimelineItem,
 } from "@/lib/types"
-
-type DashboardContextValue = {
-  stage: Stage
-  setStage: (stage: Stage) => void
-  evalTab: EvalTab
-  setEvalTab: (tab: EvalTab) => void
-  repoSkill: string | null
-  setRepoSkill: (name: string | null) => void
-  historyOpen: boolean
-  setHistoryOpen: (open: boolean) => void
-  searchQuery: string
-  setSearchQuery: (value: string) => void
-  paste: string
-  setPaste: (value: string) => void
-  skill: SkillPayload | null
-  skills: SkillPayload[]
-  checks: Check[]
-  yaml: string
-  running: boolean
-  connectionLost: boolean
-  seeding: boolean
-  seedingAssist: boolean
-  checksSeeded: boolean
-  checksSource:
-    | "model"
-    | "heuristic"
-    | "template"
-    | "suite"
-    | "yaml"
-    | "pack"
-    | "assist"
-    | "empty"
-    | null
-  checksNote: string
-  checksWarning: string
-  intakeError: string
-  catalogError: CatalogError | null
-  lastResult: RunRecord | null
-  liveGateResult: RunRecord | null
-  tryoutResult: RunRecord | null
-  lastAdvice: Advice | null
-  history: HistoryPayload | null
-  skillHistory: HistoryPayload | null
-  analytics: AnalyticsPayload | null
-  status: StatusPayload | null
-  copiedFix: boolean
-  deployLast: string | null
-  deployAllowed: boolean
-  suggestBusy: boolean
-  suggestError: { message: string; hint?: string } | null
-  suggestByRunId: Record<string, SkillUpdatesPayload>
-  requestSkillUpdates: (opts?: { force?: boolean }) => Promise<void>
-  copySkillUpdates: () => Promise<void>
-  refreshSkills: () => Promise<SkillPayload[]>
-  refreshAnalytics: () => Promise<AnalyticsPayload | null>
-  refreshStatus: () => Promise<StatusPayload | null>
-  selectSkill: (
-    skillId: string,
-    opts?: { tab?: EvalTab; fallbackSkill?: SkillPayload; forceSeed?: boolean }
-  ) => Promise<void>
-  pinShownChecks: () => Promise<void>
-  pinCheckAt: (index: number) => Promise<void>
-  pinDatasetChecks: (checks: Check[], pinSkillId?: string) => Promise<boolean>
-  pinBaseline: (opts: {
-    skill: string
-    run_id?: string | null
-    follow_deploy?: boolean
-  }) => Promise<boolean>
-  openHistoryRun: (item: TimelineItem) => Promise<void>
-  openRepository: (name?: string | null) => void
-  pasteSkill: () => Promise<void>
-  uploadZip: (file: File) => Promise<void>
-  addCheck: (draft?: Partial<Check>) => void
-  updateCheck: (index: number, patch: Partial<Check>) => void
-  removeCheck: (index: number) => void
-  applySkill: (next: SkillPayload) => void
-  importYaml: (text: string) => Promise<void>
-  startEvaluations: () => Promise<void>
-  runThisCheck: (check: Check) => Promise<void>
-  fixtureInherit: boolean
-  fixtureGlob: string
-  setFixtureInherit: (next: boolean) => void
-  setFixtureGlob: (next: string) => void
-  bindPackFixtures: (inherit: boolean) => Promise<Check[] | void>
-  expandPackFixtures: () => Promise<void>
-  runAfterPossiblePaste: () => Promise<void>
-  copyFix: () => Promise<void>
-  installTo: (target: DeployTarget) => Promise<void>
-  publishToGit: () => Promise<void>
-  harnessPref: HarnessPref
-  setHarnessPref: (value: HarnessPref) => void
-  resolvedHarness: string
-  evalConfig: EvalConfigDraft
-  setEvalConfig: (value: EvalConfigDraft) => void
-  viewingPinnedHistory: boolean
-  gateRunning: boolean
-  tryoutRunning: boolean
-}
 
 const DashboardContext = createContext<DashboardContextValue | undefined>(
   undefined
 )
 
 export function DashboardProvider({ children }: { children: ReactNode }) {
-  const [stage, setStage] = useState<Stage>("home")
+  const [stage, setStage] = useState<Stage>("repository")
   const [evalTab, setEvalTab] = useState<EvalTab>("skill")
   const [repoSkill, setRepoSkill] = useState<string | null>(null)
   const [historyOpen, setHistoryOpen] = useState(false)
@@ -562,7 +463,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
           setYaml(data.yaml || "")
           setChecksSource("pack")
           setChecksNote(
-            "Deploy follows this Dataset. Generate drafts checks — doesn't unlock Deploy."
+            "These checks are saved with this skill. Edit them, then press Run."
           )
           setChecksSeeded(true)
           if (data.skill) {
@@ -828,8 +729,8 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       return
     }
     localHomeBooted.current = true
-    if (status.mode === "local" && !status.slots?.analyticsHome) {
-      setStage("repository")
+    if (slotOn(status, "analyticsHome")) {
+      setStage("home")
     }
   }, [status])
 

@@ -46,6 +46,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
       - uses: pnpm/action-setup@v4
         with:
           version: 10
@@ -54,9 +57,31 @@ jobs:
           node-version: "22"
           cache: pnpm
           cache-dependency-path: web/pnpm-lock.yaml
-      - name: Build React UI
-        working-directory: web
-        run: pnpm install --frozen-lockfile && pnpm build
+      - name: Build sdist and wheel with React UI
+        run: |
+          python -m pip install -U pip build
+          python -m build
+          python tests/assert_wheel_ui.py
+      - name: pip install wheel and serve UI without pnpm
+        run: |
+          python -m venv /tmp/wheelenv
+          /tmp/wheelenv/bin/pip install dist/skillgate_ai-*.whl
+          mkdir -p /tmp/emptyws
+          /tmp/wheelenv/bin/python -c "from importlib.resources import files; p=files('skillgate_ai').joinpath('web_static/index.html'); assert p.is_file(), p"
+          /tmp/wheelenv/bin/skillgate ui --root /tmp/emptyws --no-browser &
+          pid=$!
+          for i in 1 2 3 4 5 6 7 8 9 10; do
+            if curl -fsS http://127.0.0.1:8765/ | grep -q "Skill Gate"; then
+              curl -fsS http://127.0.0.1:8765/api/status | grep -q '"mode":"local"'
+              kill "$pid"
+              wait "$pid" || true
+              exit 0
+            fi
+            sleep 1
+          done
+          kill "$pid" || true
+          echo "skillgate ui did not serve the React app from the wheel"
+          exit 1
 
   oss-surface:
     runs-on: ubuntu-latest

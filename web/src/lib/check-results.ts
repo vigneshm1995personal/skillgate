@@ -73,7 +73,7 @@ function looksLikeTriggerMiss(text: string): boolean {
   )
 }
 
-/** Map stored scorer/Jev codes to a customer sentence. */
+/** Map stored scorer codes to a customer sentence. */
 export function scorerCodeToPlain(raw: string, hint = ""): string {
   const text = trimText(raw)
   if (!text) {
@@ -275,7 +275,7 @@ export function scoredByFromJudge(judge: JudgeResult | null | undefined): string
     judge.status === "completed" ||
     (judge.answers && Object.keys(judge.answers).length > 0)
   ) {
-    return "Jev scored this run."
+    return "The built-in checker scored this run."
   }
   return ""
 }
@@ -419,7 +419,7 @@ export function missingJudgeAnswersLine(task: TaskResult): string | null {
   }
   const happened = happenedLine(task)
   const neverStarted =
-    "Jev didn't score this check because the skill never started."
+    "The checker didn't score this check because the skill never started."
   const happenedIsGeneric =
     !happened || isGenericFail(happened) || isChecksDump(happened)
   if (!happenedIsGeneric) {
@@ -427,7 +427,7 @@ export function missingJudgeAnswersLine(task: TaskResult): string | null {
       return neverStarted
     }
     if (/\b(timed out|timeout)\b/i.test(happened)) {
-      return "Jev didn't score this check because it ran out of time."
+      return "The checker didn't score this check because it ran out of time."
     }
     return happened
   }
@@ -440,15 +440,15 @@ export function missingJudgeAnswersLine(task: TaskResult): string | null {
     .join(" ")
     .toLowerCase()
   if (blob.includes("timed out") || blob.includes("timeout")) {
-    return "Jev didn't score this check because it ran out of time."
+    return "The checker didn't score this check because it ran out of time."
   }
   if (looksLikeDidntStart(blob) && !skillPathRan(task)) {
     return neverStarted
   }
   if (task.skipped) {
-    return "Jev didn't score this check because it was skipped."
+    return "The checker didn't score this check because it was skipped."
   }
-  return "Jev didn't score this check."
+  return "The checker didn't score this check."
 }
 
 /** Path in opened details. Null means omit the row. */

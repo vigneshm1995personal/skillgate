@@ -25,7 +25,7 @@ import {
   FieldSet,
 } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
-import { authenticFixtureDefaults } from "@/lib/types"
+import { authenticFixtureDefaults } from "@/lib/check-guards"
 import type { Check, PackFile, SkillPayload } from "@/lib/types"
 
 function fileParts(path: string) {

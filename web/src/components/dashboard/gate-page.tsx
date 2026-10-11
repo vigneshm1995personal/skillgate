@@ -59,7 +59,6 @@ import {
   tokenMetricDisplay,
 } from "@/lib/metrics-label"
 import {
-  CI_URL,
   isLiveHarness,
   type HistoryPayload,
   type LiveState,
@@ -106,7 +105,7 @@ export function GatePage({ embedded = false }: { embedded?: boolean }) {
   const live = scopedResult?.live ?? null
   const viewingHistorical = viewingPinnedHistory
   const waitingForSkillRun = Boolean(skill) && seeding && !scopedResult && !liveGateResult
-  const ciUrl = status?.ci.url ?? CI_URL
+  const ciUrl = (status?.ci.url || "").trim()
   const completed = scopedResult?.completed_count ?? report?.completed_count ?? 0
   const total =
     scopedResult?.task_count ??
@@ -357,17 +356,19 @@ export function GatePage({ embedded = false }: { embedded?: boolean }) {
                   }
                 </EvalResultShell>
               )}
-              <p
-                className="flex flex-wrap items-center gap-2 text-sm"
-                id="ci-gate-line"
-              >
-                <span className="text-muted-foreground">GitHub Actions:</span>
-                <CiGateChip
-                  href={ciUrl}
-                  evaluating={evaluating}
-                  conclusion={status?.ci.conclusion}
-                />
-              </p>
+              {ciUrl ? (
+                <p
+                  className="flex flex-wrap items-center gap-2 text-sm"
+                  id="ci-gate-line"
+                >
+                  <span className="text-muted-foreground">GitHub Actions:</span>
+                  <CiGateChip
+                    href={ciUrl}
+                    evaluating={evaluating}
+                    conclusion={status?.ci.conclusion}
+                  />
+                </p>
+              ) : null}
             </CardContent>
             <CardFooter>
               <Button

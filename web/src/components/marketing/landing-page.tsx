@@ -4,7 +4,7 @@ import { SignInWithVercelButton } from "@/components/auth/sign-in-with-vercel"
 
 import styles from "./landing-page.module.css"
 
-const GITHUB = "https://github.com/vigneshm1995personal/skillgate-ai"
+const GITHUB = "https://github.com/vigneshm1995personal/skillgate"
 const AUTH = "/api/auth/authorize"
 
 export function LandingPage({ configured }: { configured?: boolean }) {

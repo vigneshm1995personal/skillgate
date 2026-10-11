@@ -74,7 +74,7 @@ import {
   startBlockedByNeedsUpload,
   startBlockedIssues,
   startBlockedMessage,
-} from "@/lib/types"
+} from "@/lib/check-guards"
 
 const MISSING_KEY_DISMISS = "skillgate-missing-key-dismissed"
 

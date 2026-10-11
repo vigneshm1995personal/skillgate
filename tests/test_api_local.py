@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import io
 import shutil
 import time
+import zipfile
 from pathlib import Path
 
 from fastapi.testclient import TestClient
@@ -40,6 +42,8 @@ def test_status_local_hides_paid_slots(tmp_path: Path, monkeypatch) -> None:
     assert data["slots"]["billing"] is False
     assert data["slots"]["generateChecks"] is False
     assert data["slots"]["gitPublish"] is False
+    assert data["ci"]["url"] == ""
+    assert data["ci"]["badge"] == ""
     me = client.get("/api/auth/me")
     assert me.json()["user"] is None
     assert me.json()["auth_required"] is False
@@ -180,3 +184,75 @@ def test_ui_static_attaches_without_fastapi_error(tmp_path: Path, monkeypatch) -
     else:
         assert page.status_code == 503
         assert "pnpm build" in page.text
+
+
+def _skill_md(name: str) -> str:
+    return (
+        f"---\nname: {name}\n"
+        "description: Intake path tests. Use when the user asks for intake path coverage.\n"
+        "---\n\n# Steps\n1. Read input\n"
+    )
+
+
+def test_paste_rejects_names_that_escape_skills(tmp_path: Path, monkeypatch) -> None:
+    marker = tmp_path / "keep-me.txt"
+    marker.write_text("safe\n", encoding="utf-8")
+    client = _client(tmp_path, monkeypatch)
+    for name in ("/tmp/pwn", "..", "../escape", "foo/bar"):
+        res = client.post("/api/skills/paste", json={"markdown": _skill_md(name)})
+        assert res.status_code == 400, name
+        detail = res.json()["detail"]
+        message = detail["message"] if isinstance(detail, dict) else str(detail)
+        assert "lowercase" in message.lower() or "name" in message.lower()
+    assert marker.is_file()
+    assert marker.read_text(encoding="utf-8") == "safe\n"
+    assert not Path("/tmp/pwn").exists() or not (Path("/tmp/pwn") / "SKILL.md").is_file()
+    skills = tmp_path / "skills"
+    if skills.is_dir():
+        assert ".." not in {child.name for child in skills.iterdir()}
+
+
+def test_zip_skips_dotdot_and_absolute_members(tmp_path: Path, monkeypatch) -> None:
+    marker = tmp_path / "keep-me.txt"
+    marker.write_text("safe\n", encoding="utf-8")
+    client = _client(tmp_path, monkeypatch)
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as archive:
+        archive.writestr(
+            "../SKILL.md",
+            _skill_md("pwn"),
+        )
+        archive.writestr("/tmp/pwn/SKILL.md", _skill_md("pwn"))
+        archive.writestr("../../outside.txt", "nope\n")
+    res = client.post(
+        "/api/skills/upload",
+        files={"file": ("evil.zip", buf.getvalue(), "application/zip")},
+    )
+    assert res.status_code == 400
+    assert marker.is_file()
+    assert marker.read_text(encoding="utf-8") == "safe\n"
+    assert not (tmp_path / "outside.txt").is_file()
+    assert not (tmp_path.parent / "outside.txt").is_file()
+
+
+def test_zip_keeps_valid_skill_and_drops_traversal_members(
+    tmp_path: Path, monkeypatch
+) -> None:
+    client = _client(tmp_path, monkeypatch)
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as archive:
+        archive.writestr("safe-skill/SKILL.md", _skill_md("safe-skill"))
+        archive.writestr("safe-skill/../../outside.txt", "pwn\n")
+        archive.writestr("../escape.txt", "no\n")
+    res = client.post(
+        "/api/skills/upload",
+        files={"file": ("safe-skill.zip", buf.getvalue(), "application/zip")},
+    )
+    assert res.status_code == 200
+    dest = tmp_path / "skills" / "safe-skill"
+    assert (dest / "SKILL.md").is_file()
+    assert "safe-skill" in (dest / "SKILL.md").read_text(encoding="utf-8")
+    assert not (tmp_path / "outside.txt").is_file()
+    assert not (tmp_path / "escape.txt").is_file()
+    assert not (tmp_path.parent / "outside.txt").is_file()
+    assert list(dest.rglob("outside.txt")) == []

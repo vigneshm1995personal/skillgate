@@ -32,7 +32,7 @@ import {
   checkNeedsInput,
   displayCheckFiles,
   filesAreInherited,
-} from "@/lib/types"
+} from "@/lib/check-guards"
 import type { Check, CheckFile, PackFile, SkillPayload } from "@/lib/types"
 
 export function CheckInputControls({

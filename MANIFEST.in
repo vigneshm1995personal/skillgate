@@ -1,0 +1,5 @@
+include src/skillgate_build.py
+include LICENSE
+include README.md
+recursive-include src/skillgate_ai/web_static *
+recursive-include src/skillgate_ai/local_ui/static *

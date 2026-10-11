@@ -7,7 +7,7 @@ from typing import Any
 
 from skillgate_ai.deploy import claude_skills_root, codex_skills_root, cursor_skills_root
 from skillgate_ai.errors import SkillGateError
-from skillgate_ai.ingest import ingest_skill
+from skillgate_ai.ingest import NAME_RE, ingest_skill
 from skillgate_ai.pack import copy_skill_pack as copy_pack
 from skillgate_ai.paths import is_skill_pack
 
@@ -110,6 +110,17 @@ def catalog_entries(root: Path) -> list[dict[str, Any]]:
     return entries
 
 
+def safe_skill_folder_name(name: str) -> str:
+    """Reject names that would escape ``skills/`` (absolute paths, ``..``, slashes)."""
+    text = (name or "").strip()
+    if not NAME_RE.match(text):
+        raise SkillGateError(
+            "Skill names are lowercase letters, numbers, and hyphens.",
+            hint="Example: pdf-tools",
+        )
+    return text
+
+
 def find_skill(root: Path, name: str) -> Path:
     text = (name or "").strip()
     if not text:
@@ -117,12 +128,13 @@ def find_skill(root: Path, name: str) -> Path:
     supplied = Path(text).expanduser()
     if supplied.is_absolute() and (supplied / "SKILL.md").is_file():
         return supplied.resolve()
+    if NAME_RE.match(text):
+        workspace = workspace_skills_root(root) / text
+        if (workspace / "SKILL.md").is_file():
+            return workspace.resolve()
     for entry in catalog_entries(root):
         if entry["name"] == text or entry["id"] == text or entry["absolute"] == text:
             return Path(entry["absolute"])
-    workspace = workspace_skills_root(root) / text
-    if (workspace / "SKILL.md").is_file():
-        return workspace.resolve()
     raise SkillGateError(
         f"Skill {text!r} was not found.",
         hint="Import from ~/.cursor/skills, ~/.codex/skills, or ~/.claude/skills, or open a folder with SKILL.md.",

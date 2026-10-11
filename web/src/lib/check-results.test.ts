@@ -162,8 +162,10 @@ describe("scoredByLine", () => {
     ).toBe("OpenAI (your key) scored this run.")
   })
 
-  it("maps a Jev judge without hard-coding the UI to Jev-only", () => {
-    expect(scoredByFromJudge(passTask.judge)).toBe("Jev scored this run.")
+  it("maps a built-in checker without hard-coding the UI to one scorer", () => {
+    expect(scoredByFromJudge(passTask.judge)).toBe(
+      "The built-in checker scored this run."
+    )
     expect(
       scoredByFromJudge({
         provider: "openai",
@@ -358,7 +360,7 @@ describe("missingJudgeAnswersLine", () => {
         status: "done",
         failures: ["sandbox timed out"],
       })
-    ).toBe("Jev didn't score this check because it ran out of time.")
+    ).toBe("The checker didn't score this check because it ran out of time.")
     expect(
       missingJudgeAnswersLine({
         id: "extract-hello",
@@ -368,7 +370,9 @@ describe("missingJudgeAnswersLine", () => {
         happened: "blocker skill_trigger (need none)",
         failures: ["blocker skill_trigger (need none)"],
       })
-    ).toBe("Jev didn't score this check because the skill never started.")
+    ).toBe(
+      "The checker didn't score this check because the skill never started."
+    )
     expect(missingJudgeAnswersLine(passTask)).toBeNull()
   })
 
@@ -398,7 +402,7 @@ describe("missingJudgeAnswersLine", () => {
     expect(happenedLine(task)).toBe("The PDF was only partly right.")
     expect(missingJudgeAnswersLine(task)).toBe("The PDF was only partly right.")
     expect(missingJudgeAnswersLine(task)).not.toBe(
-      "Jev didn't score this check because the skill never started."
+      "The checker didn't score this check because the skill never started."
     )
   })
 
@@ -414,7 +418,7 @@ describe("missingJudgeAnswersLine", () => {
         '{"type":"item.completed","item":{"type":"agent_message","text":"No matching skill."}}',
     }
     expect(missingJudgeAnswersLine(task)).toBe(
-      "Jev didn't score this check because the skill never started."
+      "The checker didn't score this check because the skill never started."
     )
   })
 
@@ -429,7 +433,7 @@ describe("missingJudgeAnswersLine", () => {
     }
     expect(happenedLine(task)).toMatch(/didn't start/)
     expect(missingJudgeAnswersLine(task)).toBe(
-      "Jev didn't score this check because the skill never started."
+      "The checker didn't score this check because the skill never started."
     )
   })
 
@@ -444,7 +448,7 @@ describe("missingJudgeAnswersLine", () => {
       metrics: { path: { steps: 7, had_path: true } },
     }
     expect(missingJudgeAnswersLine(task)).not.toBe(
-      "Jev didn't score this check because the skill never started."
+      "The checker didn't score this check because the skill never started."
     )
   })
 })

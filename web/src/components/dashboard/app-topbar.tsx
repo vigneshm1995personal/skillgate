@@ -20,9 +20,10 @@ import { useTheme } from "@/components/theme-provider"
 import { SignOutButton } from "@/components/auth/sign-out-button"
 import { stageTitle } from "@/components/dashboard/chrome"
 import { useDashboard } from "@/lib/dashboard-provider"
+import { slotOn } from "@/lib/mode"
 import type { Stage } from "@/lib/types"
 
-const SEARCH_STAGES: Stage[] = ["eval", "deploy", "repository", "history", "home"]
+const SEARCH_STAGES: Stage[] = ["eval", "deploy", "repository", "settings"]
 
 export function AppTopbar({ onMenuClick }: { onMenuClick?: () => void }) {
   const {
@@ -93,8 +94,13 @@ export function AppTopbar({ onMenuClick }: { onMenuClick?: () => void }) {
               repository: "repository",
               repo: "repository",
               deploy: "deploy",
-              history: "history",
-              home: "home",
+              settings: "settings",
+            }
+            if (slotOn(status, "sharedHistory")) {
+              aliases.history = "history"
+            }
+            if (slotOn(status, "analyticsHome")) {
+              aliases.home = "home"
             }
             const match =
               aliases[raw] ||
@@ -121,6 +127,7 @@ export function AppTopbar({ onMenuClick }: { onMenuClick?: () => void }) {
       </div>
       <div className="ml-auto flex items-center gap-1">
         {status?.auth_required ? <SignOutButton /> : null}
+        {slotOn(status, "sharedHistory") ? (
         <Tooltip>
           <TooltipTrigger
             render={
@@ -140,6 +147,7 @@ export function AppTopbar({ onMenuClick }: { onMenuClick?: () => void }) {
           </TooltipTrigger>
           <TooltipContent>History</TooltipContent>
         </Tooltip>
+        ) : null}
         <Tooltip>
           <TooltipTrigger
             render={

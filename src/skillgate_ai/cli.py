@@ -357,7 +357,7 @@ def list_assets() -> None:
 @app.command("ui")
 def ui_cmd(
     host: str = typer.Option("127.0.0.1", "--host", help="Bind address (default loopback)"),
-    port: int = typer.Option(8765, "--port", help="Port (default 8765, not hosted 8477)"),
+    port: int = typer.Option(8765, "--port", help="Port (default 8765)"),
     root: Path | None = typer.Option(None, "--root", help="Workspace root for browse/create"),
     pack: Path | None = typer.Option(None, "--pack", help="Open this pack instead of the picker"),
     open_browser: bool = typer.Option(False, "--open", help="Open the loopback URL in a browser"),
