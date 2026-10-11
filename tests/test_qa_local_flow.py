@@ -319,6 +319,13 @@ def test_fake_home_import_list_open_run_deploy(tmp_path: Path, monkeypatch) -> N
     assert hist_after["deploys"]
     assert hist_after["last_deploy"]["target"] == "cursor"
     assert hist_after["deploys"][0]["status"] in {"installed", "ok"}
+    deploy_labels = [
+        item.get("label")
+        for item in (hist_after.get("timeline") or [])
+        if item.get("kind") == "deploy"
+    ]
+    assert "Install to Cursor" in deploy_labels
+    assert "Install to cursor" not in deploy_labels
 
     idea_deploy = client.post(
         "/api/deploy",
@@ -384,6 +391,16 @@ def test_react_ui_customer_copy() -> None:
         "pack fixtures",
         "semver + version fingerprint",
         "evals/fixtures/*",
+        ">Harness<",
+        ">Stamp<",
+        "Pin as baseline",
+        "Pinned as baseline",
+        "Pack files",
+        "SKILLGATE_TASK",
+        "Harness default",
+        "Harness step",
+        "this harness",
+        ">Pinned<",
     )
     hits: list[str] = []
     for path in web.rglob("*"):
@@ -394,8 +411,18 @@ def test_react_ui_customer_copy() -> None:
         if "landing-page" in rel or ".test." in rel:
             continue
         for needle in forbidden:
+            if needle == "SKILLGATE_TASK" and (
+                path.suffix != ".tsx" or "skill-pack-browser" in rel
+            ):
+                continue
             if needle in text:
                 hits.append(f"{rel}: {needle}")
+        if (
+            path.suffix == ".tsx"
+            and "skill-pack-browser" not in rel
+            and ("evals/goldens" in text or "evals/fixtures" in text)
+        ):
+            hits.append(f"{rel}: raw evals path")
         if 'Badge' in text and ">eval<" in text.lower():
             hits.append(f"{rel}: bare eval badge")
     assert hits == []

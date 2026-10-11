@@ -465,6 +465,12 @@ describe("customerGateCopy", () => {
     expect(
       customerGateCopy("Case extract-hello is missing golden file evals/goldens/extract-hello.txt.")
     ).toBe("This check is missing its expected output file.")
+    expect(customerGateCopy("Set SKILLGATE_TASK before running.")).toBe(
+      "Set the task before running."
+    )
+    expect(
+      customerGateCopy("Missing fixture evals/fixtures/hello.pdf for this check.")
+    ).not.toMatch(/evals\//)
   })
 })
 

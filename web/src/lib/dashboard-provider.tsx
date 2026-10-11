@@ -47,7 +47,13 @@ const DashboardContext = createContext<DashboardContextValue | undefined>(
   undefined
 )
 
-export function DashboardProvider({ children }: { children: ReactNode }) {
+export function DashboardProvider({
+  children,
+  initialStatus = null,
+}: {
+  children: ReactNode
+  initialStatus?: StatusPayload | null
+}) {
   const [stage, setStage] = useState<Stage>("repository")
   const [evalTab, setEvalTab] = useState<EvalTab>("skill")
   const [repoSkill, setRepoSkill] = useState<string | null>(null)
@@ -85,7 +91,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   const [history, setHistory] = useState<HistoryPayload | null>(null)
   const [skillHistory, setSkillHistory] = useState<HistoryPayload | null>(null)
   const [analytics, setAnalytics] = useState<AnalyticsPayload | null>(null)
-  const [status, setStatus] = useState<StatusPayload | null>(null)
+  const [status, setStatus] = useState<StatusPayload | null>(initialStatus)
   const [copiedFix, setCopiedFix] = useState(false)
   const [deployLast, setDeployLast] = useState<string | null>(null)
   const [harnessPref, setHarnessPref] = useState<HarnessPref>("auto")

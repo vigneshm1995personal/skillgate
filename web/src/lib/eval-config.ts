@@ -92,7 +92,7 @@ export function modelsForHarness(
 ): ModelOption[] {
   const harness = resolveModelHarness(pref, resolvedHarness)
   const defaultLabel =
-    harness === "codex" ? "CLI default (no -m)" : "Harness default"
+    harness === "codex" ? "CLI default (no -m)" : "Agent default"
   const known = knownModelsForHarness(pref, resolvedHarness, catalog).map(
     (id) => ({ value: id, label: id })
   )
@@ -166,16 +166,16 @@ export function emptyCatalogHint(
   const entry = meta[harness]
   const error = entry?.error
   if (error === "list_failed") {
-    return "Could not list models for this key. Use Custom… or Harness default."
+    return "Could not list models for this key. Use Custom… or Agent default."
   }
   // Auto + no keys: Start is already blocked. Do not add a second message.
   if (pref === "auto") {
     return null
   }
   if (error === "no_key" || entry?.source === "empty" || !entry) {
-    return "Set this harness’s key in Settings to list models. Custom… still works."
+    return "Set this agent's key in Settings to list models. Custom… still works."
   }
-  return "No models listed for this key. Use Custom… or Harness default."
+  return "No models listed for this key. Use Custom… or Agent default."
 }
 
 export function unsupportedModelHint(
@@ -185,14 +185,14 @@ export function unsupportedModelHint(
 ): string {
   if (resolveModelHarness(pref, resolvedHarness) === "codex") {
     if (known.length === 0 || known.length > 8) {
-      return "Not on this harness’s list. Codex + ChatGPT login needs a Codex model — not gateway ids like openai/gpt-4o-mini."
+      return "Not on this agent's list. Codex + ChatGPT login needs a Codex model — not gateway ids like openai/gpt-4o-mini."
     }
-    return `Not on this harness’s list. Codex + ChatGPT login needs a Codex model (${known.join(", ")}) — not gateway ids like openai/gpt-4o-mini.`
+    return `Not on this agent's list. Codex + ChatGPT login needs a Codex model (${known.join(", ")}) — not gateway ids like openai/gpt-4o-mini.`
   }
   if (known.length === 0 || known.length > 8) {
-    return "Not on this harness’s list. Pick from the list for this harness or leave Harness default."
+    return "Not on this agent's list. Pick from the list for this agent or leave Agent default."
   }
-  return `Not on this harness’s list. Pick from the list for this harness (${known.join(", ")}) or leave Harness default.`
+  return `Not on this agent's list. Pick from the list for this agent (${known.join(", ")}) or leave Agent default.`
 }
 
 export function draftConfigSummary(

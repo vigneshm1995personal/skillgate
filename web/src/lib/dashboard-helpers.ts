@@ -88,6 +88,23 @@ export function deployLabel(target?: string | null) {
   return labels[target] ?? target
 }
 
+export function sidebarVersionLabel(
+  status?: { version?: string | null } | null
+): string {
+  const version = status?.version?.trim()
+  return version ? `v${version}` : "Skill Gate"
+}
+
+export function installedNote(
+  skillName: string,
+  lastDeploy: { semver?: string | null; target?: string | null }
+): string {
+  const ver = lastDeploy.semver ? ` v${lastDeploy.semver}` : ""
+  const labeled = deployLabel(lastDeploy.target)
+  const target = labeled ? ` to ${labeled}` : ""
+  return `Installed ${skillName}${ver}${target}.`
+}
+
 export function collectChecksForRun(
   checks: Check[],
   skill: SkillPayload | null

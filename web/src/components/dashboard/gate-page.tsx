@@ -234,7 +234,7 @@ export function GatePage({ embedded = false }: { embedded?: boolean }) {
       {waitingForSkillRun ? (
         <Card>
           <CardHeader>
-            <CardTitle>Stamp</CardTitle>
+            <CardTitle>Result</CardTitle>
             <CardDescription>
               Loading the last eval for {skill?.name ?? "this skill"}.
             </CardDescription>
@@ -263,7 +263,7 @@ export function GatePage({ embedded = false }: { embedded?: boolean }) {
         >
           <Card>
             <CardHeader>
-              <CardTitle>Stamp</CardTitle>
+              <CardTitle>Result</CardTitle>
               <CardDescription>
                 {viewingHistorical
                   ? `Historical run ${lastResult?.id} — not the live Deploy gate.`
@@ -289,6 +289,7 @@ export function GatePage({ embedded = false }: { embedded?: boolean }) {
                 <EvalResultShell
                   key={scopedResult?.id ?? "gate-run"}
                   target={kind}
+                  hold={!viewingHistorical}
                   onResultVisible={setResultVisible}
                   checking={
                     <EvalCheckingPanel
@@ -869,7 +870,7 @@ function GateBaselineStamp({
             disabled={busy !== null || isThisBaseline}
             onClick={() => void pin(false)}
           >
-            {isThisBaseline ? "This is the baseline" : "Pin as baseline"}
+            {isThisBaseline ? "This is the baseline" : "Save as baseline"}
           </Button>
           {canFollow ? (
             <Button

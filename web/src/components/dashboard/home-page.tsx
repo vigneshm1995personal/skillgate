@@ -187,7 +187,7 @@ export function HomePage() {
                   <TableHeader>
                     <TableRow>
                       <TableHead className="pl-6">Skill</TableHead>
-                      <TableHead>Harness</TableHead>
+                      <TableHead>Agent</TableHead>
                       <TableHead>Result</TableHead>
                       <TableHead className="pr-6 text-right">When</TableHead>
                     </TableRow>

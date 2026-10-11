@@ -229,7 +229,7 @@ export function PromoteCheckDialog({
                   </Field>
                   {files.length ? (
                     <Field>
-                      <FieldLabel>Pack files</FieldLabel>
+                      <FieldLabel>Skill files</FieldLabel>
                       <FieldDescription>
                         Copied into this skill folder.
                       </FieldDescription>

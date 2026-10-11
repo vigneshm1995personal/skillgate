@@ -17,6 +17,7 @@ import {
   NavRow,
   useGateLabel,
 } from "@/components/dashboard/chrome"
+import { sidebarVersionLabel } from "@/lib/dashboard-helpers"
 import { useDashboard } from "@/lib/dashboard-provider"
 import { isLocalMode, slotOn } from "@/lib/mode"
 import { type Stage } from "@/lib/types"
@@ -166,7 +167,7 @@ export function AppSidebar({
           </div>
         ) : null}
         <div className="px-1 pb-1">
-          <p className="text-sm font-medium">{status?.version ? `v${status.version}` : "Skill Gate"}</p>
+          <p className="text-sm font-medium">{sidebarVersionLabel(status)}</p>
         </div>
       </div>
       <span className="sr-only">{gateLabel}</span>

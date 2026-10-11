@@ -3,6 +3,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react"
 import {
   CHECKING_MIN_MS,
   EVAL_MOTION_MS,
+  initialHoldPhase,
   resultHoldPlan,
 } from "@/lib/eval-result-hold"
 import type { SuiteResultKind } from "@/lib/eval-row-state"
@@ -36,15 +37,27 @@ export function EvalResultShell({
   checking,
   children,
   onResultVisible,
+  hold = true,
 }: {
   target: EvalResultTarget
   checking: ReactNode
   children: (opts: { mode: EvalMarkMode }) => ReactNode
   onResultVisible?: (visible: boolean) => void
+  hold?: boolean
 }) {
-  const checkingShownAt = useRef<number | null>(Date.now())
+  const checkingShownAt = useRef<number | null>(hold ? Date.now() : null)
   const slideTimer = useRef(0)
-  const [phase, setPhase] = useState<Phase>("checking")
+  const [phase, setPhase] = useState<Phase>(() =>
+    initialHoldPhase(
+      resultHoldPlan({
+        target,
+        reducedMotion: false,
+        sawChecking: false,
+        elapsedMs: null,
+        hold,
+      }).showCheckingFirst
+    )
+  )
 
   useEffect(() => {
     onResultVisible?.(phase !== "checking")
@@ -66,6 +79,7 @@ export function EvalResultShell({
       reducedMotion: reduced,
       sawChecking: true,
       elapsedMs: elapsed,
+      hold,
     })
     const holdTimer = window.setTimeout(() => {
       if (reduced || !plan.showCheckingFirst) {
@@ -82,7 +96,7 @@ export function EvalResultShell({
       window.clearTimeout(holdTimer)
       window.clearTimeout(slideTimer.current)
     }
-  }, [target])
+  }, [hold, target])
 
   return (
     <div className="eval-result-stage" id="eval-result-stage">

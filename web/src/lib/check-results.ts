@@ -461,10 +461,11 @@ export function pathOpenedLine(task: TaskResult): string | null {
 
 /** Gate already emits customer sentences. Rewrite leftover developer/warning codes. */
 export function customerGateCopy(text: string): string {
-  const value = trimText(text)
+  let value = trimText(text)
   if (!value) {
     return ""
   }
+  value = value.replace(/\bSKILLGATE_TASK\b/g, "the task")
   if (FILE_WARN.test(value)) {
     return "This skill is meant to write a file, and this run didn't record one."
   }
@@ -486,6 +487,8 @@ export function customerGateCopy(text: string): string {
   if (/missing golden/i.test(value) || /evals\/goldens/i.test(value)) {
     return "This check is missing its expected output file."
   }
+  value = value.replace(/\bevals\/(?:goldens|fixtures)\/(\S+?)(?=[.,;:]?(?:\s|$))/gi, "$1")
+  value = value.replace(/\bevals\/[\w./-]+/g, "the expected file")
   return scorerCodeToPlain(value)
 }
 

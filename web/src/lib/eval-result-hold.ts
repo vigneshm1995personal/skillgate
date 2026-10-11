@@ -8,16 +8,18 @@ export function resultHoldPlan({
   reducedMotion,
   sawChecking,
   elapsedMs,
+  hold = true,
 }: {
   target: EvalHoldTarget
   reducedMotion: boolean
   sawChecking: boolean
   elapsedMs: number | null
+  hold?: boolean
 }): { showCheckingFirst: boolean; waitMs: number } {
   if (target === "checking") {
     return { showCheckingFirst: true, waitMs: 0 }
   }
-  if (reducedMotion) {
+  if (!hold || reducedMotion) {
     return { showCheckingFirst: false, waitMs: 0 }
   }
   const elapsed = sawChecking && elapsedMs != null ? elapsedMs : 0
@@ -25,4 +27,10 @@ export function resultHoldPlan({
     showCheckingFirst: true,
     waitMs: Math.max(0, CHECKING_MIN_MS - elapsed),
   }
+}
+
+export function initialHoldPhase(
+  showCheckingFirst: boolean
+): "checking" | "settled" {
+  return showCheckingFirst ? "checking" : "settled"
 }

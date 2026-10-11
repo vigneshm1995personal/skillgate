@@ -12,4 +12,14 @@ describe("historyMeta", () => {
       }).config
     ).toBe("Built-in checker")
   })
+
+  it("capitalizes Install to Cursor", () => {
+    expect(
+      historyMeta({
+        kind: "deploy",
+        skill: "pdf",
+        target: "cursor",
+      }).config
+    ).toBe("Install to Cursor")
+  })
 })

@@ -463,7 +463,7 @@ export function useEvalSession(opts: EvalSessionOpts) {
         toast.add({
           title: request.follow_deploy
             ? "Using last Deploy as baseline"
-            : "Pinned as baseline",
+            : "Saved as baseline",
           type: "success",
         })
         const skillName = data.skill || request.skill

@@ -68,6 +68,7 @@ describe("modelsForHarness", () => {
       MODEL_DEFAULT_VALUE,
       MODEL_CUSTOM_VALUE,
     ])
+    expect(empty[0]?.label).toBe("Agent default")
     const listed = modelsForHarness("codex", "codex", { codex: ["gpt-5.6-luna"] })
     expect(listed[0]?.value).toBe(MODEL_DEFAULT_VALUE)
     expect(listed.at(-1)?.value).toBe(MODEL_CUSTOM_VALUE)

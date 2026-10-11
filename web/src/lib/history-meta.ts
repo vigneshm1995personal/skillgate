@@ -1,3 +1,4 @@
+import { deployLabel } from "@/lib/dashboard-helpers"
 import { harnessDisplayName } from "@/lib/eval-config"
 import type { TimelineItem } from "@/lib/types"
 
@@ -12,7 +13,9 @@ export function historyMeta(
     return {
       skill: item.skill || item.label || "Deploy",
       version: "",
-      config: item.target ? `Install to ${item.target}` : item.label || "—",
+      config: item.target
+        ? `Install to ${deployLabel(item.target) ?? item.target}`
+        : item.label || "—",
       fingerprint: "",
     }
   }

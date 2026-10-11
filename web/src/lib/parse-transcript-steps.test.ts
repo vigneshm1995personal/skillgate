@@ -800,4 +800,20 @@ describe("spansToTimelineSteps titles", () => {
     expect(steps[0]?.title).toBe("Read hello.pdf")
     expect(steps[0]?.title).not.toMatch(/Run ·/)
   })
+
+  it("uses Agent step instead of Harness step", () => {
+    const steps = spansToTimelineSteps([
+      {
+        name: "tool.shell",
+        attributes: [
+          {
+            key: "gen_ai.tool.call.arguments",
+            value: { stringValue: "SKILLGATE_TASK=merge do-the-thing" },
+          },
+        ],
+      },
+    ])
+    expect(steps[0]?.title).not.toMatch(/Harness/i)
+    expect(JSON.stringify(steps)).not.toMatch(/SKILLGATE_TASK/)
+  })
 })

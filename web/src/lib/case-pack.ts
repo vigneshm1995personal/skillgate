@@ -27,3 +27,19 @@ export function canPinCheck(check: Check): boolean {
 export function pinnedCaseCount(checks: Check[]): number {
   return checks.filter(isPinnedCheck).length
 }
+
+export function expectedFieldValue(
+  check: Pick<Check, "contains" | "golden_path">
+): string {
+  const contains = check.contains ?? ""
+  if (contains.trim()) {
+    return contains
+  }
+  const golden = (check.golden_path || "").trim()
+  if (!golden) {
+    return contains
+  }
+  const base =
+    golden.replace(/\\/g, "/").split("/").filter(Boolean).pop() || golden
+  return `Matches file ${base}`
+}

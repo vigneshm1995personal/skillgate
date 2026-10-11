@@ -59,7 +59,7 @@ export function RunConfigAccordion({
         <AccordionContent>
           <FieldGroup>
             <Field data-disabled={disabled || undefined}>
-              <FieldTitle id="harness-label">Harness</FieldTitle>
+              <FieldTitle id="harness-label">Agent</FieldTitle>
               <ToggleGroup
                 id="harness-select"
                 aria-labelledby="harness-label"

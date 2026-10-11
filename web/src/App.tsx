@@ -107,15 +107,17 @@ function AuthGate({ children }: { children: ReactNode }) {
     return <LandingPage configured={configured} />
   }
 
-  return <>{children}</>
+  return (
+    <DashboardProvider initialStatus={status}>
+      {children}
+    </DashboardProvider>
+  )
 }
 
 export function App() {
   return (
     <AuthGate>
-      <DashboardProvider>
-        <DashboardMain />
-      </DashboardProvider>
+      <DashboardMain />
     </AuthGate>
   )
 }

@@ -228,7 +228,7 @@ def history_payload(state: AppState, skill_path: Path) -> dict[str, Any]:
                 "skill": skill_path.name,
                 "target": item.get("target"),
                 "status": item.get("status"),
-                "label": f"Install to {item.get('target')}",
+                "label": f"Install to {SOURCE_LABELS.get(item.get('target'), item.get('target') or 'agent')}",
             }
         )
     timeline.sort(key=lambda item: str(item.get("at") or ""), reverse=True)

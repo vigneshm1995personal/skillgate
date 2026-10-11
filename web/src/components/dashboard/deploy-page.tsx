@@ -16,6 +16,7 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 import { PageHeader } from "@/components/dashboard/chrome"
+import { installedNote } from "@/lib/dashboard-helpers"
 import { useDashboard } from "@/lib/dashboard-provider"
 import { runMetricsLine } from "@/lib/metrics-label"
 import { slotOn } from "@/lib/mode"
@@ -99,9 +100,7 @@ export function DeployPage() {
     deployAllowed &&
     (lastDeploy?.dest_label || lastDeploy?.dest_path || lastDeploy?.status === "installed")
   ) {
-    const ver = lastDeploy.semver ? ` v${lastDeploy.semver}` : ""
-    const target = lastDeploy.target ? ` to ${lastDeploy.target}` : ""
-    note = `Installed ${skillName}${ver}${target}.`
+    note = installedNote(skillName, lastDeploy)
     title = "Installed"
   } else if (deployAllowed && deployLast) {
     note = `Last install: ${deployLast}. Checks passed for ${skillName} — Install is unlocked.`

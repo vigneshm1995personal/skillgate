@@ -157,7 +157,7 @@ export function SkillPackBrowser({
   return (
     <Card id="skill-pack-files" className="overflow-x-visible overflow-y-visible">
       <CardHeader>
-        <CardTitle>Pack files</CardTitle>
+        <CardTitle>Skill files</CardTitle>
         <CardDescription>
           The skill folder — SKILL.md plus scripts, samples, and checks.
         </CardDescription>

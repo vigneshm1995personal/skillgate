@@ -328,7 +328,7 @@ export function SkillDetailPage({ name }: { name: string }) {
                   <TableRow>
                     <TableHead>When</TableHead>
                     <TableHead>Gate</TableHead>
-                    <TableHead>Harness</TableHead>
+                    <TableHead>Agent</TableHead>
                     <TableHead>Config</TableHead>
                     <TableHead>Version</TableHead>
                   </TableRow>

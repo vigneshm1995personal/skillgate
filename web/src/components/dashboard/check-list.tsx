@@ -7,7 +7,7 @@ import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui
 import { Input } from "@/components/ui/input"
 import { Spinner } from "@/components/ui/spinner"
 import { Textarea } from "@/components/ui/textarea"
-import { canPinCheck, isPinnedCheck } from "@/lib/case-pack"
+import { canPinCheck, expectedFieldValue, isPinnedCheck } from "@/lib/case-pack"
 import { checkHeadline, scorerCodeToPlain } from "@/lib/check-results"
 import { harnessDisplayName } from "@/lib/eval-config"
 import { runForCheck } from "@/lib/skill-run-state"
@@ -93,7 +93,7 @@ export function CheckList({
                   </Badge>
                 ) : null}
                 {isPinnedCheck(check) ? (
-                  <Badge variant="secondary">Pinned</Badge>
+                  <Badge variant="secondary">Saved</Badge>
                 ) : null}
               </div>
               <div className="flex shrink-0 items-center gap-1">
@@ -172,7 +172,7 @@ export function CheckList({
                 </FieldLabel>
                 <Input
                   id={`check-expected-${index}`}
-                  value={check.contains ?? ""}
+                  value={expectedFieldValue(check)}
                   placeholder="Hello Skill Gate"
                   disabled={running}
                   onChange={(event) => {

@@ -23,6 +23,22 @@ type Segment = {
   command?: string
 }
 
+function customerVisibleText(text: string): string {
+  return text
+    .replace(/\bSKILLGATE_TASK(?:=[^\s]*)?/g, "the task")
+    .replace(/\bevals\/(?:goldens|fixtures)\/([^\s]+)/g, "$1")
+}
+
+function polishStep(step: TimelineStep): TimelineStep {
+  return {
+    ...step,
+    title: customerVisibleText(step.title),
+    subtitle: step.subtitle ? customerVisibleText(step.subtitle) : step.subtitle,
+    detail: step.detail ? customerVisibleText(step.detail) : step.detail,
+    commands: step.commands.map((item) => customerVisibleText(item)),
+  }
+}
+
 function basename(path: string): string {
   const cleaned = path.replace(/\\/g, "/").replace(/['"]/g, "")
   const parts = cleaned.split("/").filter(Boolean)
@@ -141,7 +157,7 @@ function classify(
   }
   if (command) {
     return {
-      title: file ? `Touch ${file}` : "Harness step",
+      title: file ? `Touch ${file}` : "Agent step",
       subtitle: truncateAtWord(command, 96),
     }
   }
@@ -274,7 +290,7 @@ function parseNarrationSteps(
   if (opts?.passed === true) {
     for (const step of merged) step.status = "pass"
   }
-  return merged
+  return merged.map(polishStep)
 }
 
 export function countHarnessCommands(transcript: string | null | undefined): number {
@@ -408,7 +424,7 @@ export function spansToTimelineSteps(
   if (opts?.passed === true) {
     for (const step of merged) step.status = "pass"
   }
-  return merged
+  return merged.map(polishStep)
 }
 
 
