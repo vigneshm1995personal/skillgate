@@ -19,6 +19,13 @@ describe("design tokens", () => {
     expect(css).toMatch(/--warning:/)
   })
 
+  it("keeps light-mode warning as dark as success so chip text meets AA", () => {
+    const root = css.slice(css.indexOf(":root {"), css.indexOf("\n.dark {"))
+    expect(root).toMatch(/--success:\s*oklch\(0\.55/)
+    expect(root).toMatch(/--warning:\s*oklch\(0\.55/)
+    expect(root).not.toMatch(/--warning:\s*oklch\(0\.72/)
+  })
+
   it("pairs Geist with a display face for the stamp", () => {
     expect(css).toMatch(/--font-display:/)
     expect(css).toMatch(/Newsreader/)

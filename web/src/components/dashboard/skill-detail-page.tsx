@@ -338,7 +338,19 @@ export function SkillDetailPage({ name }: { name: string }) {
                     <TableRow
                       key={run.id}
                       className={run.id ? "cursor-pointer" : undefined}
+                      tabIndex={run.id ? 0 : undefined}
                       onClick={() => openRun(run)}
+                      onKeyDown={
+                        run.id
+                          ? (event) => {
+                              if (event.key !== "Enter" && event.key !== " ") {
+                                return
+                              }
+                              event.preventDefault()
+                              openRun(run)
+                            }
+                          : undefined
+                      }
                     >
                       <TableCell
                         className="text-muted-foreground tabular-nums whitespace-nowrap"

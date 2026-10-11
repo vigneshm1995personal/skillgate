@@ -43,6 +43,19 @@ describe("skip link", () => {
     )
     expect(app).toMatch(/href=["']#main["']/)
     expect(app).toMatch(/id=["']main["']/)
+    expect(app).toMatch(/id=["']main["'][\s\S]{0,120}tabIndex=\{-1\}/)
+  })
+})
+
+describe("skill run rows", () => {
+  it("opens a run from the keyboard, not only a click", () => {
+    const src = readFileSync(
+      join(componentsRoot, "dashboard/skill-detail-page.tsx"),
+      "utf8"
+    )
+    expect(src).toMatch(/tabIndex=\{run\.id \? 0/)
+    expect(src).toMatch(/onKeyDown/)
+    expect(src).toMatch(/event\.key !== "Enter"/)
   })
 })
 
