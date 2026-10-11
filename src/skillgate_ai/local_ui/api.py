@@ -17,7 +17,7 @@ from skillgate_ai.advice import (
     rewrite_skill_description,
 )
 from skillgate_ai.case_pack import CasePack, dataset_view, save_case_pack
-from skillgate_ai.config import ROOT_ENV_NAMES, get_llm_config, load_env
+from skillgate_ai.config import NO_KEY_HINT, ROOT_ENV_NAMES, get_llm_config, load_env
 from skillgate_ai.demo_files import ensure_demo_pdfs
 from skillgate_ai.errors import MissingLLMKeyError, SkillGateError
 from skillgate_ai.keys import set_vault_key
@@ -368,7 +368,7 @@ def _start_check(state: UiState, payload: dict[str, Any]) -> tuple[int, dict[str
     if not get_llm_config(state.root).has_any_key:
         raise MissingLLMKeyError(
             LIVE_NO_KEY,
-            hint="Add a key in Settings (`skillgate ui`) or run `skillgate keys set`.",
+            hint=NO_KEY_HINT,
         )
     with state.lock:
         if (

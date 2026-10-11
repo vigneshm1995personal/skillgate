@@ -137,7 +137,7 @@ export function SkillUpdateChecklist() {
           title={
             hasGatewayKey
               ? undefined
-              : "Add AI_GATEWAY_API_KEY to suggest skill updates."
+              : "Add a model key in Settings to suggest skill updates."
           }
           onClick={() => void requestSkillUpdates({ force: Boolean(payload) })}
         >

@@ -19,6 +19,8 @@ FORBIDDEN = (
     "not a live model",
     "pdf twin",
     "Corrected SKILL.md description",
+    "Add AI_GATEWAY_API_KEY to suggest skill updates",
+    "not gateway ids like openai/gpt-4o-mini",
 )
 
 
@@ -29,8 +31,9 @@ def test_check_without_key_exits_2(tmp_path: Path, monkeypatch) -> None:
     result = runner.invoke(app, ["check", str(pack)])
     out = plain_text(result.stdout + result.stderr)
     assert result.exit_code == 2, out
-    assert "Settings" in out
-    assert "skillgate keys set" in out
+    assert "Add a model key in Settings or run `skillgate keys set`" in out
+    assert "SKILLGATE_OPENAI_API_KEY" not in out
+    assert "--key-env" not in out
     assert "built-in checker" not in out.lower()
     assert "not a live model" not in out.lower()
 
@@ -43,17 +46,20 @@ def test_run_check_without_key_does_not_start(tmp_path: Path) -> None:
     assert result.report is None
     assert result.error is not None
     message = (result.error.get("message") or "") + " " + (result.error.get("hint") or "")
-    assert "skillgate keys set" in message
-    assert "Settings" in message
+    assert result.error.get("hint") == "Add a model key in Settings or run `skillgate keys set`"
+    assert "SKILLGATE_" not in message
+    assert "--key-env" not in message
 
 
 def test_check_help_has_no_demo_flag() -> None:
     result = runner.invoke(app, ["check", "--help"], color=False)
-    help_text = plain_text(result.stdout + result.stderr).lower()
+    help_text = plain_text(result.stdout + result.stderr)
+    lower = help_text.lower()
     assert result.exit_code == 0, help_text
-    assert "--demo" not in help_text
-    assert "--live" not in help_text
-    assert "--key-env" in help_text
+    assert "--demo" not in lower
+    assert "--live" not in lower
+    assert "--key-env" in lower
+    assert "SKILLGATE_OPENAI_API_KEY" in help_text
 
 
 def test_demo_flag_is_unknown(tmp_path: Path, monkeypatch) -> None:

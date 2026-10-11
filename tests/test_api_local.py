@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import io
+import json
 import shutil
-import time
 import zipfile
 from pathlib import Path
 
@@ -135,7 +135,11 @@ def test_run_without_key_is_conflict(tmp_path: Path, monkeypatch) -> None:
     assert started.status_code == 409
     detail = started.json()["detail"]
     assert "No model key" in (detail.get("message") or "")
-    assert "skillgate keys set" in (detail.get("hint") or "")
+    assert detail.get("hint") == "Add a model key in Settings or run `skillgate keys set`"
+    hint = detail.get("hint") or ""
+    assert "SKILLGATE_" not in hint
+    assert "--key-env" not in hint
+    assert "skillgate ui" not in hint
 
 
 def test_settings_keys_write_vault(tmp_path: Path, monkeypatch) -> None:
@@ -308,6 +312,132 @@ def test_zip_keeps_valid_skill_and_drops_traversal_members(
     assert not (tmp_path / "escape.txt").is_file()
     assert not (tmp_path.parent / "outside.txt").is_file()
     assert list(dest.rglob("outside.txt")) == []
+
+
+_LEAKY_JUDGE = {
+    "provider": "openai",
+    "backend": "decisions",
+    "display_name": "OpenAI Decisions via Vercel AI Gateway (your key)",
+    "model": "gpt-6-luna",
+    "chosen": "false",
+}
+_LEAKY_CONFIG = {
+    "harness": "llm",
+    "model": "openai/gpt-4o-mini",
+    "label": (
+        "LLM · openai/gpt-4o-mini via gateway · 300s · "
+        "OpenAI Decisions via Vercel AI Gateway (your key)"
+    ),
+    "judge": _LEAKY_JUDGE,
+}
+_LEAKY_REPORT = {
+    "skill": "pdf",
+    "harness": "llm",
+    "task_count": 1,
+    "passed": True,
+    "config": _LEAKY_CONFIG,
+    "tasks": [
+        {
+            "id": "extract-hello",
+            "passed": True,
+            "check_kind": "openai",
+            "judge": dict(_LEAKY_JUDGE),
+        }
+    ],
+}
+
+
+def _assert_browser_payload_is_scrubbed(payload: object) -> None:
+    blob = json.dumps(payload)
+    lower = blob.lower()
+    assert "config_label_raw" not in blob
+    assert "check_kind" not in blob
+    assert "gpt-6-luna" not in lower
+    assert "openai decisions" not in lower
+    assert "vercel ai gateway" not in lower
+    assert '"display_name": "openai"' not in lower
+
+
+def test_browser_api_scrubs_provider_model_names(tmp_path: Path, monkeypatch) -> None:
+    pack = _copy_pack(tmp_path)
+    hist_dir = pack / "evals" / "history"
+    for path in hist_dir.glob("*.jsonl"):
+        path.unlink()
+    append_eval(
+        pack,
+        run_id="auto-judge",
+        passed=True,
+        report=_LEAKY_REPORT,
+        config=_LEAKY_CONFIG,
+    )
+    append_eval(
+        pack,
+        run_id="chosen-jev",
+        passed=True,
+        report={
+            "skill": "pdf",
+            "harness": "llm",
+            "task_count": 1,
+            "passed": True,
+            "config": {
+                "harness": "llm",
+                "label": "LLM · 300s · Jev",
+                "judge": {
+                    "provider": "jev",
+                    "display_name": "Jev",
+                    "model": "jev-hidden-model",
+                    "chosen": True,
+                },
+            },
+            "tasks": [
+                {
+                    "id": "extract-hello",
+                    "passed": True,
+                    "check_kind": "openai",
+                    "judge": {
+                        "provider": "jev",
+                        "display_name": "Jev",
+                        "model": "jev-hidden-model",
+                        "chosen": True,
+                    },
+                }
+            ],
+        },
+        config={
+            "harness": "llm",
+            "label": "LLM · 300s · Jev",
+            "judge": {
+                "provider": "jev",
+                "display_name": "Jev",
+                "model": "jev-hidden-model",
+                "chosen": True,
+            },
+        },
+    )
+    disk = "".join(path.read_text(encoding="utf-8") for path in hist_dir.glob("*.jsonl"))
+    assert "gpt-6-luna" in disk
+    assert "check_kind" in disk
+    assert "OpenAI Decisions" in disk
+    assert "jev-hidden-model" in disk
+
+    client = _client(tmp_path, monkeypatch)
+    hist = client.get("/api/history", params={"skill": "pdf"}).json()
+    skill = client.get("/api/skills/pdf").json()
+    auto_run = client.get("/api/runs/auto-judge").json()
+    jev_run = client.get("/api/runs/chosen-jev").json()
+    _assert_browser_payload_is_scrubbed(hist)
+    _assert_browser_payload_is_scrubbed(skill)
+    _assert_browser_payload_is_scrubbed(auto_run)
+    _assert_browser_payload_is_scrubbed(jev_run)
+    assert "jev-hidden-model" not in json.dumps(jev_run)
+    assert hist["last_run"]["config_label"] == "Scored by Jev"
+    auto_row = next(item for item in hist["runs"] if item["id"] == "auto-judge")
+    assert auto_row["config_label"] == "Scored by the judge"
+    assert auto_row["config"]["label"] == "Scored by the judge"
+    assert auto_row["config"]["judge"]["display_name"] == "the judge"
+    assert "model" not in auto_row["config"]["judge"]
+    assert jev_run["config"]["judge"]["display_name"] == "Jev"
+    assert jev_run["config_label"] == "Scored by Jev"
 
 
 def test_local_gate_tryout_stays_pending() -> None:

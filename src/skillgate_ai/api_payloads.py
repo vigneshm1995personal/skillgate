@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import threading
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -11,9 +12,10 @@ from fastapi import HTTPException, Request
 
 from skillgate_ai.case_pack import skill_has_dataset
 from skillgate_ai.catalog import SOURCE_LABELS, catalog_entries
-from skillgate_ai.eval_config import config_label, customer_config_label, harness_display_name
+from skillgate_ai.eval_config import customer_config_label
 from skillgate_ai.history import load_deploys, load_history
 from skillgate_ai.ingest import ingest_skill
+from skillgate_ai.judge_copy import customer_scorer_name
 from skillgate_ai.pack import browser_files, relevant_eval_fixtures
 
 SETTINGS_KEYS = (
@@ -74,6 +76,38 @@ def _row_is_tryout(row: dict[str, Any], report: dict[str, Any] | None) -> bool:
     return bool(row.get("tryout") or (report or {}).get("tryout"))
 
 
+def _scrub_judge(judge: dict[str, Any]) -> dict[str, Any]:
+    out = {key: value for key, value in judge.items() if key != "model"}
+    out["display_name"] = customer_scorer_name(judge)
+    return out
+
+
+def _scrub_browser(value: Any) -> Any:
+    if isinstance(value, list):
+        return [_scrub_browser(item) for item in value]
+    if not isinstance(value, dict):
+        return value
+    out: dict[str, Any] = {}
+    for key, item in value.items():
+        if key in {"config_label_raw", "check_kind"}:
+            continue
+        if key == "judge" and isinstance(item, dict):
+            out[key] = _scrub_judge(item)
+            continue
+        if key == "config" and isinstance(item, dict):
+            scrubbed = _scrub_browser(item)
+            scrubbed["label"] = customer_config_label(item)
+            out[key] = scrubbed
+            continue
+        out[key] = _scrub_browser(item)
+    return out
+
+
+def scrub_browser_payload(value: Any) -> Any:
+    """Copy for the local UI. Provider/model names stay on disk unless the user picked."""
+    return _scrub_browser(copy.deepcopy(value))
+
+
 def history_row_to_run(row: dict[str, Any], skill_path: Path) -> dict[str, Any]:
     report = row.get("report") if isinstance(row.get("report"), dict) else None
     passed = row.get("passed")
@@ -83,27 +117,27 @@ def history_row_to_run(row: dict[str, Any], skill_path: Path) -> dict[str, Any]:
     decision, reason = local_gate(passed, status="error" if error else "done", tryout=tryout)
     cfg = row.get("config") if isinstance(row.get("config"), dict) else None
     label = customer_config_label(cfg, str(harness or ""))
-    raw = config_label(cfg) if cfg else label
-    return {
-        "id": row.get("run_id"),
-        "status": "error" if error else "done",
-        "passed": passed,
-        "gate": row.get("gate") or ("green" if passed else "red"),
-        "gate_decision": decision,
-        "gate_reason": reason,
-        "error": error,
-        "report": report,
-        "created_at": row.get("ts"),
-        "harness": harness,
-        "config_label": label,
-        "config_label_raw": raw,
-        "skill": (report or {}).get("skill") or skill_path.name,
-        "skill_path": str(skill_path),
-        "config": cfg,
-        "completed_count": (report or {}).get("task_count"),
-        "task_count": (report or {}).get("task_count"),
-        "tryout": tryout,
-    }
+    return scrub_browser_payload(
+        {
+            "id": row.get("run_id"),
+            "status": "error" if error else "done",
+            "passed": passed,
+            "gate": row.get("gate") or ("green" if passed else "red"),
+            "gate_decision": decision,
+            "gate_reason": reason,
+            "error": error,
+            "report": report,
+            "created_at": row.get("ts"),
+            "harness": harness,
+            "config_label": label,
+            "skill": (report or {}).get("skill") or skill_path.name,
+            "skill_path": str(skill_path),
+            "config": cfg,
+            "completed_count": (report or {}).get("task_count"),
+            "task_count": (report or {}).get("task_count"),
+            "tryout": tryout,
+        }
+    )
 
 
 def _newest_full_run(runs: list[dict[str, Any]]) -> dict[str, Any] | None:
@@ -191,7 +225,6 @@ def history_payload(state: AppState, skill_path: Path) -> dict[str, Any]:
             "skill": item.get("skill"),
             "harness": item.get("harness"),
             "config_label": item.get("config_label"),
-            "config_label_raw": item.get("config_label_raw"),
             "gate": item.get("gate"),
             "status": item.get("status"),
             "tryout": item.get("tryout"),

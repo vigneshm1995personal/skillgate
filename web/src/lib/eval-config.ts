@@ -193,9 +193,9 @@ export function unsupportedModelHint(
 ): string {
   if (resolveModelHarness(pref, resolvedHarness) === "codex") {
     if (known.length === 0 || known.length > 8) {
-      return "Not on this agent's list. Codex + ChatGPT login needs a Codex model — not gateway ids like openai/gpt-4o-mini."
+      return "Not on this agent's list. Codex + ChatGPT login needs a Codex model — not a gateway model id."
     }
-    return `Not on this agent's list. Codex + ChatGPT login needs a Codex model (${known.join(", ")}) — not gateway ids like openai/gpt-4o-mini.`
+    return `Not on this agent's list. Codex + ChatGPT login needs a Codex model (${known.join(", ")}) — not a gateway model id.`
   }
   if (known.length === 0 || known.length > 8) {
     return "Not on this agent's list. Pick from the list for this agent or leave Agent default."

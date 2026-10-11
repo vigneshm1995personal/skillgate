@@ -206,7 +206,9 @@ def test_fake_home_import_list_open_run_deploy(tmp_path: Path, monkeypatch) -> N
     assert idea_run.status_code == 409
     idea_detail = idea_run.json().get("detail") or {}
     assert "No model key" in (idea_detail.get("message") or "")
-    assert "skillgate keys set" in (idea_detail.get("hint") or "")
+    assert idea_detail.get("hint") == "Add a model key in Settings or run `skillgate keys set`"
+    assert "SKILLGATE_" not in (idea_detail.get("hint") or "")
+    assert "--key-env" not in (idea_detail.get("hint") or "")
 
     gen = client.post("/api/evals/generate", json={"skill": "pdf"})
     assert gen.status_code == 200

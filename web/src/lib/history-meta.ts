@@ -31,12 +31,11 @@ export function historyMeta(
     item.config_label ||
     harnessDisplayName(item.harness || "", item.harness || "") ||
     "—"
-  const rawConfig = item.config_label_raw || stamped
+  const scored = customerConfigLabel({ label: stamped, harness: item.harness }, item.harness)
   const config = isLegacyRunCopy(stamped, item.harness)
     ? OLDER_RUN_LABEL
-    : customerConfigLabel({ label: rawConfig, harness: item.harness }, item.harness) ||
-      harnessDisplayName(item.harness || "") ||
-      "—"
+    : scored ||
+      (/^Scored by /i.test(stamped) ? stamped : harnessDisplayName(item.harness || "") || "—")
   const fingerprint = item.config_fingerprint || item.hash || ""
-  return { skill, version, config, configRaw: rawConfig === "—" ? "" : rawConfig, fingerprint }
+  return { skill, version, config, configRaw: "", fingerprint }
 }

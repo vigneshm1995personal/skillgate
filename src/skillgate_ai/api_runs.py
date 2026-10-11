@@ -8,9 +8,16 @@ from typing import Any
 
 from fastapi import FastAPI, Request
 
-from skillgate_ai.api_payloads import AppState, fail, local_gate, run_from_history, state_of
+from skillgate_ai.api_payloads import (
+    AppState,
+    fail,
+    local_gate,
+    run_from_history,
+    scrub_browser_payload,
+    state_of,
+)
 from skillgate_ai.catalog import find_skill
-from skillgate_ai.config import get_llm_config, load_env
+from skillgate_ai.config import NO_KEY_HINT, get_llm_config, load_env
 from skillgate_ai.errors import MissingLLMKeyError, SkillGateError
 from skillgate_ai.gate import run_check
 from skillgate_ai.live import create_control, drop_control, get_control
@@ -35,7 +42,7 @@ def start_run(state: AppState, body: dict[str, Any]) -> dict[str, Any]:
     if not get_llm_config(state.root).has_any_key:
         raise MissingLLMKeyError(
             "No model key found.",
-            hint="Add a key in Settings (`skillgate ui`) or run `skillgate keys set`.",
+            hint=NO_KEY_HINT,
         )
     config = body.get("config") if isinstance(body.get("config"), dict) else {}
     with state.lock:
@@ -156,7 +163,7 @@ def register_run_routes(app: FastAPI) -> None:
             if found is None:
                 fail(404, f"Unknown run {run_id}")
             return found
-        return dict(record)
+        return scrub_browser_payload(record)
 
     @app.post("/api/runs/{run_id}/skip")
     def skip_run(run_id: str) -> dict[str, Any]:

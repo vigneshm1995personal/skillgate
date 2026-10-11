@@ -23,8 +23,9 @@ def test_gate_without_key_exits_2(project_root: Path) -> None:
     assert result.error is not None
     assert "No model key" in (result.error.get("message") or "")
     hint = result.error.get("hint") or ""
-    assert "skillgate keys set" in hint
-    assert "Settings" in hint
+    assert hint == "Add a model key in Settings or run `skillgate keys set`"
+    assert "SKILLGATE_" not in hint
+    assert "--key-env" not in hint
 
 
 def test_ambient_key_does_not_start_a_check(

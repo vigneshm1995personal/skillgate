@@ -27,8 +27,9 @@ def test_check_without_key_exits_2(project_root: Path) -> None:
     result = runner.invoke(app, ["check", str(project_root / "skills" / "pdf")])
     out = plain_text(result.stdout + result.stderr)
     assert result.exit_code == 2, out
-    assert "Settings" in out
-    assert "skillgate keys set" in out
+    assert "Add a model key in Settings or run `skillgate keys set`" in out
+    assert "SKILLGATE_OPENAI_API_KEY" not in out
+    assert "--key-env" not in out
     assert "built-in checker" not in out.lower()
     assert "not a live model" not in out.lower()
 

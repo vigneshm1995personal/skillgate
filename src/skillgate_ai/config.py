@@ -258,10 +258,7 @@ def _env_temperature() -> float:
 
 
 NO_KEY_MESSAGE = "No model key found."
-NO_KEY_HINT = (
-    "Add a key in Settings (`skillgate ui`) or run `skillgate keys set`.\n"
-    "CI: set SKILLGATE_OPENAI_API_KEY, or pass --key-env OPENAI_API_KEY."
-)
+NO_KEY_HINT = "Add a model key in Settings or run `skillgate keys set`"
 UI_NO_KEY_HINT = "Add a key in Settings, then press Run."
 
 
@@ -269,9 +266,8 @@ def missing_key_error(*, live: bool = True, for_codex: bool = False) -> MissingL
     del live
     if for_codex:
         hint = (
-            "Codex CLI needs a key in Settings (`skillgate keys set CODEX_API_KEY`) "
-            "or a ChatGPT login (`codex login`).\n"
-            "CI: set SKILLGATE_CODEX_API_KEY or pass --key-env CODEX_API_KEY."
+            "Codex CLI needs a key in Settings (`skillgate keys set`) "
+            "or a ChatGPT login (`codex login`)."
         )
     else:
         hint = NO_KEY_HINT

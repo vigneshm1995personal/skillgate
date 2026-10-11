@@ -9,6 +9,7 @@ import {
   friendlyModelName,
   stampRunConfig,
   emptyCatalogHint,
+  unsupportedModelHint,
   draftConfigSummary,
   harnessDisplayName,
   knownModelsForHarness,
@@ -88,6 +89,19 @@ describe("modelSelectValue", () => {
     expect(modelSelectValue("", options)).toBe(MODEL_DEFAULT_VALUE)
     expect(modelSelectValue("gpt-5.6-luna", options)).toBe("gpt-5.6-luna")
     expect(modelSelectValue("openai/gpt-4o-mini", options)).toBe(MODEL_CUSTOM_VALUE)
+  })
+})
+
+describe("unsupportedModelHint", () => {
+  it("uses plain words instead of gateway model ids", () => {
+    const short = unsupportedModelHint("codex", "codex", [])
+    const listed = unsupportedModelHint("codex", "codex", ["gpt-5.6-luna"])
+    expect(short).toMatch(/Codex model/)
+    expect(short).not.toMatch(/gateway ids/i)
+    expect(short).not.toMatch(/openai\/gpt-4o-mini/)
+    expect(listed).toContain("gpt-5.6-luna")
+    expect(listed).not.toMatch(/openai\/gpt-4o-mini/)
+    expect(listed).toMatch(/not a gateway model id/i)
   })
 })
 
