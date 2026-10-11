@@ -23,7 +23,7 @@ export const PACK_BANK_NOTICE =
   "These checks are saved with this skill. Edit them, then press Run."
 
 export const ASSIST_CHECKS_NOTICE =
-  "Draft checks from Generate. Edit them before Run. They do not unlock Install until you save them."
+  "Draft checks from Generate. Edit them before Run. They do not unlock Deploy until you save them."
 
 export const FIXTURE_NOTICE =
   "Completion checks need a file in the skill folder — add input or keep trigger-only."

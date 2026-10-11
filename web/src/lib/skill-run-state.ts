@@ -1,7 +1,7 @@
 import { isLiveHarness, type Check, type RunRecord, type SkillPayload } from "@/lib/types"
 
 /** Shown on single-check try-outs. Never the Deploy source of record. */
-export const TRYOUT_LABEL = "Single check — doesn't change Install"
+export const TRYOUT_LABEL = "Single check — doesn't change Deploy"
 
 export type RunPurpose = "gate" | "tryout"
 
@@ -61,6 +61,24 @@ export function pinBelongsToSkill(
   }
   const pinSkill = runSkillName(pin)
   return !pinSkill || pinSkill === name
+}
+
+export function isViewingOlderRun(
+  slot: SkillRunSlot,
+  skillName?: string | null
+): boolean {
+  if (!pinBelongsToSkill(slot.pin, skillName)) {
+    return false
+  }
+  const pinId = (slot.pin?.id || "").trim()
+  if (!pinId) {
+    return false
+  }
+  const liveId = (liveGateRun(slot, skillName)?.id || "").trim()
+  if (!liveId) {
+    return false
+  }
+  return pinId !== liveId
 }
 
 export function shownGateRun(slot: SkillRunSlot, skillName?: string | null): RunRecord | null {

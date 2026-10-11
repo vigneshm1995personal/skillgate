@@ -194,7 +194,7 @@ def decide_gate_result(
     if not is_live_harness(harness):
         return GateVerdict("blocked", "Deploy needs a live harness.")
     if not passed:
-        return GateVerdict("blocked", "Get a passing run to unlock Install.")
+        return GateVerdict("blocked", "Get a passing run to unlock Deploy.")
     return GateVerdict(
         "cleared",
         "This Dataset passed.",

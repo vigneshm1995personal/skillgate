@@ -299,7 +299,7 @@ export function SkillDetailPage({ name }: { name: string }) {
         <CardHeader>
             <CardTitle>Runs</CardTitle>
             <CardDescription>
-            A complete run sets Install. Running one example by itself is labeled and doesn't count.
+            A complete run sets Deploy. Running one example by itself is labeled and doesn't count.
             </CardDescription>
         </CardHeader>
         <CardContent>

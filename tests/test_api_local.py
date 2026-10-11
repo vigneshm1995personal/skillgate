@@ -313,7 +313,7 @@ def test_zip_keeps_valid_skill_and_drops_traversal_members(
 def test_local_gate_tryout_stays_pending() -> None:
     assert local_gate(True, status="done", tryout=True) == (
         "pending",
-        "Single-check runs do not unlock Install.",
+        "Single-check runs do not unlock Deploy.",
     )
     row = history_row_to_run(
         {"run_id": "try-1", "passed": True, "report": {"tryout": True, "task_count": 1}},

@@ -60,10 +60,10 @@ def is_relative(path: Path, root: Path) -> bool:
 
 def local_gate(passed: bool | None, *, status: str, tryout: bool) -> tuple[str, str]:
     if tryout:
-        return "pending", "Single-check runs do not unlock Install."
+        return "pending", "Single-check runs do not unlock Deploy."
     if status == "error" or not passed:
-        return "blocked", "Get a passing run to unlock Install."
-    return "cleared", "Checks passed — Install is unlocked."
+        return "blocked", "Get a passing run to unlock Deploy."
+    return "cleared", "Checks passed — Deploy is unlocked."
 
 
 def _row_is_tryout(row: dict[str, Any], report: dict[str, Any] | None) -> bool:

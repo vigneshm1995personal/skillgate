@@ -137,7 +137,7 @@ function seedingSpinnerCopy(opts: {
     if (opts.hasDataset) {
       return {
         title: "Asking the model",
-        description: "Generating draft checks. They don’t unlock Install.",
+        description: "Generating draft checks. They don’t unlock Deploy.",
       }
     }
     return {

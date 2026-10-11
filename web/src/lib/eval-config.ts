@@ -267,6 +267,52 @@ function isStaleAutoLabel(label: string, harness?: string): boolean {
   return /^auto(\s*·|\s*$)/i.test(label.trim())
 }
 
+export function friendlyModelName(model?: string | null): string {
+  const raw = (model || "").trim()
+  if (!raw) {
+    return ""
+  }
+  const slug = raw.includes("/") ? raw.slice(raw.lastIndexOf("/") + 1) : raw
+  const gpt = slug.match(/^gpt-(.+)$/i)
+  if (gpt) {
+    const [ver, ...tail] = gpt[1].split("-")
+    const extras = tail.map((part) => {
+      const lower = part.toLowerCase()
+      if (lower === "mini" || lower === "nano" || lower === "preview") {
+        return lower
+      }
+      return part
+    })
+    return [`GPT-${ver}`, ...extras].join(" ")
+  }
+  return slug
+    .split(/[-_]/)
+    .map((part) => {
+      if (!part || /^\d+(\.\d+)*$/.test(part)) {
+        return part
+      }
+      return part.charAt(0).toUpperCase() + part.slice(1)
+    })
+    .join(" ")
+}
+
+export function customerRanWith(config?: EvalRunConfig | null): string {
+  if (!config || isLegacyRunCopy(config.label, config.harness)) {
+    return ""
+  }
+  const model = friendlyModelName(config.model)
+  if (model) {
+    return `Ran with ${model}`
+  }
+  const resolved = (config.harness || config.harness_pref || "").trim()
+  const harness = harnessDisplayName(resolved, config.harness)
+  const cleaned = harness.replace(/^Auto · /, "").trim()
+  if (cleaned && cleaned !== "Auto") {
+    return `Ran with ${cleaned}`
+  }
+  return ""
+}
+
 export function configLabel(config?: EvalRunConfig | null): string {
   if (!config) {
     return ""

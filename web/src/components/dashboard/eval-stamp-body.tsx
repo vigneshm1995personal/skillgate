@@ -3,6 +3,12 @@ import { CheckIcon } from "lucide-react"
 import { cn } from "cn"
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import {
@@ -112,10 +118,12 @@ export function EvalErrorPanel({
   message,
   hint,
   stampLine,
+  ranWith,
 }: {
   message: string
   hint?: string | null
   stampLine: string
+  ranWith?: string
 }) {
   const { setStage } = useDashboard()
   const showSettings = /settings/i.test(`${message} ${hint || ""}`)
@@ -137,12 +145,13 @@ export function EvalErrorPanel({
             </Button>
           </p>
         ) : null}
-        {stampLine ? (
+        {ranWith ? (
           <p className="mt-2" id="run-config">
-            {stampLine}
+            {ranWith}
           </p>
         ) : null}
-        <p className="mt-2">Get a passing run to unlock Install.</p>
+        <RunDetails stampLine={stampLine} />
+        <p className="mt-2">Get a passing run to unlock Deploy.</p>
       </AlertDescription>
     </Alert>
   )
@@ -160,6 +169,7 @@ export function EvalPassFailPanel({
   errorNote,
   baseline,
   stampLine,
+  ranWith,
   stampMetrics,
   configDiff,
 }: {
@@ -174,6 +184,7 @@ export function EvalPassFailPanel({
   errorNote?: string | null
   baseline: ReactNode
   stampLine: string
+  ranWith?: string
   stampMetrics: string | null
   configDiff: ConfigDiffEntry[]
 }) {
@@ -197,6 +208,11 @@ export function EvalPassFailPanel({
         {scoredBy ? (
           <p className="text-sm text-muted-foreground">{scoredBy}</p>
         ) : null}
+        {ranWith ? (
+          <p className="text-sm text-muted-foreground" id="run-config">
+            {ranWith}
+          </p>
+        ) : null}
         <GateBadge {...stampBadgeProps(kind)} />
       </div>
       {errorNote ? (
@@ -214,25 +230,47 @@ export function EvalPassFailPanel({
         </p>
       ) : null}
       {baseline}
-      {stampLine ? (
-        <p className="text-sm" id="run-config">
-          {stampLine}
-        </p>
-      ) : null}
       {stampMetrics ? (
         <p className="text-sm text-muted-foreground" id="run-usage">
           {stampMetrics}
         </p>
       ) : null}
-      {configDiff.length ? (
-        <Alert id="config-diff">
-          <AlertTitle>Settings changed from the last run</AlertTitle>
-          <AlertDescription>
-            {plainConfigDiff(configDiff)}
-          </AlertDescription>
-        </Alert>
-      ) : null}
+      <RunDetails stampLine={stampLine} configDiff={configDiff} />
     </div>
+  )
+}
+
+function RunDetails({
+  stampLine,
+  configDiff = [],
+}: {
+  stampLine?: string
+  configDiff?: ConfigDiffEntry[]
+}) {
+  if (!stampLine && !configDiff.length) {
+    return null
+  }
+  return (
+    <Accordion defaultValue={[]}>
+      <AccordionItem value="run-details" className="border-0">
+        <AccordionTrigger className="py-1.5 text-muted-foreground hover:no-underline">
+          Run details
+        </AccordionTrigger>
+        <AccordionContent>
+          {stampLine ? (
+            <p className="text-sm" id="run-config-details">
+              {stampLine}
+            </p>
+          ) : null}
+          {configDiff.length ? (
+            <Alert id="config-diff">
+              <AlertTitle>Settings changed from the last run</AlertTitle>
+              <AlertDescription>{plainConfigDiff(configDiff)}</AlertDescription>
+            </Alert>
+          ) : null}
+        </AccordionContent>
+      </AccordionItem>
+    </Accordion>
   )
 }
 
@@ -243,25 +281,25 @@ export function gateCoverageLine(
   harness: string | null | undefined
 ): string {
   if (deployAllowed) {
-    return "Checks passed — Install is unlocked."
+    return "Checks passed — Deploy is unlocked."
   }
   if (reportPassed === true && !isLiveHarness(harness)) {
-    return "Get a passing run to unlock Install."
+    return "Get a passing run to unlock Deploy."
   }
   if (reportPassed === true && isLiveHarness(harness)) {
     return (
       lastResult.gate_reason ||
-      "Checks passed. Install stays blocked until a completion check passes with a file from this skill."
+      "Checks passed. Deploy stays blocked until a completion check passes with a file from this skill."
     )
   }
   if (isRegressionCopy(lastResult.gate_reason) || lastResult.regression?.hard) {
     return (
       lastResult.gate_reason ||
       lastResult.regression?.reason ||
-      "Get a passing run to unlock Install."
+      "Get a passing run to unlock Deploy."
     )
   }
-  return "Get a passing run to unlock Install."
+  return "Get a passing run to unlock Deploy."
 }
 
 function isRegressionCopy(reason?: string | null): boolean {

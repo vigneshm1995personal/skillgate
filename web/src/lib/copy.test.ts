@@ -22,6 +22,11 @@ const CUSTOMER_DENY = [
   "Full runs decide the gate",
   "not the live Deploy gate",
   "Pass the checks to unlock Install.",
+  "unlock Install",
+  "sets Install",
+  "Install still follows",
+  "doesn't change Install",
+  "OpenAI was unsure",
 ] as const
 
 const componentsRoot = join(dirname(fileURLToPath(import.meta.url)), "../components")
@@ -86,5 +91,14 @@ describe("customer copy", () => {
       }
     }
     expect(hits).toEqual([])
+  })
+
+  it("hides run plumbing behind Run details", () => {
+    const src = readFileSync(
+      join(componentsRoot, "dashboard/eval-stamp-body.tsx"),
+      "utf8"
+    )
+    expect(src).toMatch(/Run details/)
+    expect(src).toMatch(/Get a passing run to unlock Deploy\./)
   })
 })

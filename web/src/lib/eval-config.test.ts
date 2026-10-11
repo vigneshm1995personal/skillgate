@@ -4,6 +4,8 @@ import {
   MODEL_CUSTOM_VALUE,
   MODEL_DEFAULT_VALUE,
   configLabel,
+  customerRanWith,
+  friendlyModelName,
   stampRunConfig,
   emptyCatalogHint,
   draftConfigSummary,
@@ -169,6 +171,26 @@ describe("configLabel", () => {
         label: "Auto · Cursor",
       })
     ).toBe("LLM · openai/gpt-4o-mini via gateway")
+  })
+
+  it("shows Ran with a friendly model name, not gateway plumbing", () => {
+    expect(
+      customerRanWith({
+        harness: "llm",
+        harness_pref: "auto",
+        model: "openai/gpt-4o-mini",
+        applied: { via_gateway: true },
+        label: "LLM · openai/gpt-4o-mini via gateway",
+      })
+    ).toBe("Ran with GPT-4o mini")
+    expect(friendlyModelName("openai/gpt-4o-mini")).toBe("GPT-4o mini")
+    expect(friendlyModelName("gpt-4o-mini")).toBe("GPT-4o mini")
+    const customer = customerRanWith({
+      harness: "llm",
+      model: "openai/gpt-4o-mini",
+      applied: { via_gateway: true },
+    })
+    expect(customer).not.toMatch(/via gateway|openai\//)
   })
 
   it("prefers the stamped report config over an Auto request", () => {
