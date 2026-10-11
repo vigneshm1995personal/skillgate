@@ -705,8 +705,8 @@ export function EvalPage() {
                     {anyNeedsInput
                       ? "Needs input"
                       : authenticFixtureDefaults(skill).length
-                        ? "Pack files ready"
-                        : "Trigger-only seed"}
+                        ? "Skill files ready"
+                        : "Add input or expected output"}
                   </AlertTitle>
                   <AlertDescription>
                     {anyNeedsInput

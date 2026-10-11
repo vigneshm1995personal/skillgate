@@ -1,9 +1,13 @@
 import { useEffect, useRef, useState, type ReactNode } from "react"
 
+import {
+  CHECKING_MIN_MS,
+  EVAL_MOTION_MS,
+  resultHoldPlan,
+} from "@/lib/eval-result-hold"
 import type { SuiteResultKind } from "@/lib/eval-row-state"
 
-export const EVAL_MOTION_MS = 350
-export const CHECKING_MIN_MS = 700
+export { CHECKING_MIN_MS, EVAL_MOTION_MS }
 
 export type EvalResultTarget = Exclude<SuiteResultKind, "idle">
 export type EvalMarkMode = "idle" | "play" | "complete"
@@ -38,14 +42,10 @@ export function EvalResultShell({
   children: (opts: { mode: EvalMarkMode }) => ReactNode
   onResultVisible?: (visible: boolean) => void
 }) {
-  const sawChecking = useRef(target === "checking")
-  const checkingShownAt = useRef<number | null>(
-    target === "checking" ? Date.now() : null
-  )
+  const sawChecking = useRef(true)
+  const checkingShownAt = useRef<number | null>(Date.now())
   const slideTimer = useRef(0)
-  const [phase, setPhase] = useState<Phase>(
-    target === "checking" ? "checking" : "settled"
-  )
+  const [phase, setPhase] = useState<Phase>("checking")
 
   useEffect(() => {
     onResultVisible?.(phase !== "checking")
@@ -59,18 +59,23 @@ export function EvalResultShell({
       return
     }
 
-    if (!sawChecking.current) {
-      setPhase("settled")
-      return
-    }
-
     const reduced = prefersReducedMotion()
     const elapsed = checkingShownAt.current
       ? Date.now() - checkingShownAt.current
-      : CHECKING_MIN_MS
-    const wait = reduced ? 0 : Math.max(0, CHECKING_MIN_MS - elapsed)
+      : null
+    const plan = resultHoldPlan({
+      target,
+      reducedMotion: reduced,
+      sawChecking: sawChecking.current,
+      elapsedMs: elapsed,
+    })
+    if (plan.showCheckingFirst && !sawChecking.current) {
+      sawChecking.current = true
+      checkingShownAt.current = Date.now()
+      setPhase("checking")
+    }
     const holdTimer = window.setTimeout(() => {
-      if (reduced) {
+      if (reduced || !plan.showCheckingFirst) {
         setPhase("settled")
         return
       }
@@ -78,7 +83,7 @@ export function EvalResultShell({
       slideTimer.current = window.setTimeout(() => {
         setPhase("play")
       }, EVAL_MOTION_MS)
-    }, wait)
+    }, plan.waitMs)
 
     return () => {
       window.clearTimeout(holdTimer)

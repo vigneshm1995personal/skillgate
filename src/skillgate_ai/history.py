@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 HISTORY_DIR = "evals/history"
+DEPLOY_FILE = "deploys.jsonl"
 
 
 def history_dir(pack_root: str | Path) -> Path:
@@ -68,6 +69,62 @@ def load_history(pack_root: str | Path, *, limit: int = 50) -> list[dict[str, An
                 continue
             if isinstance(item, dict):
                 rows.append(item)
+    if limit > 0:
+        return rows[-limit:]
+    return rows
+
+
+def append_deploy(
+    pack_root: str | Path,
+    *,
+    target: str,
+    status: str,
+    file_count: int | None = None,
+    mode: str = "local",
+) -> Path | None:
+    dest_dir = history_dir(pack_root)
+    dest = dest_dir / DEPLOY_FILE
+    label = {"cursor": "Cursor", "codex": "Codex", "claude": "Claude"}.get(
+        (target or "").strip().lower(), (target or "agent").strip()
+    )
+    row = {
+        "ts": datetime.now(timezone.utc).isoformat(),
+        "kind": "deploy",
+        "target": (target or "").strip().lower(),
+        "status": status,
+        "file_count": file_count,
+        "mode": mode,
+        "dest_label": f"{label}'s skills folder",
+    }
+    payload = json.dumps(row, ensure_ascii=True) + "\n"
+    try:
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        with dest.open("a", encoding="utf-8") as handle:
+            handle.write(payload)
+    except OSError:
+        return None
+    return dest
+
+
+def load_deploys(pack_root: str | Path, *, limit: int = 50) -> list[dict[str, Any]]:
+    dest = history_dir(pack_root) / DEPLOY_FILE
+    if not dest.is_file():
+        return []
+    rows: list[dict[str, Any]] = []
+    try:
+        text = dest.read_text(encoding="utf-8")
+    except OSError:
+        return []
+    for line in text.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            item = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(item, dict):
+            rows.append(item)
     if limit > 0:
         return rows[-limit:]
     return rows

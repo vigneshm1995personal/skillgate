@@ -29,6 +29,8 @@ from skillgate_ai.pack import (
 from skillgate_ai.suite import DEFAULT_TASK_TIMEOUT_SEC, SuiteSpec, _normalize_suite
 
 CASES_REL = "evals/cases.yaml"
+PIN_NEEDS_EXPECTED = "Add expected output for this check, then save."
+PIN_NEEDS_EXPECTED_HINT = "Open Dataset and fill Expected output."
 GOLDEN_TAIL_CHARS = 8000
 _OUTPUT_MAGICS = (
     (b"\xff\xd8\xff", "jpeg", "image/jpeg"),
@@ -390,7 +392,13 @@ def pin_case_ids(skill_path: str | Path, case_ids: list[str]) -> CasePack:
         if case.id in wanted:
             found.add(case.id)
             if case.should_trigger and case.golden is None:
-                raise ValueError("Pin needs a golden file or Expected text.")
+                attached = _disk_golden(root, case.id, None)
+                if attached is None:
+                    raise ValueError(PIN_NEEDS_EXPECTED)
+                updated.append(
+                    case.model_copy(update={"status": "pinned", "golden": attached})
+                )
+                continue
             updated.append(case.model_copy(update={"status": "pinned"}))
         else:
             updated.append(case)
@@ -759,6 +767,36 @@ def _persist_input_files(
     return out
 
 
+def _disk_golden(
+    root: Path, case_id: str, output_path: str | None
+) -> CaseGolden | None:
+    folder = root / GOLDEN_DIR
+    if not folder.is_dir():
+        return None
+    matches = sorted(
+        path
+        for path in folder.iterdir()
+        if path.is_file() and path.stem == case_id
+    )
+    if not matches:
+        return None
+    path = matches[0]
+    rel = f"{GOLDEN_DIR}/{path.name}"
+    suffix = path.suffix.lower()
+    kind: Literal["json", "text", "bytes"]
+    if suffix == ".json":
+        kind = "json"
+    elif suffix in {".pdf", ".png", ".jpg", ".jpeg", ".gif", ".webp"}:
+        kind = "bytes"
+    else:
+        kind = "text"
+    return CaseGolden(
+        output_path=output_path or "output/result.txt",
+        path=rel,
+        kind=kind,
+    )
+
+
 def _persist_golden(
     root: Path,
     *,
@@ -793,8 +831,11 @@ def _persist_golden(
             return CaseGolden(output_path=dest_output, path=rel, kind=kind)
         kind = "json" if Path(rel).suffix.lower() == ".json" else "text"
         return CaseGolden(output_path=dest_output, path=rel, kind=kind)
+    attached = _disk_golden(root, case_id, dest_output)
+    if attached is not None:
+        return attached
     if not contains_list:
-        raise ValueError("Pin needs a golden file or Expected text.")
+        raise ValueError(PIN_NEEDS_EXPECTED)
     body = contains_list[0]
     suffix = ".json" if dest_output.endswith(".json") and _JSONISH_RE.match(body) else ".txt"
     if dest_output.endswith(".json") and len(contains_list) == 1 and _JSONISH_RE.match(body):

@@ -242,10 +242,17 @@ def test_roundtrip_dict() -> None:
 def test_config_label_includes_harness_and_timeout() -> None:
     run = EvalRunConfig(harness="codex", model="gpt-test", timeout_effective=300, reasoning_effort="medium")
     label = config_label(run)
-    assert "codex" in label
+    assert "Codex" in label
     assert "gpt-test" in label
     assert "300s" in label
     assert "medium" in label
+
+
+def test_config_label_uses_built_in_checker_for_demo() -> None:
+    label = config_label(EvalRunConfig(harness="demo", timeout_effective=12))
+    assert "Built-in checker" in label
+    assert "demo" not in label.lower()
+    assert "eval" not in label.lower()
 
 
 def test_fingerprint_changes_on_judge_backend() -> None:

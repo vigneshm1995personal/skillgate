@@ -98,7 +98,11 @@ export function GatePage({ embedded = false }: { embedded?: boolean }) {
   const [controlBusy, setControlBusy] = useState<"skip" | "kill" | null>(null)
   const [resultVisible, setResultVisible] = useState(false)
   const skillScoped =
-    viewingPinnedHistory || runBelongsToSkill(lastResult, skill?.name)
+    viewingPinnedHistory ||
+    runBelongsToSkill(
+      lastResult,
+      skill?.slug || skill?.id || skill?.name
+    )
   const scopedResult =
     skillScoped && !isTryoutRun(lastResult) ? lastResult : null
   const report = scopedResult?.report

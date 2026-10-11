@@ -58,7 +58,7 @@ def _iter_skill_dirs(parent: Path) -> list[Path]:
 
 
 def catalog_entries(root: Path) -> list[dict[str, Any]]:
-    """Workspace packs first, then agent skill folders. First name wins on lookup."""
+    """Skills in this project only. Agent folders are a Connect source, not the list."""
     root = root.expanduser().resolve()
     entries: list[dict[str, Any]] = []
     seen: set[Path] = set()
@@ -97,15 +97,6 @@ def catalog_entries(root: Path) -> list[dict[str, Any]]:
         add(root, "workspace")
     for child in _iter_skill_dirs(workspace_skills_root(root)):
         add(child, "workspace")
-    for source, getter in SOURCE_ROOTS:
-        if source == "workspace" or getter is None:
-            continue
-        try:
-            parent = getter()
-        except OSError:
-            continue
-        for child in _iter_skill_dirs(parent):
-            add(child, source)
     return entries
 
 
@@ -161,8 +152,13 @@ def find_skill(root: Path, name: str) -> Path:
 def import_from_agent_folders(
     root: Path, *, sources: list[str] | None = None
 ) -> dict[str, Any]:
-    """Copy agent skill folders into ``<root>/skills/``. Skip names that already exist."""
-    wanted = [item.strip().lower() for item in (sources or ["cursor", "codex", "claude"]) if item]
+    """Copy chosen agent skill folders into ``<root>/skills/``. Skip names that already exist."""
+    wanted = [item.strip().lower() for item in (sources or []) if item]
+    if not wanted:
+        raise SkillGateError(
+            "Choose Cursor, Codex, or Claude first.",
+            hint="Pick an agent, then import.",
+        )
     dest_parent = workspace_skills_root(root)
     dest_parent.mkdir(parents=True, exist_ok=True)
     imported: list[dict[str, str]] = []

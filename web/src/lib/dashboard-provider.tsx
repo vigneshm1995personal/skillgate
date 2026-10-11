@@ -91,7 +91,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   const [harnessPref, setHarnessPref] = useState<HarnessPref>("auto")
   const [evalConfig, setEvalConfig] = useState<EvalConfigDraft>(DEFAULT_EVAL_CONFIG_DRAFT)
   const [fixtureInherit, setFixtureInherit] = useState(true)
-  const [fixtureGlob, setFixtureGlob] = useState("evals/fixtures/*")
+  const [fixtureGlob, setFixtureGlob] = useState("")
   const resolvedHarness = resolvedHarnessName(harnessPref, status)
 
   const refreshSkills = useCallback(async () => {
@@ -263,7 +263,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
         setChecksNote("")
         setChecksWarning("")
         setFixtureInherit(true)
-        setFixtureGlob("evals/fixtures/*")
+        setFixtureGlob("")
         setEvalTab("checks")
       }
       try {

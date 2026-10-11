@@ -279,11 +279,34 @@ def config_fingerprint(run: EvalRunConfig | None) -> str | None:
     return hashlib.sha256(blob.encode("utf-8")).hexdigest()[:16]
 
 
+def harness_display_name(pref: str | None, resolved: str | None = None) -> str:
+    key = (pref or resolved or "").strip().lower()
+    if key == "auto":
+        labels = {
+            "codex": "Codex",
+            "claude": "Claude",
+            "llm": "LLM",
+            "cursor-agent": "Cursor",
+        }
+        return f"Auto · {labels.get((resolved or '').strip().lower(), 'Cursor')}"
+    names = {
+        "cursor-agent": "Cursor",
+        "codex": "Codex",
+        "claude": "Claude",
+        "llm": "LLM",
+        "demo": "Built-in checker",
+        "eval": "Built-in checker",
+    }
+    if key in names:
+        return names[key]
+    return (pref or resolved or "Built-in checker").strip() or "Built-in checker"
+
+
 def config_label(run: EvalRunConfig | dict[str, Any] | None) -> str:
     cfg = coerce_eval_config(run)
     if cfg is None:
         return ""
-    parts: list[str] = [cfg.harness or "eval"]
+    parts: list[str] = [harness_display_name(cfg.harness, cfg.harness)]
     if cfg.model:
         parts.append(cfg.model)
     timeout = cfg.timeout_effective if cfg.timeout_effective is not None else cfg.timeout_sec

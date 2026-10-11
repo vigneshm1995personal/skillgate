@@ -128,4 +128,9 @@ describe("configLabel", () => {
       "Cursor · 300s"
     )
   })
+
+  it("names the built-in checker instead of demo", () => {
+    expect(configLabel({ harness: "demo" })).toBe("Built-in checker")
+    expect(configLabel({ harness: "eval" })).toBe("Built-in checker")
+  })
 })

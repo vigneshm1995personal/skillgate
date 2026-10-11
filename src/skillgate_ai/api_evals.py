@@ -9,6 +9,7 @@ from fastapi import FastAPI, Request
 from skillgate_ai.api_payloads import fail, skill_payload, state_of
 from skillgate_ai.case_pack import (
     CASES_REL,
+    PIN_NEEDS_EXPECTED_HINT,
     checks_from_pack,
     dataset_view,
     load_case_pack,
@@ -64,12 +65,15 @@ def register_eval_routes(app: FastAPI) -> None:
         skill_path = find_skill(state.root, str(body.get("skill") or ""))
         checks = body.get("checks")
         case_ids = body.get("case_ids")
-        if isinstance(checks, list) and checks:
-            pack = pin_checks(skill_path, [dict(item) for item in checks])
-        elif isinstance(case_ids, list) and case_ids:
-            pack = pin_case_ids(skill_path, [str(item) for item in case_ids])
-        else:
-            fail(400, "Pin needs checks or case ids.")
+        try:
+            if isinstance(checks, list) and checks:
+                pack = pin_checks(skill_path, [dict(item) for item in checks])
+            elif isinstance(case_ids, list) and case_ids:
+                pack = pin_case_ids(skill_path, [str(item) for item in case_ids])
+            else:
+                fail(400, "Pin needs checks or case ids.")
+        except ValueError as exc:
+            fail(400, str(exc), hint=PIN_NEEDS_EXPECTED_HINT)
         yaml_out = (
             (skill_path / CASES_REL).read_text(encoding="utf-8")
             if (skill_path / CASES_REL).is_file()

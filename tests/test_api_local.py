@@ -138,7 +138,7 @@ def test_import_from_cursor_skills(tmp_path: Path, monkeypatch) -> None:
     client = _client(tmp_path, monkeypatch)
     listed = client.get("/api/skills")
     names = {item["name"] for item in listed.json()["skills"]}
-    assert "imported-skill" in names
+    assert "imported-skill" not in names
     imported = client.post("/api/skills/import", json={"sources": ["cursor"]})
     assert imported.status_code == 200
     dest = tmp_path / "skills" / "imported-skill"

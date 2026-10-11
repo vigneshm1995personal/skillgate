@@ -20,6 +20,7 @@ from skillgate_ai.catalog import (
 )
 from skillgate_ai.deploy import get_adapter
 from skillgate_ai.errors import SkillGateError
+from skillgate_ai.history import append_deploy
 from skillgate_ai.ingest import ingest_skill
 from skillgate_ai.pack import (
     CannotSynthesizeFixture,
@@ -219,19 +220,30 @@ def register_skill_routes(app: FastAPI) -> None:
         skill_path = find_skill(state.root, str(body.get("skill") or ""))
         loaded = ingest_skill(skill_path, strict=False)
         result = get_adapter(target).install(skill=loaded, source=skill_path)
+        status = result.get("status") or "installed"
+        append_deploy(
+            skill_path,
+            target=target,
+            status=status,
+            file_count=result.get("file_count"),
+            mode="local",
+        )
+        dest_label = {
+            "cursor": "Cursor's skills folder",
+            "codex": "Codex's skills folder",
+            "claude": "Claude's skills folder",
+        }.get(target, "the agent's skills folder")
         return {
-            "status": result.get("status") or "installed",
+            "status": status,
             "note": result.get("message") or f"Installed {loaded.name}",
             "live": True,
             "mode": "local",
             "skill": loaded.name,
-            "dest": result.get("dest_path"),
             "attempt": {
                 "target": target,
-                "status": result.get("status") or "installed",
-                "dest_path": result.get("dest_path"),
+                "status": status,
+                "dest_path": dest_label,
                 "mode": "local",
-                "pack_path": result.get("pack_path"),
                 "file_count": result.get("file_count"),
             },
         }

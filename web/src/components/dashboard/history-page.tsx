@@ -27,8 +27,8 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { PageHeader } from "@/components/dashboard/chrome"
 import { useDashboard } from "@/lib/dashboard-provider"
+import { historyMeta } from "@/lib/history-meta"
 import { relativeTime } from "@/lib/time"
-import type { TimelineItem } from "@/lib/types"
 
 export function HistoryList() {
   const { history, openHistoryRun, searchQuery, pinBaseline } = useDashboard()
@@ -211,38 +211,6 @@ export function HistoryList() {
       </Table>
     </ScrollArea>
   )
-}
-
-function historyMeta(item: TimelineItem & {
-  semver?: string
-  hash?: string
-  harness?: string
-}) {
-  if (item.kind !== "run") {
-    return {
-      skill: item.skill || item.label || "Deploy",
-      version: "",
-      config: item.target ? `Install to ${item.target}` : item.label || "—",
-      fingerprint: "",
-    }
-  }
-  const skill = item.skill || "—"
-  const version = item.semver ? `v${item.semver}` : ""
-  const config =
-    item.config_label ||
-    item.harness ||
-    (item.label || "")
-      .replace(/^(GREEN|RED)\s+/i, "")
-      .replace(new RegExp(`^${skill}\\s*`), "")
-      .replace(/^v[^\s·]+ · /, "")
-      .replace(/ · [a-f0-9]{8,}$/i, "")
-      .trim() || "—"
-  const fingerprint =
-    item.config_fingerprint ||
-    item.hash ||
-    (item.label || "").match(/([a-f0-9]{8,12})$/i)?.[1] ||
-    ""
-  return { skill, version, config, fingerprint }
 }
 
 export function HistoryPage() {

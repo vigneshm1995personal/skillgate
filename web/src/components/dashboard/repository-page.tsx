@@ -4,7 +4,6 @@ import { useState } from "react"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Checkbox } from "@/components/ui/checkbox"
 import {
   Card,
   CardContent,
@@ -75,11 +74,10 @@ export function RepositoryPage() {
   const openImport = async () => {
     setImportOpen(true)
     setSourcesError("")
+    setSelected([])
     try {
       const data = await api.importSources()
-      const next = data.sources ?? []
-      setSources(next)
-      setSelected(next.filter((item) => item.found && item.count > 0).map((item) => item.id))
+      setSources(data.sources ?? [])
     } catch (err) {
       const message =
         err instanceof ApiError ? err.message : "Could not look up agent folders."
@@ -88,8 +86,12 @@ export function RepositoryPage() {
     }
   }
 
-  const importAgentSkills = async () => {
-    const wanted = selected.length ? selected : sources.filter((item) => item.found).map((item) => item.id)
+  const importAgentSkills = async (wanted: string[]) => {
+    if (!wanted.length) {
+      toast.add({ title: "Choose Cursor, Codex, or Claude first.", type: "error" })
+      return
+    }
+    setSelected(wanted)
     setImporting(true)
     try {
       const data = await api.importSkills(wanted)
@@ -132,7 +134,7 @@ export function RepositoryPage() {
         title="Skills"
         description={
           isLocalMode(status)
-            ? "Skills in this project plus Cursor, Codex, and Claude. Open one to read SKILL.md. Run never starts until you press it."
+            ? "Skills in this project. Connect Cursor, Codex, or Claude to import. Open one to read SKILL.md. Run never starts until you press it."
             : "Every skill on disk, with last gate, evals, versions, and deploys. Last eval is the latest full run; single checks don't count."
         }
         action={
@@ -143,7 +145,7 @@ export function RepositoryPage() {
                 variant="outline"
                 onClick={() => void openImport()}
               >
-                Import from agent folders
+                Connect
               </Button>
             ) : null}
             <Button
@@ -220,10 +222,10 @@ export function RepositoryPage() {
                 <TableRow>
                   <TableHead>Skill</TableHead>
                   <TableHead>Gate</TableHead>
-                  <TableHead>Evals</TableHead>
+                  <TableHead>Runs</TableHead>
                   <TableHead>Versions</TableHead>
                   <TableHead title="Latest full run. Single checks are excluded.">
-                    Last eval
+                    Last run
                   </TableHead>
                   <TableHead />
                 </TableRow>
@@ -245,9 +247,9 @@ export function RepositoryPage() {
       <Dialog open={importOpen} onOpenChange={setImportOpen}>
         <DialogContent id="import-agent-folders" className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Connect agent folders</DialogTitle>
+            <DialogTitle>Connect</DialogTitle>
             <DialogDescription>
-              Choose Cursor, Codex, and Claude. We’ll copy whole skill folders into this project.
+              Choose Cursor, Codex, or Claude first. We’ll copy that agent’s skills into this project.
             </DialogDescription>
           </DialogHeader>
           {sourcesError ? (
@@ -259,48 +261,36 @@ export function RepositoryPage() {
             <p className="text-sm text-muted-foreground">Looking up agent folders…</p>
           ) : (
             <div className="flex flex-col gap-3">
-              {sources.map((source) => {
-                const checked = selected.includes(source.id)
-                return (
-                  <label
-                    key={source.id}
-                    className="flex items-start gap-3 rounded-lg border px-3 py-2"
-                  >
-                    <Checkbox
-                      checked={checked}
-                      disabled={!source.found}
-                      onCheckedChange={(value) => {
-                        const on = value === true
-                        setSelected((current) =>
-                          on
-                            ? Array.from(new Set([...current, source.id]))
-                            : current.filter((id) => id !== source.id)
-                        )
-                      }}
-                    />
-                    <span className="min-w-0 flex-1">
-                      <span className="block text-sm font-medium">{source.label}</span>
-                      <span className="block text-xs text-muted-foreground">
-                        {source.found
-                          ? `${source.folder_label} · ${source.count} skill${source.count === 1 ? "" : "s"}`
-                          : `${source.folder_label} not found`}
-                      </span>
+              {sources.map((source) => (
+                <div
+                  key={source.id}
+                  className="flex items-start gap-3 rounded-lg border px-3 py-2"
+                >
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-sm font-medium">{source.label}</span>
+                    <span className="block text-xs text-muted-foreground">
+                      {source.found
+                        ? `${source.folder_label} · ${source.count} skill${source.count === 1 ? "" : "s"}`
+                        : `${source.folder_label} not found`}
                     </span>
-                  </label>
-                )
-              })}
+                  </span>
+                  <Button
+                    id={`btn-import-${source.id}`}
+                    size="sm"
+                    disabled={importing || !source.found || source.count === 0}
+                    onClick={() => void importAgentSkills([source.id])}
+                  >
+                    {importing && selected.includes(source.id)
+                      ? "Importing…"
+                      : "Import"}
+                  </Button>
+                </div>
+              ))}
             </div>
           )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setImportOpen(false)}>
               Cancel
-            </Button>
-            <Button
-              id="btn-import-confirm"
-              disabled={importing || selected.length === 0}
-              onClick={() => void importAgentSkills()}
-            >
-              {importing ? "Importing…" : "Import"}
             </Button>
           </DialogFooter>
         </DialogContent>

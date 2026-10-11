@@ -36,7 +36,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { api, ApiError } from "@/lib/api"
 import { useDashboard } from "@/lib/dashboard-provider"
 import { slotOn } from "@/lib/mode"
-import { configLabel } from "@/lib/eval-config"
+import { configLabel, harnessDisplayName } from "@/lib/eval-config"
 import { skillDetailStatus } from "@/lib/skill-detail-state"
 import { isTryoutRun } from "@/lib/skill-run-state"
 import { relativeTime } from "@/lib/time"
@@ -221,7 +221,7 @@ export function SkillDetailPage({ name }: { name: string }) {
           }
         />
         <StatCard
-          label="Evals"
+          label="Runs"
           value={loading ? <Skeleton className="h-6 w-10" /> : String(item?.eval_count ?? runs.length)}
         />
         <StatCard
@@ -297,10 +297,10 @@ export function SkillDetailPage({ name }: { name: string }) {
 
       <Card>
         <CardHeader>
-          <CardTitle>Evals</CardTitle>
-          <CardDescription>
-            Full runs decide the gate. Single checks are labeled and excluded from Last eval.
-          </CardDescription>
+            <CardTitle>Runs</CardTitle>
+            <CardDescription>
+            Full runs decide the gate. Single checks are labeled and excluded from the last run.
+            </CardDescription>
         </CardHeader>
         <CardContent>
           {loading ? (
@@ -315,9 +315,9 @@ export function SkillDetailPage({ name }: { name: string }) {
                 <EmptyMedia variant="icon">
                   <FolderIcon />
                 </EmptyMedia>
-                <EmptyTitle>No evals yet</EmptyTitle>
+                <EmptyTitle>No runs yet</EmptyTitle>
                 <EmptyDescription>
-                  Evaluate this skill to record a gate decision.
+                  Run this skill to record a gate decision.
                 </EmptyDescription>
               </EmptyHeader>
             </Empty>
@@ -357,7 +357,9 @@ export function SkillDetailPage({ name }: { name: string }) {
                           />
                         )}
                       </TableCell>
-                      <TableCell>{run.harness || "—"}</TableCell>
+                      <TableCell>
+                        {harnessDisplayName(run.harness || "", run.harness || "")}
+                      </TableCell>
                       <TableCell>
                         <div className="flex flex-col gap-1">
                           <span className="truncate">
@@ -387,7 +389,7 @@ export function SkillDetailPage({ name }: { name: string }) {
         <Card>
           <CardHeader>
             <CardTitle>Versions</CardTitle>
-            <CardDescription>semver + version fingerprint.</CardDescription>
+            <CardDescription>Recorded versions of this skill.</CardDescription>
           </CardHeader>
           <CardContent>
             {loading ? (
@@ -399,7 +401,7 @@ export function SkillDetailPage({ name }: { name: string }) {
                 <Table>
                   <TableHeader className="sticky top-0 z-10 bg-card shadow-xs">
                     <TableRow>
-                      <TableHead>semver</TableHead>
+                      <TableHead>Version</TableHead>
                       <TableHead>Hash</TableHead>
                       <TableHead>When</TableHead>
                     </TableRow>
