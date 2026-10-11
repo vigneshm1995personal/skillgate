@@ -302,13 +302,17 @@ export function friendlyModelName(model?: string | null): string {
     .join(" ")
 }
 
+function looksOpenAIScorer(text?: string | null): boolean {
+  return /\bopenai\b(?!\/)/i.test(text || "")
+}
+
 function customerLabelFromRaw(raw: string, harness?: string | null): string {
   if (isLegacyRunCopy(raw, harness)) {
     return OLDER_RUN_LABEL
   }
   const modelHit = raw.match(/gpt-[\w.-]+/i)
   const model = modelHit ? friendlyModelName(modelHit[0]) : ""
-  const scored = /openai/i.test(raw) ? "Scored by OpenAI" : ""
+  const scored = looksOpenAIScorer(raw) ? "Scored by OpenAI" : ""
   if (model && scored) {
     return `${model} · ${scored}`
   }
@@ -333,8 +337,8 @@ export function customerConfigLabel(
   const judge = config.judge
   const fromJudge =
     (judge?.provider || "").toLowerCase() === "openai" ||
-    /openai/i.test(judge?.display_name || "")
-  const fromLabel = /openai/i.test(config.label || "")
+    looksOpenAIScorer(judge?.display_name)
+  const fromLabel = looksOpenAIScorer(config.label)
   const scored = fromJudge || fromLabel ? "Scored by OpenAI" : ""
   if (model && scored) {
     return `${model} · ${scored}`

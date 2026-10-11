@@ -212,6 +212,18 @@ describe("configLabel", () => {
     ).toBe("GPT-4o mini · Scored by OpenAI")
   })
 
+  it("does not treat an openai/ model id as the scorer", () => {
+    expect(
+      customerConfigLabel({
+        harness: "llm",
+        model: "openai/gpt-4o-mini",
+        applied: { via_gateway: true },
+        label: "LLM · openai/gpt-4o-mini via gateway · 300s",
+        judge: { provider: "skip", display_name: "Checks" },
+      })
+    ).toBe("GPT-4o mini")
+  })
+
   it("prefers the stamped report config over an Auto request", () => {
     expect(
       configLabel(
