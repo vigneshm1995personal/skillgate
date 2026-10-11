@@ -250,7 +250,7 @@ export function HistoryPage() {
     <div className="flex flex-col gap-8">
       <PageHeader
         title="History"
-        description="Workspace timeline across skills. Open a run to reload that exact Gate result."
+        description="Past runs on this machine. Shared team history is a hosted feature. Open a run to reload that Gate result."
       />
       <Card>
         <CardHeader>

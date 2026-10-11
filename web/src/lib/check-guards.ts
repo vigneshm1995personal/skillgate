@@ -38,7 +38,7 @@ export const START_NEEDS_UPLOAD =
   "Completion checks still need a file in the skill folder."
 
 export const PACK_INHERIT_HINT =
-  "Turn on Use pack fixtures, or add a file once to the skill folder."
+  "Turn on skill files for completion checks, or add a file once to the skill folder."
 
 export type StartBlockIssue = {
   index: number

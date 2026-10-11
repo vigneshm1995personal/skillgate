@@ -116,7 +116,10 @@ export type CatalogError = {
 export type SkillPayload = {
   id: string
   name: string
+  slug?: string
   description?: string
+  body?: string
+  warning?: string | null
   path?: string
   absolute: string
   uploaded?: boolean

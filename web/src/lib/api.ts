@@ -179,11 +179,33 @@ export const api = {
     request<{ skills: SkillPayload[]; catalog_error?: CatalogError | null }>(
       "/api/skills"
     ),
+  importSources: () =>
+    request<{
+      sources: Array<{
+        id: string
+        label: string
+        found: boolean
+        count: number
+        folder_label: string
+      }>
+    }>("/api/skills/import-sources"),
   importSkills: (sources?: string[]) =>
     request<{
       skills: SkillPayload[]
-      imported: Array<{ name: string; source: string; dest?: string }>
+      imported: Array<{
+        name: string
+        source: string
+        slug?: string
+        warning?: string | null
+      }>
       skipped: Array<{ name: string; source: string; reason?: string }>
+      sources?: Array<{
+        id: string
+        label: string
+        found: boolean
+        count: number
+        folder_label: string
+      }>
       catalog_error?: CatalogError | null
     }>("/api/skills/import", {
       method: "POST",

@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { FileTextIcon, FolderIcon, PlusIcon } from "lucide-react"
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -43,6 +43,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { toast } from "@/components/ui/toast"
 import { DatasetViewer } from "@/components/dashboard/dataset-viewer"
 import { api } from "@/lib/api"
+import { AssistantMarkdown } from "@/components/dashboard/assistant-markdown"
 import type { PackFile, PackPreview, SkillPayload } from "@/lib/types"
 
 export function SkillPackBrowser({
@@ -58,7 +59,7 @@ export function SkillPackBrowser({
   datasetOpen?: boolean
   onDatasetOpenChange?: (open: boolean) => void
 }) {
-  const [selected, setSelected] = useState<string | null>(null)
+  const [selected, setSelected] = useState<string | null>("SKILL.md")
   const [preview, setPreview] = useState<PackPreview | null>(null)
   const [previewError, setPreviewError] = useState("")
   const [addOpen, setAddOpen] = useState(false)
@@ -87,13 +88,21 @@ export function SkillPackBrowser({
     setSelected(path)
     setPreviewError("")
     try {
-      const data = await api.packPreview(skill.id, path)
+      const data = await api.packPreview(skill.absolute || skill.id, path)
       setPreview(data)
     } catch (err) {
       setPreview(null)
       setPreviewError(err instanceof Error ? err.message : "Could not open that file.")
     }
   }
+
+  useEffect(() => {
+    if (files.some((item) => item.path === "SKILL.md")) {
+      void openPreview("SKILL.md")
+    }
+    // Load the readable SKILL.md view once per skill.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [skill.id, skill.absolute])
 
   const savePasted = async () => {
     const content = paste.trim()
@@ -150,8 +159,7 @@ export function SkillPackBrowser({
       <CardHeader>
         <CardTitle>Pack files</CardTitle>
         <CardDescription>
-          The skill folder — SKILL.md plus scripts, references, assets, and
-          evals/fixtures. Checks reference these paths.
+          The skill folder — SKILL.md plus scripts, samples, and checks.
         </CardDescription>
         <CardAction>
           <div className="flex flex-wrap gap-2">
@@ -239,8 +247,7 @@ export function SkillPackBrowser({
           <DialogHeader>
             <DialogTitle>Add artifact</DialogTitle>
             <DialogDescription>
-              Saved into this skill folder (evals/fixtures/ or assets/). Same pack
-              Evaluate checks use.
+              Saved into this skill folder. Evaluate checks use the same files.
             </DialogDescription>
           </DialogHeader>
           <FieldGroup
@@ -261,10 +268,10 @@ export function SkillPackBrowser({
                 id="artifact-filename"
                 value={filename}
                 onChange={(event) => setFilename(event.target.value)}
-                placeholder="evals/fixtures/notes.txt"
+                placeholder="samples/notes.txt"
               />
               <FieldDescription>
-                A bare name lands in evals/fixtures/.
+                A bare name lands in this skill’s sample files.
               </FieldDescription>
             </Field>
             <Field>
@@ -335,7 +342,15 @@ function PackPreviewPane({
       </div>
       {preview.kind === "text" && preview.text != null ? (
         <ScrollArea className="h-64">
-          <pre className="whitespace-pre-wrap font-mono text-xs">{preview.text}</pre>
+          {preview.path === "SKILL.md" ? (
+            <div className="text-sm leading-relaxed">
+              <AssistantMarkdown
+                text={preview.text.replace(/^---[\s\S]*?---\s*/, "") || preview.text}
+              />
+            </div>
+          ) : (
+            <pre className="whitespace-pre-wrap font-mono text-xs">{preview.text}</pre>
+          )}
         </ScrollArea>
       ) : null}
       {preview.kind === "image" ? (

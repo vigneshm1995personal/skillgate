@@ -226,7 +226,7 @@ export function CheckInputControls({
               variant={inherited ? "secondary" : "outline"}
               title={
                 inherited
-                  ? `${file.dest || file.src} from pack fixtures`
+                  ? `${file.dest || file.src} from this skill`
                   : undefined
               }
             >

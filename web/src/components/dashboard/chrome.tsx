@@ -92,16 +92,12 @@ export function GateBadge({
   if (tone === "green") {
     return (
       <Badge variant="secondary" className="font-medium text-success">
-        GREEN
+        Ready
       </Badge>
     )
   }
   if (tone === "red") {
-    return (
-      <Badge variant="destructive">
-        {gate === "blocked" ? "Blocked" : "RED"}
-      </Badge>
-    )
+    return <Badge variant="destructive">Blocked</Badge>
   }
   return <Badge variant="outline">Pending</Badge>
 }
@@ -177,13 +173,13 @@ export function useGateLabel() {
   }
   const decision = record?.gate_decision || skillHistory?.gate
   if (decision === "cleared") {
-    return "GREEN"
+    return "Ready"
   }
   if (record?.status === "done" && record.report?.passed === true) {
-    return decision === "blocked" ? "Blocked" : "GREEN"
+    return decision === "blocked" ? "Blocked" : "Ready"
   }
   if (record && (record.status === "error" || record.status === "done")) {
-    return "RED"
+    return "Blocked"
   }
   if (skillHistory?.gate === "blocked") {
     return "Blocked"

@@ -477,6 +477,15 @@ export function customerGateCopy(text: string): string {
   if (COVER_WARN.test(value)) {
     return "This run didn't include every check from the saved Dataset."
   }
+  if (/gate is red/i.test(value) || /clear gate green/i.test(value)) {
+    return "Pass the checks to unlock Install."
+  }
+  if (/gate is green/i.test(value)) {
+    return "Checks passed — Install is unlocked."
+  }
+  if (/missing golden/i.test(value) || /evals\/goldens/i.test(value)) {
+    return "This check is missing its expected output file."
+  }
   return scorerCodeToPlain(value)
 }
 

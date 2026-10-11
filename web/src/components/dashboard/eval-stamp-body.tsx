@@ -113,7 +113,7 @@ export function EvalErrorPanel({
 }) {
   return (
     <Alert variant="destructive">
-      <AlertTitle>RED</AlertTitle>
+      <AlertTitle>Couldn’t finish this run</AlertTitle>
       <AlertDescription>
         {message}
         {hint ? <p className="mt-2 whitespace-pre-wrap">{hint}</p> : null}
@@ -122,7 +122,7 @@ export function EvalErrorPanel({
             {stampLine}
           </p>
         ) : null}
-        <p className="mt-2">Gate is red — Deploy is blocked.</p>
+        <p className="mt-2">Pass the checks to unlock Install.</p>
       </AlertDescription>
     </Alert>
   )
@@ -226,25 +226,25 @@ export function gateCoverageLine(
   harness: string | null | undefined
 ): string {
   if (deployAllowed) {
-    return "Gate is green — Deploy is unlocked."
+    return "Checks passed — Install is unlocked."
   }
   if (reportPassed === true && !isLiveHarness(harness)) {
-    return "Gate is red — Deploy is blocked."
+    return "Pass the checks to unlock Install."
   }
   if (reportPassed === true && isLiveHarness(harness)) {
     return (
       lastResult.gate_reason ||
-      "Checks passed. Gate stays blocked until a completion check passes with a file from this skill."
+      "Checks passed. Install stays blocked until a completion check passes with a file from this skill."
     )
   }
   if (isRegressionCopy(lastResult.gate_reason) || lastResult.regression?.hard) {
     return (
       lastResult.gate_reason ||
       lastResult.regression?.reason ||
-      "Gate is red — Deploy is blocked."
+      "Pass the checks to unlock Install."
     )
   }
-  return "Gate is red — Deploy is blocked."
+  return "Pass the checks to unlock Install."
 }
 
 function isRegressionCopy(reason?: string | null): boolean {

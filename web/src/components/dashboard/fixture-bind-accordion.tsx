@@ -65,7 +65,7 @@ export function FixtureBindAccordion({
   }
   const names = dataset.map((item) => item.path.split("/").pop() || item.path)
   const summary = !dataset.length
-    ? "Add a file to evals/fixtures to bind completion checks"
+    ? "Add a sample file to this skill to bind completion checks"
     : inherit
       ? names.join(", ")
       : `Not using pack files: ${names.join(", ")}`
@@ -132,7 +132,7 @@ export function FixtureBindAccordion({
                   />
                   <FieldContent>
                     <FieldLabel htmlFor="btn-use-pack-fixtures">
-                      Use pack fixtures for completion checks
+                      Use this skill’s files for completion checks
                     </FieldLabel>
                     <FieldDescription>
                       Completion rows inherit these files unless a row already
@@ -142,13 +142,13 @@ export function FixtureBindAccordion({
                   </FieldContent>
                 </Field>
                 <Field data-disabled={disabled || undefined}>
-                  <FieldLabel htmlFor="fixture-glob">Which pack files</FieldLabel>
+                  <FieldLabel htmlFor="fixture-glob">Which files</FieldLabel>
                   <Input
                     id="fixture-glob"
                     value={glob}
                     disabled={disabled}
                     onChange={(event) => onGlobChange(event.target.value)}
-                    placeholder="evals/fixtures/*"
+                    placeholder="samples/*"
                     className="text-sm"
                   />
                 </Field>
@@ -176,7 +176,7 @@ export function FixtureBindAccordion({
             <Empty className="border-0 px-1 py-3">
               <EmptyHeader>
                 <EmptyTitle className="text-pretty">
-                  Add a file to evals/fixtures to bind completion checks
+                  Add a sample file to this skill to bind completion checks
                 </EmptyTitle>
                 <EmptyDescription className="text-pretty">
                   Upload a real file into this skill folder. Completion checks

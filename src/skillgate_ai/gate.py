@@ -202,6 +202,7 @@ def run_check(
                 on_progress=on_progress,
                 control=control,
                 judge=outcome_judge,
+                strict_ingest=source == "cli",
             )
             run_cfg = with_timeout_effective(run_cfg, report.timeout_effective)
             report.config = run_cfg.to_dict()

@@ -525,8 +525,8 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
         })
         toast.add({
           title: inherit
-            ? "Completion checks now use pack fixtures"
-            : "Pack fixture inherit is off",
+            ? "Completion checks now use this skill’s files"
+            : "Skill files are off for completion checks",
           type: "success",
         })
         return data.checks

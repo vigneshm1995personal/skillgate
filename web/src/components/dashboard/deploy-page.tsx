@@ -33,21 +33,21 @@ const TARGETS: Array<{
     label: "Cursor",
     icon: SparklesIcon,
     rootKey: "cursor",
-    hint: "~/.cursor/skills (or SKILLGATE_CURSOR_SKILLS).",
+    hint: "Cursor's skills folder",
   },
   {
     target: "codex",
     label: "Codex",
     icon: TerminalIcon,
     rootKey: "codex",
-    hint: "~/.codex/skills (or SKILLGATE_CODEX_SKILLS).",
+    hint: "Codex's skills folder",
   },
   {
     target: "claude",
     label: "Claude",
     icon: BotIcon,
     rootKey: "claude",
-    hint: "~/.claude/skills (or SKILLGATE_CLAUDE_SKILLS).",
+    hint: "Claude's skills folder",
   },
 ]
 
@@ -76,7 +76,6 @@ export function DeployPage() {
       ? `${skill.name} — evaluate to record a version.`
       : "Select a skill on Evaluate first."
 
-  const roots = status?.deploy?.roots || {}
   const localAvailable = status?.deploy?.local_available !== false
   const live = localAvailable
     ? status?.deploy?.live || ["cursor", "claude", "codex"]
@@ -87,36 +86,36 @@ export function DeployPage() {
   const git = status?.deploy?.git
   const gitConfigured = Boolean(git?.configured)
 
-  let note = "Pick a skill on Evaluate, then clear Gate green."
-  let title = deployAllowed ? "Unlocked" : "Blocked"
+  let note = "Pick a skill on Evaluate, then pass the checks to unlock Install."
+  let title = deployAllowed ? "Ready" : "Blocked"
   if (!skill) {
-    note = "Pick a skill on Evaluate → Gate green unlocks Install."
+    note = "Pick a skill on Evaluate. Pass the checks to unlock Install."
   } else if (deployAllowed && lastDeploy?.mode === "git" && (lastDeploy.url || lastDeploy.dest_path)) {
     note = lastDeploy.url
-      ? `Published ${skillName} to git → ${lastDeploy.url}`
-      : `Published ${skillName} to git → ${lastDeploy.dest_path}`
+      ? `Published ${skillName} to git.`
+      : `Published ${skillName} to git.`
     title = "Published"
   } else if (deployAllowed && lastDeploy?.dest_path) {
     const ver = lastDeploy.semver ? ` v${lastDeploy.semver}` : ""
     const target = lastDeploy.target ? ` to ${lastDeploy.target}` : ""
-    note = `Installed ${skillName}${ver}${target} → ${lastDeploy.dest_path}`
+    note = `Installed ${skillName}${ver}${target}.`
     title = "Installed"
   } else if (deployAllowed && deployLast) {
-    note = `Last install: ${deployLast}. Gate is green for ${skillName} — Install is unlocked.`
+    note = `Last install: ${deployLast}. Checks passed for ${skillName} — Install is unlocked.`
   } else if (deployAllowed) {
     note = localAvailable
-      ? `Gate is green for ${skillName}. Install to Cursor, Codex, or Claude is unlocked.`
-      : `Gate is green for ${skillName}. Local install needs the CLI on your machine — or Publish to git below.`
+      ? `Checks passed for ${skillName}. Install to Cursor, Codex, or Claude is unlocked.`
+      : `Checks passed for ${skillName}. Local install needs the app on your machine — or Publish to git below.`
   } else if (
     last?.passed &&
     !isLiveHarness(last.report?.harness || last.harness) &&
     status?.mode !== "local"
   ) {
-    note = `Demo evals do not unlock Deploy. Run live Start Evaluations for ${skillName}.`
+    note = `Demo runs do not unlock Deploy. Run live Start Evaluations for ${skillName}.`
   } else if (deployLast) {
-    note = `Last install: ${deployLast}. Gate is red for ${skillName} — clear Gate to unlock.`
+    note = `Last install: ${deployLast}. Pass the checks to unlock Install.`
   } else if (skill) {
-    note = `Clear Gate green for ${skillName} to unlock Install.`
+    note = "Pass the checks to unlock Install."
   }
 
   const stampMetrics =
@@ -134,8 +133,8 @@ export function DeployPage() {
         title="Deploy"
         description={
           localAvailable
-            ? "Install this gated skill into Cursor, Codex, or Claude when the gate is green."
-            : "Hosted Skill Gate cannot write your Mac skills folders — publish to git, or run the CLI locally."
+            ? "Install this gated skill into Cursor, Codex, or Claude when the checks pass."
+            : "Hosted Skill Gate cannot write your skills folders — publish to git, or run the app locally."
         }
         action={
           <Button
@@ -164,13 +163,9 @@ export function DeployPage() {
         <Alert id="deploy-local-hosted">
           <AlertTitle>Local install on your machine</AlertTitle>
           <AlertDescription>
-            This Vercel deployment cannot copy skills into{" "}
-            <code className="text-xs">~/.cursor/skills</code>,{" "}
-            <code className="text-xs">~/.codex/skills</code>, or{" "}
-            <code className="text-xs">~/.claude/skills</code>. Run{" "}
-            <code className="text-xs">skillgate-ai serve</code> on Mini (or your
-            laptop), clear Gate, then use Install there — same{" "}
-            <code className="text-xs">skill_md_hash</code> proof.
+            This hosted app cannot copy skills into Cursor, Codex, or Claude
+            folders on your machine. Run Skill Gate locally, pass the checks,
+            then use Install there.
           </AlertDescription>
         </Alert>
       ) : null}
@@ -179,7 +174,7 @@ export function DeployPage() {
         <h2 className="text-sm font-medium text-muted-foreground">
           Install locally
         </h2>
-        {targets.map(({ target, label, icon: Icon, rootKey, hint }) => (
+        {targets.map(({ target, label, icon: Icon, hint }) => (
           <Card key={target}>
             <CardHeader>
               <CardTitle className="flex items-center gap-3">
@@ -190,8 +185,8 @@ export function DeployPage() {
               </CardTitle>
               <CardDescription>
                 {localAvailable
-                  ? `Copy the gated skill into ${roots[rootKey] || hint}`
-                  : `Run the CLI on your machine to install into ${hint}`}
+                  ? `Copy the gated skill into ${hint}`
+                  : `Run the app on your machine to install into ${hint}`}
               </CardDescription>
             </CardHeader>
             <CardContent>

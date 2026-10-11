@@ -150,6 +150,7 @@ def run_eval(
     pack_fingerprint: str | None = None,
     pack_case_ids: tuple[str, ...] | list[str] | None = None,
     judge: Judge | None = None,
+    strict_ingest: bool = True,
 ) -> SuiteReport:
     """Run every task. Hosted slice/poller kwargs are not part of the public gate."""
     outcome_judge = judge if judge is not None else default_judge()
@@ -170,7 +171,7 @@ def run_eval(
         resolved = _resolve_path(root, suite_dir, extra)
         if resolved not in skill_paths:
             skill_paths.append(resolved)
-    skills = ingest_skills(skill_paths)
+    skills = ingest_skills(skill_paths, strict=strict_ingest)
     reference = _reference_twin(root, skills[0] if skills else None)
     stamp_fp, stamp_ids = _resolve_pack_stamp(
         skills[0].path if skills else None,
@@ -514,6 +515,23 @@ def _run_task(
         with span("eval.task", task.id, expect_skill=task.expect_skill or ""):
             copies: list[tuple[Path, str]] = []
             skill_root = skills[0].path if skills else None
+            if skill_root is not None:
+                from skillgate_ai.case_pack import (
+                    MISSING_GOLDEN_REASON,
+                    task_missing_golden,
+                )
+
+                if task_missing_golden(skill_root, task.id):
+                    ended = True
+                    return TaskReport(
+                        task_id=task.id,
+                        prompt=task.prompt,
+                        expect_skill=task.expect_skill,
+                        passed=False,
+                        scores=[],
+                        selected_skill=None,
+                        failures=[MISSING_GOLDEN_REASON],
+                    )
             for item in task.files:
                 rel = str(item.src).replace("\\", "/").lstrip("/")
                 if rel.startswith("evals/goldens/"):

@@ -89,8 +89,8 @@ def local_gate(passed: bool | None, *, status: str, tryout: bool) -> tuple[str, 
     if tryout:
         return "pending", "Single-check runs do not unlock Deploy."
     if status == "error" or not passed:
-        return "blocked", "Gate is red."
-    return "cleared", "Gate is green."
+        return "blocked", "Pass the checks to unlock Install."
+    return "cleared", "Checks passed — Install is unlocked."
 
 
 def _row_is_tryout(row: dict[str, Any], report: dict[str, Any] | None) -> bool:
@@ -132,22 +132,30 @@ def _newest_full_run(runs: list[dict[str, Any]]) -> dict[str, Any] | None:
 
 
 def skill_payload(state: AppState, path: Path) -> dict[str, Any]:
-    loaded = ingest_skill(path)
+    loaded = ingest_skill(path, strict=False)
     files = browser_files(path)
     hist = load_history(path, limit=50)
     runs = [history_row_to_run(row, path) for row in reversed(hist)]
     last_run = _newest_full_run(runs)
     last = hist[-1] if hist else None
     gate = (last_run or {}).get("gate_decision") or "pending"
+    slug = loaded.name or path.name
+    display = loaded.display_name or path.name
+    rel = path.name
+    if is_relative(path, state.root):
+        rel = str(path.relative_to(state.root))
     return {
-        "id": loaded.name,
-        "name": loaded.name,
+        "id": slug,
+        "name": display,
+        "slug": slug,
         "description": loaded.description,
-        "path": str(path.relative_to(state.root)) if is_relative(path, state.root) else path.name,
+        "body": loaded.body,
+        "warning": loaded.warning,
+        "path": rel,
         "absolute": str(path.resolve()),
         "uploaded": False,
-        "seed": loaded.name == "pdf",
-        "sabotaged": loaded.name == "pdf-sabotaged",
+        "seed": slug == "pdf",
+        "sabotaged": slug == "pdf-sabotaged",
         "gate": gate,
         "last_eval_at": last.get("ts") if last else None,
         "eval_count": len(hist),

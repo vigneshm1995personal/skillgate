@@ -162,7 +162,7 @@ export function SettingsPage() {
         title="Settings"
         description={
           isLocalMode(status)
-            ? "Bring your own model keys. Saved in this project’s .env. No Skill Gate account."
+            ? "Bring your own model keys. Saved on this machine. No Skill Gate account."
             : "Bring your own model keys. Skill Gate stores them encrypted for this user and uses them instead of server env when present."
         }
       />
@@ -171,7 +171,7 @@ export function SettingsPage() {
           <CardTitle>Model keys</CardTitle>
           <CardDescription>
             {isLocalMode(status)
-              ? "Keys stay on this machine. Clearing a key removes it from .env for this project."
+              ? "Keys stay on this machine. Clearing a key removes it from this project."
               : qaOpen
                 ? "QA is sign-in free. Keys save under the shared qa-open identity on the qa database — not production, not a browser cookie."
                 : "Keys belong to your signed-in account. They override process env for your requests only. Clearing a key does not unset a server env var."}
@@ -209,7 +209,7 @@ export function SettingsPage() {
                     {presence.from_env && !presence.from_vault ? (
                       <FieldDescription>
                         {isLocalMode(status)
-                          ? "Set in the process environment. Clear only removes a key saved in .env."
+                          ? "Set in the process environment. Clear only removes a key saved for this project."
                           : "Set on the server. Clear only removes a saved user key."}
                       </FieldDescription>
                     ) : null}
@@ -257,10 +257,10 @@ export function SettingsPage() {
                         <TooltipContent>
                           {presence.from_vault
                             ? isLocalMode(status)
-                              ? "Remove the key from this project’s .env"
+                              ? "Remove the key saved for this project"
                               : "Remove the saved user key"
                             : isLocalMode(status)
-                              ? "Clear only removes a key saved in .env"
+                              ? "Clear only removes a key saved for this project"
                               : "Clear only removes a saved user key"}
                         </TooltipContent>
                       </Tooltip>

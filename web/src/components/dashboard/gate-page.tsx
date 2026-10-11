@@ -214,7 +214,7 @@ export function GatePage({ embedded = false }: { embedded?: boolean }) {
       {embedded ? null : (
         <PageHeader
           title="Gate"
-          description="RED blocks deploy. GREEN is the CI bar."
+          description="Blocked keeps Install locked. Ready unlocks Install."
           action={
             <Button
               variant="outline"
@@ -332,7 +332,7 @@ export function GatePage({ embedded = false }: { embedded?: boolean }) {
                                   report?.harness || scopedResult.harness
                                 )
                               )
-                            : "Gate is red — Deploy is blocked."
+                            : "Pass the checks to unlock Install."
                         }
                         passWarnings={passWarnings}
                         errorNote={errorNote || null}

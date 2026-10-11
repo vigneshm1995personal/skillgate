@@ -451,9 +451,9 @@ def copy_skill_pack(
     Copies SKILL.md plus scripts/, assets/, references/, evals/fixtures/, and
     any other pack files. Skips VCS/cache dirs. Dest is replaced if present.
 
-    ``skill_pack_hash`` (the recorded pass) includes ``evals/goldens/``. Deploy
-    bundle and git publish pass ``include_goldens=True`` so the copied tree
-    hashes the same. Sandbox and editor installs keep goldens out so the
+    ``skill_pack_hash`` (the recorded pass) includes ``evals/goldens/``. Import
+    into this project, deploy bundle, and git publish pass ``include_goldens=True``
+    so checks can score. Sandbox and editor installs keep goldens out so the
     agent cannot read expected answers.
     """
     src = Path(source).expanduser().resolve()

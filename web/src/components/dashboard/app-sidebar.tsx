@@ -18,7 +18,7 @@ import {
   useGateLabel,
 } from "@/components/dashboard/chrome"
 import { useDashboard } from "@/lib/dashboard-provider"
-import { slotOn } from "@/lib/mode"
+import { isLocalMode, slotOn } from "@/lib/mode"
 import { type Stage } from "@/lib/types"
 
 export function AppSidebar({
@@ -109,7 +109,7 @@ export function AppSidebar({
             label="Deploy"
             onClick={() => go("deploy")}
           />
-          {slotOn(status, "sharedHistory") ? (
+          {slotOn(status, "sharedHistory") || isLocalMode(status) ? (
             <NavRow
               id="tab-history"
               active={stage === "history"}
@@ -167,12 +167,6 @@ export function AppSidebar({
         ) : null}
         <div className="px-1 pb-1">
           <p className="text-sm font-medium">{status?.version ? `v${status.version}` : "Skill Gate"}</p>
-          {status && !status.has_key ? (
-            <p className="text-xs text-muted-foreground">
-              {status.missing_key_message ||
-                "No model key yet. The built-in checker still works."}
-            </p>
-          ) : null}
         </div>
       </div>
       <span className="sr-only">{gateLabel}</span>

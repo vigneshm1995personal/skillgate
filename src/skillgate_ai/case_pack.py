@@ -600,17 +600,23 @@ def _validate_pack_on_disk(root: Path, pack: CasePack) -> None:
                     f"Case {case.id} is missing input file {item.src}.",
                     hint="Add the fixture under evals/fixtures/ or mark needs_upload.",
                 )
-        if case.golden:
-            golden = root / case.golden.path
-            if not golden.is_file():
-                raise SuiteError(
-                    f"Case {case.id} is missing golden file {case.golden.path}.",
-                    hint=f"Write the expected output under {GOLDEN_DIR}/.",
-                )
-        elif case.should_trigger and case.status == "pinned":
-            # Pinned completion-shaped rows must have a golden. Trigger-only
-            # (no golden, no output) is allowed.
-            pass
+        # Missing expected-output files fail that check at run time.
+        # Do not abort the whole suite here.
+
+
+MISSING_GOLDEN_REASON = "This check is missing its expected output file."
+
+
+def task_missing_golden(root: Path, task_id: str) -> bool:
+    """True when this pinned case names an expected-output file that is not on disk."""
+    try:
+        pack = load_case_pack(root)
+    except (SuiteError, OSError, ValueError):
+        return False
+    case = case_for_task(pack, task_id)
+    if case is None or case.golden is None:
+        return False
+    return not (root / case.golden.path).is_file()
 
 
 def _skill_name(root: Path) -> str:
@@ -619,7 +625,7 @@ def _skill_name(root: Path) -> str:
         try:
             from skillgate_ai.ingest import ingest_skill
 
-            return ingest_skill(root).name
+            return ingest_skill(root, strict=False).name
         except Exception:
             pass
     return root.name
@@ -782,7 +788,8 @@ def _persist_golden(
             write_pack_file(root, rel=rel, content=src.read_bytes())
             kind = "json" if suffix.lower() == ".json" else "text"
             return CaseGolden(output_path=dest_output, path=rel, kind=kind)
-        raise ValueError("Pin needs a golden file or Expected text.")
+        kind = "json" if Path(rel).suffix.lower() == ".json" else "text"
+        return CaseGolden(output_path=dest_output, path=rel, kind=kind)
     if not contains_list:
         raise ValueError("Pin needs a golden file or Expected text.")
     body = contains_list[0]

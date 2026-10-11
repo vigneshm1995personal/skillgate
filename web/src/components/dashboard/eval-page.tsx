@@ -9,6 +9,7 @@ import {
 } from "lucide-react"
 
 import { AddCheckDialog } from "@/components/dashboard/add-check-dialog"
+import { AssistantMarkdown } from "@/components/dashboard/assistant-markdown"
 import { CheckList } from "@/components/dashboard/check-list"
 import { DatasetViewer } from "@/components/dashboard/dataset-viewer"
 import { GateBadge, PageHeader } from "@/components/dashboard/chrome"
@@ -298,7 +299,7 @@ export function EvalPage() {
             {status.missing_key_hint ||
               (isLocalMode(status)
                 ? "Add a key in Settings to run live. Run still works with the built-in checker — that is not a live model."
-                : "Open Settings to add a key, or set CURSOR_API_KEY in .env. Auto/Cursor Start Evaluations will fail without a key. Explicit Codex may use `codex login`.")}{" "}
+                : "Add a key in Settings to run live. Auto/Cursor Start Evaluations need a key.")}{" "}
             <Button
               id="btn-open-settings"
               variant="link"
@@ -331,7 +332,7 @@ export function EvalPage() {
           {status.missing_key_hint ||
             (isLocalMode(status)
               ? "Add a key in Settings to run live. Run still works with the built-in checker — that is not a live model."
-              : "Open Settings to add a key, or set CURSOR_API_KEY in .env. Auto/Cursor Start Evaluations will fail without a key. Explicit Codex may use `codex login`.")}
+              : "Add a key in Settings to run live. Auto/Cursor Start Evaluations need a key.")}
         </p>
       ) : null}
 
@@ -427,6 +428,9 @@ export function EvalPage() {
                     <span className="min-w-0 flex-1 truncate text-sm font-medium">
                       {item.name}
                     </span>
+                    {item.warning ? (
+                      <Badge variant="outline">Needs attention</Badge>
+                    ) : null}
                     {item.seed ? (
                       <Badge variant="outline">Seed</Badge>
                     ) : null}
@@ -476,7 +480,7 @@ export function EvalPage() {
                   </span>
                 </CardTitle>
                 <CardDescription className="text-pretty">
-                  Input and expected output for this skill.
+                  {skill.warning || skill.description || "Input and expected output for this skill."}
                 </CardDescription>
                 <CardAction>
                   <Button
@@ -492,6 +496,17 @@ export function EvalPage() {
                   </Button>
                 </CardAction>
               </CardHeader>
+            </Card>
+          ) : null}
+
+          {skill?.body?.trim() ? (
+            <Card id="eval-skill-md">
+              <CardHeader>
+                <CardTitle>SKILL.md</CardTitle>
+              </CardHeader>
+              <CardContent className="text-sm leading-relaxed">
+                <AssistantMarkdown text={skill.body} />
+              </CardContent>
             </Card>
           ) : null}
 
@@ -866,11 +881,11 @@ export function EvalPage() {
                   ) : null}
                 </div>
               ) : null}
-              {skill ? (
+              {skill && !isLocalMode(status) ? (
               <Accordion className="rounded-lg border px-2">
                 <AccordionItem value="yaml">
                   <AccordionTrigger className="py-1.5">
-                    Power user: YAML
+                    Import checks from YAML
                   </AccordionTrigger>
                   <AccordionContent>
                     <FieldGroup>

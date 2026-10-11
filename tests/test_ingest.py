@@ -66,3 +66,31 @@ def test_discover_empty_dir_raises(tmp_path: Path) -> None:
     (tmp_path / "skills").mkdir()
     with pytest.raises(IngestError, match="No SKILL.md folders"):
         discover_skills(tmp_path / "skills")
+
+
+def test_lenient_keeps_display_name(tmp_path: Path) -> None:
+    folder = tmp_path / "idea-brainstorming"
+    folder.mkdir()
+    (folder / "SKILL.md").write_text(
+        "---\nname: Idea brainstorming\n"
+        "description: Brainstorm product ideas with the user.\n"
+        "---\n\n# Go\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(IngestError, match="invalid"):
+        ingest_skill(folder)
+    loaded = ingest_skill(folder, strict=False)
+    assert loaded.name == "idea-brainstorming"
+    assert loaded.display_name == "Idea brainstorming"
+    assert loaded.warning is None
+    assert "Brainstorm" in loaded.description
+
+
+def test_lenient_broken_skill_has_warning(tmp_path: Path) -> None:
+    folder = tmp_path / "broken-skill"
+    folder.mkdir()
+    (folder / "SKILL.md").write_text("# no frontmatter\n", encoding="utf-8")
+    loaded = ingest_skill(folder, strict=False)
+    assert loaded.name == "broken-skill"
+    assert loaded.warning
+    assert "header" in loaded.warning.lower() or "couldn" in loaded.warning.lower()

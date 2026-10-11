@@ -11,7 +11,6 @@ from skillgate_ai.catalog import safe_skill_folder_name, workspace_skills_root
 from skillgate_ai.errors import SkillGateError
 from skillgate_ai.ingest import FRONTMATTER_RE, ingest_skill
 from skillgate_ai.scaffold import scaffold_trigger_cases
-from skillgate_ai.skill_md import write_skill_md
 
 
 def _inside(root: Path, candidate: Path) -> Path:
@@ -33,17 +32,16 @@ def write_pasted_skill(root: Path, markdown: str) -> Path:
     parsed = yaml.safe_load(match.group(1)) or {}
     if not isinstance(parsed, dict):
         raise SkillGateError("SKILL.md frontmatter must be a mapping of fields.")
-    name = safe_skill_folder_name(str(parsed.get("name") or "").strip())
-    description = str(parsed.get("description") or "").strip()
+    display = str(parsed.get("name") or "").strip()
+    name = safe_skill_folder_name(display)
     parent = workspace_skills_root(root)
     parent.mkdir(parents=True, exist_ok=True)
     dest = _inside(parent, parent / name)
-    if dest.exists():
-        (dest / "SKILL.md").write_text(text, encoding="utf-8")
-        ingest_skill(dest)
+    dest.mkdir(parents=True, exist_ok=True)
+    (dest / "SKILL.md").write_text(text, encoding="utf-8")
+    ingest_skill(dest, strict=False)
+    if not dest.exists():
         return dest
-    body = text[match.end() :]
-    write_skill_md(dest, name=name, description=description or name, body=body)
     if not (dest / CASES_REL).is_file():
         scaffold_trigger_cases(dest)
     return dest
@@ -107,5 +105,5 @@ def extract_uploaded_skill(root: Path, data: bytes, *, filename: str) -> Path:
             continue
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(archive.read(info))
-    ingest_skill(dest)
+    ingest_skill(dest, strict=False)
     return dest

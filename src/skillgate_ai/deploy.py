@@ -90,7 +90,7 @@ class _PackAdapter:
         self.skills_root().mkdir(parents=True, exist_ok=True)
         try:
             copied = copy_skill_pack(source, dest)
-            ingest_skill(dest)
+            ingest_skill(dest, strict=False)
         except IngestError as exc:
             if dest.exists():
                 shutil.rmtree(dest)
@@ -111,7 +111,7 @@ class _PackAdapter:
             "dest_path": str(copied["dest_path"]),
             "pack_path": str(copied["pack_path"]),
             "file_count": file_count,
-            "message": f"Installed {name} ({file_count} files) → {copied['dest_path']}",
+            "message": f"Installed {name} ({file_count} files) into {self.label}'s skills folder.",
         }
 
 

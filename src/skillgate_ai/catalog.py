@@ -7,7 +7,7 @@ from typing import Any
 
 from skillgate_ai.deploy import claude_skills_root, codex_skills_root, cursor_skills_root
 from skillgate_ai.errors import SkillGateError
-from skillgate_ai.ingest import NAME_RE, ingest_skill
+from skillgate_ai.ingest import NAME_RE, folder_slug, ingest_skill
 from skillgate_ai.pack import copy_skill_pack as copy_pack
 from skillgate_ai.paths import is_skill_pack
 
@@ -71,26 +71,25 @@ def catalog_entries(root: Path) -> list[dict[str, Any]]:
         if not (resolved / "SKILL.md").is_file():
             return
         seen.add(resolved)
-        name = resolved.name
-        skill_id = name if name not in names_seen else str(resolved)
-        names_seen.add(name)
-        try:
-            loaded = ingest_skill(resolved)
-            description = loaded.description
-            name = loaded.name or name
-        except SkillGateError:
-            description = ""
+        slug = folder_slug(resolved)
+        loaded = ingest_skill(resolved, strict=False)
+        slug = loaded.name or slug
+        display = loaded.display_name or resolved.name
+        skill_id = slug if slug not in names_seen else f"{source}:{slug}"
+        names_seen.add(slug)
         entries.append(
             {
                 "id": skill_id,
-                "name": name,
-                "description": description,
+                "name": display,
+                "slug": slug,
+                "description": loaded.description,
+                "warning": loaded.warning,
                 "path": _display_path(resolved, root),
                 "absolute": str(resolved),
                 "source": source,
                 "source_label": SOURCE_LABELS.get(source, source),
-                "seed": name == "pdf",
-                "sabotaged": name == "pdf-sabotaged",
+                "seed": slug == "pdf",
+                "sabotaged": slug == "pdf-sabotaged",
             }
         )
 
@@ -111,14 +110,27 @@ def catalog_entries(root: Path) -> list[dict[str, Any]]:
 
 
 def safe_skill_folder_name(name: str) -> str:
-    """Reject names that would escape ``skills/`` (absolute paths, ``..``, slashes)."""
+    """Folder slug for ``skills/<name>/``. Display names are slugified; path escape is rejected."""
     text = (name or "").strip()
-    if not NAME_RE.match(text):
+    if not text or text in {".", ".."} or "/" in text or "\\" in text:
         raise SkillGateError(
             "Skill names are lowercase letters, numbers, and hyphens.",
             hint="Example: pdf-tools",
         )
-    return text
+    if ".." in text.split("/"):
+        raise SkillGateError(
+            "Skill names are lowercase letters, numbers, and hyphens.",
+            hint="Example: pdf-tools",
+        )
+    if NAME_RE.match(text):
+        return text
+    slug = folder_slug(Path(text))
+    if not NAME_RE.match(slug):
+        raise SkillGateError(
+            "Skill names are lowercase letters, numbers, and hyphens.",
+            hint="Example: pdf-tools",
+        )
+    return slug
 
 
 def find_skill(root: Path, name: str) -> Path:
@@ -133,11 +145,16 @@ def find_skill(root: Path, name: str) -> Path:
         if (workspace / "SKILL.md").is_file():
             return workspace.resolve()
     for entry in catalog_entries(root):
-        if entry["name"] == text or entry["id"] == text or entry["absolute"] == text:
+        if (
+            entry["name"] == text
+            or entry["id"] == text
+            or entry.get("slug") == text
+            or entry["absolute"] == text
+        ):
             return Path(entry["absolute"])
     raise SkillGateError(
         f"Skill {text!r} was not found.",
-        hint="Import from ~/.cursor/skills, ~/.codex/skills, or ~/.claude/skills, or open a folder with SKILL.md.",
+        hint="Connect Cursor, Codex, or Claude, or paste a SKILL.md.",
     )
 
 
@@ -160,10 +177,16 @@ def import_from_agent_folders(
                 skipped.append({"name": skill_dir.name, "source": source, "reason": "already here"})
                 continue
             try:
-                copy_pack(skill_dir, dest)
-                ingest_skill(dest)
-            except (SkillGateError, OSError, ValueError) as exc:
-                skipped.append({"name": skill_dir.name, "source": source, "reason": str(exc)})
+                copy_pack(skill_dir, dest, include_goldens=True)
+            except (OSError, ValueError) as exc:
+                skipped.append(
+                    {
+                        "name": skill_dir.name,
+                        "source": source,
+                        "reason": "Couldn't copy this skill.",
+                    }
+                )
+                del exc
                 if dest.exists() and dest != skill_dir:
                     try:
                         import shutil
@@ -172,12 +195,49 @@ def import_from_agent_folders(
                     except OSError:
                         pass
                 continue
-            imported.append({"name": skill_dir.name, "source": source, "dest": str(dest)})
+            loaded = ingest_skill(dest, strict=False)
+            imported.append(
+                {
+                    "name": loaded.display_name or dest.name,
+                    "slug": dest.name,
+                    "source": source,
+                    "warning": loaded.warning,
+                }
+            )
     return {
         "imported": imported,
         "skipped": skipped,
         "skills": catalog_entries(root),
+        "sources": agent_source_status(),
     }
+
+
+def agent_source_status() -> list[dict[str, Any]]:
+    """Per-agent connect status: folder found + skill counts. No filesystem paths."""
+    rows: list[dict[str, Any]] = []
+    for source, getter in SOURCE_ROOTS:
+        if source == "workspace" or getter is None:
+            continue
+        label = SOURCE_LABELS.get(source, source)
+        found = False
+        count = 0
+        try:
+            parent = getter()
+            found = parent.is_dir()
+            if found:
+                count = len(_iter_skill_dirs(parent))
+        except OSError:
+            found = False
+        rows.append(
+            {
+                "id": source,
+                "label": label,
+                "found": found,
+                "count": count,
+                "folder_label": f"{label}'s skills folder",
+            }
+        )
+    return rows
 
 
 def _display_path(path: Path, root: Path) -> str:

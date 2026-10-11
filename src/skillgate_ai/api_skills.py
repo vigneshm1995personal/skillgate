@@ -12,7 +12,12 @@ from fastapi.responses import FileResponse
 from skillgate_ai.advice import description_from_paste, rewrite_skill_description
 from skillgate_ai.api_intake import extract_uploaded_skill, write_pasted_skill
 from skillgate_ai.api_payloads import fail, history_payload, skill_payload, state_of
-from skillgate_ai.catalog import catalog_entries, find_skill, import_from_agent_folders
+from skillgate_ai.catalog import (
+    agent_source_status,
+    catalog_entries,
+    find_skill,
+    import_from_agent_folders,
+)
 from skillgate_ai.deploy import get_adapter
 from skillgate_ai.errors import SkillGateError
 from skillgate_ai.ingest import ingest_skill
@@ -25,12 +30,39 @@ from skillgate_ai.pack import (
 )
 
 
+def _broken_skill_row(item: dict[str, Any]) -> dict[str, Any]:
+    folder = Path(str(item.get("absolute") or item.get("name") or "skill"))
+    return {
+        "id": item.get("id") or item.get("name") or folder.name,
+        "name": item.get("name") or folder.name,
+        "slug": item.get("slug") or folder.name,
+        "description": item.get("description") or "",
+        "warning": item.get("warning") or "Couldn't read this skill’s details.",
+        "path": item.get("path") or folder.name,
+        "absolute": item.get("absolute") or str(folder),
+        "uploaded": False,
+        "seed": False,
+        "sabotaged": False,
+        "gate": "pending",
+        "pack_files": [],
+    }
+
+
 def register_skill_routes(app: FastAPI) -> None:
     @app.get("/api/skills")
     def list_skills(request: Request) -> dict[str, Any]:
         state = state_of(request)
-        skills = [skill_payload(state, Path(item["absolute"])) for item in catalog_entries(state.root)]
-        return {"skills": skills, "catalog_error": None}
+        skills: list[dict[str, Any]] = []
+        for item in catalog_entries(state.root):
+            try:
+                skills.append(skill_payload(state, Path(item["absolute"])))
+            except (SkillGateError, OSError, ValueError):
+                skills.append(_broken_skill_row(item))
+        return {"skills": skills, "catalog_error": None, "sources": agent_source_status()}
+
+    @app.get("/api/skills/import-sources")
+    def import_sources() -> dict[str, Any]:
+        return {"sources": agent_source_status()}
 
     @app.post("/api/skills/import")
     async def import_skills(request: Request) -> dict[str, Any]:
@@ -41,9 +73,14 @@ def register_skill_routes(app: FastAPI) -> None:
             state.root,
             sources=sources if isinstance(sources, list) else None,
         )
-        result["skills"] = [
-            skill_payload(state, Path(item["absolute"])) for item in catalog_entries(state.root)
-        ]
+        skills: list[dict[str, Any]] = []
+        for item in catalog_entries(state.root):
+            try:
+                skills.append(skill_payload(state, Path(item["absolute"])))
+            except (SkillGateError, OSError, ValueError):
+                skills.append(_broken_skill_row(item))
+        result["skills"] = skills
+        result["sources"] = agent_source_status()
         return result
 
     @app.get("/api/skills/{name}")
@@ -180,7 +217,7 @@ def register_skill_routes(app: FastAPI) -> None:
         if mode == "git" or target == "git":
             fail(404, "Publishing to git isn’t in the local app.")
         skill_path = find_skill(state.root, str(body.get("skill") or ""))
-        loaded = ingest_skill(skill_path)
+        loaded = ingest_skill(skill_path, strict=False)
         result = get_adapter(target).install(skill=loaded, source=skill_path)
         return {
             "status": result.get("status") or "installed",

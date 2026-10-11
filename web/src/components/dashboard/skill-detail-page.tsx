@@ -27,6 +27,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { AssistantMarkdown } from "@/components/dashboard/assistant-markdown"
 import { EvalMosaic, MosaicLegend } from "@/components/dashboard/eval-mosaic"
 import { DatasetViewer } from "@/components/dashboard/dataset-viewer"
 import { SkillPackBrowser } from "@/components/dashboard/skill-pack-browser"
@@ -244,6 +245,35 @@ export function SkillDetailPage({ name }: { name: string }) {
           }
         />
       </div>
+
+      {item?.warning ? (
+        <Alert>
+          <AlertTitle>This skill needs attention</AlertTitle>
+          <AlertDescription>{item.warning}</AlertDescription>
+        </Alert>
+      ) : null}
+
+      {item ? (
+        <Card id="skill-md-readable">
+          <CardHeader>
+            <CardTitle>SKILL.md</CardTitle>
+            <CardDescription>
+              {item.description || "How this skill works."}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {item.body?.trim() ? (
+              <div className="text-sm leading-relaxed">
+                <AssistantMarkdown text={item.body} />
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                This skill has no SKILL.md body yet.
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      ) : null}
 
       {item ? (
         <SkillPackBrowser

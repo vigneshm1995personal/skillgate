@@ -459,6 +459,12 @@ describe("customerGateCopy", () => {
     expect(
       customerGateCopy("This run used draft checks, not the saved Dataset.")
     ).toBe("This run used the current checks, which aren't the saved Dataset yet.")
+    expect(customerGateCopy("Gate is red — Deploy is blocked.")).toBe(
+      "Pass the checks to unlock Install."
+    )
+    expect(
+      customerGateCopy("Case extract-hello is missing golden file evals/goldens/extract-hello.txt.")
+    ).toBe("This check is missing its expected output file.")
   })
 })
 
