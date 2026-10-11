@@ -66,7 +66,7 @@ export function AppSidebar({
         <img
           alt=""
           src="/skill-gate-mark.png"
-          className="size-8 shrink-0 rounded-sm object-contain ring-1 ring-white/20"
+          className="size-8 shrink-0 rounded-sm object-contain ring-1 ring-foreground/20"
         />
         <div className="min-w-0">
           <p className="truncate font-display text-[1.05rem] font-medium tracking-tight">
