@@ -1,9 +1,17 @@
 from __future__ import annotations
 
 import os
+import re
 from pathlib import Path
 
 import pytest
+
+_ANSI_RE = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
+
+
+def plain_text(text: str) -> str:
+    """Strip ANSI so help-text asserts work under GITHUB_ACTIONS/FORCE_COLOR."""
+    return _ANSI_RE.sub("", text or "")
 
 ROOT = Path(__file__).resolve().parents[1]
 

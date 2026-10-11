@@ -11,12 +11,12 @@ HISTORY_DIR = "evals/history"
 DEPLOY_REL = "evals/deploys.jsonl"
 
 
+def _local_now() -> datetime:
+    return datetime.now().astimezone()
+
+
 def history_dir(pack_root: str | Path) -> Path:
     return Path(pack_root).expanduser().resolve() / HISTORY_DIR
-
-
-def _now() -> str:
-    return datetime.now(timezone.utc).isoformat()
 
 
 def _append_jsonl(dest: Path, row: dict[str, Any]) -> Path | None:
@@ -51,6 +51,12 @@ def _read_jsonl(path: Path) -> list[dict[str, Any]]:
     return rows
 
 
+def latest_eval(pack_root: str | Path) -> dict[str, Any] | None:
+    """Newest history row, or None when this pack has never been checked."""
+    rows = load_history(pack_root, limit=1)
+    return rows[-1] if rows else None
+
+
 def append_eval(
     pack_root: str | Path,
     *,
@@ -61,12 +67,12 @@ def append_eval(
     config: dict[str, Any] | None = None,
 ) -> Path | None:
     """Append one JSONL row. Returns the file path, or None on EACCES/EROFS."""
-    stamp = datetime.now(timezone.utc).strftime("%Y%m%d")
-    dest = history_dir(pack_root) / f"{stamp}.jsonl"
+    now = _local_now()
+    dest = history_dir(pack_root) / f"{now.strftime('%Y%m%d')}.jsonl"
     return _append_jsonl(
         dest,
         {
-            "ts": _now(),
+            "ts": now.isoformat(),
             "kind": "run",
             "run_id": run_id,
             "passed": passed,
@@ -79,17 +85,32 @@ def append_eval(
     )
 
 
+def _row_ts(item: dict[str, Any]) -> datetime:
+    raw = item.get("ts")
+    if isinstance(raw, str) and raw.strip():
+        try:
+            parsed = datetime.fromisoformat(raw)
+        except ValueError:
+            pass
+        else:
+            if parsed.tzinfo is None:
+                parsed = parsed.replace(tzinfo=timezone.utc)
+            return parsed
+    return datetime.min.replace(tzinfo=timezone.utc)
+
+
 def load_history(pack_root: str | Path, *, limit: int = 50) -> list[dict[str, Any]]:
-    """Newest-last eval rows. Missing dir → empty list. Never reads the deploy log."""
+    """Newest-last eval rows by ``ts``. Missing dir → empty list. Never reads the deploy log."""
     dest_dir = history_dir(pack_root)
     if not dest_dir.is_dir():
         return []
     rows: list[dict[str, Any]] = []
-    for path in sorted(dest_dir.glob("*.jsonl")):
+    for path in dest_dir.glob("*.jsonl"):
         for item in _read_jsonl(path):
             if item.get("kind") == "deploy" or not item.get("run_id"):
                 continue
             rows.append(item)
+    rows.sort(key=_row_ts)
     if limit > 0:
         return rows[-limit:]
     return rows
@@ -107,7 +128,7 @@ def append_deploy(
     return _append_jsonl(
         dest,
         {
-            "ts": _now(),
+            "ts": _local_now().isoformat(),
             "kind": "deploy",
             "target": (target or "").strip().lower(),
             "status": status,
@@ -119,6 +140,7 @@ def append_deploy(
 
 def load_deploys(pack_root: str | Path, *, limit: int = 50) -> list[dict[str, Any]]:
     rows = _read_jsonl(Path(pack_root).expanduser().resolve() / DEPLOY_REL)
+    rows.sort(key=_row_ts)
     if limit > 0:
         return rows[-limit:]
     return rows

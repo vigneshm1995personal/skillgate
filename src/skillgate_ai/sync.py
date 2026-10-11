@@ -17,7 +17,7 @@ import tempfile
 import time
 from pathlib import Path
 
-from skillgate_ai.deploy import adapters
+from skillgate_ai.deploy import adapters, latest_check_passed
 from skillgate_ai.errors import SkillGateError
 from skillgate_ai.ingest import ingest_skill
 from skillgate_ai.pack import copy_skill_pack
@@ -133,6 +133,8 @@ def _sync_one_target(
         source = repo_root / (path_prefix or "skills") / name
         if not source.is_dir() or not (source / "SKILL.md").is_file():
             continue
+        if latest_check_passed(source) is False:
+            continue
         copy_skill_pack(source, root / name)
         ingest_skill(root / name)
         installed += 1
@@ -163,8 +165,15 @@ def sync_once(
                 f"That repo has no '{path_prefix or 'skills'}/' folder. Nothing was changed."
             )
         names = _skill_names(work, path_prefix)
+        prefix = path_prefix or "skills"
         for name in names:
-            _reject_symlinks(work / (path_prefix or "skills") / name)
+            _reject_symlinks(work / prefix / name)
+        skipped = [
+            name
+            for name in names
+            if latest_check_passed(work / prefix / name) is False
+        ]
+        skipped_set = set(skipped)
         roots = target_roots()
         per_target = {
             target: _sync_one_target(
@@ -172,7 +181,12 @@ def sync_once(
             )
             for target in selected
         }
-    return {"skills": names, "targets": per_target}
+    return {
+        "skills": names,
+        "synced": [name for name in names if name not in skipped_set],
+        "skipped": skipped,
+        "targets": per_target,
+    }
 
 
 def run_sync_loop(

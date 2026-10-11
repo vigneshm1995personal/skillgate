@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 import os
-import shutil
 from pathlib import Path
 from typing import NotRequired, Protocol, TypedDict
 
-from skillgate_ai.errors import DeployError, IngestError
+from skillgate_ai.errors import DeployError, IngestError, friendly_os_error
+from skillgate_ai.history import latest_eval
 from skillgate_ai.ingest import NAME_RE, Skill, folder_slug, ingest_skill
 from skillgate_ai.pack import copy_skill_pack
 
@@ -42,21 +42,19 @@ def _override_root(env_var: str) -> Path | None:
 
 
 def cursor_skills_root() -> Path:
-    return _override_root("SKILLGATE_CURSOR_SKILLS") or (
-        Path.home() / ".cursor" / "skills"
-    ).resolve()
+    return (
+        _override_root("SKILLGATE_CURSOR_SKILLS") or (Path.home() / ".cursor" / "skills").resolve()
+    )
 
 
 def codex_skills_root() -> Path:
-    return _override_root("SKILLGATE_CODEX_SKILLS") or (
-        Path.home() / ".codex" / "skills"
-    ).resolve()
+    return _override_root("SKILLGATE_CODEX_SKILLS") or (Path.home() / ".codex" / "skills").resolve()
 
 
 def claude_skills_root() -> Path:
-    return _override_root("SKILLGATE_CLAUDE_SKILLS") or (
-        Path.home() / ".claude" / "skills"
-    ).resolve()
+    return (
+        _override_root("SKILLGATE_CLAUDE_SKILLS") or (Path.home() / ".claude" / "skills").resolve()
+    )
 
 
 class _PackAdapter:
@@ -67,7 +65,7 @@ class _PackAdapter:
     def skills_root(self) -> Path:
         raise NotImplementedError
 
-    def install(self, *, skill: Skill, source: Path) -> DeployResult:
+    def install(self, *, skill: Skill, source: Path, force: bool = False) -> DeployResult:
         source = source.expanduser().resolve()
         name = (skill.name or folder_slug(source) or "").strip()
         if not NAME_RE.match(name):
@@ -75,6 +73,8 @@ class _PackAdapter:
                 "This skill needs a simple folder name before Install.",
                 hint="Use lowercase letters, numbers, and hyphens.",
             )
+        if not force and latest_check_passed(source) is False:
+            raise refuse_ungated_install(name)
         if not source.is_dir() or not (source / "SKILL.md").is_file():
             raise DeployError(
                 "The gated skill folder is gone. Pass the checks again, then install.",
@@ -85,22 +85,19 @@ class _PackAdapter:
                 f"Install source and {self.label} dest are the same folder — "
                 "refusing to overwrite the only copy."
             )
-        self.skills_root().mkdir(parents=True, exist_ok=True)
         try:
+            self.skills_root().mkdir(parents=True, exist_ok=True)
             copied = copy_skill_pack(source, dest)
             ingest_skill(dest, strict=False)
         except IngestError as exc:
-            if dest.exists():
-                shutil.rmtree(dest)
             raise DeployError(exc.message, hint=exc.hint) from exc
         except ValueError as exc:
-            if dest.exists() and dest != source:
-                shutil.rmtree(dest)
             raise DeployError(str(exc)) from exc
         except OSError as exc:
-            if dest.exists() and dest != source:
-                shutil.rmtree(dest)
-            raise DeployError(f"Could not copy the skill into {self.label}: {exc}") from exc
+            raise DeployError(
+                friendly_os_error(exc, what=f"install into {self.label}"),
+                hint="The existing install was left as-is. Fix folder permissions and try again.",
+            ) from None
         file_count = int(copied["file_count"])
         return {
             "target": self.id,
@@ -170,6 +167,22 @@ def get_adapter(target: str) -> DeployAdapter:
     if cls is None:
         raise DeployError("Deploy target must be Cursor, Claude, or Codex.")
     return cls()
+
+
+def latest_check_passed(pack: Path) -> bool | None:
+    """True/False from the newest local check, or None if this pack has no history."""
+    row = latest_eval(pack)
+    if row is None:
+        return None
+    return bool(row.get("passed"))
+
+
+def refuse_ungated_install(skill_name: str, *, exit_code: int = 1) -> DeployError:
+    return DeployError(
+        f"Not installing `{skill_name}` because the latest check did not pass.",
+        hint="Fix the skill, or pass --force to install anyway.",
+        exit_code=exit_code,
+    )
 
 
 def local_deploy_available() -> bool:

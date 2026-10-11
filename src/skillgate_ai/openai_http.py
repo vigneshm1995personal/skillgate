@@ -9,6 +9,7 @@ from typing import Any, Callable, Mapping
 
 import httpx
 
+from skillgate_ai.errors import OFFLINE_MESSAGE
 from skillgate_ai.judge_bank import UNUSABLE_ANSWER
 
 _LOG = logging.getLogger(__name__)
@@ -60,7 +61,7 @@ def is_quota_exhausted(response: httpx.Response) -> bool:
 
 def user_message_for_status(status: int, *, error_code: str | None = None) -> str:
     if status == 401:
-        return "OpenAI did not accept this API key. Check OPENAI_API_KEY."
+        return "OpenAI did not accept this API key."
     if status == 403:
         return "OpenAI scoring is not enabled for this key."
     if status == 404:
@@ -155,7 +156,7 @@ def post_openai_json(
     except httpx.TimeoutException:
         return {"status": "error", "reason": "OpenAI scoring timed out.", "model": model}
     except httpx.HTTPError:
-        return {"status": "error", "reason": "OpenAI scoring failed.", "model": model}
+        return {"status": "error", "reason": OFFLINE_MESSAGE, "model": model}
     if response.status_code >= 400:
         return _status_error(response, model=model)
     try:

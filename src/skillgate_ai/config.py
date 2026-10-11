@@ -1,4 +1,4 @@
-"""BYOLLM configuration from `.env` / process env. No vault, no db-creds."""
+"""Model-key configuration from `.env` / process env."""
 
 from __future__ import annotations
 
@@ -238,16 +238,16 @@ def missing_key_error(*, live: bool = True, for_codex: bool = False) -> MissingL
     else:
         hint = (
             "Add one of these in `.env` or GitHub Actions secrets:\n"
-            "  CURSOR_API_KEY      Cursor Agent harness\n"
-            "  CODEX_API_KEY       Codex CLI harness\n"
-            "  OPENAI_API_KEY      OpenAI-compatible BYO chat / Codex fallback\n"
+            "  CURSOR_API_KEY      Cursor Agent\n"
+            "  CODEX_API_KEY       Codex CLI\n"
+            "  OPENAI_API_KEY      OpenAI-compatible chat / Codex fallback\n"
             "  AI_GATEWAY_API_KEY  optional OpenAI-compatible HTTP base\n"
-            "  ANTHROPIC_API_KEY   Anthropic BYOLLM\n"
-            "See `.env.example`. Deterministic fixture checks need no key (`skillgate check`).\n"
-            "Live harnesses require a key you own — Skill Gate does not ship a model."
+            "  ANTHROPIC_API_KEY   Anthropic\n"
+            "See `.env.example`. Built-in checks need no key (`skillgate check`).\n"
+            "Live checks require a key you own — Skill Gate does not ship a model."
         )
     return MissingLLMKeyError(
-        "No model key found. Skill Gate is BYOLLM — it does not ship a hosted model.",
+        "No model key found. Skill Gate does not ship a hosted model.",
         hint=hint,
     )
 

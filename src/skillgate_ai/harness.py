@@ -20,7 +20,12 @@ from skillgate_ai.config import (
     missing_key_error,
     normalize_codex_reasoning_effort,
 )
-from skillgate_ai.errors import HarnessError, MissingLLMKeyError
+from skillgate_ai.errors import (
+    HarnessError,
+    MissingLLMKeyError,
+    OFFLINE_MESSAGE,
+    harness_http_error,
+)
 from skillgate_ai.ingest import Skill
 from skillgate_ai.sandbox import Sandbox, running_python
 from skillgate_ai.scorers import TriggerEvidence
@@ -198,7 +203,14 @@ class DemoHarness:
         returncode = 0
         read_paths: list[str] = []
         if selected:
-            entry = sandbox.workspace / ".skillgate" / "skills" / selected / "scripts" / "agent_entry.py"
+            entry = (
+                sandbox.workspace
+                / ".skillgate"
+                / "skills"
+                / selected
+                / "scripts"
+                / "agent_entry.py"
+            )
             read_paths.append(str(Path(".skillgate") / "skills" / selected / "SKILL.md"))
             transcript.append(f"phase 2: loaded {selected}/SKILL.md")
             if entry.is_file():
@@ -220,7 +232,9 @@ class DemoHarness:
         _write_selection(sandbox.workspace, selected)
         text = "\n".join(transcript)
         return HarnessResult(
-            trigger=TriggerEvidence(selected_skill=selected, read_paths=read_paths, transcript=text),
+            trigger=TriggerEvidence(
+                selected_skill=selected, read_paths=read_paths, transcript=text
+            ),
             stdout=stdout,
             stderr=stderr,
             transcript=text,
@@ -505,7 +519,7 @@ class LLMHarness:
             router_prompt = (
                 "You are a skill router. Pick at most one skill for the user task.\n"
                 "You may only use the skill name and description — not the skill body.\n"
-                "Reply with JSON only: {\"skill\": \"<name>\"} or {\"skill\": null}.\n\n"
+                'Reply with JSON only: {"skill": "<name>"} or {"skill": null}.\n\n'
                 f"Skills:\n{catalog}\n\nUser task:\n{prompt}"
             )
             router = self._complete(router_prompt, timeout_sec)
@@ -527,7 +541,9 @@ class LLMHarness:
             skill = next(s for s in skills if s.name == selected)
             read_paths.append(f".skillgate/skills/{selected}/SKILL.md")
             body = skill.body[:8000]
-            scripts = list((sandbox.workspace / ".skillgate" / "skills" / selected / "scripts").glob("*.py"))
+            scripts = list(
+                (sandbox.workspace / ".skillgate" / "skills" / selected / "scripts").glob("*.py")
+            )
             script_list = "\n".join(f"- {p.name}" for p in scripts) or "(none)"
             act_prompt = (
                 f"The skill `{selected}` is already selected (Gate pre-selected; "
@@ -559,7 +575,9 @@ class LLMHarness:
         _write_selection(sandbox.workspace, selected)
         text = "\n".join(transcript)
         return HarnessResult(
-            trigger=TriggerEvidence(selected_skill=selected, read_paths=read_paths, transcript=text),
+            trigger=TriggerEvidence(
+                selected_skill=selected, read_paths=read_paths, transcript=text
+            ),
             stdout=stdout,
             stderr=stderr,
             transcript=text,
@@ -795,9 +813,7 @@ def _cursor_prompt(
                 "After reading SKILL.md, follow it to complete the task. "
                 "Use bundled scripts under that skill when they exist."
             )
-        parts.append(
-            "Put user-requested output files where the task says (usually `output/`)."
-        )
+        parts.append("Put user-requested output files where the task says (usually `output/`).")
         parts.append(f"Task:\n{task}")
         return "\n".join(parts)
     return (
@@ -993,15 +1009,15 @@ def _gateway_complete_response(
         payload["max_tokens"] = max_tokens
     try:
         response = httpx.post(url, headers=headers, json=payload, timeout=timeout_sec)
-    except httpx.HTTPError as exc:
-        raise HarnessError(f"BYO LLM request failed: {exc}") from exc
+    except httpx.HTTPError:
+        raise HarnessError(OFFLINE_MESSAGE) from None
     if response.status_code >= 400:
         raise _byo_provider_error(response.status_code)
     data = response.json()
     try:
         text = data["choices"][0]["message"]["content"]
-    except (KeyError, IndexError, TypeError) as exc:
-        raise HarnessError("Unexpected BYO LLM response shape") from exc
+    except (KeyError, IndexError, TypeError):
+        raise HarnessError("The model service returned an answer we could not read.") from None
     return Completion(text=text, usage=_completion_usage(data))
 
 
@@ -1010,9 +1026,7 @@ def _anthropic_complete(cfg: LLMConfig, prompt: str, timeout_sec: int) -> str:
     return _anthropic_complete_response(cfg, prompt, timeout_sec).text
 
 
-def _anthropic_complete_response(
-    cfg: LLMConfig, prompt: str, timeout_sec: int
-) -> Completion:
+def _anthropic_complete_response(cfg: LLMConfig, prompt: str, timeout_sec: int) -> Completion:
     headers = {
         "x-api-key": cfg.anthropic_api_key or "",
         "anthropic-version": "2023-06-01",
@@ -1031,18 +1045,15 @@ def _anthropic_complete_response(
             json=payload,
             timeout=timeout_sec,
         )
-    except httpx.HTTPError as exc:
-        raise HarnessError(f"Anthropic request failed: {exc}") from exc
+    except httpx.HTTPError:
+        raise HarnessError(OFFLINE_MESSAGE) from None
     if response.status_code >= 400:
-        raise HarnessError(
-            f"Anthropic API returned {response.status_code}",
-            hint="Check ANTHROPIC_API_KEY in `.env`.",
-        )
+        raise harness_http_error(response.status_code, openai=False)
     data = response.json()
     try:
         text = "".join(part.get("text", "") for part in data.get("content", []))
-    except (KeyError, TypeError) as exc:
-        raise HarnessError("Unexpected Anthropic response shape") from exc
+    except (KeyError, TypeError):
+        raise HarnessError("Anthropic returned an answer we could not read.") from None
     return Completion(text=text, usage=_completion_usage(data))
 
 

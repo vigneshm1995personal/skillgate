@@ -6,7 +6,7 @@
 #
 # First publish: after merging this workflow to main AND registering the
 # pending publisher on pypi.org, run Actions → release → Run workflow
-# with tag v0.3.0. Do not put PYPI_API_TOKEN in repo secrets.
+# with tag v0.4.2. Do not put PYPI_API_TOKEN in repo secrets.
 
 name: release
 
@@ -17,7 +17,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Existing git tag to build and publish (e.g. v0.3.0)"
+        description: "Existing git tag to build and publish (e.g. v0.4.2)"
         required: true
         type: string
 

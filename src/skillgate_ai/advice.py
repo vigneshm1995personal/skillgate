@@ -64,6 +64,17 @@ def advise_task(
         description = synthesize_trigger_description(skill, prompts, reference)
         return _trigger_fix(skill, task.prompt, description, reference)
 
+    if trigger and task.expect_skill and trigger.actual == task.expect_skill:
+        description = synthesize_trigger_description(skill, prompts, reference)
+        return _trigger_fix(
+            skill,
+            task.prompt,
+            description,
+            reference,
+            headline="Description didn’t match this request",
+            ran=True,
+        )
+
     if trigger and task.expect_skill is None and trigger.actual not in {None, "none"}:
         description = _tighten_description(skill, task.prompt)
         return FixAdvice(
@@ -91,7 +102,9 @@ def advise_task(
             description=description,
         )
 
-    missing = (completion.detail if completion else "") or (rubric.detail if rubric else "missing output")
+    missing = (completion.detail if completion else "") or (
+        rubric.detail if rubric else "missing output"
+    )
     if _is_script_failure(returncode, stderr):
         snippet = _command_fail_snippet(stderr)
         why = f"The command exited {returncode}."
@@ -105,7 +118,9 @@ def advise_task(
             target="body",
         )
     return FixAdvice(
-        headline=completion.headline if completion else (rubric.headline if rubric else "Task failed"),
+        headline=completion.headline
+        if completion
+        else (rubric.headline if rubric else "Task failed"),
         why=(
             f"The skill triggered (or was expected to), but the work didn’t land. {missing}. "
             f"Request was: “{task.prompt}”."
@@ -343,6 +358,9 @@ def _trigger_fix(
     example_prompt: str,
     description: str,
     reference: Skill | None,
+    *,
+    headline: str = "Skill didn’t trigger",
+    ran: bool = False,
 ) -> FixAdvice:
     restore = None
     if reference and reference.name != skill.name and (reference.path / "scripts").is_dir():
@@ -353,13 +371,20 @@ def _trigger_fix(
         if restore or "sabotag" in skill.name
         else "Copy this into SKILL.md below, then run `skillgate check`."
     )
-    return FixAdvice(
-        headline="Skill didn’t trigger",
-        why=(
+    if ran:
+        why = (
+            f"The log shows `{skill.name}` ran, but its description would not have "
+            f"selected it for this request: “{example_prompt}”."
+        )
+    else:
+        why = (
             f"The agent only sees name + description before opening SKILL.md. "
             f"This request was: “{example_prompt}” — and `{skill.name}`’s current description "
             f"never matched (it talks about something else)."
-        ),
+        )
+    return FixAdvice(
+        headline=headline,
+        why=why,
         change=(
             "Replace the `description:` in SKILL.md with the block below, then run "
             "`skillgate check` on this same skill."
@@ -412,10 +437,7 @@ def _description_from_prompts(name: str, prompts: list[str]) -> str:
     what = ", ".join(verbs[:4]) or "complete the requested files"
     objects = ", ".join(nouns[:6]) or name.replace("-", " ")
     when = _when_clause(prompts)
-    return (
-        f"{what.capitalize()} {objects}. Use this skill whenever the user asks to "
-        f"{when}."
-    )
+    return f"{what.capitalize()} {objects}. Use this skill whenever the user asks to {when}."
 
 
 def _when_clause(prompts: list[str]) -> str:
