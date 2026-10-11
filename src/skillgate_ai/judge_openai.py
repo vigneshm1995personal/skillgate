@@ -49,6 +49,17 @@ INLINE_MAGICS = {"jpeg": "image/jpeg", "png": "image/png"}
 DISPLAY_NAME = "OpenAI (your key)"
 
 
+def _model_supports_reasoning(model: str) -> bool:
+    slug = (model or "").strip().lower().rsplit("/", 1)[-1]
+    return slug.startswith(("o1", "o3", "o4", "gpt-5", "gpt-6"))
+
+
+def _reasoning_field(model: str, effort: str) -> dict[str, Any]:
+    if _model_supports_reasoning(model):
+        return {"reasoning": {"effort": effort}}
+    return {}
+
+
 class JudgeBackend(Protocol):
     name: str
     model: str
@@ -502,7 +513,7 @@ class StructuredOutputsBackend(_OpenAIPosted):
             "/responses",
             {
                 "model": self.model,
-                "reasoning": {"effort": self.reasoning_effort},
+                **_reasoning_field(self.model, self.reasoning_effort),
                 "input": [
                     {
                         "role": "system",
@@ -770,7 +781,7 @@ class OutcomeJudge:
         payload = {
             "model": self.backend.model,
             "max_output_tokens": WHY_MAX_OUTPUT_TOKENS,
-            "reasoning": {"effort": self.reasoning_effort},
+            **_reasoning_field(self.backend.model, self.reasoning_effort),
             "input": [
                 {
                     "role": "system",

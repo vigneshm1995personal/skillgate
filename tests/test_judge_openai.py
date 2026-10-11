@@ -444,6 +444,62 @@ def test_responses_fallback_uses_structured_outputs() -> None:
     assert "path_efficiency" not in fmt["schema"]["properties"]
     assert "decisions" not in post.calls[0]["url"]
     assert judged["cells"]["path_efficiency"]["reason"] == PATH_NOT_AVAILABLE
+    assert post.calls[0]["json"]["reasoning"] == {"effort": "low"}
+
+
+def test_gateway_mini_responses_omits_reasoning() -> None:
+    body = json.dumps(PASS_CHOICES)
+    post = FakePost([FakeResponse(200, {"output_text": body, "model": "openai/gpt-4o-mini"})])
+    judge = make_openai_judge(
+        api_key=SECRET,
+        backend="responses",
+        model="openai/gpt-4o-mini",
+        why_enabled=False,
+        post=post,
+    )
+    judged = _score(judge)
+    assert judged["passed"] is True
+    payload = post.calls[0]["json"]
+    assert payload["model"] == "openai/gpt-4o-mini"
+    assert "reasoning" not in payload
+
+
+def test_o_series_responses_includes_reasoning() -> None:
+    body = json.dumps(PASS_CHOICES)
+    post = FakePost([FakeResponse(200, {"output_text": body, "model": "openai/o3-mini"})])
+    judge = make_openai_judge(
+        api_key=SECRET,
+        backend="responses",
+        model="openai/o3-mini",
+        why_enabled=False,
+        post=post,
+    )
+    judged = _score(judge)
+    assert judged["passed"] is True
+    assert post.calls[0]["json"]["reasoning"] == {"effort": "low"}
+
+
+def test_gateway_mini_why_call_omits_reasoning() -> None:
+    body = json.dumps({**PASS_CHOICES, "correctness": "Incorrect"})
+    post = FakePost(
+        [
+            FakeResponse(200, {"output_text": body, "model": "openai/gpt-4o-mini"}),
+            FakeResponse(200, why_payload("The numbers were wrong.")),
+        ]
+    )
+    judge = make_openai_judge(
+        api_key=SECRET,
+        backend="responses",
+        model="openai/gpt-4o-mini",
+        why_enabled=True,
+        post=post,
+    )
+    passed, _failures, judged = _gated(judge)
+    assert passed is False
+    assert judged["why"] == "The numbers were wrong."
+    assert "reasoning" not in post.calls[0]["json"]
+    assert post.calls[1]["url"].endswith("/v1/responses")
+    assert "reasoning" not in post.calls[1]["json"]
 
 
 def test_images_inline_jpeg_png_only(tmp_path: Path) -> None:
