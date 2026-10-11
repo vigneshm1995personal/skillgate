@@ -8,7 +8,7 @@ Skill Gate’s public CLI is a **local gate**. You do not sign up, you do not ne
 python3 -m venv .venv
 source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -e .
-skillgate version           # 0.4.0
+skillgate version           # 0.4.1
 ```
 
 Or, after the first PyPI release: `pip install skillgate-ai` (not `pip install skillgate` — that name is a different product).
@@ -71,7 +71,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: { python-version: "3.12" }
-      - run: pip install skillgate-ai==0.4.0
+      - run: pip install skillgate-ai==0.4.1
       - run: skillgate check .
 ```
 

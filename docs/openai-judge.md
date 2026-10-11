@@ -43,7 +43,7 @@ If the scorer is not very sure about a Pass, the check still Passes. You will se
 ```yaml
 - uses: actions/setup-python@v5
   with: { python-version: "3.12" }
-- run: pip install skillgate-ai==0.4.0
+- run: pip install skillgate-ai==0.4.1
 - run: skillgate check .
   env:
     OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}   # optional; omit for the built-in checker
