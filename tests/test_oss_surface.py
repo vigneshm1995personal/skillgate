@@ -145,9 +145,7 @@ def _is_skillgate_hosted_host(host: str) -> bool:
         return False
     if name in _HOSTED_SKILLGATE_HOSTS:
         return True
-    if name.endswith(".skillgate.ai") or name.endswith(".skillgate.dev"):
-        return True
-    if name.endswith(".skillgate.app") or name.endswith(".skillgate.cloud"):
+    if name.endswith((".skillgate.ai", ".skillgate.dev", ".skillgate.app", ".skillgate.cloud")):
         return True
     return any(name.startswith(prefix) for prefix in _HOSTED_SKILLGATE_PREFIXES)
 
@@ -172,7 +170,7 @@ def _scan_skillgate_hosted_urls() -> list[str]:
                 continue
             if path.suffix not in {".py", ".ts", ".tsx", ".js", ".mjs", ".example", ""}:
                 continue
-            if path.name.endswith(".test.ts") or path.name.endswith(".test.tsx"):
+            if path.name.endswith((".test.ts", ".test.tsx")):
                 continue
             text = path.read_text(encoding="utf-8")
             for raw in _URL_RE.findall(text):
