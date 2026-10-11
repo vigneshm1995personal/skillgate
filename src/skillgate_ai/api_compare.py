@@ -10,12 +10,14 @@ from typing import Any
 from fastapi import FastAPI, Request
 
 from skillgate_ai.api_payloads import AppState, fail, state_of
-from skillgate_ai.catalog import catalog_entries, find_skill
+from skillgate_ai.catalog import find_skill
 from skillgate_ai.compare import (
     CompareArmSpec,
     CompareError,
+    arm_id_for_index,
     arm_label_defaults,
     find_compare,
+    find_compare_anywhere,
     list_compares,
     parse_arm_spec,
     run_models_compare,
@@ -53,11 +55,9 @@ def register_compare_routes(app: FastAPI) -> None:
             path = find_skill(state.root, skill)
             row = find_compare(path, compare_id)
         else:
-            for entry in catalog_entries(state.root):
-                path = Path(entry["absolute"])
-                row = find_compare(path, compare_id)
-                if row:
-                    break
+            found = find_compare_anywhere(state.root, compare_id)
+            if found:
+                path, row = found
         if row is None:
             with state.lock:
                 live = state.compares.get(compare_id)
@@ -106,9 +106,8 @@ def _start_models_compare(state: AppState, body: dict[str, Any]) -> dict[str, An
     if not isinstance(raw_arms, list) or len(raw_arms) < 2:
         fail(400, "Add at least two arms.")
     specs: list[CompareArmSpec] = []
-    ids = "abcdefghijklmnop"
     for index, item in enumerate(raw_arms[:4]):
-        arm_id = ids[index]
+        arm_id = arm_id_for_index(index)
         if isinstance(item, str):
             specs.append(parse_arm_spec(item, arm_id=arm_id, index=index))
         elif isinstance(item, dict):
@@ -144,20 +143,23 @@ def _start_models_compare(state: AppState, body: dict[str, Any]) -> dict[str, An
                 compare_id=compare_id,
             )
             payload = scrub_compare_payload(result.payload)
-            payload["status"] = "done"
-            state.compares[compare_id] = payload
+            payload["status"] = str(result.payload.get("status") or "done")
+            with state.lock:
+                state.compares[compare_id] = payload
         except CompareError as exc:
-            state.compares[compare_id] = {
-                "compare_id": compare_id,
-                "status": "error",
-                "error": {"message": exc.message, "hint": exc.hint},
-            }
+            with state.lock:
+                state.compares[compare_id] = {
+                    "compare_id": compare_id,
+                    "status": "error",
+                    "error": {"message": exc.message, "hint": exc.hint},
+                }
         except Exception as exc:  # noqa: BLE001
-            state.compares[compare_id] = {
-                "compare_id": compare_id,
-                "status": "error",
-                "error": {"message": str(exc)},
-            }
+            with state.lock:
+                state.compares[compare_id] = {
+                    "compare_id": compare_id,
+                    "status": "error",
+                    "error": {"message": str(exc)},
+                }
 
     threading.Thread(target=worker, name=f"skillgate-compare-{compare_id}", daemon=True).start()
     return {"compare_id": compare_id, "status": "running"}
@@ -185,14 +187,23 @@ def _start_versions_compare(state: AppState, body: dict[str, Any]) -> dict[str, 
                 rerun=bool(body.get("rerun")),
             )
             payload = scrub_compare_payload(result.payload)
-            payload["status"] = "done"
-            state.compares[compare_id] = payload
+            payload["status"] = str(result.payload.get("status") or "done")
+            with state.lock:
+                state.compares[compare_id] = payload
         except CompareError as exc:
-            state.compares[compare_id] = {
-                "compare_id": compare_id,
-                "status": "error",
-                "error": {"message": exc.message, "hint": exc.hint},
-            }
+            with state.lock:
+                state.compares[compare_id] = {
+                    "compare_id": compare_id,
+                    "status": "error",
+                    "error": {"message": exc.message, "hint": exc.hint},
+                }
+        except Exception as exc:  # noqa: BLE001
+            with state.lock:
+                state.compares[compare_id] = {
+                    "compare_id": compare_id,
+                    "status": "error",
+                    "error": {"message": str(exc)},
+                }
 
     with state.lock:
         state.compares[compare_id] = {"compare_id": compare_id, "status": "running", "mode": "versions"}

@@ -975,20 +975,16 @@ def compare_show_cmd(
     json_out: bool = typer.Option(False, "--json", help="Machine JSON"),
 ) -> None:
     """Show a compare job."""
-    from skillgate_ai.compare import find_compare, scrub_compare_payload
+    from skillgate_ai.compare import find_compare, find_compare_anywhere, scrub_compare_payload
     from skillgate_ai.compare_format import format_compare_cli
 
     root = _boot()
     path = _resolve_pack_arg(pack) if pack else None
     row = find_compare(path, compare_id) if path else None
     if row is None and path is None:
-        from skillgate_ai.catalog import catalog_entries
-
-        for entry in catalog_entries(root):
-            candidate = find_compare(Path(entry["absolute"]), compare_id)
-            if candidate:
-                row = candidate
-                break
+        found = find_compare_anywhere(root, compare_id)
+        if found:
+            _, row = found
     if row is None:
         console.print(f"Unknown compare {compare_id}")
         raise typer.Exit(1)

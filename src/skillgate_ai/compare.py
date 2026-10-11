@@ -16,7 +16,6 @@ from skillgate_ai.gate import run_check
 from skillgate_ai.compare_control import clear_compare_cancel, create_compare_control
 from skillgate_ai.history import append_compare, load_compares, load_history
 from skillgate_ai.live import create_control, drop_control
-from skillgate_ai.pack import skill_pack_hash
 
 MAX_ARMS = 4
 MIN_ARMS = 2
@@ -109,14 +108,10 @@ def _arm_ids(n: int) -> list[str]:
     return [chr(ord("a") + i) for i in range(n)]
 
 
-def _sum_usage(arms: list[dict[str, Any]]) -> float:
-    total = 0.0
-    for arm in arms:
-        usage = arm.get("usage") if isinstance(arm.get("usage"), dict) else {}
-        cost = usage.get("cost_usd")
-        if isinstance(cost, (int, float)):
-            total += float(cost)
-    return round(total, 6)
+def arm_id_for_index(index: int) -> str:
+    if index < 0 or index >= MAX_ARMS:
+        raise CompareError(f"Compare supports at most {MAX_ARMS} arms.")
+    return chr(ord("a") + index)
 
 
 def _usage_from_report(report: dict[str, Any] | None) -> dict[str, Any] | None:
@@ -183,11 +178,6 @@ def scrub_compare_payload(payload: dict[str, Any]) -> dict[str, Any]:
         for key in ("provider", "backend", "via_gateway"):
             arm.pop(key, None)
     return data
-
-
-def _safe_judge_display(value: Any) -> bool:
-    text = str(value or "").strip().lower()
-    return text in {"checks", "scored by the judge"} or text == ""
 
 
 def _subtitle_for_arm(spec: CompareArmSpec, harness: str | None) -> str:
@@ -407,22 +397,23 @@ def run_versions_compare(
     for idx, (rid, report) in enumerate(zip(run_ids, reports, strict=True)):
         arm_id = _arm_ids(2)[idx]
         tasks = _task_map(report)
-        arm_rows.append(
-            {
-                "arm_id": arm_id,
-                "label": f"Run {rid[:6]}",
-                "subtitle": str(report.get("harness") or ""),
-                "source": "history",
-                "run_id": rid,
-                "skill_pack_hash": skill_pack_hash(pack),
-                "passed": report.get("passed"),
-                "passed_count": report.get("passed_count"),
-                "task_count": report.get("task_count"),
-                "usage": _usage_from_report(report),
-                "duration_sec": None,
-                "task_by_id": tasks,
-            }
-        )
+        arm_row: dict[str, Any] = {
+            "arm_id": arm_id,
+            "label": f"Run {rid[:6]}",
+            "subtitle": str(report.get("harness") or ""),
+            "source": "history",
+            "run_id": rid,
+            "passed": report.get("passed"),
+            "passed_count": report.get("passed_count"),
+            "task_count": report.get("task_count"),
+            "usage": _usage_from_report(report),
+            "duration_sec": None,
+            "task_by_id": tasks,
+        }
+        sph = report.get("skill_pack_hash")
+        if isinstance(sph, str) and sph:
+            arm_row["skill_pack_hash"] = sph
+        arm_rows.append(arm_row)
     payload: dict[str, Any] = {
         "kind": "compare",
         "compare_id": compare_id,
@@ -444,6 +435,17 @@ def find_compare(pack: Path, compare_id: str) -> dict[str, Any] | None:
     for row in load_compares(pack, limit=0):
         if row.get("compare_id") == compare_id:
             return row
+    return None
+
+
+def find_compare_anywhere(root: Path, compare_id: str) -> tuple[Path, dict[str, Any]] | None:
+    from skillgate_ai.catalog import catalog_entries
+
+    for entry in catalog_entries(root):
+        path = Path(entry["absolute"])
+        row = find_compare(path, compare_id)
+        if row:
+            return path, row
     return None
 
 

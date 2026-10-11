@@ -22,8 +22,6 @@ def format_compare_cli(payload: dict[str, Any]) -> str:
     lines.append("")
     header = ["", *[str(a.get("label") or a.get("arm_id")) for a in arms]]
     lines.append("".join(f"{col:16}" for col in header[:1]) + "".join(f"{col:16}" for col in header[1:]))
-    for arm in arms:
-        pass
     summary_labels = ["Checks", "Tokens", "Cost", "Latency"]
     for label in summary_labels:
         row = [label]
@@ -33,7 +31,10 @@ def format_compare_cli(payload: dict[str, Any]) -> str:
             elif label == "Tokens":
                 usage = arm.get("usage") or {}
                 total = usage.get("tokens_total")
-                row.append(f"{total}k" if isinstance(total, int) and total >= 1000 else str(total or "—"))
+                if isinstance(total, int) and total >= 1000:
+                    row.append(f"{total / 1000:.1f}k")
+                else:
+                    row.append(str(total if total is not None else "—"))
             elif label == "Cost":
                 usage = arm.get("usage") or {}
                 cost = usage.get("cost_usd")

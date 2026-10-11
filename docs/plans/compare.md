@@ -1,6 +1,6 @@
 # Compare runs — Implementation Plan
 
-> **Phase 1 is this plan.** Phase 2+ implement on follow-up branches after Vignesh approves. Do **not** ship product code in this PR. Do **not** bump/publish PyPI from this PR.
+> **Phase 1** landed the plan (PR #22). **Phase 2** ships Compare in the same feature branch: CLI, API, UI, and tests. Do **not** bump/publish PyPI from the compare PR unless release is explicitly requested.
 
 **Goal:** Side-by-side **Compare** for one skill on one Dataset (same pinned cases): (1) **models** — N harness configurations on the same pack; (2) **versions** — the same Dataset against two skill snapshots (history runs and/or git refs). Per-case **Pass** / **Fail**, suite aggregates, and **tokens · cost · latency** where the harness records them. Works in **`skillgate ui`** and **`skillgate compare`** with the same engine and history storage.
 

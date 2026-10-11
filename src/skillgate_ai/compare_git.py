@@ -19,6 +19,8 @@ from skillgate_ai.compare import (
     _usage_from_report,
 )
 from skillgate_ai.history import append_compare
+
+
 def find_git_root(pack: Path) -> Path:
     pack = pack.resolve()
     try:
@@ -43,12 +45,18 @@ def find_git_root(pack: Path) -> Path:
 def _materialize_ref(pack: Path, git_root: Path, ref: str, dest: Path) -> Path:
     rel = pack.resolve().relative_to(git_root.resolve())
     dest.mkdir(parents=True, exist_ok=True)
-    proc = subprocess.run(
-        ["git", "archive", ref, str(rel)],
-        cwd=git_root,
-        check=True,
-        capture_output=True,
-    )
+    try:
+        proc = subprocess.run(
+            ["git", "archive", ref, str(rel)],
+            cwd=git_root,
+            check=True,
+            capture_output=True,
+        )
+    except subprocess.CalledProcessError as exc:
+        raise CompareError(
+            f"Git ref {ref!r} is not valid for this skill path.",
+            hint="Use `git rev-parse` to verify the ref, or compare two history runs instead.",
+        ) from exc
     import io
     import tarfile
 
