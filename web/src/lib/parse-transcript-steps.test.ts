@@ -7,6 +7,7 @@ import { collapseAssistantSpans } from "./collapse-assistant-spans"
 import {
   glueAssistantDelta,
   jsonlToSpans,
+  parseTranscriptSteps,
   pickTimelineSteps,
   previewPlainText,
   spansToTimelineSteps,
@@ -834,5 +835,30 @@ describe("llm harness RUN steps", () => {
     const blob = JSON.stringify(steps)
     expect(blob).toMatch(/create_pdf/)
     expect(blob).not.toMatch(/No agent steps/)
+  })
+})
+
+describe("customer What happened titles", () => {
+  it("does not show Gate pre-selected skill in the timeline", () => {
+    const steps = parseTranscriptSteps(
+      [
+        "Gate pre-selected skill (skip catalog discovery)",
+        "selected: pdf",
+      ].join("\n")
+    )
+    const blob = JSON.stringify(steps)
+    expect(blob).not.toMatch(/Gate pre-selected/)
+    expect(blob).not.toMatch(/skip catalog discovery/)
+    expect(steps.some((step) => step.title === "Select skill")).toBe(true)
+  })
+
+  it("does not show a raw router JSON line when no skill was picked", () => {
+    const steps = parseTranscriptSteps(
+      ['router: {"skill": null}', "selected: none"].join("\n")
+    )
+    const blob = JSON.stringify(steps)
+    expect(blob).not.toMatch(/router:/)
+    expect(blob).not.toMatch(/\{"skill":/)
+    expect(blob).toMatch(/No skill was picked, as expected/)
   })
 })

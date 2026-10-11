@@ -9,9 +9,9 @@ import {
   deployAllowedForLiveGate,
   emptySkillRunSlot,
   isTryoutRun,
+  isViewingOlderRun,
   liveGateRun,
   patchSkillSlot,
-  pinBelongsToSkill,
   shownGateRun,
   skillSlotKey,
   type RunPurpose,
@@ -111,7 +111,7 @@ export function useEvalSession(opts: EvalSessionOpts) {
   const slot = slots[skillKey] ?? emptySkillRunSlot()
   const liveGateResult = liveGateRun(slot, skillKey)
   const tryoutResult = slot.tryout
-  const viewingPinnedHistory = pinBelongsToSkill(slot.pin, skillKey)
+  const viewingPinnedHistory = isViewingOlderRun(slot, skillKey)
   const lastResult = shownGateRun(slot, skillKey)
   const lastAdvice: Advice | null = lastResult?.report?.advice ?? null
   const gateRunning = slot.runningPurpose === "gate"

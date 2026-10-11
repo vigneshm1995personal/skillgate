@@ -43,7 +43,12 @@ def score_task(
     *,
     skills: list | None = None,
 ) -> list[Score]:
-    scores = [score_one(spec, task, artifacts, skills=skills) for spec in task.scorers]
+    skip_output = task.expect_skill is None
+    scores = [
+        score_one(spec, task, artifacts, skills=skills)
+        for spec in task.scorers
+        if not (skip_output and spec.type in {"task_completion", "rubric"})
+    ]
     for score in scores:
         score.headline = headline_for(score)
     return scores

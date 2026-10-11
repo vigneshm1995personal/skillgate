@@ -239,7 +239,7 @@ describe("Checks Path chip (#148)", () => {
     const row = pathEfficiencySoftRow({ choice: "Efficient" }, undefined, {
       path: { steps: 6, had_path: true },
     })
-    expect(row.chip).toBe("Efficient")
+    expect(row.chip).toBe("Direct")
     expect(row.chip).not.toMatch(/step/i)
     expect(pathEfficiencySoftRow({ choice: "Looping" }, undefined).chip).toBe(
       "Looping"

@@ -63,6 +63,24 @@ export function pinBelongsToSkill(
   return !pinSkill || pinSkill === name
 }
 
+export function isViewingOlderRun(
+  slot: SkillRunSlot,
+  skillName?: string | null
+): boolean {
+  if (!pinBelongsToSkill(slot.pin, skillName)) {
+    return false
+  }
+  const pinId = (slot.pin?.id || "").trim()
+  if (!pinId) {
+    return false
+  }
+  const liveId = (liveGateRun(slot, skillName)?.id || "").trim()
+  if (!liveId) {
+    return false
+  }
+  return pinId !== liveId
+}
+
 export function shownGateRun(slot: SkillRunSlot, skillName?: string | null): RunRecord | null {
   if (pinBelongsToSkill(slot.pin, skillName)) {
     return slot.pin

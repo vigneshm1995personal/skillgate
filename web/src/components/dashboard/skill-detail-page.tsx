@@ -36,10 +36,10 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { api, ApiError } from "@/lib/api"
 import { useDashboard } from "@/lib/dashboard-provider"
 import { slotOn } from "@/lib/mode"
-import { configLabel, harnessDisplayName } from "@/lib/eval-config"
+import { customerConfigLabel, harnessDisplayName } from "@/lib/eval-config"
 import { skillDetailStatus } from "@/lib/skill-detail-state"
 import { isTryoutRun } from "@/lib/skill-run-state"
-import { relativeTime } from "@/lib/time"
+import { absoluteTime, relativeTime } from "@/lib/time"
 import type { AnalyticsPayload, AnalyticsRun, SkillDetailPayload } from "@/lib/types"
 
 export function SkillDetailPage({ name }: { name: string }) {
@@ -299,7 +299,7 @@ export function SkillDetailPage({ name }: { name: string }) {
         <CardHeader>
             <CardTitle>Runs</CardTitle>
             <CardDescription>
-            Full runs decide the gate. Single checks are labeled and excluded from the last run.
+            A complete run sets Deploy. Running one example by itself is labeled and doesn't count.
             </CardDescription>
         </CardHeader>
         <CardContent>
@@ -335,10 +335,26 @@ export function SkillDetailPage({ name }: { name: string }) {
                 </TableHeader>
                 <TableBody>
                   {runs.map((run) => (
-                    <TableRow key={run.id}>
+                    <TableRow
+                      key={run.id}
+                      className={run.id ? "cursor-pointer" : undefined}
+                      tabIndex={run.id ? 0 : undefined}
+                      onClick={() => openRun(run)}
+                      onKeyDown={
+                        run.id
+                          ? (event) => {
+                              if (event.key !== "Enter" && event.key !== " ") {
+                                return
+                              }
+                              event.preventDefault()
+                              openRun(run)
+                            }
+                          : undefined
+                      }
+                    >
                       <TableCell
                         className="text-muted-foreground tabular-nums whitespace-nowrap"
-                        title={run.created_at}
+                        title={absoluteTime(run.created_at)}
                       >
                         {relativeTime(run.created_at)}
                       </TableCell>
@@ -363,18 +379,20 @@ export function SkillDetailPage({ name }: { name: string }) {
                       <TableCell>
                         <div className="flex flex-col gap-1">
                           <span className="truncate">
-                            {configLabel(run.config) || run.harness || "—"}
+                            {customerConfigLabel(run.config, run.harness) ||
+                              run.config_label ||
+                              run.harness ||
+                              "—"}
                           </span>
                           {run.config_changed ? (
-                            <Badge variant="outline">Config changed</Badge>
+                            <Badge variant="warning">
+                              Settings changed from the last run
+                            </Badge>
                           ) : null}
                         </div>
                       </TableCell>
                       <TableCell className="whitespace-nowrap">
                         {run.semver ? `v${run.semver}` : "—"}
-                        {run.skill_md_hash
-                          ? ` · ${run.skill_md_hash.slice(0, 8)}`
-                          : ""}
                       </TableCell>
                     </TableRow>
                   ))}
@@ -402,7 +420,6 @@ export function SkillDetailPage({ name }: { name: string }) {
                   <TableHeader className="sticky top-0 z-10 bg-card shadow-xs">
                     <TableRow>
                       <TableHead>Version</TableHead>
-                      <TableHead>Hash</TableHead>
                       <TableHead>When</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -410,12 +427,9 @@ export function SkillDetailPage({ name }: { name: string }) {
                     {versions.map((version) => (
                       <TableRow key={`${version.skill_md_hash}-${version.id}`}>
                         <TableCell>v{version.semver}</TableCell>
-                        <TableCell className="font-mono text-xs">
-                          {(version.skill_md_hash || "").slice(0, 12) || "—"}
-                        </TableCell>
                         <TableCell
                           className="text-muted-foreground tabular-nums whitespace-nowrap"
-                          title={version.created_at}
+                          title={absoluteTime(version.created_at)}
                         >
                           {relativeTime(version.created_at)}
                         </TableCell>
@@ -454,7 +468,7 @@ export function SkillDetailPage({ name }: { name: string }) {
                       <TableRow key={attempt.id}>
                         <TableCell
                           className="text-muted-foreground tabular-nums whitespace-nowrap"
-                          title={attempt.created_at}
+                          title={absoluteTime(attempt.created_at)}
                         >
                           {relativeTime(attempt.created_at)}
                         </TableCell>
@@ -464,9 +478,6 @@ export function SkillDetailPage({ name }: { name: string }) {
                         </TableCell>
                         <TableCell className="whitespace-nowrap">
                           {attempt.semver ? `v${attempt.semver}` : "—"}
-                          {attempt.skill_md_hash
-                            ? ` · ${attempt.skill_md_hash.slice(0, 8)}`
-                            : ""}
                         </TableCell>
                       </TableRow>
                     ))}

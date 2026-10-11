@@ -33,7 +33,13 @@ import { SkillUpdateChecklist } from "@/components/dashboard/skill-update-checkl
 import { api } from "@/lib/api"
 import { useDashboard } from "@/lib/dashboard-provider"
 import { slotOn } from "@/lib/mode"
-import { configLabel, harnessDisplayName, stampRunConfig } from "@/lib/eval-config"
+import {
+  configLabel,
+  customerRanWith,
+  friendlyModelName,
+  harnessDisplayName,
+  stampRunConfig,
+} from "@/lib/eval-config"
 import {
   customerGateCopy,
   hidePassFileWarning,
@@ -133,7 +139,9 @@ export function GatePage({ embedded = false }: { embedded?: boolean }) {
     stampRunConfig(scopedResult?.config, report?.config) || null
   const stampLine =
     configLabel(runConfig) || (harnessName !== "—" ? harnessName : "")
-  const modelValue = runConfig?.model || scopedResult?.model || "—"
+  const ranWith = customerRanWith(runConfig)
+  const modelRaw = runConfig?.model || scopedResult?.model || ""
+  const modelValue = friendlyModelName(modelRaw) || modelRaw || "—"
   const timeoutValue =
     runConfig?.timeout_effective ??
     runConfig?.timeout_sec ??
@@ -216,7 +224,7 @@ export function GatePage({ embedded = false }: { embedded?: boolean }) {
       {embedded ? null : (
         <PageHeader
           title="Gate"
-          description="Blocked keeps Install locked. Ready unlocks Install."
+          description="Blocked keeps Deploy locked. Ready unlocks Deploy."
           action={
             <Button
               variant="outline"
@@ -264,20 +272,20 @@ export function GatePage({ embedded = false }: { embedded?: boolean }) {
               <CardTitle>Result</CardTitle>
               <CardDescription>
                 {viewingHistorical
-                  ? `Historical run ${lastResult?.id} — not the live Deploy gate.`
-                  : `Last eval for ${skill?.name ?? "the selected skill"} decides Deploy.`}
+                  ? `This is an older run. Deploy still follows the latest result.`
+                  : `The latest result for ${skill?.name ?? "the selected skill"} sets Deploy.`}
               </CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col gap-4" id="gate">
               {viewingHistorical ? (
                 <Alert>
-                  <AlertTitle>Historical run</AlertTitle>
+                  <AlertTitle>Older run</AlertTitle>
                   <AlertDescription>
                     Showing {lastResult?.id}
                     {lastResult?.created_at
                       ? ` · ${lastResult.created_at.replace("T", " ").replace("+00:00", " UTC")}`
                       : ""}
-                    . Live Deploy still follows the skill&apos;s latest gate.
+                    . Deploy still follows the latest result.
                   </AlertDescription>
                 </Alert>
               ) : null}
@@ -316,6 +324,7 @@ export function GatePage({ embedded = false }: { embedded?: boolean }) {
                         }
                         hint={customerGateCopy(scopedResult?.error?.hint || "")}
                         stampLine={stampLine}
+                        ranWith={ranWith}
                       />
                     ) : kind === "pass" || kind === "fail" ? (
                       <EvalPassFailPanel
@@ -335,7 +344,7 @@ export function GatePage({ embedded = false }: { embedded?: boolean }) {
                                   report?.harness || scopedResult.harness
                                 )
                               )
-                            : "Pass the checks to unlock Install."
+                            : "Get a passing run to unlock Deploy."
                         }
                         passWarnings={passWarnings}
                         errorNote={errorNote || null}
@@ -352,6 +361,7 @@ export function GatePage({ embedded = false }: { embedded?: boolean }) {
                           ) : null
                         }
                         stampLine={stampLine}
+                        ranWith={ranWith}
                         stampMetrics={stampMetrics || null}
                         configDiff={configDiff}
                       />
@@ -395,11 +405,7 @@ export function GatePage({ embedded = false }: { embedded?: boolean }) {
               usage={report?.usage}
               metrics={report?.metrics}
               tasks={report?.tasks}
-              runLine={
-                stampLine && stampLine !== harnessName
-                  ? stampLine
-                  : harnessName
-              }
+              runLine={ranWith || harnessName}
             />
           ) : null}
         </div>
@@ -713,7 +719,7 @@ function GateMetricsCard({
             {path.recorded ? (
             <Metric
               id="metric-path"
-              label="Path"
+              label="Steps"
               value={path.value}
               hint={path.hint || undefined}
             />

@@ -13,6 +13,12 @@ export type EvalRunConfig = {
   applied?: Record<string, boolean>
   fingerprint?: string
   label?: string
+  judge?: {
+    provider?: string
+    display_name?: string
+    backend?: string
+    model?: string
+  } | null
 }
 
 export type ConfigDiffEntry = {
@@ -246,6 +252,20 @@ export function stampRunConfig(
   return reportConfig || runConfig || null
 }
 
+export const OLDER_RUN_LABEL = "Older run (before live-only checks)"
+
+export function isLegacyRunCopy(
+  text?: string | null,
+  harness?: string | null
+): boolean {
+  const h = (harness || "").toLowerCase()
+  if (h === "skip" || h === "demo") {
+    return true
+  }
+  const lower = (text || "").toLowerCase()
+  return lower.includes("checker") || lower.includes("live model")
+}
+
 function isStaleAutoLabel(label: string, harness?: string): boolean {
   if (!LIVE_HARNESS_NAMES.has((harness || "").toLowerCase())) {
     return false
@@ -253,9 +273,108 @@ function isStaleAutoLabel(label: string, harness?: string): boolean {
   return /^auto(\s*·|\s*$)/i.test(label.trim())
 }
 
+export function friendlyModelName(model?: string | null): string {
+  const raw = (model || "").trim()
+  if (!raw) {
+    return ""
+  }
+  const slug = raw.includes("/") ? raw.slice(raw.lastIndexOf("/") + 1) : raw
+  const gpt = slug.match(/^gpt-(.+)$/i)
+  if (gpt) {
+    const [ver, ...tail] = gpt[1].split("-")
+    const extras = tail.map((part) => {
+      const lower = part.toLowerCase()
+      if (lower === "mini" || lower === "nano" || lower === "preview") {
+        return lower
+      }
+      return part
+    })
+    return [`GPT-${ver}`, ...extras].join(" ")
+  }
+  return slug
+    .split(/[-_]/)
+    .map((part) => {
+      if (!part || /^\d+(\.\d+)*$/.test(part)) {
+        return part
+      }
+      return part.charAt(0).toUpperCase() + part.slice(1)
+    })
+    .join(" ")
+}
+
+function looksOpenAIScorer(text?: string | null): boolean {
+  return /\bopenai\b(?!\/)/i.test(text || "")
+}
+
+function customerLabelFromRaw(raw: string, harness?: string | null): string {
+  if (isLegacyRunCopy(raw, harness)) {
+    return OLDER_RUN_LABEL
+  }
+  const modelHit = raw.match(/gpt-[\w.-]+/i)
+  const model = modelHit ? friendlyModelName(modelHit[0]) : ""
+  const scored = looksOpenAIScorer(raw) ? "Scored by OpenAI Decisions" : ""
+  if (model && scored) {
+    return `${model} · ${scored}`
+  }
+  if (model) {
+    return model
+  }
+  return scored || raw
+}
+
+export function customerConfigLabel(
+  config?: EvalRunConfig | null,
+  harness?: string | null
+): string {
+  if (!config) {
+    return ""
+  }
+  const resolved = config.harness || harness
+  if (isLegacyRunCopy(config.label, resolved)) {
+    return OLDER_RUN_LABEL
+  }
+  const model = friendlyModelName(config.model)
+  const judge = config.judge
+  const fromJudge =
+    (judge?.provider || "").toLowerCase() === "openai" ||
+    looksOpenAIScorer(judge?.display_name)
+  const fromLabel = looksOpenAIScorer(config.label)
+  const scored = fromJudge || fromLabel ? "Scored by OpenAI Decisions" : ""
+  if (model && scored) {
+    return `${model} · ${scored}`
+  }
+  if (model) {
+    return model
+  }
+  if (config.label) {
+    return customerLabelFromRaw(config.label, resolved)
+  }
+  return scored
+}
+
+export function customerRanWith(config?: EvalRunConfig | null): string {
+  if (!config || isLegacyRunCopy(config.label, config.harness)) {
+    return ""
+  }
+  const model = friendlyModelName(config.model)
+  if (model) {
+    return `Ran with ${model}`
+  }
+  const resolved = (config.harness || config.harness_pref || "").trim()
+  const harness = harnessDisplayName(resolved, config.harness)
+  const cleaned = harness.replace(/^Auto · /, "").trim()
+  if (cleaned && cleaned !== "Auto") {
+    return `Ran with ${cleaned}`
+  }
+  return ""
+}
+
 export function configLabel(config?: EvalRunConfig | null): string {
   if (!config) {
     return ""
+  }
+  if (isLegacyRunCopy(config.label, config.harness)) {
+    return OLDER_RUN_LABEL
   }
   if (config.label && !isStaleAutoLabel(config.label, config.harness)) {
     return collapseDuplicateTimeout(

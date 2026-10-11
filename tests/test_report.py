@@ -105,7 +105,32 @@ def test_scored_by_openai_with_answers() -> None:
             )
         ],
     )
-    assert scored_by_line(report) == "OpenAI (your key) scored this run."
+    assert scored_by_line(report) == "Scored by OpenAI Decisions"
+    text = format_cli(report)
+    assert "Scored by OpenAI Decisions" in text
+    assert "OpenAI (your key) scored this run." not in text
+    gateway = _report(
+        harness="llm",
+        config={
+            "judge": {
+                "provider": "openai",
+                "display_name": "OpenAI Decisions via Vercel AI Gateway (your key)",
+            }
+        },
+        tasks=[
+            _task(
+                judge={
+                    "status": "completed",
+                    "provider": "openai",
+                    "display_name": "OpenAI Decisions via Vercel AI Gateway (your key)",
+                    "answers": {"task_completion": {"choice": "Fully completed"}},
+                }
+            )
+        ],
+    )
+    assert scored_by_line(gateway) == "Scored by OpenAI Decisions"
+    assert "Scored by OpenAI Decisions" in format_cli(gateway)
+    assert "via Vercel" not in scored_by_line(gateway)
 
 
 def test_happened_never_blank_on_pass() -> None:
@@ -113,6 +138,14 @@ def test_happened_never_blank_on_pass() -> None:
     row = payload["tasks"][0]
     assert row["happened"] == "Output matched what was expected."
     assert row["check_kind"] == "builtin"
+
+
+def test_happened_no_trigger_pass_is_plain() -> None:
+    task = _task(judge=None, passed=True)
+    task.expect_skill = None
+    task.selected_skill = None
+    payload = report_to_dict(_report(harness="llm", tasks=[task]))
+    assert payload["tasks"][0]["happened"] == "No skill was picked, as expected."
 
 
 def test_happened_uses_warning_on_pass() -> None:
@@ -167,7 +200,7 @@ def test_check_answers_from_openai_cells() -> None:
                                 "choice": "Fully completed",
                             },
                             "path_efficiency": {
-                                "label": "Path",
+                                "label": "How it ran",
                                 "choice": None,
                                 "reason": "Not available. No recorded path.",
                             },
@@ -181,7 +214,7 @@ def test_check_answers_from_openai_cells() -> None:
     assert row["check_kind"] == "openai"
     answers = {item["label"]: item["answer"] for item in row["check_answers"]}
     assert answers["Got the job done?"] == "Fully completed"
-    assert answers["Path"] == "Not available"
+    assert answers["How it ran"] == "Not available"
 
 
 def test_check_answers_from_builtin_scores() -> None:

@@ -57,7 +57,7 @@ export function AppTopbar({ onMenuClick }: { onMenuClick?: () => void }) {
       window.matchMedia("(prefers-color-scheme: dark)").matches)
 
   return (
-    <header className="flex h-14 shrink-0 items-center gap-4 border-b bg-background px-6">
+    <header className="flex h-14 shrink-0 items-center gap-4 border-b border-border/80 bg-card/60 px-6 backdrop-blur-sm">
       {onMenuClick ? (
         <Button
           variant="ghost"

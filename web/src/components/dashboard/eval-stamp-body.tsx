@@ -3,6 +3,12 @@ import { CheckIcon } from "lucide-react"
 import { cn } from "cn"
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import {
@@ -56,7 +62,7 @@ export function EvalCheckingPanel({
 }) {
   return (
     <div className="flex flex-col gap-2">
-      <p className="font-heading text-4xl font-medium tracking-tight">
+      <p className="font-display text-5xl font-medium tracking-tight">
         Checking
       </p>
       <div className={cn("eval-check-progress", !total && "is-busy")}>
@@ -70,7 +76,11 @@ export function EvalCheckingPanel({
           }
         />
       </div>
-      <p className="text-sm text-muted-foreground" id="run-progress">
+      <p
+        className="text-sm text-muted-foreground"
+        id="run-progress"
+        aria-live="polite"
+      >
         {total ? `${completed}/${total} checks` : "Running your checks"}
       </p>
       <div className="flex flex-wrap items-center gap-2">
@@ -108,10 +118,12 @@ export function EvalErrorPanel({
   message,
   hint,
   stampLine,
+  ranWith,
 }: {
   message: string
   hint?: string | null
   stampLine: string
+  ranWith?: string
 }) {
   const { setStage } = useDashboard()
   const showSettings = /settings/i.test(`${message} ${hint || ""}`)
@@ -133,12 +145,13 @@ export function EvalErrorPanel({
             </Button>
           </p>
         ) : null}
-        {stampLine ? (
+        {ranWith ? (
           <p className="mt-2" id="run-config">
-            {stampLine}
+            {ranWith}
           </p>
         ) : null}
-        <p className="mt-2">Pass the checks to unlock Install.</p>
+        <RunDetails stampLine={stampLine} />
+        <p className="mt-2">Get a passing run to unlock Deploy.</p>
       </AlertDescription>
     </Alert>
   )
@@ -156,6 +169,7 @@ export function EvalPassFailPanel({
   errorNote,
   baseline,
   stampLine,
+  ranWith,
   stampMetrics,
   configDiff,
 }: {
@@ -170,6 +184,7 @@ export function EvalPassFailPanel({
   errorNote?: string | null
   baseline: ReactNode
   stampLine: string
+  ranWith?: string
   stampMetrics: string | null
   configDiff: ConfigDiffEntry[]
 }) {
@@ -180,7 +195,7 @@ export function EvalPassFailPanel({
         <EvalResultMark kind={kind} mode={mode} />
         <p
           className={cn(
-            "font-heading text-4xl font-medium tracking-tight",
+            "font-display text-5xl font-medium tracking-tight",
             kind === "pass" ? "text-success" : "text-destructive"
           )}
         >
@@ -192,6 +207,11 @@ export function EvalPassFailPanel({
         </p>
         {scoredBy ? (
           <p className="text-sm text-muted-foreground">{scoredBy}</p>
+        ) : null}
+        {ranWith ? (
+          <p className="text-sm text-muted-foreground" id="run-config">
+            {ranWith}
+          </p>
         ) : null}
         <GateBadge {...stampBadgeProps(kind)} />
       </div>
@@ -210,25 +230,47 @@ export function EvalPassFailPanel({
         </p>
       ) : null}
       {baseline}
-      {stampLine ? (
-        <p className="text-sm" id="run-config">
-          {stampLine}
-        </p>
-      ) : null}
       {stampMetrics ? (
         <p className="text-sm text-muted-foreground" id="run-usage">
           {stampMetrics}
         </p>
       ) : null}
-      {configDiff.length ? (
-        <Alert id="config-diff">
-          <AlertTitle>Settings changed from the last run</AlertTitle>
-          <AlertDescription>
-            {plainConfigDiff(configDiff)}
-          </AlertDescription>
-        </Alert>
-      ) : null}
+      <RunDetails stampLine={stampLine} configDiff={configDiff} />
     </div>
+  )
+}
+
+function RunDetails({
+  stampLine,
+  configDiff = [],
+}: {
+  stampLine?: string
+  configDiff?: ConfigDiffEntry[]
+}) {
+  if (!stampLine && !configDiff.length) {
+    return null
+  }
+  return (
+    <Accordion defaultValue={[]}>
+      <AccordionItem value="run-details" className="border-0">
+        <AccordionTrigger className="py-1.5 text-muted-foreground hover:no-underline">
+          Run details
+        </AccordionTrigger>
+        <AccordionContent>
+          {stampLine ? (
+            <p className="text-sm" id="run-config-details">
+              {stampLine}
+            </p>
+          ) : null}
+          {configDiff.length ? (
+            <Alert id="config-diff">
+              <AlertTitle>Settings changed from the last run</AlertTitle>
+              <AlertDescription>{plainConfigDiff(configDiff)}</AlertDescription>
+            </Alert>
+          ) : null}
+        </AccordionContent>
+      </AccordionItem>
+    </Accordion>
   )
 }
 
@@ -239,25 +281,25 @@ export function gateCoverageLine(
   harness: string | null | undefined
 ): string {
   if (deployAllowed) {
-    return "Checks passed — Install is unlocked."
+    return "Checks passed — Deploy is unlocked."
   }
   if (reportPassed === true && !isLiveHarness(harness)) {
-    return "Pass the checks to unlock Install."
+    return "Get a passing run to unlock Deploy."
   }
   if (reportPassed === true && isLiveHarness(harness)) {
     return (
       lastResult.gate_reason ||
-      "Checks passed. Install stays blocked until a completion check passes with a file from this skill."
+      "Checks passed. Deploy stays blocked until a completion check passes with a file from this skill."
     )
   }
   if (isRegressionCopy(lastResult.gate_reason) || lastResult.regression?.hard) {
     return (
       lastResult.gate_reason ||
       lastResult.regression?.reason ||
-      "Pass the checks to unlock Install."
+      "Get a passing run to unlock Deploy."
     )
   }
-  return "Pass the checks to unlock Install."
+  return "Get a passing run to unlock Deploy."
 }
 
 function isRegressionCopy(reason?: string | null): boolean {

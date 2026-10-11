@@ -255,10 +255,10 @@ function checkMissingRequiredFile(check: Check): boolean {
   if (hasRealFixture(check.files)) {
     return false
   }
-  if (check.needs_upload) {
-    return true
+  if (check.should_trigger === false) {
+    return false
   }
-  return check.should_trigger === false && isCompletionCheck(check)
+  return Boolean(check.needs_upload)
 }
 
 export function descriptionImpliesOutputs(

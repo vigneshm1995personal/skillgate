@@ -28,7 +28,7 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { PageHeader } from "@/components/dashboard/chrome"
 import { useDashboard } from "@/lib/dashboard-provider"
 import { historyMeta } from "@/lib/history-meta"
-import { relativeTime } from "@/lib/time"
+import { absoluteTime, relativeTime } from "@/lib/time"
 
 export function HistoryList() {
   const { history, openHistoryRun, searchQuery, pinBaseline } = useDashboard()
@@ -124,7 +124,7 @@ export function HistoryList() {
               >
                 <TableCell
                   className="text-muted-foreground tabular-nums whitespace-nowrap"
-                  title={item.at}
+                  title={absoluteTime(item.at)}
                 >
                   {relativeTime(item.at)}
                 </TableCell>
@@ -154,17 +154,25 @@ export function HistoryList() {
                       ) : null}
                     </span>
                     {item.config_changed ? (
-                      <Badge variant="outline" className="w-fit">
-                        Config changed
+                      <Badge variant="warning" className="w-fit">
+                        Settings changed from the last run
                       </Badge>
                     ) : null}
                   </div>
                 </TableCell>
                 <TableCell
                   className="text-muted-foreground"
-                  title={meta.fingerprint || undefined}
+                  title={meta.configRaw || meta.fingerprint || undefined}
                 >
                   <span className="tabular-nums">{meta.config}</span>
+                  {meta.configRaw && meta.configRaw !== meta.config ? (
+                    <details className="mt-0.5">
+                      <summary className="cursor-pointer text-xs">Details</summary>
+                      <p className="mt-1 text-xs break-words whitespace-normal">
+                        {meta.configRaw}
+                      </p>
+                    </details>
+                  ) : null}
                 </TableCell>
                 <TableCell>
                   <div className="flex items-center justify-end gap-2">

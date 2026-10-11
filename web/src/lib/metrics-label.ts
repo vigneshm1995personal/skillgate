@@ -156,6 +156,14 @@ export function taskMetricsLine(
   })
 }
 
+/** Empty usage matches the check row: Not checked, never Tokens — · — steps. */
+export function checkUsageLine(
+  usage?: Usage | null,
+  metrics?: TaskMetrics | null
+) {
+  return taskMetricsLine(usage, metrics) || "Not checked"
+}
+
 export function compactTaskMetrics(
   task: Pick<TaskResult, "usage" | "metrics">
 ) {
@@ -236,13 +244,15 @@ function signedDelta(value: number, unit: string): string {
 }
 
 const PATH_EFFICIENCY_TONES: Record<string, { chip: string; tone: SoftCheckTone }> = {
-  efficient: { chip: "Efficient", tone: "ok" },
+  efficient: { chip: "Direct", tone: "ok" },
   acceptable: { chip: "Acceptable", tone: "ok" },
   looping: { chip: "Looping", tone: "soft" },
   wasteful: { chip: "Wasteful", tone: "soft" },
 }
 
 const PATH_EFFICIENCY_CRITERIA: Record<string, string> = {
+  Direct:
+    "The skill took a direct path: no repeated tool calls, no loops, no wasted steps.",
   Efficient:
     "The skill took a direct path: no repeated tool calls, no loops, no wasted steps.",
   Acceptable: "The skill finished with only minor extra steps and no looping.",
@@ -338,7 +348,7 @@ export function pathOpenedCaption(
 ): string | null {
   const choice = typeof softChoice === "string" ? softChoice.trim() : ""
   if (choice) {
-    return choice
+    return PATH_EFFICIENCY_TONES[choice.toLowerCase()]?.chip || choice
   }
   const path = metrics?.path
   if (!path) {
@@ -379,7 +389,11 @@ export function pathEfficiencySoftRow(
   return {
     chip: mapped.chip,
     tone: mapped.tone,
-    reason: fromAnswer || pathCriteria(question?.criteria, mapped.chip) || mapped.chip,
+    reason:
+      fromAnswer ||
+      pathCriteria(question?.criteria, raw) ||
+      pathCriteria(question?.criteria, mapped.chip) ||
+      mapped.chip,
     extra: extra.length ? extra : undefined,
   }
 }

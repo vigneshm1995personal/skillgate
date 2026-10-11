@@ -32,6 +32,7 @@ from skillgate_ai.suite import DEFAULT_TASK_TIMEOUT_SEC, SuiteSpec, _normalize_s
 CASES_REL = "evals/cases.yaml"
 PIN_NEEDS_EXPECTED = "Add expected output for this check, then save."
 PIN_NEEDS_EXPECTED_HINT = "Open Dataset and fill Expected output."
+NO_TRIGGER_OUTPUT_WARNING = "Expected output on a no-trigger check is ignored."
 GOLDEN_TAIL_CHARS = 8000
 _OUTPUT_MAGICS = (
     (b"\xff\xd8\xff", "jpeg", "image/jpeg"),
@@ -218,7 +219,7 @@ def suite_from_pack(pack: CasePack, skill_rel: str) -> SuiteSpec:
     raw_tasks: list[dict[str, Any]] = []
     for case in pinned:
         scorers: list[dict[str, Any]] = [{"type": "skill_trigger"}]
-        if case.golden:
+        if case.golden and case.should_trigger:
             expects: list[dict[str, Any]] = []
             if case.contains:
                 for item in case.contains:
@@ -289,6 +290,9 @@ def checks_from_pack(pack: CasePack, *, include_drafts: bool = False) -> list[di
             "golden_kind": case.golden.kind if case.golden else None,
             "bank_status": case.status,
         }
+        warning = no_trigger_output_warning(case)
+        if warning:
+            check["warning"] = warning
         effective = merge_budgets(pack.budgets, case.budgets)
         if effective is not None:
             check["budgets"] = effective.to_sparse_dict()
@@ -446,7 +450,11 @@ def suite_from_checks(skill_path: str | Path, checks: list[dict[str, Any]]) -> S
     skill_name = _skill_name(root)
     if not checks:
         raise SuiteError("Need at least one check to run.")
-    cases = [_case_from_check(root, dict(raw), skill_name) for raw in checks]
+    try:
+        cases = [_case_from_check(root, dict(raw), skill_name) for raw in checks]
+    except ValueError as exc:
+        hint = PIN_NEEDS_EXPECTED_HINT if PIN_NEEDS_EXPECTED in str(exc) else None
+        raise SuiteError(str(exc), hint=hint) from exc
     pack = CasePack(schema_version=1, skill=skill_name, cases=cases)
     return suite_from_pack(pack, str(root))
 
@@ -623,6 +631,14 @@ def _validate_pack_on_disk(root: Path, pack: CasePack) -> None:
 MISSING_GOLDEN_REASON = "This check is missing its expected output file."
 
 
+def no_trigger_output_warning(case: PackCase) -> str | None:
+    if case.should_trigger:
+        return None
+    if case.golden is None and not case.contains:
+        return None
+    return NO_TRIGGER_OUTPUT_WARNING
+
+
 def task_missing_golden(root: Path, task_id: str) -> bool:
     """True when this pinned case names an expected-output file that is not on disk."""
     try:
@@ -630,7 +646,7 @@ def task_missing_golden(root: Path, task_id: str) -> bool:
     except (SuiteError, OSError, ValueError):
         return False
     case = case_for_task(pack, task_id)
-    if case is None or case.golden is None:
+    if case is None or case.golden is None or not case.should_trigger:
         return False
     return not (root / case.golden.path).is_file()
 
@@ -768,33 +784,67 @@ def _persist_input_files(root: Path, files: object, *, case_id: str) -> list[Cas
     return out
 
 
+_BINARY_GOLDEN = {".pdf", ".png", ".jpg", ".jpeg", ".gif", ".webp"}
+
+
+def _golden_kind(path: str | Path) -> Literal["json", "text", "bytes"]:
+    suffix = Path(path).suffix.lower()
+    if suffix == ".json":
+        return "json"
+    if suffix in _BINARY_GOLDEN:
+        return "bytes"
+    return "text"
+
+
+def _file_inside_skill(root: Path, path: Path) -> Path | None:
+    try:
+        resolved = path.expanduser().resolve()
+        resolved.relative_to(root.resolve())
+    except (OSError, ValueError):
+        return None
+    return resolved if resolved.is_file() else None
+
+
+def _resolve_golden_src(
+    root: Path, case_id: str, golden_path: str | None
+) -> Path | None:
+    root = root.resolve()
+    folder = root / GOLDEN_DIR
+    if golden_path:
+        rel = golden_path.replace("\\", "/").lstrip("/")
+        parts = Path(rel).parts
+        if ".." not in parts:
+            packed = _file_inside_skill(root, root / rel)
+            if packed is not None:
+                return packed
+        named = _file_inside_skill(root, folder / Path(rel).name)
+        if named is not None:
+            return named
+    if folder.is_dir():
+        matches = sorted(
+            path
+            for path in folder.iterdir()
+            if path.is_file() and path.stem == case_id
+        )
+        if matches:
+            return matches[0]
+    return None
+
+
 def _disk_golden(
     root: Path, case_id: str, output_path: str | None
 ) -> CaseGolden | None:
-    folder = root / GOLDEN_DIR
-    if not folder.is_dir():
+    found = _resolve_golden_src(root, case_id, None)
+    if found is None:
         return None
-    matches = sorted(
-        path
-        for path in folder.iterdir()
-        if path.is_file() and path.stem == case_id
-    )
-    if not matches:
+    try:
+        rel = found.resolve().relative_to(root.resolve()).as_posix()
+    except ValueError:
         return None
-    path = matches[0]
-    rel = f"{GOLDEN_DIR}/{path.name}"
-    suffix = path.suffix.lower()
-    kind: Literal["json", "text", "bytes"]
-    if suffix == ".json":
-        kind = "json"
-    elif suffix in {".pdf", ".png", ".jpg", ".jpeg", ".gif", ".webp"}:
-        kind = "bytes"
-    else:
-        kind = "text"
     return CaseGolden(
         output_path=output_path or "output/result.txt",
         path=rel,
-        kind=kind,
+        kind=_golden_kind(found),
     )
 
 
@@ -807,32 +857,23 @@ def _persist_golden(
     contains_list: list[str],
 ) -> CaseGolden:
     dest_output = output_path or "output/result.txt"
-    if golden_path:
-        src = Path(golden_path)
-        if src.is_absolute() and src.is_file():
-            suffix = src.suffix or ".txt"
+    found = _resolve_golden_src(root, case_id, golden_path)
+    if found is not None:
+        try:
+            rel = found.resolve().relative_to(root.resolve()).as_posix()
+        except ValueError:
+            found = None
+        else:
+            if rel.startswith(f"{GOLDEN_DIR}/"):
+                return CaseGolden(
+                    output_path=dest_output, path=rel, kind=_golden_kind(found)
+                )
+            suffix = found.suffix or ".txt"
             rel = f"{GOLDEN_DIR}/{case_id}{suffix}"
-            write_pack_file(root, rel=rel, content=src.read_bytes())
-            kind: Literal["json", "text", "bytes"] = "json" if suffix.lower() == ".json" else "text"
-            return CaseGolden(output_path=dest_output, path=rel, kind=kind)
-        rel = golden_path.replace("\\", "/").lstrip("/")
-        if not rel.startswith(f"{GOLDEN_DIR}/"):
-            rel = f"{GOLDEN_DIR}/{Path(rel).name}"
-        packed = root / rel
-        if packed.is_file():
-            kind = "json" if Path(rel).suffix.lower() == ".json" else "text"
-            return CaseGolden(output_path=dest_output, path=rel, kind=kind)
-        if src.is_file():
-            suffix = src.suffix or ".txt"
-            rel = f"{GOLDEN_DIR}/{case_id}{suffix}"
-            write_pack_file(root, rel=rel, content=src.read_bytes())
-            kind = "json" if suffix.lower() == ".json" else "text"
-            return CaseGolden(output_path=dest_output, path=rel, kind=kind)
-        kind = "json" if Path(rel).suffix.lower() == ".json" else "text"
-        return CaseGolden(output_path=dest_output, path=rel, kind=kind)
-    attached = _disk_golden(root, case_id, dest_output)
-    if attached is not None:
-        return attached
+            write_pack_file(root, rel=rel, content=found.read_bytes())
+            return CaseGolden(
+                output_path=dest_output, path=rel, kind=_golden_kind(found)
+            )
     if not contains_list:
         raise ValueError(PIN_NEEDS_EXPECTED)
     body = contains_list[0]

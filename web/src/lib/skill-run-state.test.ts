@@ -7,6 +7,7 @@ import {
   emptySkillRunSlot,
   isTryoutRun,
   liveGateRun,
+  isViewingOlderRun,
   pinBelongsToSkill,
   runForCheck,
   shownGateRun,
@@ -81,6 +82,18 @@ describe("shownGateRun / liveGateRun", () => {
     const slot = { ...emptySkillRunSlot(), gate: redGate, pin: greenGate }
     expect(shownGateRun(slot, "pdf")?.id).toBe("full-green")
     expect(liveGateRun(slot, "pdf")?.id).toBe("full-red")
+  })
+
+  it("does not treat the newest or only run as an older history pin", () => {
+    const only = { ...emptySkillRunSlot(), gate: redGate, pin: redGate }
+    expect(isViewingOlderRun(only, "pdf")).toBe(false)
+    const newest = { ...emptySkillRunSlot(), gate: greenGate, pin: greenGate }
+    expect(isViewingOlderRun(newest, "pdf")).toBe(false)
+    expect(
+      isViewingOlderRun({ ...emptySkillRunSlot(), pin: greenGate }, "pdf")
+    ).toBe(false)
+    const older = { ...emptySkillRunSlot(), gate: greenGate, pin: redGate }
+    expect(isViewingOlderRun(older, "pdf")).toBe(true)
   })
 })
 
@@ -191,7 +204,7 @@ describe("skillSlotKey", () => {
 })
 
 describe("display name vs slug identity", () => {
-  it("unlocks Install when the run is stamped with the folder slug", () => {
+  it("unlocks Deploy when the run is stamped with the folder slug", () => {
     const ideaGreen: RunRecord = {
       id: "idea-green",
       status: "done",

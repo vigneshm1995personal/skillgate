@@ -18,15 +18,16 @@ export function LoginPage({
 
   return (
     <div className="flex min-h-svh items-center justify-center bg-background px-6">
-      <div className="flex w-full max-w-md flex-col gap-6 rounded-2xl border bg-card p-8 shadow-sm">
+      <div className="flex w-full max-w-md flex-col gap-6 rounded-md border bg-card p-8">
+        <div className="sg-ink-bar -mx-8 -mt-8 mb-2" />
         <div className="flex flex-col gap-2">
           <div className="flex items-center gap-3">
             <img
               src="/skill-gate-mark.png"
               alt=""
-              className="size-10 rounded-lg"
+              className="size-10 rounded-sm"
             />
-            <h1 className="font-heading text-2xl font-medium tracking-tight">
+            <h1 className="font-display text-3xl font-medium tracking-tight">
               Skill Gate
             </h1>
           </div>

@@ -11,7 +11,7 @@ from fastapi import HTTPException, Request
 
 from skillgate_ai.case_pack import skill_has_dataset
 from skillgate_ai.catalog import SOURCE_LABELS, catalog_entries
-from skillgate_ai.eval_config import config_label, harness_display_name
+from skillgate_ai.eval_config import config_label, customer_config_label, harness_display_name
 from skillgate_ai.history import load_deploys, load_history
 from skillgate_ai.ingest import ingest_skill
 from skillgate_ai.pack import browser_files, relevant_eval_fixtures
@@ -62,8 +62,8 @@ def local_gate(passed: bool | None, *, status: str, tryout: bool) -> tuple[str, 
     if tryout:
         return "pending", "Single-check runs do not unlock Deploy."
     if status == "error" or not passed:
-        return "blocked", "Pass the checks to unlock Install."
-    return "cleared", "Checks passed — Install is unlocked."
+        return "blocked", "Get a passing run to unlock Deploy."
+    return "cleared", "Checks passed — Deploy is unlocked."
 
 
 def _row_is_tryout(row: dict[str, Any], report: dict[str, Any] | None) -> bool:
@@ -78,7 +78,8 @@ def history_row_to_run(row: dict[str, Any], skill_path: Path) -> dict[str, Any]:
     tryout = _row_is_tryout(row, report)
     decision, reason = local_gate(passed, status="error" if error else "done", tryout=tryout)
     cfg = row.get("config") if isinstance(row.get("config"), dict) else None
-    label = config_label(cfg) if cfg else harness_display_name(str(harness or ""))
+    label = customer_config_label(cfg, str(harness or ""))
+    raw = config_label(cfg) if cfg else label
     return {
         "id": row.get("run_id"),
         "status": "error" if error else "done",
@@ -91,6 +92,7 @@ def history_row_to_run(row: dict[str, Any], skill_path: Path) -> dict[str, Any]:
         "created_at": row.get("ts"),
         "harness": harness,
         "config_label": label,
+        "config_label_raw": raw,
         "skill": (report or {}).get("skill") or skill_path.name,
         "skill_path": str(skill_path),
         "config": cfg,
@@ -185,6 +187,7 @@ def history_payload(state: AppState, skill_path: Path) -> dict[str, Any]:
             "skill": item.get("skill"),
             "harness": item.get("harness"),
             "config_label": item.get("config_label"),
+            "config_label_raw": item.get("config_label_raw"),
             "gate": item.get("gate"),
             "status": item.get("status"),
             "tryout": item.get("tryout"),

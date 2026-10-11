@@ -71,9 +71,10 @@ export function AddCheckDialog({
       setPromptError("Write what this check should ask the agent.")
       return
     }
-    const nextExpected = expected.trim()
-    const nextOutput =
-      outputPath.trim() || (nextExpected ? skillOutputPath(skill) : "")
+    const nextExpected = shouldTrigger ? expected.trim() : ""
+    const nextOutput = shouldTrigger
+      ? outputPath.trim() || (nextExpected ? skillOutputPath(skill) : "")
+      : ""
     addCheck({
       prompt: nextPrompt,
       should_trigger: shouldTrigger,
@@ -129,27 +130,31 @@ export function AddCheckDialog({
                   This should trigger the skill
                 </FieldLabel>
               </Field>
-              <Field>
-                <FieldLabel htmlFor="new-check-expected">Expected</FieldLabel>
-                <Input
-                  id="new-check-expected"
-                  value={expected}
-                  placeholder="Hello Skill Gate"
-                  onChange={(event) => setExpected(event.target.value)}
-                />
-              </Field>
-              <Field>
-                <FieldLabel htmlFor="new-check-output">
-                  Output file (optional)
-                </FieldLabel>
-                <Input
-                  id="new-check-output"
-                  value={outputPath}
-                  placeholder={skillOutputPath(skill)}
-                  onChange={(event) => setOutputPath(event.target.value)}
-                />
-                <FieldDescription>Used when Expected is set.</FieldDescription>
-              </Field>
+              {shouldTrigger ? (
+                <>
+                  <Field>
+                    <FieldLabel htmlFor="new-check-expected">Expected</FieldLabel>
+                    <Input
+                      id="new-check-expected"
+                      value={expected}
+                      placeholder="Hello Skill Gate"
+                      onChange={(event) => setExpected(event.target.value)}
+                    />
+                  </Field>
+                  <Field>
+                    <FieldLabel htmlFor="new-check-output">
+                      Output file (optional)
+                    </FieldLabel>
+                    <Input
+                      id="new-check-output"
+                      value={outputPath}
+                      placeholder={skillOutputPath(skill)}
+                      onChange={(event) => setOutputPath(event.target.value)}
+                    />
+                    <FieldDescription>Used when Expected is set.</FieldDescription>
+                  </Field>
+                </>
+              ) : null}
               <CheckInputControls
                 check={{
                   prompt,

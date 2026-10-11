@@ -1,3 +1,4 @@
+import { isLegacyRunCopy, OLDER_RUN_LABEL } from "@/lib/eval-config"
 import { pathOpenedCaption } from "@/lib/metrics-label"
 import type { JudgeAnswer, JudgeResult, Report, TaskResult } from "@/lib/types"
 
@@ -201,6 +202,9 @@ export function happenedLine(task: TaskResult): string {
     if (stampedPass && !isGenericFail(stampedPass) && !isChecksDump(stampedPass)) {
       return scorerCodeToPlain(stampedPass, hint)
     }
+    if (task.expect_skill === null && !task.selected_skill) {
+      return "No skill was picked, as expected."
+    }
     return "Output matched what was expected."
   }
   const stamped = trimText(task.happened)
@@ -258,13 +262,40 @@ function isOpenAIJudge(judge: JudgeResult | null | undefined): boolean {
   return model.includes("gpt-6") || model.startsWith("gpt-")
 }
 
+export function customerScoredBy(line: string): string {
+  const text = trimText(line)
+  if (!text) {
+    return ""
+  }
+  if (isLegacyRunCopy(text)) {
+    return OLDER_RUN_LABEL
+  }
+  if (/openai/i.test(text) && /couldn['’]t score/i.test(text)) {
+    return text
+  }
+  if (/openai/i.test(text) || /via (?:vercel )?ai gateway/i.test(text)) {
+    return "Scored by OpenAI Decisions"
+  }
+  if (/checks scored/i.test(text)) {
+    return "Scored by Checks"
+  }
+  const match = text.match(/^(.+?) scored this run\.?$/i)
+  if (match) {
+    const name = match[1]
+      .replace(/\s*\(your key\)/gi, "")
+      .replace(/\s+via\s+.+$/i, "")
+      .trim()
+    return name ? `Scored by ${name}` : text
+  }
+  return text
+}
+
 export function scoredByFromJudge(judge: JudgeResult | null | undefined): string {
   if (!judge) {
     return ""
   }
   if (isOpenAIJudge(judge)) {
-    const name = trimText(judge.display_name) || "OpenAI (your key)"
-    return `${name} scored this run.`
+    return "Scored by OpenAI Decisions"
   }
   const provider = trimText(judge.provider).toLowerCase()
   const model = trimText(judge.model).toLowerCase()
@@ -276,7 +307,7 @@ export function scoredByFromJudge(judge: JudgeResult | null | undefined): string
     judge.status === "completed" ||
     (judge.answers && Object.keys(judge.answers).length > 0)
   ) {
-    return "Checks scored this run."
+    return "Scored by Checks"
   }
   return ""
 }
@@ -286,7 +317,7 @@ export function scoredByLine(
 ): string {
   const stamped = trimText(report?.scored_by)
   if (stamped) {
-    return stamped
+    return isLegacyRunCopy(stamped) ? OLDER_RUN_LABEL : customerScoredBy(stamped)
   }
   for (const task of report?.tasks ?? []) {
     const line = scoredByFromJudge(task.judge)
@@ -302,6 +333,9 @@ function cellWouldPass(id: string, choice: string): boolean {
 }
 
 export function lowConfidenceWarning(task: TaskResult): string | null {
+  if (workDidNotHappen(task)) {
+    return null
+  }
   const judge = task.judge
   const answers = judge?.answers
   if (!answers) {
@@ -332,11 +366,8 @@ export function lowConfidenceWarning(task: TaskResult): string | null {
     }
     missing = true
   }
-  if (numeric != null) {
-    return `OpenAI was unsure (${numeric.toFixed(2).replace(/0+$/, "").replace(/\.$/, "")}).`
-  }
-  if (missing) {
-    return "OpenAI was unsure on some Checks."
+  if (numeric != null || missing) {
+    return "The judge wasn't sure about this one"
   }
   return null
 }
@@ -346,7 +377,7 @@ export function suiteUnsureWarning(
 ): string | null {
   for (const task of report?.tasks ?? []) {
     if (lowConfidenceWarning(task)) {
-      return "OpenAI was unsure on some Checks."
+      return "The judge wasn't sure about this one"
     }
   }
   return null
@@ -364,6 +395,7 @@ export function openedCheckAnswers(task: TaskResult): OpenedAnswer[] {
   if (!hasAnswers && !hasCells) {
     return []
   }
+  const unchecked = workDidNotHappen(task)
   return CHECK_QUESTION_ORDER.map((id) => {
     const question = task.judge?.questions?.[id]
     const choice =
@@ -371,7 +403,7 @@ export function openedCheckAnswers(task: TaskResult): OpenedAnswer[] {
     return {
       id,
       label: trimText(question?.instructions) || CHECK_QUESTION_LABELS[id] || id,
-      answer: choice || "—",
+      answer: unchecked ? "Not checked" : choice || "—",
     }
   })
 }
@@ -385,6 +417,30 @@ function looksLikeDidntStart(text: string): boolean {
     blob.includes("skill didn’t trigger") ||
     blob.includes("skill_trigger")
   )
+}
+
+function workDidNotHappen(task: TaskResult): boolean {
+  if (task.passed === true) {
+    return false
+  }
+  if (skillPathRan(task)) {
+    return false
+  }
+  if (task.skipped) {
+    return true
+  }
+  const blob = [
+    happenedLine(task),
+    ...(task.failures ?? []),
+    trimText(task.judge?.reason),
+    trimText(task.judge?.why),
+    trimText(task.happened),
+  ].join(" ")
+  if (looksLikeDidntStart(blob)) {
+    return true
+  }
+  const path = task.metrics?.path
+  return Boolean(path && path.had_path === false)
 }
 
 /** True when stored path/spans/transcript show the skill actually ran. */
@@ -454,10 +510,14 @@ export function missingJudgeAnswersLine(task: TaskResult): string | null {
 
 /** Path in opened details. Null means omit the row. */
 export function pathOpenedLine(task: TaskResult): string | null {
-  return pathOpenedCaption(
+  const caption = pathOpenedCaption(
     task.judge?.soft_answers?.path_efficiency?.choice,
     task.metrics
   )
+  if (workDidNotHappen(task) && (caption || task.metrics?.path?.had_path === false)) {
+    return "Not checked"
+  }
+  return caption
 }
 
 /** Gate already emits customer sentences. Rewrite leftover developer/warning codes. */
@@ -479,11 +539,13 @@ export function customerGateCopy(text: string): string {
   if (COVER_WARN.test(value)) {
     return "This run didn't include every check from the saved Dataset."
   }
+  value = value.replace(/\bunlock Install\b/g, "unlock Deploy")
+  value = value.replace(/\bInstall is unlocked\b/g, "Deploy is unlocked")
   if (/gate is red/i.test(value) || /clear gate green/i.test(value)) {
-    return "Pass the checks to unlock Install."
+    return "Get a passing run to unlock Deploy."
   }
   if (/gate is green/i.test(value)) {
-    return "Checks passed — Install is unlocked."
+    return "Checks passed — Deploy is unlocked."
   }
   if (/missing golden/i.test(value) || /evals\/goldens/i.test(value)) {
     return "This check is missing its expected output file."

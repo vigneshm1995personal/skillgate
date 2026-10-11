@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 
-import { gateTone, stampBadgeProps } from "@/components/dashboard/chrome"
+import { gateTone, stageTitle, stampBadgeProps } from "@/components/dashboard/chrome"
 
 describe("stampBadgeProps", () => {
   it("shows a passing run as Ready, not Blocked", () => {
@@ -8,5 +8,11 @@ describe("stampBadgeProps", () => {
     expect(props.passed).toBe(true)
     expect(gateTone(props.gate, props.passed)).toBe("green")
     expect(gateTone("blocked", false)).toBe("red")
+  })
+})
+
+describe("stageTitle", () => {
+  it("calls the skills list Skills, not Skill Repository", () => {
+    expect(stageTitle("repository")).toBe("Skills")
   })
 })

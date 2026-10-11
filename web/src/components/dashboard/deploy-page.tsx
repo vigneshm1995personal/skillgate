@@ -87,10 +87,10 @@ export function DeployPage() {
   const git = status?.deploy?.git
   const gitConfigured = Boolean(git?.configured)
 
-  let note = "Pick a skill on Evaluate, then pass the checks to unlock Install."
+  let note = "Pick a skill on Evaluate, then get a passing run to unlock Deploy."
   let title = deployAllowed ? "Ready" : "Blocked"
   if (!skill) {
-    note = "Pick a skill on Evaluate. Pass the checks to unlock Install."
+    note = "Pick a skill on Evaluate. Get a passing run to unlock Deploy."
   } else if (deployAllowed && lastDeploy?.mode === "git" && (lastDeploy.url || lastDeploy.dest_label || lastDeploy.dest_path)) {
     note = lastDeploy.url
       ? `Published ${skillName} to git.`
@@ -103,21 +103,21 @@ export function DeployPage() {
     note = installedNote(skillName, lastDeploy)
     title = "Installed"
   } else if (deployAllowed && deployLast) {
-    note = `Last install: ${deployLast}. Checks passed for ${skillName} — Install is unlocked.`
+    note = `Last deploy: ${deployLast}. Checks passed for ${skillName} — Deploy is unlocked.`
   } else if (deployAllowed) {
     note = localAvailable
-      ? `Checks passed for ${skillName}. Install to Cursor, Codex, or Claude is unlocked.`
+      ? `Checks passed for ${skillName}. Deploy to Cursor, Codex, or Claude is unlocked.`
       : `Checks passed for ${skillName}. Local install needs the app on your machine — or Publish to git below.`
   } else if (
     last?.passed &&
     !isLiveHarness(last.report?.harness || last.harness) &&
     status?.mode !== "local"
   ) {
-    note = `Demo runs do not unlock Deploy. Run live Start Evaluations for ${skillName}.`
+    note = `Demo runs do not unlock Deploy. Press Start for ${skillName}.`
   } else if (deployLast) {
-    note = `Last install: ${deployLast}. Pass the checks to unlock Install.`
+    note = `Last deploy: ${deployLast}. Get a passing run to unlock Deploy.`
   } else if (skill) {
-    note = "Pass the checks to unlock Install."
+    note = "Get a passing run to unlock Deploy."
   }
 
   const stampMetrics =

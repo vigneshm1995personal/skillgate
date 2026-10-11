@@ -12,7 +12,7 @@ from skillgate_ai.advice import FixAdvice, advise_suite, advise_task
 from skillgate_ai.errors import IngestError, SuiteError
 from skillgate_ai.harness import Harness, HarnessResult, _write_selection, is_live_harness
 from skillgate_ai.ingest import Skill, ingest_skill, ingest_skills
-from skillgate_ai.judge import Judge, SkipJudge, default_judge
+from skillgate_ai.judge import Judge, SkipJudge, default_judge, judge_stamp
 from skillgate_ai.live import KILL, CheckAborted, RunControl
 from skillgate_ai.observability import breadcrumb_task, report_eval_outcome, set_eval_passed, span
 from skillgate_ai.output_match import expected_output_mismatch_reason
@@ -423,6 +423,39 @@ def _apply_mismatch(
     return False, [mismatch, *failures]
 
 
+CORRECTLY_SKIPPED = "Correctly skipped"
+
+
+def _no_trigger_skipped_judge(judge: Judge | None) -> dict[str, Any]:
+    """Output rubric is N/A when the check is 'do not pick a skill'."""
+    from skillgate_ai.judge_bank import CHECK_CELL_LABELS, CHECK_CELL_ORDER, SOFT_CELL_LABELS
+
+    stamp = judge_stamp(judge)
+    cells = {
+        key: {"label": CHECK_CELL_LABELS[key], "choice": CORRECTLY_SKIPPED}
+        for key in CHECK_CELL_ORDER
+    }
+    cells["path_efficiency"] = {
+        "label": SOFT_CELL_LABELS["path_efficiency"],
+        "choice": CORRECTLY_SKIPPED,
+    }
+    answers = {key: {"choice": CORRECTLY_SKIPPED} for key in CHECK_CELL_ORDER}
+    questions = {
+        key: {"instructions": CHECK_CELL_LABELS[key]} for key in CHECK_CELL_ORDER
+    }
+    return {
+        **stamp,
+        "status": "skip",
+        "passed": None,
+        "reasons": [],
+        "why": None,
+        "answers": answers,
+        "cells": cells,
+        "warnings": [],
+        "questions": questions,
+    }
+
+
 def _live_verdict(
     judge: dict[str, Any] | None,
     expect_skill: str | None,
@@ -440,6 +473,8 @@ def _live_verdict(
         str(item) for item in (judge.get("warnings") or []) if str(item).strip()
     ]
     stamped = {**judge, "warnings": warnings}
+    if expect_skill is None:
+        return det_passed, det_failures, stamped
     if judge.get("status") == "error":
         failures = [str(item) for item in (judge.get("reasons") or []) if str(item).strip()]
         if not failures:
@@ -448,15 +483,46 @@ def _live_verdict(
         return passed, failures, stamped
     if judge.get("status") == "skip" or judge.get("passed") is None:
         return det_passed, det_failures, judge
-    if expect_skill is None:
-        passed, failures = _apply_mismatch(det_passed, list(det_failures), mismatch)
-        return passed, failures, stamped
     passed = bool(judge.get("passed"))
     failures = [str(item) for item in (judge.get("reasons") or []) if str(item).strip()]
     if not passed and not failures:
         failures = list(det_failures) or ["OpenAI scoring failed this check."]
     passed, failures = _apply_mismatch(passed, failures, mismatch)
     return passed, failures, stamped
+
+
+def _seed_skill_selection(workspace: Path, expect_skill: str | None) -> None:
+    """Pin a skill for trigger checks. Leave the catalog open for no-trigger."""
+    if expect_skill is None:
+        target = workspace / ".skillgate" / "selected.json"
+        if target.is_file():
+            target.unlink()
+        return
+    _write_selection(workspace, expect_skill)
+
+
+def _why_expected_output(
+    task: TaskSpec,
+    golden_payload: dict[str, Any] | None,
+    *,
+    skill_name: str | None = None,
+) -> Any:
+    """This check's own expectation for the Fail why-call. Never a sibling golden."""
+    if task.expect_skill is None:
+        if skill_name:
+            label = skill_name.upper() if len(skill_name) <= 4 else skill_name
+            return f"No {label} skill triggered"
+        return "No skill triggered"
+    if isinstance(golden_payload, dict):
+        return golden_payload
+    for spec in task.scorers:
+        for item in spec.files:
+            if item.contains:
+                return item.contains
+        for check in spec.checks:
+            if check.contains:
+                return check.contains
+    return None
 
 
 def _maybe_explain_fail(
@@ -546,7 +612,7 @@ def _run_task(
                 copies.append((src, item.dest))
             staged = skills if task.expect_skill is not None else []
             prepare_workspace(sandbox.workspace, staged, copies)
-            _write_selection(sandbox.workspace, task.expect_skill)
+            _seed_skill_selection(sandbox.workspace, task.expect_skill)
             with span("eval.harness", harness.name):
                 try:
                     result: HarnessResult = harness.run(sandbox, task.prompt, skills, timeout)
@@ -582,19 +648,26 @@ def _run_task(
             from skillgate_ai.metrics import count_path_steps, evaluate_task_metrics
 
             steps, errors, had_path = count_path_steps(spans, result.transcript)
-            judged, mismatch, golden_payload, actual_payload = _run_outcome_judge(
-                task,
-                artifacts,
-                result,
-                scores,
-                harness.name,
-                skill_root=skill_root,
-                path={"steps": steps, "errors": errors, "had_path": had_path},
-                judge=judge,
-            )
             det_passed = all(s.passed for s in scores)
             det_failures = [s.headline or s.detail for s in scores if not s.passed]
-            if is_live_harness(harness.name):
+            if task.expect_skill is None:
+                judged = (
+                    _no_trigger_skipped_judge(judge)
+                    if is_live_harness(harness.name)
+                    else None
+                )
+                passed, failures = det_passed, det_failures
+            elif is_live_harness(harness.name):
+                judged, mismatch, golden_payload, actual_payload = _run_outcome_judge(
+                    task,
+                    artifacts,
+                    result,
+                    scores,
+                    harness.name,
+                    skill_root=skill_root,
+                    path={"steps": steps, "errors": errors, "had_path": had_path},
+                    judge=judge,
+                )
                 passed, failures, judged = _live_verdict(
                     judged,
                     task.expect_skill,
@@ -609,10 +682,15 @@ def _run_task(
                     judged,
                     check=task.prompt,
                     transcript_tail=result.transcript,
-                    expected_output=golden_payload,
+                    expected_output=_why_expected_output(
+                        task,
+                        golden_payload,
+                        skill_name=skills[0].name if skills else None,
+                    ),
                     actual_output=actual_payload,
                 )
             else:
+                judged = None
                 passed, failures = det_passed, det_failures
             primary = skills[0] if skills else None
             advice = (

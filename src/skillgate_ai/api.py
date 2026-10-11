@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -35,6 +37,31 @@ from skillgate_ai.deploy import deploy_status
 from skillgate_ai.errors import MissingLLMKeyError, SkillGateError
 from skillgate_ai.mode import current_mode, slots_for
 from skillgate_ai.paths import project_root
+
+
+def _package_git_cwd() -> Path:
+    here = Path(__file__).resolve()
+    for candidate in (here, *here.parents):
+        if (candidate / ".git").exists():
+            return candidate
+    return here.parents[2] if len(here.parents) >= 2 else Path.cwd()
+
+
+def ui_build_id() -> str:
+    for key in ("SKILLGATE_BUILD", "GITHUB_SHA"):
+        value = (os.environ.get(key) or "").strip()
+        if value:
+            return value[:12]
+    try:
+        out = subprocess.check_output(
+            ["git", "rev-parse", "--short=12", "HEAD"],
+            cwd=_package_git_cwd(),
+            stderr=subprocess.DEVNULL,
+            timeout=1,
+        )
+        return out.decode().strip()
+    except Exception:
+        return ""
 
 
 def create_app(*, root: Path | None = None, pack: Path | None = None) -> FastAPI:
@@ -85,6 +112,7 @@ def _register_core_routes(app: FastAPI) -> None:
         skills = catalog_entries(state.root)
         return {
             "version": __version__,
+            "build": ui_build_id(),
             "mode": mode,
             "slots": slots_for(mode),
             "has_key": cfg.has_any_key,

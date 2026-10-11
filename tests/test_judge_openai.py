@@ -15,8 +15,11 @@ from skillgate_ai.judge_bank import (
     UNUSABLE_ANSWER,
     decisions_questions,
 )
+from skillgate_ai.config import DEFAULT_GATEWAY_MODEL
 from skillgate_ai.judge_openai import (
+    DEFAULT_MODEL,
     DISPLAY_NAME,
+    GATEWAY_DECISIONS_MODEL,
     IMAGE_MAX_BYTES,
     WHY_MAX_OUTPUT_TOKENS,
     WHY_OUTPUT_CHARS,
@@ -200,6 +203,36 @@ def test_decisions_request_shape() -> None:
     assert judged["soft_answers"] == {}
     assert judged["cells"]["path_efficiency"]["choice"] is None
     assert judged["cells"]["path_efficiency"]["reason"] == PATH_NOT_AVAILABLE
+
+
+def test_default_scoring_posts_decisions_not_the_task_model() -> None:
+    """Direct and gateway scoring POST /decisions with luna; the task model never scores."""
+    post = FakePost([FakeResponse(200, decisions_payload())])
+    judged = _score(make_openai_judge(api_key="sk-test", post=post))
+    assert judged["backend"] == "decisions"
+    assert post.calls[0]["url"].endswith("/v1/decisions")
+    assert post.calls[0]["json"]["model"] == DEFAULT_MODEL == "gpt-6-luna"
+    assert post.calls[0]["json"]["model"] != DEFAULT_GATEWAY_MODEL
+
+    post_gw = FakePost([FakeResponse(200, decisions_payload())])
+    judged_gw = _score(
+        make_openai_judge(
+            api_key="gw-test",
+            model=GATEWAY_DECISIONS_MODEL,
+            base_url="https://ai-gateway.vercel.sh/v1",
+            post=post_gw,
+        )
+    )
+    assert judged_gw["backend"] == "decisions"
+    assert post_gw.calls[0]["url"].endswith("/v1/decisions")
+    assert post_gw.calls[0]["json"]["model"] == GATEWAY_DECISIONS_MODEL
+    assert post_gw.calls[0]["json"]["model"] != DEFAULT_GATEWAY_MODEL
+
+    post_task = FakePost([FakeResponse(200, decisions_payload())])
+    _score(make_openai_judge(api_key="sk-test", model=DEFAULT_GATEWAY_MODEL, post=post_task))
+    assert post_task.calls[0]["url"].endswith("/v1/decisions")
+    assert post_task.calls[0]["json"]["model"] == "gpt-6-luna"
+    assert post_task.calls[0]["json"]["model"] != DEFAULT_GATEWAY_MODEL
 
 
 def test_fail_lock_does_not_fail_on_wasteful_path() -> None:
@@ -723,7 +756,7 @@ def test_why_skipped_on_no_trigger_without_mismatch() -> None:
     assert post.calls[0]["url"].endswith("/v1/decisions")
 
 
-def test_why_fires_on_no_trigger_when_output_missing() -> None:
+def test_why_skipped_on_no_trigger_when_output_missing() -> None:
     post = FakePost(
         [
             FakeResponse(200, decisions_payload()),
@@ -733,14 +766,15 @@ def test_why_fires_on_no_trigger_when_output_missing() -> None:
     passed, failures, judged = _gated(
         _judge(post),
         expect_skill=None,
+        selected_skill=None,
         golden={"path": "out.json", "kind": "json", "output_path": "out.json"},
         actual_output={"path": "out.json", "present": False, "body": None},
     )
-    assert passed is False
-    assert judged["passed"] is True
-    assert REASON_MISSING_OUTPUT in failures
-    assert judged["why"] == "The expected file was missing."
-    assert len(post.calls) == 2
+    assert passed is True
+    assert failures == []
+    assert judged["why"] is None
+    assert len(post.calls) == 1
+    assert post.calls[0]["url"].endswith("/v1/decisions")
 
 
 def test_http_error_with_missing_output_names_both() -> None:

@@ -40,6 +40,18 @@ describe("happenedLine", () => {
     expect(happenedLine(passTask)).toBe("Output matched what was expected.")
   })
 
+  it("says no skill was picked on a passing no-trigger check", () => {
+    expect(
+      happenedLine({
+        id: "no-trigger-unrelated",
+        passed: true,
+        status: "done",
+        expect_skill: null,
+        selected_skill: null,
+      })
+    ).toBe("No skill was picked, as expected.")
+  })
+
   it("prefers a stamped happened line", () => {
     expect(happenedLine({ ...passTask, happened: "Custom pass line." })).toBe(
       "Custom pass line."
@@ -150,7 +162,7 @@ describe("extraFailWhy", () => {
 })
 
 describe("scoredByLine", () => {
-  it("reads stamped scored_by first", () => {
+  it("reads stamped scored_by first as customer copy", () => {
     expect(
       scoredByLine({
         scored_by: "OpenAI (your key) scored this run.",
@@ -159,13 +171,32 @@ describe("scoredByLine", () => {
         task_count: 1,
         tasks: [passTask],
       })
-    ).toBe("OpenAI (your key) scored this run.")
+    ).toBe("Scored by OpenAI Decisions")
+  })
+
+  it("hides leftover skip-judge copy from older JSONL rows", () => {
+    expect(
+      scoredByLine({
+        scored_by: "This is not a live model.",
+        skill: "pdf",
+        passed_count: 1,
+        task_count: 1,
+        tasks: [passTask],
+      })
+    ).toBe("Older run (before live-only checks)")
+    expect(
+      scoredByLine({
+        scored_by: "Built-in checker scored this run.",
+        skill: "pdf",
+        passed_count: 1,
+        task_count: 1,
+        tasks: [passTask],
+      })
+    ).toBe("Older run (before live-only checks)")
   })
 
   it("maps skip scoring without hard-coding the UI to one scorer", () => {
-    expect(scoredByFromJudge(passTask.judge)).toBe(
-      "Checks scored this run."
-    )
+    expect(scoredByFromJudge(passTask.judge)).toBe("Scored by Checks")
     expect(
       scoredByFromJudge({
         provider: "openai",
@@ -174,7 +205,7 @@ describe("scoredByLine", () => {
         status: "completed",
         answers: passTask.judge?.answers,
       })
-    ).toBe("OpenAI (your key) scored this run.")
+    ).toBe("Scored by OpenAI Decisions")
     expect(
       scoredByFromJudge({
         provider: "openai",
@@ -184,7 +215,29 @@ describe("scoredByLine", () => {
         status: "completed",
         answers: passTask.judge?.answers,
       })
-    ).toBe("OpenAI Decisions via Vercel AI Gateway (your key) scored this run.")
+    ).toBe("Scored by OpenAI Decisions")
+  })
+
+  it("does not show gateway plumbing or raw model ids", () => {
+    const line = scoredByFromJudge({
+      provider: "openai",
+      backend: "decisions",
+      model: "openai/gpt-4o-mini",
+      display_name: "OpenAI Decisions via Vercel AI Gateway (your key)",
+      status: "completed",
+      answers: passTask.judge?.answers,
+    })
+    expect(line).toBe("Scored by OpenAI Decisions")
+    expect(line).not.toMatch(/gateway|openai\/|your key/i)
+    expect(
+      scoredByLine({
+        scored_by: "The skill ran live. Checks scored this run.",
+        skill: "pdf",
+        passed_count: 1,
+        task_count: 1,
+        tasks: [passTask],
+      })
+    ).toBe("Scored by Checks")
   })
 })
 
@@ -198,7 +251,7 @@ describe("pathOpenedLine", () => {
           soft_answers: { path_efficiency: { choice: "Efficient" } },
         },
       })
-    ).toBe("Efficient")
+    ).toBe("Direct")
   })
 
   it("omits Path when there is no ordinal and no steps — never Not available", () => {
@@ -229,6 +282,21 @@ describe("pathOpenedLine", () => {
       })
     ).toBeNull()
   })
+
+  it("marks Path Not checked when the script never ran", () => {
+    expect(
+      pathOpenedLine({
+        id: "extract-hello",
+        passed: false,
+        status: "done",
+        happened: "blocker skill_trigger (need none)",
+        judge: {
+          soft_answers: { path_efficiency: { choice: "Efficient" } },
+        },
+        metrics: { path: { steps: 0, had_path: false } },
+      })
+    ).toBe("Not checked")
+  })
 })
 
 describe("openedCheckAnswers / low confidence", () => {
@@ -258,7 +326,7 @@ describe("openedCheckAnswers / low confidence", () => {
           },
         },
       })
-    ).toBe("OpenAI was unsure (0.42).")
+    ).toBe("The judge wasn't sure about this one")
     expect(
       suiteUnsureWarning({
         tasks: [
@@ -274,7 +342,7 @@ describe("openedCheckAnswers / low confidence", () => {
           },
         ],
       })
-    ).toBe("OpenAI was unsure on some Checks.")
+    ).toBe("The judge wasn't sure about this one")
     expect(
       lowConfidenceWarning({
         ...passTask,
@@ -326,6 +394,79 @@ describe("openedCheckAnswers / low confidence", () => {
       "Violated",
       "Fully supported",
       "Significant issues",
+    ])
+  })
+
+  it("does not show a raw confidence number", () => {
+    const warning = lowConfidenceWarning({
+      ...passTask,
+      judge: {
+        provider: "openai",
+        backend: "decisions",
+        answers: {
+          ...passTask.judge!.answers!,
+          correctness: { choice: "Correct", confidence: 0.13 },
+        },
+      },
+    })
+    expect(warning).toBe("The judge wasn't sure about this one")
+    expect(warning).not.toMatch(/0\.13|OpenAI was unsure/)
+  })
+
+  it("marks rubric answers Not checked when the script never ran", () => {
+    const neverRan: TaskResult = {
+      id: "extract-hello",
+      prompt: "Extract the text from hello.pdf.",
+      passed: false,
+      status: "done",
+      happened: "blocker skill_trigger (need none)",
+      failures: ["blocker skill_trigger (need none)"],
+      judge: {
+        cells: {
+          task_completion: { choice: "Fully completed" },
+          correctness: { choice: "Correct" },
+          instruction_adherence: { choice: "Fully followed" },
+          evidence_action_validity: { choice: "Fully supported" },
+          result_quality: { choice: "Clear and complete" },
+        },
+        soft_answers: { path_efficiency: { choice: "Efficient" } },
+      },
+      metrics: { path: { steps: 0, had_path: false } },
+    }
+    expect(openedCheckAnswers(neverRan).map((row) => row.answer)).toEqual([
+      "Not checked",
+      "Not checked",
+      "Not checked",
+      "Not checked",
+      "Not checked",
+    ])
+    expect(pathOpenedLine(neverRan)).toBe("Not checked")
+  })
+
+  it("says Correctly skipped on a passing no-trigger check", () => {
+    const skipped: TaskResult = {
+      id: "no-trigger-unrelated",
+      passed: true,
+      status: "done",
+      expect_skill: null,
+      selected_skill: null,
+      judge: {
+        status: "skip",
+        answers: {
+          task_completion: { choice: "Correctly skipped" },
+          correctness: { choice: "Correctly skipped" },
+          instruction_adherence: { choice: "Correctly skipped" },
+          evidence_action_validity: { choice: "Correctly skipped" },
+          result_quality: { choice: "Correctly skipped" },
+        },
+      },
+    }
+    expect(openedCheckAnswers(skipped).map((row) => row.answer)).toEqual([
+      "Correctly skipped",
+      "Correctly skipped",
+      "Correctly skipped",
+      "Correctly skipped",
+      "Correctly skipped",
     ])
   })
 })
@@ -470,7 +611,10 @@ describe("customerGateCopy", () => {
       customerGateCopy("This run used draft checks, not the saved Dataset.")
     ).toBe("This run used the current checks, which aren't the saved Dataset yet.")
     expect(customerGateCopy("Gate is red — Deploy is blocked.")).toBe(
-      "Pass the checks to unlock Install."
+      "Get a passing run to unlock Deploy."
+    )
+    expect(customerGateCopy("Get a passing run to unlock Install.")).toBe(
+      "Get a passing run to unlock Deploy."
     )
     expect(
       customerGateCopy("Case extract-hello is missing golden file evals/goldens/extract-hello.txt.")

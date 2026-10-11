@@ -38,13 +38,13 @@ const KEY_ROWS: Array<{
   {
     name: "CURSOR_API_KEY",
     label: "Cursor",
-    hint: "Cursor Agent harness",
+    hint: "Runs checks in Cursor",
     slug: "cursor",
   },
   {
     name: "CODEX_API_KEY",
     label: "Codex",
-    hint: "Codex CLI",
+    hint: "Runs checks in Codex",
     slug: "codex",
   },
   {
@@ -272,6 +272,10 @@ export function SettingsPage() {
           ) : null}
         </CardContent>
       </Card>
+      <p className="text-xs text-muted-foreground" id="settings-build">
+        Skill Gate {status?.version || "0.5.0"}
+        {status?.build ? ` · ${status.build}` : ""}
+      </p>
     </div>
   )
 }

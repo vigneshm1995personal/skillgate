@@ -19,10 +19,11 @@ export function resultHoldPlan({
   if (target === "checking") {
     return { showCheckingFirst: true, waitMs: 0 }
   }
-  if (!hold || reducedMotion) {
+  const allowHold = hold && sawChecking
+  if (reducedMotion || !allowHold) {
     return { showCheckingFirst: false, waitMs: 0 }
   }
-  const elapsed = sawChecking && elapsedMs != null ? elapsedMs : 0
+  const elapsed = elapsedMs != null ? elapsedMs : 0
   return {
     showCheckingFirst: true,
     waitMs: Math.max(0, CHECKING_MIN_MS - elapsed),

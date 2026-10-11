@@ -1,3 +1,17 @@
+export function absoluteTime(value?: string | null): string | undefined {
+  if (!value) {
+    return undefined
+  }
+  const then = Date.parse(value)
+  if (Number.isNaN(then)) {
+    return undefined
+  }
+  return new Intl.DateTimeFormat(undefined, {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(then)
+}
+
 export function relativeTime(value?: string | null): string {
   if (!value) {
     return "—"

@@ -11,6 +11,7 @@ from skillgate_ai.eval_config import (
     apply_eval_config,
     config_fingerprint,
     config_label,
+    customer_config_label,
     diff_eval_config,
     harness_display_name,
     parse_temperature,
@@ -326,6 +327,42 @@ def test_config_label_names_openai_scorer_not_model_id() -> None:
     label = config_label(run)
     assert "OpenAI (your key)" in label
     assert "gpt-6-luna" not in label
+
+
+def test_customer_config_label_is_plain_model_and_scorer() -> None:
+    run = EvalRunConfig(
+        harness="llm",
+        model="openai/gpt-4o-mini",
+        timeout_effective=300,
+        applied={"via_gateway": True},
+        judge={
+            "provider": "openai",
+            "backend": "decisions",
+            "display_name": "OpenAI Decisions via Vercel AI Gateway (your key)",
+            "model": "gpt-6-luna",
+        },
+    )
+    raw = config_label(run)
+    assert "openai/gpt-4o-mini" in raw
+    assert "via gateway" in raw
+    customer = customer_config_label(run)
+    assert customer == "GPT-4o mini · Scored by OpenAI Decisions"
+    assert "via gateway" not in customer
+    assert "openai/" not in customer
+    assert "300s" not in customer
+    direct = customer_config_label(
+        EvalRunConfig(
+            harness="llm",
+            model="gpt-4o-mini",
+            judge={
+                "provider": "openai",
+                "backend": "decisions",
+                "display_name": "OpenAI (your key)",
+                "model": "gpt-6-luna",
+            },
+        )
+    )
+    assert direct == "GPT-4o mini · Scored by OpenAI Decisions"
 
 
 def test_from_dict_drops_judge_api_key() -> None:

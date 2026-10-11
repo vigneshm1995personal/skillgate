@@ -62,6 +62,16 @@ def test_pack_file_outside_skill_is_400(tmp_path: Path, monkeypatch) -> None:
     assert not (tmp_path / "outside.txt").exists()
 
 
+def test_status_includes_build_for_qa(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("SKILLGATE_BUILD", "deadbeefcafebabe")
+    client = _client(tmp_path, monkeypatch)
+    data = client.get("/api/status").json()
+    from skillgate_ai import __version__
+
+    assert data["version"] == __version__
+    assert data["build"] == "deadbeefcafe"
+
+
 def test_status_local_hides_paid_slots(tmp_path: Path, monkeypatch) -> None:
     client = _client(tmp_path, monkeypatch)
     res = client.get("/api/status")

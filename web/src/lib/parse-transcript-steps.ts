@@ -25,6 +25,10 @@ type Segment = {
 
 function customerVisibleText(text: string): string {
   return text
+    .replace(/Gate pre-selected skill \(skip catalog discovery\)\s*/gi, "")
+    .replace(/^router:\s*\{[\s\S]*?\}(?:\s|$)/gim, "")
+    .replace(/^router:\s*.+$/gim, "")
+    .replace(/^selected:\s*none\s*$/gim, "No skill was picked, as expected")
     .replace(/\bSKILLGATE_TASK(?:=[^\s]*)?/g, "the task")
     .replace(/\bevals\/(?:goldens|fixtures)\/([^\s]+)/g, "$1")
 }
@@ -90,20 +94,32 @@ function classify(
   narration: string,
   command: string | undefined
 ): Pick<TimelineStep, "title" | "subtitle"> {
-  const blob = `${narration}\n${command ?? ""}`.toLowerCase()
+  const visible = customerVisibleText(narration)
+  const blob = `${visible}\n${command ?? ""}`.toLowerCase()
   const file = command ? fileFromCommand(command) : undefined
-  const skill = skillFromPath(`${narration}\n${command ?? ""}`)
+  const skill = skillFromPath(`${visible}\n${command ?? ""}`)
 
+  if (/no skill was picked/i.test(blob)) {
+    return { title: "No skill was picked, as expected" }
+  }
   // Only real selection acts — not closing summaries like "Selected the pdf skill and…"
+  const selectedLine = narration.match(/^\s*selected:\s*(\S+)/im)?.[1]
   const selectHit =
     blob.includes("selected.json") ||
     blob.includes("catalog.md") ||
+    blob.includes("pre-selected") ||
+    blob.includes("skip catalog") ||
+    Boolean(selectedLine) ||
     /\bskill selection\b/.test(blob) ||
     (/\$\s*(?:edit|write|changed)\b/.test(blob) && blob.includes("selected.json"))
   if (selectHit) {
+    const picked =
+      selectedLine && selectedLine.toLowerCase() !== "none"
+        ? selectedLine
+        : skill
     return {
       title: "Select skill",
-      subtitle: skill,
+      subtitle: picked,
     }
   }
   if (blob.includes("skill.md") || /read .*\.md/.test(blob)) {
@@ -292,6 +308,7 @@ function parseNarrationSteps(
     if (title.startsWith("created ")) return false
     if (title === "write artifact" && !step.detail?.includes("$")) return false
     if (title === "step") return false
+    if (title.includes("no skill was picked")) return true
     return Boolean(step.detail && step.detail.length > 40)
   })
   const merged = dedupeSelectSkill(mergeSameTitle(meaningful))

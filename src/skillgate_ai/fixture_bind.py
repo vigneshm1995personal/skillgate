@@ -37,7 +37,8 @@ def is_completion_check(check: dict[str, Any]) -> bool:
     item = dict(check)
     contains = str(item.get("contains") or item.get("expected") or "").strip()
     output_path = str(item.get("output_path") or "").strip()
-    return bool(output_path or contains)
+    golden_path = str(item.get("golden_path") or "").strip()
+    return bool(output_path or contains or golden_path)
 
 
 def is_trigger_only(check: dict[str, Any]) -> bool:
@@ -193,7 +194,7 @@ def decide_gate_result(
     if not is_live_harness(harness):
         return GateVerdict("blocked", "Deploy needs a live harness.")
     if not passed:
-        return GateVerdict("blocked", "Pass the checks to unlock Install.")
+        return GateVerdict("blocked", "Get a passing run to unlock Deploy.")
     return GateVerdict(
         "cleared",
         "This Dataset passed.",
