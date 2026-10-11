@@ -85,6 +85,7 @@ Or set `SKILLGATE_OPENAI_API_KEY` in the job env instead of `--key-env`.
 - [`docs/plans/0.5-decisions.md`](docs/plans/0.5-decisions.md) — 0.5 live-only / explicit keys
 - [Score live checks with your OpenAI key](docs/openai-judge.md) — optional; OpenAI key scores live checks
 - [`docs/ui.md`](docs/ui.md) — local React UI (`skillgate ui`), red path, Docker stays `check /pack`
+- [UI revamp plan](docs/plans/ui-revamp.md) — shared `web/` look and copy for local and cloud
 - [`docs/proof/PUBLISH.md`](docs/proof/PUBLISH.md) — secret scan, tag, PyPI Trusted Publishing, GHCR
 
 Keys live in `{project}/.skillgate/keys` (gitignored, mode 0600). Ambient `OPENAI_API_KEY` / `AI_GATEWAY_API_KEY` are ignored unless you pass `--key-env`. See `.env.example` for non-secret config.
