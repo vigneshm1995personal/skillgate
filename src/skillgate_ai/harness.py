@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 import os
 import re
-import shlex
 import shutil
 import subprocess
 from dataclasses import dataclass
@@ -26,6 +25,7 @@ from skillgate_ai.errors import (
     OFFLINE_MESSAGE,
     harness_http_error,
 )
+from skillgate_ai.harness_llm_run import command_allowed, llm_run_spans, parse_run_lines
 from skillgate_ai.ingest import Skill
 from skillgate_ai.sandbox import Sandbox
 from skillgate_ai.scorers import TriggerEvidence
@@ -462,6 +462,7 @@ class LLMHarness:
         stderr = ""
         returncode = 0
         read_paths: list[str] = []
+        ran: list[tuple[list[str], int]] = []
         if selected:
             skill = next(s for s in skills if s.name == selected)
             read_paths.append(f".skillgate/skills/{selected}/SKILL.md")
@@ -488,14 +489,15 @@ class LLMHarness:
                 usage = merge_usage(usage, act.usage)
             act_text = act.text
             transcript.append(act_text)
-            for command in _parse_run_lines(act_text):
-                if not _command_allowed(command, selected):
+            for command in parse_run_lines(act_text):
+                if not command_allowed(command, selected):
                     transcript.append(f"blocked command: {command}")
                     continue
                 proc = sandbox.run(command, env={"SKILLGATE_TASK": prompt}, timeout=timeout_sec)
                 stdout += proc.stdout
                 stderr += proc.stderr
                 returncode = proc.returncode
+                ran.append((command, proc.returncode))
                 transcript.append(f"ran {' '.join(command)} exit={proc.returncode}")
         _write_selection(sandbox.workspace, selected)
         text = "\n".join(transcript)
@@ -508,6 +510,7 @@ class LLMHarness:
             transcript=text,
             returncode=returncode,
             usage=usage if usage.known else None,
+            spans=llm_run_spans(selected, ran),
         )
 
     def _complete(self, prompt: str, timeout_sec: int) -> Completion:
@@ -848,32 +851,6 @@ def _byo_provider_error(status: int) -> HarnessError:
     else:
         message = "Your model provider refused the request."
     return HarnessError(message, hint="Check your key in Settings.")
-
-
-def _parse_run_lines(text: str) -> list[list[str]]:
-    commands: list[list[str]] = []
-    for line in text.splitlines():
-        stripped = line.strip()
-        if stripped.upper().startswith("RUN:"):
-            payload = stripped[4:].strip()
-            try:
-                argv = shlex.split(payload)
-            except ValueError:
-                argv = payload.split()
-            commands.append(argv)
-    return commands
-
-
-def _command_allowed(command: list[str], skill_name: str) -> bool:
-    if len(command) < 2:
-        return False
-    if command[0] not in {"python", "python3"}:
-        return False
-    script = command[1].replace("\\", "/")
-    if script.startswith("-") or ".." in script:
-        return False
-    needle = f".skillgate/skills/{skill_name}/scripts/"
-    return script.startswith(needle) and script.endswith(".py")
 
 
 def _gateway_complete(

@@ -235,6 +235,7 @@ NO_KEY_HINT = (
     "Add a key in Settings (`skillgate ui`) or run `skillgate keys set`.\n"
     "CI: set SKILLGATE_OPENAI_API_KEY, or pass --key-env OPENAI_API_KEY."
 )
+UI_NO_KEY_HINT = "Add a key in Settings, then press Run."
 
 
 def missing_key_error(*, live: bool = True, for_codex: bool = False) -> MissingLLMKeyError:

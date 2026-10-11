@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import httpx
 
 from skillgate_ai.errors import HarnessError
-from skillgate_ai.harness import _command_allowed, _gateway_complete_response, _parse_run_lines
+from skillgate_ai.harness import _gateway_complete_response
+from skillgate_ai.harness_llm_run import command_allowed, parse_run_lines
+from skillgate_ai.metrics import count_path_steps
 from test_judge import _cfg
 
 
@@ -12,7 +16,7 @@ def test_parse_run_lines_keeps_quoted_title() -> None:
         "RUN: python3 .skillgate/skills/pdf/scripts/create_pdf.py "
         '--title "Q3 Status" output/status.pdf --body "All systems are go."'
     )
-    commands = _parse_run_lines(text)
+    commands = parse_run_lines(text)
     assert commands == [
         [
             "python3",
@@ -24,13 +28,13 @@ def test_parse_run_lines_keeps_quoted_title() -> None:
             "All systems are go.",
         ]
     ]
-    assert _command_allowed(commands[0], "pdf")
+    assert command_allowed(commands[0], "pdf")
     assert '"Q3' not in commands[0]
     assert 'Status"' not in commands[0]
 
 
 def test_command_allowed_rejects_python_c_with_skill_path_decoy() -> None:
-    assert not _command_allowed(
+    assert not command_allowed(
         [
             "python3",
             "-c",
@@ -39,7 +43,7 @@ def test_command_allowed_rejects_python_c_with_skill_path_decoy() -> None:
         ],
         "pdf",
     )
-    assert not _command_allowed(
+    assert not command_allowed(
         ["python3", "-m", "http.server", ".skillgate/skills/pdf/scripts/create_pdf.py"],
         "pdf",
     )
@@ -65,3 +69,58 @@ def test_byo_llm_429_is_plain_settings_copy(monkeypatch) -> None:
     assert ".env" not in blob
     assert "Settings" in blob
     assert "rate-limited" in blob.lower() or "out of credit" in blob.lower()
+
+
+def test_count_path_steps_counts_llm_run_commands() -> None:
+    transcript = (
+        "selected: pdf\n"
+        'RUN: python3 .skillgate/skills/pdf/scripts/create_pdf.py --title "Q3 Status" output/status.pdf\n'
+        "ran python3 .skillgate/skills/pdf/scripts/create_pdf.py --title Q3 Status output/status.pdf exit=0"
+    )
+    steps, _errors, had_path = count_path_steps(None, transcript)
+    assert had_path is True
+    assert steps >= 1
+
+
+def test_llm_harness_records_run_commands_as_spans(monkeypatch, tmp_path) -> None:
+    from skillgate_ai.harness import Completion, LLMHarness
+    from skillgate_ai.ingest import ingest_skill
+    from skillgate_ai.sandbox import LocalSandbox
+    from skillgate_ai.usage import Usage
+
+    pack = tmp_path / "pdf"
+    import shutil
+
+    shutil.copytree(Path(__file__).resolve().parents[1] / "skills" / "pdf", pack)
+    scripts = pack / "scripts"
+    scripts.mkdir(exist_ok=True)
+    (scripts / "create_pdf.py").write_text("print('ok')\n", encoding="utf-8")
+    skill = ingest_skill(pack, strict=False)
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    dest_skill = workspace / ".skillgate" / "skills" / "pdf"
+    dest_skill.mkdir(parents=True)
+    shutil.copytree(pack, dest_skill, dirs_exist_ok=True)
+    (workspace / ".skillgate" / "selected.json").write_text(
+        '{"skill": "pdf"}', encoding="utf-8"
+    )
+
+    harness = LLMHarness(_cfg(openai_api_key="sk-test"))
+
+    def fake_complete(prompt, timeout_sec):
+        del prompt, timeout_sec
+        return Completion(
+            text='RUN: python3 .skillgate/skills/pdf/scripts/create_pdf.py output/out.pdf',
+            usage=Usage(tokens_in=1, tokens_out=1),
+        )
+
+    monkeypatch.setattr(harness, "_complete", fake_complete)
+    sandbox = LocalSandbox(workspace)
+    result = harness.run(sandbox, "Make a PDF", [skill], timeout_sec=5)
+    assert result.spans
+    names = [span.get("name") for span in result.spans]
+    assert "skill.select" in names
+    assert any(str(name).startswith("tool.") for name in names)
+    steps, _errors, had_path = count_path_steps(result.spans, result.transcript)
+    assert had_path is True
+    assert steps >= 1

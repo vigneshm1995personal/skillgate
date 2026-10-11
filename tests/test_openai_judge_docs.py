@@ -18,3 +18,5 @@ def test_openai_judge_docs_are_plain() -> None:
     assert "page counts" in lower or "contain this text" in lower
     assert "tasks[].judge.backend" not in text
     assert "task_completion.choice" not in text
+    assert "built-in checker" not in lower
+    assert "--harness demo" not in lower

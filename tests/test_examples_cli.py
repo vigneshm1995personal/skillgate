@@ -61,3 +61,6 @@ def test_init_and_new_match_scaffold(tmp_path: Path, monkeypatch) -> None:
     assert "skill: notes-helper" in cases
     assert "should-trigger-1" in cases
     assert "no-trigger-unrelated" in cases
+    skill_md = (dest / "SKILL.md").read_text(encoding="utf-8")
+    assert "invoices" not in skill_md.lower()
+    assert "documents" not in skill_md.lower()

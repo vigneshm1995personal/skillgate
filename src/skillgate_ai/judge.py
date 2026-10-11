@@ -107,7 +107,9 @@ def _openai_judge(cfg: LLMConfig) -> Judge:
     from skillgate_ai.config import DEFAULT_JUDGE_MODEL
     from skillgate_ai.judge_openai import (
         DEFAULT_BASE_URL,
+        DISPLAY_NAME,
         GATEWAY_DECISIONS_MODEL,
+        GATEWAY_DISPLAY_NAME,
         make_openai_judge,
     )
 
@@ -115,9 +117,11 @@ def _openai_judge(cfg: LLMConfig) -> Judge:
     backend = cfg.judge_backend
     model = cfg.judge_model
     base_url = DEFAULT_BASE_URL
+    display_name = DISPLAY_NAME
     if not api_key:
         api_key = (cfg.gateway_api_key or "").strip()
         base_url = (cfg.gateway_base_url or "").rstrip("/") or DEFAULT_BASE_URL
+        display_name = GATEWAY_DISPLAY_NAME
         backend_name = (backend or "decisions").strip().lower()
         if backend_name not in {"structured", "responses"} and (model or "").strip() in {
             "",
@@ -133,6 +137,7 @@ def _openai_judge(cfg: LLMConfig) -> Judge:
         reasoning_effort=cfg.judge_reasoning_effort,
         timeout_sec=cfg.judge_timeout_sec,
         base_url=base_url,
+        display_name=display_name,
     )
 
 
@@ -149,7 +154,7 @@ def judge_stamp(judge: Judge | None) -> dict[str, str]:
         return {
             "provider": "openai",
             "backend": judge.backend.name,
-            "display_name": DISPLAY_NAME,
+            "display_name": getattr(judge, "display_name", None) or DISPLAY_NAME,
             "model": str(getattr(judge.backend, "model", "") or judge.model or ""),
         }
     backend_obj = getattr(judge, "backend", None)
@@ -158,6 +163,6 @@ def judge_stamp(judge: Judge | None) -> dict[str, str]:
     return {
         "provider": "openai",
         "backend": str(backend),
-        "display_name": DISPLAY_NAME,
+        "display_name": str(getattr(judge, "display_name", None) or DISPLAY_NAME),
         "model": str(model),
     }

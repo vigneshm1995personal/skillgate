@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import Any
 
 from skillgate_ai.demo_files import write_pdf
+from skillgate_ai.errors import SkillGateError
 
 FIXTURE_DIR = "evals/fixtures"
 GOLDEN_DIR = "evals/goldens"
@@ -182,9 +183,15 @@ def write_pack_file(
     root = Path(skill_path).expanduser().resolve()
     if not root.is_dir():
         raise ValueError("Skill folder not found.")
-    relative = safe_relpath(rel)
-    dest_path = (root / relative).resolve()
-    dest_path.relative_to(root)
+    try:
+        relative = safe_relpath(rel)
+        dest_path = (root / relative).resolve()
+        dest_path.relative_to(root)
+    except ValueError as exc:
+        raise SkillGateError(
+            "That path is outside the skill folder.",
+            hint="Pick a file inside this skill.",
+        ) from exc
     dest_path.parent.mkdir(parents=True, exist_ok=True)
     data = content.encode("utf-8") if isinstance(content, str) else content
     dest_path.write_bytes(data)

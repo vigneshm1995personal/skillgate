@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import getpass
 import json
 import os
 import sys
@@ -94,6 +95,19 @@ def _parse_targets(*values: str | None, default: str = "cursor") -> list[str]:
 def _bind_key_env(key_env: list[str] | None) -> None:
     reset_key_env_bindings()
     bind_key_env(key_env)
+
+
+def _stdin_is_tty() -> bool:
+    try:
+        return sys.stdin.isatty()
+    except Exception:
+        return False
+
+
+def _read_omitted_key() -> str:
+    if _stdin_is_tty():
+        return getpass.getpass("Value (hidden): ")
+    return sys.stdin.read()
 
 
 def _run_gate(
@@ -263,15 +277,15 @@ def deploy(
     force: bool = typer.Option(
         False,
         "--force",
-        help="Install even if the latest check did not pass. The skill may still be broken.",
+        help="Install even if the latest check did not pass. Does not skip a skill that has never been checked.",
     ),
 ) -> None:
     """Copy a skill pack into a local agent skills directory.
 
     Refuses unless this pack already has a passing check. Does not run check.
-    Copies skill files only (not evals/). Pass --force to install anyway.
+    Copies skill files only (not evals/). --force only overrides a red latest check.
     """
-    from skillgate_ai.deploy import get_adapter, latest_check_passed, refuse_ungated_install
+    from skillgate_ai.deploy import get_adapter
 
     root = _boot()
     path = resolve_user_path(pack, root)
@@ -279,12 +293,6 @@ def deploy(
     try:
         adapters = [get_adapter(name) for name in selected]
         loaded = ingest_skill(path)
-        if not force:
-            latest = latest_check_passed(path)
-            if latest is not True:
-                raise refuse_ungated_install(
-                    loaded.name, never_checked=latest is None
-                )
         for adapter in adapters:
             result = adapter.install(skill=loaded, source=path, force=force)
             console.print(result["message"])
@@ -416,14 +424,23 @@ app.add_typer(keys_app, name="keys")
 @keys_app.command("set")
 def keys_set(
     name: str = typer.Argument(..., help="CURSOR_API_KEY | CODEX_API_KEY | OPENAI_API_KEY | …"),
-    value: str = typer.Argument(..., help="The secret. Not printed later."),
+    value: str | None = typer.Argument(
+        None,
+        help="The secret. Omit to paste hidden (TTY) or read stdin.",
+    ),
 ) -> None:
     """Write a key into `.skillgate/keys` (mode 0600)."""
     from skillgate_ai.keys import set_vault_key
 
     root = _boot()
+    secret = value
+    if secret is None:
+        secret = (_read_omitted_key() or "").strip()
+    if not secret:
+        console.print("Pass a key value, or paste it when prompted.")
+        raise typer.Exit(2)
     try:
-        set_vault_key(root, name, value)
+        set_vault_key(root, name, secret)
     except SkillGateError as exc:
         console.print(exc.render())
         raise typer.Exit(exc.exit_code) from None
@@ -536,10 +553,6 @@ def ui_cmd(
             "Warning: binding off loopback. This is still a local process with no auth — "
             "not the hosted Skill Gate app."
         )
-    console.print(
-        "Local Skill Gate UI — no account. Press Run to evaluate. "
-        "CI/Docker still use `skillgate check`."
-    )
     try:
         serve_ui(
             root=workspace,
@@ -548,6 +561,9 @@ def ui_cmd(
             pack=pack,
             open_browser=should_open,
         )
+    except SkillGateError as exc:
+        console.print(exc.render())
+        raise typer.Exit(exc.exit_code) from None
     except OSError as exc:
         console.print(f"Could not bind {host}:{port}: {exc}")
         raise typer.Exit(1) from exc

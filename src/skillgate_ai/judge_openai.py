@@ -48,6 +48,7 @@ IMAGE_MAX_BYTES = 4 * 1024 * 1024
 IMAGE_MAX_COUNT = 3
 INLINE_MAGICS = {"jpeg": "image/jpeg", "png": "image/png"}
 DISPLAY_NAME = "OpenAI (your key)"
+GATEWAY_DISPLAY_NAME = "OpenAI Decisions via Vercel AI Gateway (your key)"
 
 
 def _decisions_model(model: str) -> str:
@@ -587,12 +588,14 @@ class OutcomeJudge:
         why_enabled: bool = True,
         reasoning_effort: str = "low",
         timeout_sec: float = DEFAULT_TIMEOUT_SEC,
+        display_name: str = DISPLAY_NAME,
     ) -> None:
         self.backend = backend
         self.min_confidence = min_confidence
         self.why_enabled = why_enabled
         self.reasoning_effort = reasoning_effort
         self.timeout_sec = timeout_sec
+        self.display_name = display_name
 
     @property
     def model(self) -> str:
@@ -665,7 +668,7 @@ class OutcomeJudge:
             "status": status,
             "provider": "openai",
             "backend": self.backend.name,
-            "display_name": DISPLAY_NAME,
+            "display_name": self.display_name,
             "model": model,
             "passed": passed,
             "reasons": reasons,
@@ -871,6 +874,7 @@ def make_openai_judge(
     timeout_sec: float = DEFAULT_TIMEOUT_SEC,
     base_url: str = DEFAULT_BASE_URL,
     post: PostFn | None = None,
+    display_name: str = DISPLAY_NAME,
 ) -> OutcomeJudge:
     name = (backend or "decisions").strip().lower()
     if name in {"structured", "responses"}:
@@ -894,12 +898,14 @@ def make_openai_judge(
         why_enabled=why_enabled,
         reasoning_effort=reasoning_effort,
         timeout_sec=timeout_sec,
+        display_name=display_name,
     )
 
 
 # Re-export for tests
 __all__ = [
     "DISPLAY_NAME",
+    "GATEWAY_DISPLAY_NAME",
     "IMAGE_MAX_BYTES",
     "IMAGE_MAX_COUNT",
     "OUT_OF_CREDITS",

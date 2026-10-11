@@ -6,6 +6,7 @@ web/node_modules/
 web/dist/
 web/*.tsbuildinfo
 src/skillgate_ai/web_static/
+src/skillgate_ai/examples/
 *.py[cod]
 *.egg-info/
 .eggs/
@@ -23,6 +24,7 @@ uploads/
 evals/history/*.jsonl
 **/evals/history/*.jsonl
 !**/evals/history/.gitkeep
+**/evals/deploys.jsonl
 
 *.env
 !.env.example

@@ -21,6 +21,7 @@ import {
 } from "@/lib/eval-row-state"
 import { formatCost, formatTokens, taskMetricsLine } from "@/lib/metrics-label"
 import { useTickingElapsed } from "@/lib/use-elapsed"
+import { useDashboard } from "@/lib/dashboard-provider"
 import type { LiveState, TaskResult, VsBaseline } from "@/lib/types"
 import { Spinner } from "@/components/ui/spinner"
 
@@ -39,6 +40,7 @@ export function ChecksResultsTable({
   onPromote: (task: TaskResult) => void
   onRunCheck?: (task: TaskResult) => void
 }) {
+  const hasKey = Boolean(useDashboard().status?.has_key)
   const runningIndex = tasks.findIndex((task) => taskState(task) === "running")
   const [open, setOpen] = useState<number | null>(
     runningIndex >= 0 ? runningIndex : null
@@ -116,6 +118,7 @@ export function ChecksResultsTable({
                 onToggle={toggle}
                 onPromote={onPromote}
                 onRunCheck={onRunCheck}
+                hasKey={hasKey}
               />
             )
           })}
@@ -142,6 +145,7 @@ function CheckPair({
   onToggle,
   onPromote,
   onRunCheck,
+  hasKey,
 }: {
   task: TaskResult
   index: number
@@ -159,6 +163,7 @@ function CheckPair({
   onToggle: () => void
   onPromote: (task: TaskResult) => void
   onRunCheck?: (task: TaskResult) => void
+  hasKey: boolean
 }) {
   return (
     <>
@@ -242,6 +247,7 @@ function CheckPair({
               running={running}
               onPromote={onPromote}
               onRunCheck={onRunCheck}
+              hasKey={hasKey}
             />
           ) : null}
         </td>
@@ -258,6 +264,7 @@ function OpenedDetails({
   running,
   onPromote,
   onRunCheck,
+  hasKey,
 }: {
   task: TaskResult
   index: number
@@ -266,6 +273,7 @@ function OpenedDetails({
   running: boolean
   onPromote: (task: TaskResult) => void
   onRunCheck?: (task: TaskResult) => void
+  hasKey: boolean
 }) {
   const answers = openedCheckAnswers(task)
   const noAnswers = missingJudgeAnswersLine(task)
@@ -350,6 +358,7 @@ function OpenedDetails({
           variant="outline"
           size="xs"
           className="w-fit"
+          disabled={!hasKey}
           onClick={(event) => {
             event.stopPropagation()
             onRunCheck(task)

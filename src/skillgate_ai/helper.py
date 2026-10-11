@@ -22,7 +22,7 @@ import urllib.request
 import zipfile
 from pathlib import Path
 
-from skillgate_ai.deploy import get_adapter, latest_check_passed, refuse_ungated_install
+from skillgate_ai.deploy import get_adapter
 from skillgate_ai.errors import SKILL_CHANGED_MESSAGE, SkillGateError, customer_job_error
 from skillgate_ai.ingest import ingest_skill
 from skillgate_ai.pack import skill_pack_hash
@@ -240,14 +240,13 @@ def process_job(url: str, config: dict, job: dict) -> dict:
             loaded = ingest_skill(skill_dir)
         except SkillGateError as exc:
             return _failed_result(targets, _friendly_reason(exc))
-        if latest_check_passed(skill_dir) is False:
-            exc = refuse_ungated_install(skill_name, never_checked=False)
-            return _failed_result(targets, _friendly_reason(exc))
         results: list[dict] = []
         failed = False
         for target in targets:
             try:
-                get_adapter(target).install(skill=loaded, source=skill_dir, force=True)
+                get_adapter(target).install(
+                    skill=loaded, source=skill_dir, remote_gated=True
+                )
                 results.append({"target": target, "status": "installed"})
             except SkillGateError as exc:
                 failed = True

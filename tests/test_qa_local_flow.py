@@ -104,8 +104,14 @@ def test_fake_home_import_list_open_run_deploy(tmp_path: Path, monkeypatch) -> N
     status = client.get("/api/status")
     assert status.status_code == 200
     assert status.json().get("version") == __version__
-    assert "skillgate check" not in (status.json().get("missing_key_hint") or "").lower()
-    assert "skillgate check" not in (status.json().get("missing_key_message") or "").lower()
+    hint = (status.json().get("missing_key_hint") or "").lower()
+    message = (status.json().get("missing_key_message") or "").lower()
+    assert "skillgate check" not in hint
+    assert "skillgate check" not in message
+    assert "skillgate" not in hint
+    assert "keys set" not in hint
+    assert "--key-env" not in hint
+    assert "skillgate_" not in hint
 
     sources = client.get("/api/skills/import-sources")
     assert sources.status_code == 200

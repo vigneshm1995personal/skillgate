@@ -33,6 +33,35 @@ def _client(tmp: Path, monkeypatch) -> TestClient:
     return TestClient(app, base_url="http://127.0.0.1:8765")
 
 
+def test_status_missing_key_hint_is_ui_wording(tmp_path: Path, monkeypatch) -> None:
+    client = _client(tmp_path, monkeypatch)
+    data = client.get("/api/status").json()
+    assert data["has_key"] is False
+    hint = (data.get("missing_key_hint") or "").lower()
+    assert "settings" in hint
+    assert "skillgate" not in hint
+    assert "skillgate ui" not in hint
+    assert "keys set" not in hint
+    assert "skillgate_openai" not in hint
+    assert "--key-env" not in hint
+    assert "openai_api_key" not in hint
+
+
+def test_pack_file_outside_skill_is_400(tmp_path: Path, monkeypatch) -> None:
+    _copy_pack(tmp_path)
+    client = _client(tmp_path, monkeypatch)
+    escaped = client.post(
+        "/api/skills/pack-file",
+        json={"skill": "pdf", "path": "../../outside.txt", "content": "nope"},
+    )
+    assert escaped.status_code == 400, escaped.text
+    detail = escaped.json()["detail"]
+    message = detail.get("message") if isinstance(detail, dict) else str(detail)
+    assert message
+    assert "traceback" not in str(escaped.json()).lower()
+    assert not (tmp_path / "outside.txt").exists()
+
+
 def test_status_local_hides_paid_slots(tmp_path: Path, monkeypatch) -> None:
     client = _client(tmp_path, monkeypatch)
     res = client.get("/api/status")

@@ -103,3 +103,39 @@ def test_customer_copy_denylist() -> None:
                 if needle.lower() in lower:
                     hits.append(f"{path.relative_to(ROOT)}: {needle}")
     assert hits == [], "forbidden customer copy:\n" + "\n".join(hits)
+
+
+def test_all_run_buttons_disable_without_key() -> None:
+    eval_page = (ROOT / "web" / "src" / "components" / "dashboard" / "eval-page.tsx").read_text(
+        encoding="utf-8"
+    )
+    check_list = (ROOT / "web" / "src" / "components" / "dashboard" / "check-list.tsx").read_text(
+        encoding="utf-8"
+    )
+    results = (
+        ROOT / "web" / "src" / "components" / "dashboard" / "checks-results-table.tsx"
+    ).read_text(encoding="utf-8")
+    gate = (ROOT / "web" / "src" / "components" / "dashboard" / "gate-page.tsx").read_text(
+        encoding="utf-8"
+    )
+    assert "id=\"btn-run\"" in eval_page
+    assert eval_page.count("!status?.has_key") >= 2
+    assert "Run this check" in check_list
+    assert "has_key" in check_list
+    run_check = check_list.split("Run this check")[0][-400:]
+    assert "hasKey" in run_check or "!hasKey" in run_check
+    assert "has_key" in results
+    table_run = results.split("Run this check")[0][-400:]
+    assert "hasKey" in table_run or "!hasKey" in table_run
+    fix_run = gate.split('id="btn-fix-run"')[1][:500]
+    assert "has_key" in fix_run
+
+
+def test_eval_banner_has_no_cli_or_env_names() -> None:
+    text = (ROOT / "web" / "src" / "components" / "dashboard" / "eval-page.tsx").read_text(
+        encoding="utf-8"
+    )
+    assert "skillgate keys set" not in text
+    assert "skillgate ui" not in text
+    assert "SKILLGATE_" not in text
+    assert "--key-env" not in text

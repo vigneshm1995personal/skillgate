@@ -31,7 +31,7 @@ skillgate example pdf-sabotaged
 skillgate check pdf-sabotaged --expect-fail   # exit 0 after a live red run
 ```
 
-`skillgate deploy skills/pdf` copies **only the skill files** (not `evals/`) into Cursor, Claude, or Codex **only if** this pack already has a passing check. It does not run check for you.
+`skillgate deploy pdf` copies **only the skill files** (not `evals/`) into Cursor, Claude, or Codex **only if** this pack already has a passing check. It does not run check for you.
 
 ```bash
 skillgate check pdf

@@ -100,6 +100,33 @@ def test_keys_list_never_prints_secrets(tmp_path: Path, monkeypatch: pytest.Monk
     assert list_key_names(tmp_path) == ["OPENAI_API_KEY"]
 
 
+def test_keys_set_prompts_hidden_when_value_omitted(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("SKILLGATE_ROOT", str(tmp_path))
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr("skillgate_ai.cli._stdin_is_tty", lambda: True)
+    monkeypatch.setattr("skillgate_ai.cli.getpass.getpass", lambda prompt="": "sk-hidden-prompt")
+    result = runner.invoke(app, ["keys", "set", "OPENAI_API_KEY"])
+    out = plain_text(result.stdout + result.stderr)
+    assert result.exit_code == 0, out
+    assert read_vault(tmp_path)["OPENAI_API_KEY"] == "sk-hidden-prompt"
+    assert "sk-hidden-prompt" not in out
+
+
+def test_keys_set_reads_stdin_when_value_omitted(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("SKILLGATE_ROOT", str(tmp_path))
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr("skillgate_ai.cli._stdin_is_tty", lambda: False)
+    result = runner.invoke(app, ["keys", "set", "OPENAI_API_KEY"], input="sk-from-stdin\n")
+    out = plain_text(result.stdout + result.stderr)
+    assert result.exit_code == 0, out
+    assert read_vault(tmp_path)["OPENAI_API_KEY"] == "sk-from-stdin"
+    assert "sk-from-stdin" not in out
+
+
 def test_keys_set_and_clear_cli(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("SKILLGATE_ROOT", str(tmp_path))
     monkeypatch.chdir(tmp_path)

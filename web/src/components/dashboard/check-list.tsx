@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input"
 import { Spinner } from "@/components/ui/spinner"
 import { Textarea } from "@/components/ui/textarea"
 import { canPinCheck, expectedFieldValue, isPinnedCheck } from "@/lib/case-pack"
+import { useDashboard } from "@/lib/dashboard-provider"
 import { checkHeadline, scorerCodeToPlain } from "@/lib/check-results"
 import { harnessDisplayName } from "@/lib/eval-config"
 import { runForCheck } from "@/lib/skill-run-state"
@@ -53,6 +54,7 @@ export function CheckList({
   onPin?: (index: number) => void
   onRunCheck?: (check: Check) => void
 }) {
+  const hasKey = Boolean(useDashboard().status?.has_key)
   const skillName = skill?.name
   return (
     <div id="check-list" className="flex flex-col gap-3">
@@ -102,7 +104,7 @@ export function CheckList({
                     id={`btn-run-check-${index}`}
                     variant="outline"
                     size="xs"
-                    disabled={running}
+                    disabled={running || !hasKey}
                     onClick={() => onRunCheck(check)}
                   >
                     Run this check

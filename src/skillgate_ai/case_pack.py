@@ -17,6 +17,7 @@ import yaml
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from skillgate_ai.errors import SuiteError, friendly_validation_error
+from skillgate_ai.ingest import folder_matches_skill
 from skillgate_ai.metrics import CaseBudgets, merge_budgets, parse_budgets
 from skillgate_ai.pack import (
     FIXTURE_DIR,
@@ -154,7 +155,7 @@ def load_case_pack(skill_path: str | Path) -> CasePack | None:
     except Exception as exc:
         raise SuiteError(friendly_validation_error(exc, kind="Case pack", raw=raw)) from None
     folder = root.name
-    if pack.skill != folder:
+    if not folder_matches_skill(folder, pack.skill):
         raise SuiteError(
             f"This check file is for `{pack.skill}`, but the folder is `{folder}`.",
             hint="Set `skill:` in evals/cases.yaml to the folder name.",

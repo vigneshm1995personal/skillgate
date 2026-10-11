@@ -128,6 +128,23 @@ def test_judge_stamp_has_no_secret() -> None:
     assert stamp["model"] == "gpt-6-luna"
 
 
+def test_gateway_judge_stamp_names_decisions_via_gateway() -> None:
+    stamp = judge_stamp(
+        resolve_judge(
+            _cfg(
+                gateway_api_key="gw-test",
+                gateway_base_url="https://ai-gateway.vercel.sh/v1",
+            ),
+            harness_name="llm",
+        )
+    )
+    assert stamp["provider"] == "openai"
+    assert stamp["backend"] == "decisions"
+    assert stamp["display_name"] == "OpenAI Decisions via Vercel AI Gateway (your key)"
+    assert stamp["model"] == "openai/gpt-6-luna-decisions"
+    assert "gw-test" not in str(stamp)
+
+
 def test_judge_stamp_uses_decisions_backend_model() -> None:
     judge = make_openai_judge(api_key="sk-test", model="not-the-decisions-model")
     stamp = judge_stamp(judge)

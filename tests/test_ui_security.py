@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import socket
 from pathlib import Path
 
 from fastapi.testclient import TestClient
@@ -82,3 +83,24 @@ def test_ui_port_out_of_range_is_friendly() -> None:
     assert result.exit_code == 2, out
     assert "Port must be between 1 and 65535" in out
     assert "Traceback" not in out
+
+
+def test_ui_busy_port_is_friendly_before_url(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("SKILLGATE_ROOT", str(tmp_path))
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    sock.bind(("127.0.0.1", 0))
+    port = sock.getsockname()[1]
+    try:
+        result = runner.invoke(
+            app,
+            ["ui", "--host", "127.0.0.1", "--port", str(port), "--no-browser", "--root", str(tmp_path)],
+        )
+        out = plain_text(result.stdout + result.stderr)
+        assert result.exit_code != 0, out
+        assert "in use" in out.lower()
+        assert "at http" not in out.lower()
+        assert "Skill Gate UI (local, no account) at" not in out
+        assert "Traceback" not in out
+    finally:
+        sock.close()

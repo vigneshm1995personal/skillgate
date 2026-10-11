@@ -175,6 +175,16 @@ describe("scoredByLine", () => {
         answers: passTask.judge?.answers,
       })
     ).toBe("OpenAI (your key) scored this run.")
+    expect(
+      scoredByFromJudge({
+        provider: "openai",
+        backend: "decisions",
+        model: "openai/gpt-6-luna-decisions",
+        display_name: "OpenAI Decisions via Vercel AI Gateway (your key)",
+        status: "completed",
+        answers: passTask.judge?.answers,
+      })
+    ).toBe("OpenAI Decisions via Vercel AI Gateway (your key) scored this run.")
   })
 })
 

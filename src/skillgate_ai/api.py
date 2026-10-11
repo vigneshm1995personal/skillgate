@@ -22,7 +22,13 @@ from skillgate_ai.api_runs import register_run_routes
 from skillgate_ai.api_shims import register_hosted_shims
 from skillgate_ai.api_skills import register_skill_routes
 from skillgate_ai.catalog import catalog_entries
-from skillgate_ai.config import ROOT_ENV_NAMES, get_llm_config, load_env, missing_key_error
+from skillgate_ai.config import (
+    ROOT_ENV_NAMES,
+    UI_NO_KEY_HINT,
+    get_llm_config,
+    load_env,
+    missing_key_error,
+)
 from skillgate_ai.keys import clear_vault_key, set_vault_key
 from skillgate_ai.local_guard import LocalUIGuard
 from skillgate_ai.deploy import deploy_status
@@ -87,7 +93,7 @@ def _register_core_routes(app: FastAPI) -> None:
             "available_harnesses": cfg.available_harnesses,
             "default_harness": cfg.default_harness,
             "missing_key_message": None if cfg.has_any_key else missing.message,
-            "missing_key_hint": None if cfg.has_any_key else missing.hint,
+            "missing_key_hint": None if cfg.has_any_key else UI_NO_KEY_HINT,
             "auth_required": False,
             "siwv_configured": False,
             "auth_open": False,

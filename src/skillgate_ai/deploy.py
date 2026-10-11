@@ -65,7 +65,14 @@ class _PackAdapter:
     def skills_root(self) -> Path:
         raise NotImplementedError
 
-    def install(self, *, skill: Skill, source: Path, force: bool = False) -> DeployResult:
+    def install(
+        self,
+        *,
+        skill: Skill,
+        source: Path,
+        force: bool = False,
+        remote_gated: bool = False,
+    ) -> DeployResult:
         source = source.expanduser().resolve()
         name = (skill.name or folder_slug(source) or "").strip()
         if not NAME_RE.match(name):
@@ -73,9 +80,11 @@ class _PackAdapter:
                 "This skill needs a simple folder name before Install.",
                 hint="Use lowercase letters, numbers, and hyphens.",
             )
-        latest = latest_check_passed(source)
-        if not force and latest is not True:
-            raise refuse_ungated_install(name, never_checked=latest is None)
+        if remote_gated:
+            if latest_check_passed(source) is False:
+                raise refuse_ungated_install(name, never_checked=False)
+        else:
+            require_passing_check(source, name=name, force=force)
         if not source.is_dir() or not (source / "SKILL.md").is_file():
             raise DeployError(
                 "The gated skill folder is gone. Pass the checks again, then install.",
@@ -176,6 +185,15 @@ def latest_check_passed(pack: Path) -> bool | None:
     if row is None:
         return None
     return bool(row.get("passed"))
+
+
+def require_passing_check(pack: Path, *, name: str, force: bool = False) -> None:
+    """Refuse never-checked always; `--force` only overrides a red latest check."""
+    latest = latest_check_passed(pack)
+    if latest is None:
+        raise refuse_ungated_install(name, never_checked=True)
+    if latest is not True and not force:
+        raise refuse_ungated_install(name, never_checked=False)
 
 
 def refuse_ungated_install(

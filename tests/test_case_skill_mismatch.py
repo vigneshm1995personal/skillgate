@@ -31,6 +31,14 @@ def test_cases_yaml_skill_mismatch_is_plain(tmp_path: Path) -> None:
         raise AssertionError("expected SuiteError")
 
 
+def test_cases_yaml_allows_docker_pack_mount(tmp_path: Path) -> None:
+    pack = tmp_path / "pack"
+    shutil.copytree(ROOT / "skills" / "pdf", pack)
+    loaded = load_case_pack(pack)
+    assert loaded is not None
+    assert loaded.skill == "pdf"
+
+
 def test_cases_yaml_skill_mismatch_cli_prints_once(tmp_path: Path, monkeypatch) -> None:
     from skillgate_ai.cli import app
 

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import errno
+import socket
 import webbrowser
 from importlib.resources import files
 from pathlib import Path
@@ -11,6 +13,7 @@ from fastapi.responses import FileResponse, HTMLResponse, Response
 from starlette.staticfiles import StaticFiles
 
 from skillgate_ai.api import create_app
+from skillgate_ai.errors import SkillGateError
 
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8765
@@ -82,6 +85,25 @@ def attach_static(app: FastAPI, dist: Path | None = None) -> None:
             return HTMLResponse(_MISSING_UI, status_code=503)
 
 
+def _ensure_port_free(host: str, port: int) -> None:
+    family = socket.AF_INET6 if host in {"::1", "::"} or ":" in host and "." not in host else socket.AF_INET
+    sock = socket.socket(family, socket.SOCK_STREAM)
+    try:
+        sock.bind((host, port))
+    except OSError as exc:
+        if exc.errno == errno.EADDRINUSE or getattr(exc, "winerror", None) == 10048:
+            raise SkillGateError(
+                f"Port {port} is already in use.",
+                hint="Stop the other process, or pass --port with a free port.",
+            ) from None
+        raise SkillGateError(
+            f"Could not bind {host}:{port}.",
+            hint="Try another --host or --port.",
+        ) from None
+    finally:
+        sock.close()
+
+
 def serve_ui(
     *,
     root: Path,
@@ -92,6 +114,7 @@ def serve_ui(
 ) -> None:
     import uvicorn
 
+    _ensure_port_free(host, port)
     app = create_app(root=root, pack=pack)
     attach_static(app)
     url = f"http://{host}:{port}/"

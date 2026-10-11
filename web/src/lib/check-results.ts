@@ -263,7 +263,8 @@ export function scoredByFromJudge(judge: JudgeResult | null | undefined): string
     return ""
   }
   if (isOpenAIJudge(judge)) {
-    return "OpenAI (your key) scored this run."
+    const name = trimText(judge.display_name) || "OpenAI (your key)"
+    return `${name} scored this run.`
   }
   const provider = trimText(judge.provider).toLowerCase()
   const model = trimText(judge.model).toLowerCase()

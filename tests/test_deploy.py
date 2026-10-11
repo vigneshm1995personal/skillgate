@@ -8,7 +8,7 @@ from typer.testing import CliRunner
 
 from conftest import plain_text
 from skillgate_ai.cli import app
-from skillgate_ai.deploy import latest_check_passed
+from skillgate_ai.deploy import CursorAdapter, DeployError, latest_check_passed
 from skillgate_ai.errors import friendly_os_error
 from skillgate_ai.history import append_eval
 from skillgate_ai.ingest import ingest_skill
@@ -154,6 +154,45 @@ def test_deploy_force_installs_failed_skill(
     assert result.exit_code == 0, result.stdout
     assert (skills_root / "pdf-sabotaged" / "SKILL.md").is_file()
     assert "Installed pdf-sabotaged" in result.stdout
+
+
+def test_deploy_force_refuses_never_checked(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    pack = _pdf_pack(tmp_path / "pack")
+    skills_root = tmp_path / "cursor-skills"
+    monkeypatch.setenv("SKILLGATE_CURSOR_SKILLS", str(skills_root))
+    assert latest_check_passed(pack) is None
+    result = runner.invoke(app, ["deploy", str(pack), "--force"])
+    out = plain_text(result.stdout + result.stderr)
+    assert result.exit_code == 1, out
+    assert "Run the checks first" in out
+    assert not (skills_root / "pdf").exists()
+    assert latest_check_passed(pack) is None
+
+
+def test_adapter_install_force_refuses_never_checked(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    pack = _pdf_pack(tmp_path / "pack")
+    skills_root = tmp_path / "cursor-skills"
+    monkeypatch.setenv("SKILLGATE_CURSOR_SKILLS", str(skills_root))
+    loaded = ingest_skill(pack)
+    with pytest.raises(DeployError, match="Run the checks first"):
+        CursorAdapter().install(skill=loaded, source=pack, force=True)
+    assert not (skills_root / "pdf").exists()
+
+
+def test_adapter_remote_gated_installs_never_checked(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    pack = _pdf_pack(tmp_path / "pack")
+    skills_root = tmp_path / "cursor-skills"
+    monkeypatch.setenv("SKILLGATE_CURSOR_SKILLS", str(skills_root))
+    loaded = ingest_skill(pack)
+    result = CursorAdapter().install(skill=loaded, source=pack, remote_gated=True)
+    assert result["status"] == "installed"
+    assert (skills_root / "pdf" / "SKILL.md").is_file()
 
 
 def test_deploy_refuses_never_checked(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
