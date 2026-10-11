@@ -1,17 +1,19 @@
 # 10-minute quickstart (no account)
 
-Skill Gate’s public CLI is a **local gate**. You do not sign up, you do not need Neon, SIWV, or a Skill Gate account. Deterministic fixtures use the demo harness.
+Skill Gate’s public CLI is a **local gate**. You do not sign up and you do not need a Skill Gate account. Built-in checks need no API key.
+
+Requires **Python 3.11+**.
 
 ## Install
 
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate   # Windows: .venv\Scripts\activate
-pip install -e .
+pip install skillgate-ai
 skillgate version           # 0.4.1
 ```
 
-Or, after the first PyPI release: `pip install skillgate-ai` (not `pip install skillgate` — that name is a different product).
+(`pip install skillgate` is a different product.) From a clone of this repo you can use `pip install -e .` instead.
 
 Skill scripts run with that same Python — install the skill’s own packages there too (the pdf example needs `pypdf`).
 
@@ -38,7 +40,17 @@ skillgate check skills/pdf-sabotaged --expect-fail
 echo $?    # 0
 ```
 
-No `AI_GATEWAY_API_KEY`, no Docker required for this path. Live scoring with your OpenAI key is optional — see [`openai-judge.md`](openai-judge.md).
+No `AI_GATEWAY_API_KEY`, no Docker required for this path. Live scoring with your OpenAI key is optional — see [openai-judge.md](https://github.com/vigneshm1995personal/skillgate/blob/main/docs/openai-judge.md).
+
+## Deploy (after a green check)
+
+`skillgate deploy` copies the pack into Cursor, Claude, or Codex. It refuses unless the latest local check passed. If this pack has never been checked, deploy runs the check first. Pass `--force` to install anyway (the skill may still be broken).
+
+```bash
+skillgate deploy skills/pdf
+skillgate deploy skills/pdf --target claude
+skillgate deploy skills/pdf --force
+```
 
 ## Optional local UI
 
@@ -46,20 +58,20 @@ No `AI_GATEWAY_API_KEY`, no Docker required for this path. Live scoring with you
 skillgate ui                 # http://127.0.0.1:8765 — no account
 ```
 
-Same `run_check` engine as the CLI. See [`docs/ui.md`](ui.md). The Docker image still runs `skillgate check /pack`; do not treat the UI as `serve`.
+Same `run_check` engine as the CLI. See [ui.md](https://github.com/vigneshm1995personal/skillgate/blob/main/docs/ui.md). The Docker image still runs `skillgate check /pack`; do not treat the UI as `serve`.
 
 ## Docker (optional)
 
-Follows **docker-project-foundations** + **docker-build-strategies**: multi-stage, slim pin+digest, non-root UID 1001, `.dockerignore`, `ENTRYPOINT ["skillgate"]`, `CMD ["check", "/pack"]`.
+Multi-stage image, non-root UID 1001, `ENTRYPOINT ["skillgate"]`, `CMD ["check", "/pack"]`.
 
 ```bash
 docker compose run --rm --no-TTY skillgate
 PACK=./skills/pdf-sabotaged docker compose run --rm --no-TTY skillgate
 ```
 
-## Copy-paste Action (rung 1)
+## Copy-paste Action
 
-Put this in a skill repo whose working directory is the pack (folder with `SKILL.md`):
+Put this in a skill repo whose working directory is the pack (folder with `SKILL.md`). Needs Python 3.11+.
 
 ```yaml
 name: skillgate
@@ -75,10 +87,4 @@ jobs:
       - run: skillgate check .
 ```
 
-Until PyPI publish, replace the install line with a git/editable install of this repo.
-
-To score live checks in CI, add an optional `OPENAI_API_KEY` secret (see [`openai-judge.md`](openai-judge.md)). Omit it to keep the built-in checker.
-
-## What is not in this package
-
-No hosted dashboard, Sign in with Vercel, vault, Neon store, Vercel Sandbox, or generated-check drafts. Those stay in the private `skillgate-ai` app.
+To score live checks in CI, add an optional `OPENAI_API_KEY` secret (see [openai-judge.md](https://github.com/vigneshm1995personal/skillgate/blob/main/docs/openai-judge.md)). Omit it to keep the built-in checker.

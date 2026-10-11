@@ -79,6 +79,8 @@ def headline_for(score: Score) -> str:
     if score.scorer == "skill_trigger":
         if (score.actual or "none") == "none":
             return "Skill didn’t trigger"
+        if score.expected and score.actual == score.expected:
+            return "Description didn’t match this request"
         return f"Wrong skill triggered ({score.actual})"
     if score.scorer == "task_completion":
         return f"Task failed: {score.detail}"
@@ -139,24 +141,19 @@ def score_skill_trigger(
 
             would = select_skill_from_descriptions(task.prompt, [skill])
             if would != expected:
+                ran = inferred or expected
                 return Score(
                     scorer="skill_trigger",
                     passed=False,
-                    detail=(
-                        f"Did not trigger `{expected}` "
-                        "(the description never matched this request)"
-                    ),
+                    detail=(f"`{expected}` ran, but its description never matched this request"),
                     expected=expected,
-                    actual="none",
+                    actual=ran,
                 )
 
     if passed:
         detail = f"Triggered `{expected}`"
     elif inferred is None:
-        detail = (
-            f"Did not trigger `{expected}` "
-            "(the description never matched this request)"
-        )
+        detail = f"Did not trigger `{expected}` (the description never matched this request)"
     else:
         detail = f"Triggered `{inferred}` instead of `{expected}`"
     return Score(
@@ -201,9 +198,7 @@ def score_task_completion(expects: list[FileExpect], workspace: Path) -> Score:
             sniffed = sniff_output_bytes(data)
             if sniffed["kind"] == "bytes":
                 magic = sniffed.get("magic") or "bytes"
-                failures.append(
-                    f"{item.path} is binary ({magic}), not text/JSON"
-                )
+                failures.append(f"{item.path} is binary ({magic}), not text/JSON")
                 continue
         if item.contains:
             text = _file_text(target)

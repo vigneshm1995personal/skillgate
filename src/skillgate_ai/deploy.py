@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 import os
-import shutil
 from pathlib import Path
 from typing import NotRequired, Protocol, TypedDict
 
-from skillgate_ai.errors import DeployError, IngestError
+from skillgate_ai.errors import DeployError, IngestError, friendly_os_error
+from skillgate_ai.history import latest_eval
 from skillgate_ai.ingest import Skill, ingest_skill
 from skillgate_ai.pack import copy_skill_pack
 
@@ -42,21 +42,19 @@ def _override_root(env_var: str) -> Path | None:
 
 
 def cursor_skills_root() -> Path:
-    return _override_root("SKILLGATE_CURSOR_SKILLS") or (
-        Path.home() / ".cursor" / "skills"
-    ).resolve()
+    return (
+        _override_root("SKILLGATE_CURSOR_SKILLS") or (Path.home() / ".cursor" / "skills").resolve()
+    )
 
 
 def codex_skills_root() -> Path:
-    return _override_root("SKILLGATE_CODEX_SKILLS") or (
-        Path.home() / ".codex" / "skills"
-    ).resolve()
+    return _override_root("SKILLGATE_CODEX_SKILLS") or (Path.home() / ".codex" / "skills").resolve()
 
 
 def claude_skills_root() -> Path:
-    return _override_root("SKILLGATE_CLAUDE_SKILLS") or (
-        Path.home() / ".claude" / "skills"
-    ).resolve()
+    return (
+        _override_root("SKILLGATE_CLAUDE_SKILLS") or (Path.home() / ".claude" / "skills").resolve()
+    )
 
 
 class _PackAdapter:
@@ -87,22 +85,19 @@ class _PackAdapter:
                 f"Install source and {self.label} dest are the same folder — "
                 "refusing to overwrite the only copy."
             )
-        self.skills_root().mkdir(parents=True, exist_ok=True)
         try:
+            self.skills_root().mkdir(parents=True, exist_ok=True)
             copied = copy_skill_pack(source, dest)
             ingest_skill(dest)
         except IngestError as exc:
-            if dest.exists():
-                shutil.rmtree(dest)
             raise DeployError(exc.message, hint=exc.hint) from exc
         except ValueError as exc:
-            if dest.exists() and dest != source:
-                shutil.rmtree(dest)
             raise DeployError(str(exc)) from exc
         except OSError as exc:
-            if dest.exists() and dest != source:
-                shutil.rmtree(dest)
-            raise DeployError(f"Could not copy the skill into {self.label}: {exc}") from exc
+            raise DeployError(
+                friendly_os_error(exc, what=f"install into {self.label}"),
+                hint="The existing install was left as-is. Fix folder permissions and try again.",
+            ) from None
         file_count = int(copied["file_count"])
         return {
             "target": self.id,
@@ -172,6 +167,28 @@ def get_adapter(target: str) -> DeployAdapter:
     if cls is None:
         raise DeployError("Deploy target must be Cursor, Claude, or Codex.")
     return cls()
+
+
+def latest_check_passed(pack: Path) -> bool | None:
+    """True/False from the newest local check, or None if this pack has no history."""
+    row = latest_eval(pack)
+    if row is None:
+        return None
+    return bool(row.get("passed"))
+
+
+def refuse_ungated_install(pack: Path, skill_name: str) -> DeployError:
+    """Friendly block when the latest check is missing or red."""
+    latest = latest_check_passed(pack)
+    if latest is False:
+        return DeployError(
+            f"Not installing `{skill_name}` because the latest check did not pass.",
+            hint="Run `skillgate check` until the gate is green, or pass --force to install anyway.",
+        )
+    return DeployError(
+        f"Not installing `{skill_name}` because this pack has not passed `skillgate check`.",
+        hint="Run `skillgate check` first, or pass --force to install anyway.",
+    )
 
 
 def local_deploy_available() -> bool:

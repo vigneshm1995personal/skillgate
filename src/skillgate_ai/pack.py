@@ -16,6 +16,7 @@ import fnmatch
 import hashlib
 import re
 import shutil
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -215,9 +216,7 @@ def is_authentic_fixture_bytes(dest: str, content: str | bytes) -> bool:
     return True
 
 
-def cannot_synthesize_sample(
-    *, dest: str = "", prompt: str = "", description: str = ""
-) -> bool:
+def cannot_synthesize_sample(*, dest: str = "", prompt: str = "", description: str = "") -> bool:
     """True for photo/scan inputs we must not fake as a placeholder image."""
     if implies_photo_scan(prompt, description, dest):
         return True
@@ -241,22 +240,11 @@ def generate_sample_bytes(*, dest: str, prompt: str = "") -> bytes:
             write_pdf(path, f"Sample input: {hint[:80]}")
             return path.read_bytes()
     if suffix == ".json":
-        body = (
-            '{\n'
-            f'  "source": {stem!r},\n'
-            f'  "note": {hint!r},\n'
-            '  "total": "12.40"\n'
-            "}\n"
-        )
+        body = f'{{\n  "source": {stem!r},\n  "note": {hint!r},\n  "total": "12.40"\n}}\n'
         return body.encode("utf-8")
     if suffix == ".csv":
         return f"item,amount\n{stem},12.40\nnote,{hint}\n".encode("utf-8")
-    text = (
-        f"Sample input for this check.\n"
-        f"Item: {stem}\n"
-        f"Note: {hint}\n"
-        f"Total: 12.40\n"
-    )
+    text = f"Sample input for this check.\nItem: {stem}\nNote: {hint}\nTotal: 12.40\n"
     return text.encode("utf-8")
 
 
@@ -290,9 +278,7 @@ def copy_into_pack(
     if not source.is_file():
         raise FileNotFoundError(str(src))
     name = Path(dest_name or source.name).name
-    return write_pack_file(
-        skill_path, rel=f"{FIXTURE_DIR}/{name}", content=source.read_bytes()
-    )
+    return write_pack_file(skill_path, rel=f"{FIXTURE_DIR}/{name}", content=source.read_bytes())
 
 
 def is_pack_relative(src: str) -> bool:
@@ -370,7 +356,9 @@ def implied_fixture_name(text: str) -> str:
         return "sample.csv"
     if re.search(r"\bjson\b", blob, re.IGNORECASE):
         return "sample.json"
-    if re.search(r"\b(image|images|photo|photos|png|jpe?g|screenshot|scan|scans)\b", blob, re.IGNORECASE):
+    if re.search(
+        r"\b(image|images|photo|photos|png|jpe?g|screenshot|scan|scans)\b", blob, re.IGNORECASE
+    ):
         return "sample.png"
     return "sample.txt"
 
@@ -449,7 +437,10 @@ def copy_skill_pack(
     """Recursive copy of a skill pack root, preserving the relative tree.
 
     Copies SKILL.md plus scripts/, assets/, references/, evals/fixtures/, and
-    any other pack files. Skips VCS/cache dirs. Dest is replaced if present.
+    any other pack files. Skips VCS/cache dirs.
+
+    Write into a temp directory next to dest, then swap. Never empty an
+    existing install first — a failed copy leaves dest intact.
 
     ``skill_pack_hash`` (the recorded pass) includes ``evals/goldens/``. Deploy
     bundle and git publish pass ``include_goldens=True`` so the copied tree
@@ -462,9 +453,11 @@ def copy_skill_pack(
         raise FileNotFoundError(str(src))
     if src == dst:
         raise ValueError("Install source and dest are the same folder.")
-    dst.parent.mkdir(parents=True, exist_ok=True)
-    if dst.exists():
-        shutil.rmtree(dst)
+    parent = dst.parent
+    parent.mkdir(parents=True, exist_ok=True)
+    token = uuid.uuid4().hex[:10]
+    tmp = parent / f".{dst.name}.skillgate-tmp-{token}"
+    old = parent / f".{dst.name}.skillgate-old-{token}"
 
     def ignore_keep(_directory: str, names: list[str]) -> set[str]:
         return {
@@ -473,11 +466,26 @@ def copy_skill_pack(
             if name.lower() in _SKIP_DIR_NAMES or name.lower() in _SKIP_FILE_NAMES
         }
 
-    shutil.copytree(
-        src,
-        dst,
-        ignore=_pack_copy_ignore if not include_goldens else ignore_keep,
-    )
+    ignore = _pack_copy_ignore if not include_goldens else ignore_keep
+    try:
+        if tmp.exists():
+            shutil.rmtree(tmp)
+        shutil.copytree(src, tmp, ignore=ignore)
+        if dst.exists():
+            dst.rename(old)
+            try:
+                tmp.rename(dst)
+            except OSError:
+                if old.exists() and not dst.exists():
+                    old.rename(dst)
+                raise
+            shutil.rmtree(old, ignore_errors=True)
+        else:
+            tmp.rename(dst)
+    except BaseException:
+        if tmp.exists() and tmp.resolve() != dst:
+            shutil.rmtree(tmp, ignore_errors=True)
+        raise
     return {
         "pack_path": str(src),
         "dest_path": str(dst),

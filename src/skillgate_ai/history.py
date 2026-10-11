@@ -3,15 +3,25 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 HISTORY_DIR = "evals/history"
 
 
+def _local_now() -> datetime:
+    return datetime.now().astimezone()
+
+
 def history_dir(pack_root: str | Path) -> Path:
     return Path(pack_root).expanduser().resolve() / HISTORY_DIR
+
+
+def latest_eval(pack_root: str | Path) -> dict[str, Any] | None:
+    """Newest history row, or None when this pack has never been checked."""
+    rows = load_history(pack_root, limit=1)
+    return rows[-1] if rows else None
 
 
 def append_eval(
@@ -25,10 +35,11 @@ def append_eval(
 ) -> Path | None:
     """Append one JSONL row. Returns the file path, or None on EACCES/EROFS."""
     dest_dir = history_dir(pack_root)
-    stamp = datetime.now(timezone.utc).strftime("%Y%m%d")
+    now = _local_now()
+    stamp = now.strftime("%Y%m%d")
     dest = dest_dir / f"{stamp}.jsonl"
     row = {
-        "ts": datetime.now(timezone.utc).isoformat(),
+        "ts": now.isoformat(),
         "run_id": run_id,
         "passed": passed,
         "gate": "green" if passed else "red",

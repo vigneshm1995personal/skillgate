@@ -170,23 +170,16 @@ def test_invalid_timeout_and_temperature() -> None:
         parse_temperature(2.5)
 
 
-def test_ui_rejects_invalid_effort_cli_coerces() -> None:
+def test_ui_and_cli_reject_invalid_effort() -> None:
     cfg = _llm_config()
-    with pytest.raises(EvalConfigError, match="low, medium, high, or ultra"):
-        resolve_eval_config(
-            harness_pref="codex",
-            incoming={"reasoning_effort": "insane"},
-            cfg=cfg,
-            source="ui",
-        )
-    run = resolve_eval_config(
-        harness_pref="codex",
-        incoming={"reasoning_effort": "insane"},
-        cfg=cfg,
-        source="cli",
-        resolved_harness="codex",
-    )
-    assert run.reasoning_effort == "medium"
+    for source in ("ui", "cli"):
+        with pytest.raises(EvalConfigError, match="low, medium, high, or ultra"):
+            resolve_eval_config(
+                harness_pref="codex",
+                incoming={"reasoning_effort": "insane"},
+                cfg=cfg,
+                source=source,
+            )
 
 
 def test_cursor_applies_requested_model() -> None:

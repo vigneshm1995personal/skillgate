@@ -8,7 +8,7 @@ from typing import Any, Literal
 import yaml
 from pydantic import BaseModel, Field, field_validator
 
-from skillgate_ai.errors import SuiteError
+from skillgate_ai.errors import SuiteError, friendly_validation_error
 from skillgate_ai.metrics import CaseBudgets
 
 # Live cursor-agent / Codex tasks routinely need >120s. Env SKILLGATE_TASK_TIMEOUT_SEC still wins.
@@ -94,10 +94,15 @@ def load_suite(path: str | Path) -> tuple[SuiteSpec, Path]:
         raise SuiteError(f"Eval suite not found: {suite_path}")
     try:
         raw = yaml.safe_load(suite_path.read_text(encoding="utf-8")) or {}
-    except yaml.YAMLError as exc:
-        raise SuiteError(f"Eval suite is not valid YAML: {exc}") from exc
+    except yaml.YAMLError:
+        raise SuiteError("Eval suite is not valid YAML.") from None
     if not isinstance(raw, dict):
         raise SuiteError("Eval suite must be a YAML mapping")
+    if "cases" in raw and "tasks" not in raw:
+        raise SuiteError(
+            "That YAML is a case pack, not a suite. Pass the skill folder instead, "
+            "for example: skillgate check <folder>.",
+        )
     from_pack = str(raw.get("from_pack") or "").strip()
     if from_pack:
         skill_dir = _resolve_from_pack(suite_path, from_pack)
@@ -109,7 +114,7 @@ def load_suite(path: str | Path) -> tuple[SuiteSpec, Path]:
     try:
         spec = SuiteSpec.model_validate(raw)
     except Exception as exc:
-        raise SuiteError(f"Eval suite {suite_path.name} is invalid: {exc}") from exc
+        raise SuiteError(friendly_validation_error(exc, kind="Eval suite", raw=raw)) from None
     return spec, suite_path.parent
 
 
@@ -126,9 +131,7 @@ def discover_suites(evals_root: str | Path) -> list[Path]:
     root = Path(evals_root)
     if not root.is_dir():
         return []
-    return sorted(
-        p for p in root.iterdir() if p.suffix in {".yaml", ".yml"} and p.is_file()
-    )
+    return sorted(p for p in root.iterdir() if p.suffix in {".yaml", ".yml"} and p.is_file())
 
 
 def _normalize_suite(raw: dict[str, Any]) -> dict[str, Any]:

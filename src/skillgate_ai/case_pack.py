@@ -16,7 +16,7 @@ from typing import Any, Literal
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from skillgate_ai.errors import SuiteError
+from skillgate_ai.errors import SuiteError, friendly_validation_error
 from skillgate_ai.metrics import CaseBudgets, merge_budgets, parse_budgets
 from skillgate_ai.pack import (
     FIXTURE_DIR,
@@ -136,14 +136,21 @@ def load_case_pack(skill_path: str | Path) -> CasePack | None:
         return None
     try:
         raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-    except yaml.YAMLError as exc:
-        raise SuiteError(f"Case pack is not valid YAML: {exc}") from exc
+    except yaml.YAMLError:
+        raise SuiteError("Case pack is not valid YAML.") from None
     if not isinstance(raw, dict):
         raise SuiteError("Case pack must be a YAML mapping.")
+    schema = raw.get("schema")
+    if schema is not None and schema != 1:
+        raise SuiteError(
+            f"This case pack uses schema {schema}; Skill Gate supports schema 1.",
+            hint="Set `schema: 1` in evals/cases.yaml.",
+            exit_code=2,
+        )
     try:
         pack = CasePack.model_validate(raw)
     except Exception as exc:
-        raise SuiteError(f"Case pack is invalid: {exc}") from exc
+        raise SuiteError(friendly_validation_error(exc, kind="Case pack", raw=raw)) from None
     _validate_pack_on_disk(root, pack)
     return pack
 
@@ -153,7 +160,7 @@ def save_case_pack(skill_path: str | Path, pack: CasePack) -> Path:
     try:
         CasePack.model_validate(pack.model_dump())
     except Exception as exc:
-        raise SuiteError(f"Case pack is invalid: {exc}") from exc
+        raise SuiteError(friendly_validation_error(exc, kind="Case pack")) from None
     _validate_pack_on_disk(root, pack)
     dest = cases_path(root)
     dest.parent.mkdir(parents=True, exist_ok=True)
@@ -184,10 +191,7 @@ def suite_fingerprint(spec: SuiteSpec) -> str:
             "expect_skill": task.expect_skill,
             "files": [{"src": item.src, "dest": item.dest} for item in task.files],
             "contains": [
-                item.contains
-                for scorer in task.scorers
-                for item in scorer.files
-                if item.contains
+                item.contains for scorer in task.scorers for item in scorer.files if item.contains
             ],
         }
         effective = parse_budgets(task.budgets)
@@ -234,9 +238,7 @@ def suite_from_pack(pack: CasePack, skill_rel: str) -> SuiteSpec:
             "id": case.id,
             "prompt": case.prompt,
             "expect_skill": pack.skill if case.should_trigger else None,
-            "files": [
-                {"src": item.src, "dest": item.dest} for item in case.input.files
-            ],
+            "files": [{"src": item.src, "dest": item.dest} for item in case.input.files],
             "scorers": scorers,
         }
         effective = merge_budgets(pack.budgets, case.budgets)
@@ -269,9 +271,7 @@ def checks_from_pack(pack: CasePack, *, include_drafts: bool = False) -> list[di
             "id": case.id,
             "prompt": case.prompt,
             "should_trigger": case.should_trigger,
-            "files": [
-                {"src": item.src, "dest": item.dest} for item in case.input.files
-            ],
+            "files": [{"src": item.src, "dest": item.dest} for item in case.input.files],
             "needs_upload": case.input.needs_upload,
             "output_path": case.golden.output_path if case.golden else None,
             "contains": contains,
@@ -448,9 +448,7 @@ def checks_fingerprint(checks: list[dict[str, Any]], *, skill: str) -> str:
             )
             golden = CaseGolden(output_path=output_path, path=golden_path, kind=kind)
         contains = raw.get("contains")
-        contains_list = (
-            [contains] if isinstance(contains, str) and contains.strip() else []
-        )
+        contains_list = [contains] if isinstance(contains, str) and contains.strip() else []
         if isinstance(contains, list):
             contains_list = [str(item).strip() for item in contains if str(item).strip()]
         cases.append(
@@ -586,8 +584,8 @@ def _validate_pack_on_disk(root: Path, pack: CasePack) -> None:
             src = root / item.src
             if not src.is_file():
                 raise SuiteError(
-                    f"Case {case.id} is missing input file {item.src}.",
-                    hint="Add the fixture under evals/fixtures/ or mark needs_upload.",
+                    f"Couldn't find {item.src} (listed as an input file for {case.id}).",
+                    hint="Add the file under evals/fixtures/, or remove it from input.files.",
                 )
         if case.golden:
             golden = root / case.golden.path
@@ -697,9 +695,7 @@ def _file_content(item: dict[str, Any]) -> str | bytes | None:
     return None
 
 
-def _persist_input_files(
-    root: Path, files: object, *, case_id: str
-) -> list[CaseFileCopy]:
+def _persist_input_files(root: Path, files: object, *, case_id: str) -> list[CaseFileCopy]:
     if not isinstance(files, list):
         return []
     out: list[CaseFileCopy] = []
@@ -716,9 +712,7 @@ def _persist_input_files(
             else:
                 rel = f"{FIXTURE_DIR}/{Path(name).name}"
             written = write_pack_file(root, rel=rel, content=content)
-            out.append(
-                CaseFileCopy(src=written["src"], dest=dest_name or written["dest"])
-            )
+            out.append(CaseFileCopy(src=written["src"], dest=dest_name or written["dest"]))
             continue
         if not src:
             continue
@@ -754,9 +748,7 @@ def _persist_golden(
             suffix = src.suffix or ".txt"
             rel = f"{GOLDEN_DIR}/{case_id}{suffix}"
             write_pack_file(root, rel=rel, content=src.read_bytes())
-            kind: Literal["json", "text", "bytes"] = (
-                "json" if suffix.lower() == ".json" else "text"
-            )
+            kind: Literal["json", "text", "bytes"] = "json" if suffix.lower() == ".json" else "text"
             return CaseGolden(output_path=dest_output, path=rel, kind=kind)
         rel = golden_path.replace("\\", "/").lstrip("/")
         if not rel.startswith(f"{GOLDEN_DIR}/"):

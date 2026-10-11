@@ -275,10 +275,6 @@ def run_eval(
     passed = all(t.passed for t in reports)
     primary_skill = skills[0] if skills else None
     suite_advice = advise_suite(primary_skill, reports, reference=reference) if primary_skill else None
-    if suite_advice:
-        for task_report in reports:
-            if task_report.advice and task_report.advice.target == "description":
-                task_report.advice = suite_advice
     set_eval_passed(passed)
     report = SuiteReport(
         suite=spec.suite,
@@ -526,8 +522,8 @@ def _run_task(
                 )
                 if src is None or not src.is_file():
                     raise SuiteError(
-                        f"Task {task.id}: fixture not found: {item.src}",
-                        hint="Put the file in the skill folder (evals/fixtures/) or attach it as check input.",
+                        f"Couldn't find {item.src} (listed as an input file for {task.id}).",
+                        hint="Add the file under evals/fixtures/, or remove it from this check.",
                     )
                 copies.append((src, item.dest))
             staged = skills if task.expect_skill is not None else []

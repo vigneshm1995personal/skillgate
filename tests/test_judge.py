@@ -32,7 +32,9 @@ def _cfg(**overrides: object) -> LLMConfig:
 
 
 def test_skip_judge_does_not_pass_or_fail() -> None:
-    judged = SkipJudge().judge("extract hello.pdf", [{"path": "out.txt", "present": True}], "selected: pdf")
+    judged = SkipJudge().judge(
+        "extract hello.pdf", [{"path": "out.txt", "present": True}], "selected: pdf"
+    )
     assert judged["status"] == "skip"
     assert judged["passed"] is None
     assert judged["cells"] == []
@@ -105,7 +107,7 @@ def test_live_verdict_skip_keeps_det() -> None:
 
 def test_live_verdict_error_fails_closed() -> None:
     passed, failures, stamped = _live_verdict(
-        {"status": "error", "passed": False, "reasons": ["OpenAI did not accept this API key. Check OPENAI_API_KEY."]},
+        {"status": "error", "passed": False, "reasons": ["OpenAI did not accept this API key."]},
         "pdf",
         det_passed=True,
         det_failures=[],

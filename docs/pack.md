@@ -57,4 +57,4 @@ Paths in `files[].src` and `golden.path` are **relative to the skill folder**.
 
 ## Demo harness
 
-With no BYOLLM key, `check` uses the demo harness: tokenize name+description, then run `scripts/agent_entry.py` in a tempdir sandbox. Same scorers as a live run.
+With no model key, `check` uses the built-in checker: tokenize name+description, then run `scripts/agent_entry.py` in a tempdir sandbox. Same scorers as a live run.

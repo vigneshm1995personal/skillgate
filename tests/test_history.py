@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from skillgate_ai.history import append_eval, load_history
@@ -21,6 +22,19 @@ def test_append_and_load(tmp_path: Path) -> None:
     assert rows[0]["run_id"] == "abc123"
     assert rows[0]["passed"] is True
     assert rows[0]["gate"] == "green"
+
+
+def test_history_filename_uses_local_date(tmp_path: Path, monkeypatch) -> None:
+    pack = tmp_path / "skill"
+    (pack / "evals" / "history").mkdir(parents=True)
+    local = datetime(2026, 10, 10, 21, 0, tzinfo=timezone(timedelta(hours=-4)))
+
+    monkeypatch.setattr("skillgate_ai.history._local_now", lambda: local)
+    dest = append_eval(pack, run_id="local-date", passed=True)
+    assert dest is not None
+    assert dest.name == "20261010.jsonl"
+    rows = load_history(pack)
+    assert rows[0]["ts"].startswith("2026-10-10T21:00:00")
 
 
 def test_skip_on_unwritable(tmp_path: Path, monkeypatch) -> None:

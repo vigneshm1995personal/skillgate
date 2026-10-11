@@ -65,7 +65,9 @@ class FakePost:
         self._responses = list(responses)
 
     def __call__(self, url: str, **kwargs: object) -> FakeResponse:
-        self.calls.append({"url": url, "headers": kwargs.get("headers"), "json": kwargs.get("json")})
+        self.calls.append(
+            {"url": url, "headers": kwargs.get("headers"), "json": kwargs.get("json")}
+        )
         if not self._responses:
             raise AssertionError(f"unexpected HTTP call: {url}")
         item = self._responses.pop(0)
@@ -273,7 +275,7 @@ def test_missing_answer_name_fails_closed() -> None:
 
 def test_http_errors_fail_and_never_log_key(caplog: pytest.LogCaptureFixture) -> None:
     cases = {
-        401: "OpenAI did not accept this API key. Check OPENAI_API_KEY.",
+        401: "OpenAI did not accept this API key.",
         403: "OpenAI scoring is not enabled for this key.",
         404: "OpenAI has no scoring endpoint for this key.",
         400: "OpenAI rejected this scoring request.",
@@ -315,7 +317,7 @@ def test_http_errors_fail_and_never_log_key(caplog: pytest.LogCaptureFixture) ->
 
 
 def test_redact_secrets_masks_full_and_partial_keys() -> None:
-    leaked = 'Incorrect API key provided: sk-inval***test. Also ' + SECRET
+    leaked = "Incorrect API key provided: sk-inval***test. Also " + SECRET
     cleaned = redact_secrets(leaked, SECRET)
     assert SECRET not in cleaned
     assert "sk-inval" not in cleaned
@@ -589,9 +591,7 @@ def test_why_call_redacts_key_shaped_text() -> None:
             FakeResponse(200, decisions_payload({"correctness": "Incorrect"})),
             FakeResponse(
                 200,
-                why_payload(
-                    f"The scorer echoed {SECRET} and sk-otherleak123 in the explanation."
-                ),
+                why_payload(f"The scorer echoed {SECRET} and sk-otherleak123 in the explanation."),
             ),
         ]
     )
@@ -659,7 +659,7 @@ def test_http_error_with_missing_output_names_both() -> None:
     assert passed is False
     assert judged["passed"] is False
     assert REASON_MISSING_OUTPUT in failures
-    assert "OpenAI did not accept this API key. Check OPENAI_API_KEY." in failures
+    assert "OpenAI did not accept this API key." in failures
     assert judged["why"] is None
     assert len(post.calls) == 1
 
@@ -773,9 +773,7 @@ def test_path_asked_when_recorded() -> None:
 
 
 def test_unrecorded_path_ignores_invented_rating() -> None:
-    post = FakePost(
-        [FakeResponse(200, decisions_payload({"path_efficiency": "Efficient"}))]
-    )
+    post = FakePost([FakeResponse(200, decisions_payload({"path_efficiency": "Efficient"}))])
     judged = _score(_judge(post), path={"steps": 0, "had_path": False})
     assert judged["passed"] is True
     assert judged["soft_answers"] == {}

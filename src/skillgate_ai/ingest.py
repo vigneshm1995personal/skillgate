@@ -67,8 +67,8 @@ def ingest_skill(path: str | Path) -> Skill:
     body = text[match.end() :]
     try:
         parsed = yaml.safe_load(raw_fm) or {}
-    except yaml.YAMLError as exc:
-        raise IngestError(f"{folder.name}/SKILL.md frontmatter is not valid YAML: {exc}") from exc
+    except yaml.YAMLError:
+        raise IngestError(f"{folder.name}/SKILL.md frontmatter is not valid YAML.") from None
     if not isinstance(parsed, dict):
         raise IngestError(f"{folder.name}/SKILL.md frontmatter must be a mapping of fields")
 

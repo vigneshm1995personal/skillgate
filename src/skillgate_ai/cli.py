@@ -15,13 +15,15 @@ from skillgate_ai.config import load_env
 from skillgate_ai.errors import SkillGateError
 from skillgate_ai.gate import run_check
 from skillgate_ai.ingest import ingest_skill
-from skillgate_ai.paths import is_skill_pack, project_root
+from skillgate_ai.paths import is_skill_pack, project_root, resolve_user_path
 from skillgate_ai.report import format_cli, format_github, report_to_dict
 from skillgate_ai.suite import discover_suites
 
 app = typer.Typer(
     add_completion=False,
     no_args_is_help=True,
+    pretty_exceptions_enable=False,
+    pretty_exceptions_show_locals=False,
     help="Skill Gate — evaluate agent skills. Pack on disk + `skillgate check` (exit 0/1).",
 )
 console = Console(stderr=False)
@@ -59,7 +61,7 @@ def ingest(
         loaded = ingest_skill(skill)
     except SkillGateError as exc:
         console.print(exc.render())
-        raise typer.Exit(exc.exit_code) from exc
+        raise typer.Exit(exc.exit_code) from None
     console.print(f"OK  {loaded.name}")
     console.print(loaded.description)
 
@@ -161,7 +163,7 @@ def check_pack(
     json_out: bool = typer.Option(False, "--json", help="Machine JSON (not the primary UX)"),
     model: str | None = typer.Option(None, "--model", help="Requested model id"),
     timeout: int | None = typer.Option(None, "--timeout", help="Per-task timeout seconds"),
-    temperature: float | None = typer.Option(None, "--temperature", help="BYOLLM temperature (0–2)"),
+    temperature: float | None = typer.Option(None, "--temperature", help="Temperature (0–2)"),
     reasoning_effort: str | None = typer.Option(
         None, "--reasoning-effort", help="Codex reasoning: low | medium | high | ultra"
     ),
@@ -205,7 +207,7 @@ def run_suite(
     json_out: bool = typer.Option(False, "--json", help="Machine JSON (not the primary UX)"),
     model: str | None = typer.Option(None, "--model", help="Requested model id"),
     timeout: int | None = typer.Option(None, "--timeout", help="Per-task timeout seconds"),
-    temperature: float | None = typer.Option(None, "--temperature", help="BYOLLM temperature (0–2)"),
+    temperature: float | None = typer.Option(None, "--temperature", help="Temperature (0–2)"),
     reasoning_effort: str | None = typer.Option(
         None, "--reasoning-effort", help="Codex reasoning: low | medium | high | ultra"
     ),
@@ -232,16 +234,50 @@ def run_suite(
 def deploy(
     pack: Path = typer.Argument(..., help="Gated skill pack to copy"),
     target: str = typer.Option("cursor", "--target", help="cursor | claude | codex"),
+    force: bool = typer.Option(
+        False,
+        "--force",
+        help="Install even if the latest check did not pass. The skill may still be broken.",
+    ),
 ) -> None:
-    """Copy a skill pack into a local agent skills directory."""
-    from skillgate_ai.deploy import get_adapter
+    """Copy a skill pack into a local agent skills directory.
 
+    Refuses to install unless the latest `skillgate check` on this pack passed.
+    If this pack has never been checked, deploy runs the check first.
+    Pass --force to install anyway.
+    """
+    from skillgate_ai.deploy import get_adapter, latest_check_passed, refuse_ungated_install
+
+    root = _boot()
+    path = resolve_user_path(pack, root)
     try:
-        loaded = ingest_skill(pack)
-        result = get_adapter(target).install(skill=loaded, source=Path(pack))
+        loaded = ingest_skill(path)
+        if not force:
+            latest = latest_check_passed(path)
+            if latest is False:
+                raise refuse_ungated_install(path, loaded.name)
+            if latest is not True:
+                checked = run_check(path, source="cli", root=root)
+                if checked.demo_notice:
+                    console.print(f"[dim]{checked.demo_notice}[/dim]\n")
+                if checked.error:
+                    console.print(checked.error["message"])
+                    hint = checked.error.get("hint")
+                    if hint:
+                        console.print(hint)
+                    console.print(f"Not installing `{loaded.name}` because the check did not pass.")
+                    console.print("Fix the skill, or pass --force to install anyway.")
+                    raise typer.Exit(checked.exit_code)
+                if checked.report is not None:
+                    console.print(format_cli(checked.report))
+                if checked.exit_code != 0 or checked.report is None or not checked.report.passed:
+                    console.print(f"Not installing `{loaded.name}` because the check did not pass.")
+                    console.print("Fix the skill, or pass --force to install anyway.")
+                    raise typer.Exit(1 if checked.exit_code == 0 else checked.exit_code)
+        result = get_adapter(target).install(skill=loaded, source=path)
     except SkillGateError as exc:
         console.print(exc.render())
-        raise typer.Exit(exc.exit_code) from exc
+        raise typer.Exit(exc.exit_code) from None
     console.print(result["message"])
 
 

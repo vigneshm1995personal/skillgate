@@ -183,11 +183,10 @@ def resolve_eval_config(
     resolved_harness: str = "",
 ) -> EvalRunConfig:
     payload = incoming or {}
-    strict = source == "ui"
     model = parse_model(payload.get("model"))
     timeout_sec = parse_timeout_sec(payload.get("timeout_sec"))
     temperature = parse_temperature(payload.get("temperature"), default=cfg.temperature)
-    effort = parse_reasoning_effort(payload.get("reasoning_effort"), strict=strict)
+    effort = parse_reasoning_effort(payload.get("reasoning_effort"), strict=True)
     run = EvalRunConfig(
         harness=resolved_harness,
         harness_pref=(harness_pref or "auto").strip().lower() or "auto",
@@ -314,9 +313,7 @@ def diff_eval_config(
     entries: list[dict[str, Any]] = []
     for name in DIFF_FIELDS:
         if current_view[name] != previous_view[name]:
-            entries.append(
-                {"field": name, "from": previous_view[name], "to": current_view[name]}
-            )
+            entries.append({"field": name, "from": previous_view[name], "to": current_view[name]})
     return entries
 
 
