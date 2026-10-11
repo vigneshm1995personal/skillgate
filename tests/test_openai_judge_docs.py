@@ -4,6 +4,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 DOCS = ROOT / "docs" / "openai-judge.md"
+PLAN = ROOT / "docs" / "plans" / "openai-judge.md"
 
 
 def test_openai_judge_docs_are_plain() -> None:
@@ -18,3 +19,17 @@ def test_openai_judge_docs_are_plain() -> None:
     assert "page counts" in lower or "contain this text" in lower
     assert "tasks[].judge.backend" not in text
     assert "task_completion.choice" not in text
+    assert "built-in checker" not in lower
+    assert "--harness demo" not in lower
+    assert "fixture checks decide pass/fail" not in lower
+    assert "otherwise fixture checks" not in lower
+    assert "fixture checks decide the result" not in lower
+
+
+def test_openai_judge_plan_drops_builtin_checker_and_demo_harness() -> None:
+    text = PLAN.read_text(encoding="utf-8")
+    lower = text.lower()
+    assert "built-in checker" not in lower
+    assert "this is not a live model" not in lower
+    assert "--harness demo" not in lower
+    assert "demo harness" not in lower

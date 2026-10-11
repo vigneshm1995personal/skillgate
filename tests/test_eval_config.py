@@ -12,6 +12,7 @@ from skillgate_ai.eval_config import (
     config_fingerprint,
     config_label,
     diff_eval_config,
+    harness_display_name,
     parse_temperature,
     parse_timeout_sec,
     resolve_eval_config,
@@ -235,10 +236,66 @@ def test_roundtrip_dict() -> None:
 def test_config_label_includes_harness_and_timeout() -> None:
     run = EvalRunConfig(harness="codex", model="gpt-test", timeout_effective=300, reasoning_effort="medium")
     label = config_label(run)
-    assert "codex" in label
+    assert "Codex" in label
     assert "gpt-test" in label
     assert "300s" in label
     assert "medium" in label
+
+
+def test_config_label_does_not_say_demo() -> None:
+    label = config_label(EvalRunConfig(harness="llm", timeout_effective=12))
+    assert "LLM" in label
+    assert "demo" not in label.lower()
+    assert "Built-in checker" not in label
+
+
+def test_harness_display_name_does_not_alias_demo_to_auto() -> None:
+    assert harness_display_name("demo") != "Auto"
+    assert "demo" not in harness_display_name("llm").lower()
+
+
+def test_auto_without_a_key_does_not_claim_cursor() -> None:
+    from skillgate_ai.harness import auto_live_harness_name
+
+    cfg = _llm_config()
+    assert auto_live_harness_name(cfg) == "auto"
+    assert harness_display_name("auto") == "Auto"
+    assert "Cursor" not in harness_display_name("auto")
+    assert harness_display_name("auto", "llm") == "Auto · LLM"
+
+
+def test_attach_stamped_config_replaces_auto_request() -> None:
+    from skillgate_ai.api_runs import attach_stamped_config
+
+    record = {"config": {"harness": "auto", "harness_pref": "auto", "model": "openai/gpt-4o-mini"}}
+    attach_stamped_config(
+        record,
+        {
+            "config": {
+                "harness": "llm",
+                "model": "openai/gpt-4o-mini",
+                "applied": {"via_gateway": True},
+                "label": "LLM · openai/gpt-4o-mini via gateway",
+            }
+        },
+    )
+    assert record["config"]["harness"] == "llm"
+    assert "via gateway" in str(record["config"].get("label") or "")
+    assert "Auto · Cursor" not in str(record["config"].get("label") or "")
+
+
+def test_config_label_shows_llm_model_via_gateway() -> None:
+    cfg = _llm_config(gateway_api_key="gw-test")
+    run = stamp_resolved(
+        resolve_eval_config(harness_pref="auto", incoming={}, cfg=cfg, source="ui"),
+        "llm",
+        cfg,
+    )
+    label = config_label(run)
+    assert "Auto · Cursor" not in label
+    assert label.startswith("LLM")
+    assert "openai/gpt-4o-mini" in label
+    assert "via gateway" in label
 
 
 def test_fingerprint_changes_on_judge_backend() -> None:

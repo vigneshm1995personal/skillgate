@@ -101,7 +101,7 @@ def count_path_steps(
     """Return ``(steps, errors, had_path)``.
 
     Steps count ``skill.select`` and ``tool.*`` spans (not ``eval.check``).
-    When none of those exist, fall back to ``$ `` / ``changed `` lines.
+    When none of those exist, fall back to ``$ `` / ``changed `` / ``ran … exit=`` lines.
     """
     records = list(spans) if spans else []
     text = transcript or ""
@@ -304,6 +304,8 @@ def _command_line_count(transcript: str) -> int:
     for line in transcript.replace("\r\n", "\n").split("\n"):
         text = line.strip()
         if text.startswith("$ ") or _CHANGED_LINE.match(text):
+            count += 1
+        elif text.lower().startswith("ran ") and "exit=" in text:
             count += 1
     return count
 

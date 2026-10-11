@@ -1,8 +1,43 @@
 from __future__ import annotations
 
-from pathlib import Path
+import fnmatch
+from pathlib import Path, PurePosixPath
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def _dockerignore_patterns() -> list[str]:
+    lines: list[str] = []
+    for raw in (ROOT / ".dockerignore").read_text(encoding="utf-8").splitlines():
+        stripped = raw.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        lines.append(stripped)
+    return lines
+
+
+def _dockerignored(rel: str, patterns: list[str] | None = None) -> bool:
+    """Last matching dockerignore rule wins (Go filepath.Match-ish)."""
+    path = rel.strip("/")
+    ignored = False
+    name = PurePosixPath(path).name
+    for pat in patterns or _dockerignore_patterns():
+        negate = pat.startswith("!")
+        raw = pat[1:] if negate else pat
+        directory = raw.endswith("/")
+        raw = raw.rstrip("/")
+        matched = (
+            fnmatch.fnmatch(path, raw)
+            or fnmatch.fnmatch(path, raw + "/*")
+            or fnmatch.fnmatch(name, raw)
+            or path == raw
+            or path.startswith(raw + "/")
+        )
+        if directory and (path == raw or path.startswith(raw + "/")):
+            matched = True
+        if matched:
+            ignored = not negate
+    return ignored
 
 
 def test_dockerfile_is_cli_not_serve() -> None:
@@ -20,6 +55,8 @@ def test_dockerfile_is_cli_not_serve() -> None:
         assert f"ENV {needle}" not in text
     assert "COPY .env" not in text
     assert "COPY .pypirc" not in text
+    assert "COPY web" not in text
+    assert "pnpm" not in text.lower()
 
 
 def test_compose_and_dockerignore_exist() -> None:
@@ -36,4 +73,22 @@ def test_compose_has_no_ui_ports() -> None:
     assert "check /pack" in text
     assert "8477" not in text
     assert "8765" not in text
+
+
+def test_dockerignore_allows_packaged_example_skills() -> None:
+    dockerfile = (ROOT / "Dockerfile").read_text(encoding="utf-8")
+    assert "COPY skills" in dockerfile
+    assert not _dockerignored("skills/pdf/SKILL.md")
+    assert not _dockerignored("skills/pdf/evals/cases.yaml")
+    assert not _dockerignored("skills/pdf-sabotaged/SKILL.md")
+    assert not _dockerignored("skills")
+
+
+def test_gate_workflow_example_dest_matches_skill_name() -> None:
+    text = (ROOT / ".github" / "workflows" / "gate.yml").read_text(encoding="utf-8")
+    assert "/tmp/example-pdf" not in text
+    assert "skillgate example pdf --dest /tmp/pdf" in text
+    assert "skillgate ingest /tmp/pdf" in text
+    assert "SKILLGATE_OPENAI_API_KEY" in text
+    assert "--key-env" in text
 

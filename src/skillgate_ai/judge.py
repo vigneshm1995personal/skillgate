@@ -55,8 +55,8 @@ class SkipJudge:
             "cells": [],
             "provider": "skip",
             "backend": "skip",
-            "display_name": "Built-in checker",
-            "reason": "Built-in checker owns this check.",
+            "display_name": "Checks",
+            "reason": "Checks scored this run.",
         }
 
     def explain_fail(
@@ -80,8 +80,12 @@ def default_judge() -> SkipJudge:
 def missing_openai_judge_key() -> MissingLLMKeyError:
     return MissingLLMKeyError(
         "No OpenAI API key found. Scoring with OpenAI needs your key.",
-        hint="Add OPENAI_API_KEY in .env, or skip scoring and use the built-in checker.",
+        hint="Add an OpenAI key in Settings (`skillgate keys set`), or set SKILLGATE_JUDGE=skip.",
     )
+
+
+def _judge_api_key(cfg: LLMConfig) -> str:
+    return (cfg.openai_api_key or cfg.gateway_api_key or "").strip()
 
 
 def resolve_judge(cfg: LLMConfig, *, harness_name: str) -> Judge:
@@ -89,27 +93,51 @@ def resolve_judge(cfg: LLMConfig, *, harness_name: str) -> Judge:
     pref = (cfg.judge_pref or "auto").strip().lower() or "auto"
     if pref == "skip" or not is_live_harness(harness_name):
         return SkipJudge()
+    key = _judge_api_key(cfg)
     if pref == "openai":
-        if not cfg.openai_api_key:
+        if not key:
             raise missing_openai_judge_key()
         return _openai_judge(cfg)
-    if cfg.openai_api_key:
+    if key:
         return _openai_judge(cfg)
     return SkipJudge()
 
 
 def _openai_judge(cfg: LLMConfig) -> Judge:
-    from skillgate_ai.judge_openai import DEFAULT_BASE_URL, make_openai_judge
+    from skillgate_ai.config import DEFAULT_JUDGE_MODEL
+    from skillgate_ai.judge_openai import (
+        DEFAULT_BASE_URL,
+        DISPLAY_NAME,
+        GATEWAY_DECISIONS_MODEL,
+        GATEWAY_DISPLAY_NAME,
+        make_openai_judge,
+    )
 
+    api_key = (cfg.openai_api_key or "").strip()
+    backend = cfg.judge_backend
+    model = cfg.judge_model
+    base_url = DEFAULT_BASE_URL
+    display_name = DISPLAY_NAME
+    if not api_key:
+        api_key = (cfg.gateway_api_key or "").strip()
+        base_url = (cfg.gateway_base_url or "").rstrip("/") or DEFAULT_BASE_URL
+        display_name = GATEWAY_DISPLAY_NAME
+        backend_name = (backend or "decisions").strip().lower()
+        if backend_name not in {"structured", "responses"} and (model or "").strip() in {
+            "",
+            DEFAULT_JUDGE_MODEL,
+        }:
+            model = GATEWAY_DECISIONS_MODEL
     return make_openai_judge(
-        api_key=cfg.openai_api_key or "",
-        backend=cfg.judge_backend,
-        model=cfg.judge_model,
+        api_key=api_key,
+        backend=backend,
+        model=model,
         min_confidence=cfg.judge_min_confidence,
         why_enabled=cfg.judge_why,
         reasoning_effort=cfg.judge_reasoning_effort,
         timeout_sec=cfg.judge_timeout_sec,
-        base_url=DEFAULT_BASE_URL,
+        base_url=base_url,
+        display_name=display_name,
     )
 
 
@@ -118,7 +146,7 @@ def judge_stamp(judge: Judge | None) -> dict[str, str]:
         return {
             "provider": "skip",
             "backend": "skip",
-            "display_name": "Built-in checker",
+            "display_name": "Checks",
         }
     from skillgate_ai.judge_openai import DISPLAY_NAME, OutcomeJudge
 
@@ -126,7 +154,7 @@ def judge_stamp(judge: Judge | None) -> dict[str, str]:
         return {
             "provider": "openai",
             "backend": judge.backend.name,
-            "display_name": DISPLAY_NAME,
+            "display_name": getattr(judge, "display_name", None) or DISPLAY_NAME,
             "model": str(getattr(judge.backend, "model", "") or judge.model or ""),
         }
     backend_obj = getattr(judge, "backend", None)
@@ -135,6 +163,6 @@ def judge_stamp(judge: Judge | None) -> dict[str, str]:
     return {
         "provider": "openai",
         "backend": str(backend),
-        "display_name": DISPLAY_NAME,
+        "display_name": str(getattr(judge, "display_name", None) or DISPLAY_NAME),
         "model": str(model),
     }

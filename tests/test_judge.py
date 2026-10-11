@@ -38,7 +38,7 @@ def test_skip_judge_does_not_pass_or_fail() -> None:
     assert judged["status"] == "skip"
     assert judged["passed"] is None
     assert judged["cells"] == []
-    assert judged["display_name"] == "Built-in checker"
+    assert judged["display_name"] == "Checks"
 
 
 def test_resolve_judge_auto_skips_without_key() -> None:
@@ -72,9 +72,50 @@ def test_resolve_judge_openai_without_key() -> None:
     assert "OpenAI API key" in caught.value.message
 
 
-def test_gateway_key_is_not_an_openai_judge_key() -> None:
-    judge = resolve_judge(_cfg(gateway_api_key="gw-test"), harness_name="llm")
-    assert isinstance(judge, SkipJudge)
+def test_resolve_judge_openai_pref_uses_gateway_decisions() -> None:
+    judge = resolve_judge(
+        _cfg(
+            gateway_api_key="gw-test",
+            judge_pref="openai",
+            gateway_base_url="https://ai-gateway.vercel.sh/v1",
+        ),
+        harness_name="llm",
+    )
+    assert isinstance(judge, OutcomeJudge)
+    assert judge.backend.name == "decisions"
+    assert judge.backend.model == "openai/gpt-6-luna-decisions"
+
+
+def test_gateway_key_uses_openai_decisions_via_gateway() -> None:
+    judge = resolve_judge(
+        _cfg(
+            gateway_api_key="gw-test",
+            gateway_base_url="https://ai-gateway.vercel.sh/v1",
+        ),
+        harness_name="llm",
+    )
+    assert isinstance(judge, OutcomeJudge)
+    assert judge.backend.name == "decisions"
+    assert judge.backend.api_key == "gw-test"
+    assert judge.backend.base_url == "https://ai-gateway.vercel.sh/v1"
+    assert "api.openai.com" not in judge.backend.base_url
+    assert judge.backend.model == "openai/gpt-6-luna-decisions"
+
+
+def test_openai_key_keeps_judge_on_openai_decisions() -> None:
+    judge = resolve_judge(
+        _cfg(
+            openai_api_key="sk-test",
+            gateway_api_key="gw-test",
+            gateway_base_url="https://ai-gateway.vercel.sh/v1",
+        ),
+        harness_name="llm",
+    )
+    assert isinstance(judge, OutcomeJudge)
+    assert judge.backend.name == "decisions"
+    assert judge.backend.api_key == "sk-test"
+    assert judge.backend.base_url.endswith("api.openai.com/v1")
+    assert judge.backend.model == "gpt-6-luna"
 
 
 def test_judge_stamp_has_no_secret() -> None:
@@ -85,6 +126,23 @@ def test_judge_stamp_has_no_secret() -> None:
     assert stamp["backend"] == "decisions"
     assert stamp["display_name"] == "OpenAI (your key)"
     assert stamp["model"] == "gpt-6-luna"
+
+
+def test_gateway_judge_stamp_names_decisions_via_gateway() -> None:
+    stamp = judge_stamp(
+        resolve_judge(
+            _cfg(
+                gateway_api_key="gw-test",
+                gateway_base_url="https://ai-gateway.vercel.sh/v1",
+            ),
+            harness_name="llm",
+        )
+    )
+    assert stamp["provider"] == "openai"
+    assert stamp["backend"] == "decisions"
+    assert stamp["display_name"] == "OpenAI Decisions via Vercel AI Gateway (your key)"
+    assert stamp["model"] == "openai/gpt-6-luna-decisions"
+    assert "gw-test" not in str(stamp)
 
 
 def test_judge_stamp_uses_decisions_backend_model() -> None:

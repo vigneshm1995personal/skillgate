@@ -1,4 +1,4 @@
-"""Append-only pack-local eval history under ``<pack>/evals/history/``."""
+"""Append-only pack-local eval history and deploy log."""
 
 from __future__ import annotations
 
@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 HISTORY_DIR = "evals/history"
+DEPLOY_REL = "evals/deploys.jsonl"
 
 
 def _local_now() -> datetime:
@@ -16,6 +17,38 @@ def _local_now() -> datetime:
 
 def history_dir(pack_root: str | Path) -> Path:
     return Path(pack_root).expanduser().resolve() / HISTORY_DIR
+
+
+def _append_jsonl(dest: Path, row: dict[str, Any]) -> Path | None:
+    payload = json.dumps(row, ensure_ascii=True) + "\n"
+    try:
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        with dest.open("a", encoding="utf-8") as handle:
+            handle.write(payload)
+    except OSError:
+        return None
+    return dest
+
+
+def _read_jsonl(path: Path) -> list[dict[str, Any]]:
+    if not path.is_file():
+        return []
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError:
+        return []
+    rows: list[dict[str, Any]] = []
+    for line in text.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            item = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(item, dict):
+            rows.append(item)
+    return rows
 
 
 def latest_eval(pack_root: str | Path) -> dict[str, Any] | None:
@@ -34,27 +67,22 @@ def append_eval(
     config: dict[str, Any] | None = None,
 ) -> Path | None:
     """Append one JSONL row. Returns the file path, or None on EACCES/EROFS."""
-    dest_dir = history_dir(pack_root)
     now = _local_now()
-    stamp = now.strftime("%Y%m%d")
-    dest = dest_dir / f"{stamp}.jsonl"
-    row = {
-        "ts": now.isoformat(),
-        "run_id": run_id,
-        "passed": passed,
-        "gate": "green" if passed else "red",
-        "report": report,
-        "error": error,
-        "config": config,
-    }
-    payload = json.dumps(row, ensure_ascii=True) + "\n"
-    try:
-        dest_dir.mkdir(parents=True, exist_ok=True)
-        with dest.open("a", encoding="utf-8") as handle:
-            handle.write(payload)
-    except OSError:
-        return None
-    return dest
+    dest = history_dir(pack_root) / f"{now.strftime('%Y%m%d')}.jsonl"
+    return _append_jsonl(
+        dest,
+        {
+            "ts": now.isoformat(),
+            "kind": "run",
+            "run_id": run_id,
+            "passed": passed,
+            "gate": "green" if passed else "red",
+            "report": report,
+            "error": error,
+            "config": config,
+            "tryout": bool((report or {}).get("tryout")),
+        },
+    )
 
 
 def _row_ts(item: dict[str, Any]) -> datetime:
@@ -72,26 +100,46 @@ def _row_ts(item: dict[str, Any]) -> datetime:
 
 
 def load_history(pack_root: str | Path, *, limit: int = 50) -> list[dict[str, Any]]:
-    """Newest-last rows by ``ts``. Missing dir → empty list."""
+    """Newest-last eval rows by ``ts``. Missing dir → empty list. Never reads the deploy log."""
     dest_dir = history_dir(pack_root)
     if not dest_dir.is_dir():
         return []
     rows: list[dict[str, Any]] = []
     for path in dest_dir.glob("*.jsonl"):
-        try:
-            text = path.read_text(encoding="utf-8")
-        except OSError:
-            continue
-        for line in text.splitlines():
-            line = line.strip()
-            if not line:
+        for item in _read_jsonl(path):
+            if item.get("kind") == "deploy" or not item.get("run_id"):
                 continue
-            try:
-                item = json.loads(line)
-            except json.JSONDecodeError:
-                continue
-            if isinstance(item, dict):
-                rows.append(item)
+            rows.append(item)
+    rows.sort(key=_row_ts)
+    if limit > 0:
+        return rows[-limit:]
+    return rows
+
+
+def append_deploy(
+    pack_root: str | Path,
+    *,
+    target: str,
+    status: str,
+    file_count: int | None = None,
+    mode: str = "local",
+) -> Path | None:
+    dest = Path(pack_root).expanduser().resolve() / DEPLOY_REL
+    return _append_jsonl(
+        dest,
+        {
+            "ts": _local_now().isoformat(),
+            "kind": "deploy",
+            "target": (target or "").strip().lower(),
+            "status": status,
+            "file_count": file_count,
+            "mode": mode,
+        },
+    )
+
+
+def load_deploys(pack_root: str | Path, *, limit: int = 50) -> list[dict[str, Any]]:
+    rows = _read_jsonl(Path(pack_root).expanduser().resolve() / DEPLOY_REL)
     rows.sort(key=_row_ts)
     if limit > 0:
         return rows[-limit:]

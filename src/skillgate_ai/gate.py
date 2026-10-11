@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from skillgate_ai.config import get_llm_config, load_env
+from skillgate_ai.demo_files import ensure_demo_pdfs
 from skillgate_ai.engine import EvalProgress, SuiteReport, run_eval
 from skillgate_ai.errors import MissingLLMKeyError, SkillGateError
 from skillgate_ai.eval_config import (
@@ -24,7 +25,7 @@ from skillgate_ai.eval_config import (
     with_judge,
     with_timeout_effective,
 )
-from skillgate_ai.harness import DemoHarness, live_harness_or_error, resolve_harness
+from skillgate_ai.harness import live_harness_or_error
 from skillgate_ai.judge import judge_stamp, resolve_judge
 from skillgate_ai.history import append_eval
 from skillgate_ai.live import RunControl
@@ -37,9 +38,6 @@ from skillgate_ai.observability import (
 from skillgate_ai.paths import is_skill_pack, project_root, resolve_user_path
 from skillgate_ai.report import report_to_dict
 
-DEMO_NOTICE = "Using the built-in checker. This is not a live model."
-
-
 @dataclass
 class CheckResult:
     report: SuiteReport | None
@@ -48,6 +46,11 @@ class CheckResult:
     error: dict[str, str | None] | None = None
     expect_fail_notice: str | None = None
     run_id: str = ""
+
+
+def prepare_pack_fixtures(pack: Path) -> None:
+    if (pack / "SKILL.md").is_file():
+        ensure_demo_pdfs(pack / "evals" / "fixtures")
 
 
 def persist_eval(
@@ -80,12 +83,15 @@ def resolve_pack_and_spec(target: Path, root: Path):
     if path.is_dir() and (path / "SKILL.md").is_file():
         return expand_from_pack(path), path, path
     if path.is_file() and path.suffix.lower() in {".yaml", ".yml"}:
-        return None, None, None
+        from skillgate_ai.suite import load_suite
+
+        spec, _ = load_suite(path)
+        return spec, None, None
     if is_skill_pack(path):
         return expand_from_pack(path), path, path
     raise SkillGateError(
         f"Not a skill pack or suite: {target}",
-        hint="Pass a folder with SKILL.md + evals/cases.yaml, or a suite YAML.",
+        hint="Pass a skill folder with SKILL.md, or a suite YAML.",
     )
 
 
@@ -96,7 +102,7 @@ def run_check(
     harness: str = "auto",
     sandbox: str = "local",
     demo: bool = False,
-    live: bool = False,
+    live: bool = True,
     expect_fail: bool = False,
     model: str | None = None,
     timeout: int | None = None,
@@ -107,35 +113,47 @@ def run_check(
     run_id: str | None = None,
     source: str = "cli",
     root: Path | None = None,
+    checks: list[dict[str, Any]] | None = None,
+    tryout: bool = False,
 ) -> CheckResult:
     """Run pack-local evals. Exit 0 green, 1 red, 2 live-without-key."""
     project = root if root is not None else project_root()
     load_env(project)
-    cfg = get_llm_config()
+    cfg = get_llm_config(project)
     sandbox_kind = sandbox or cfg.sandbox_pref
     spec = None
     suite_path = resolve_user_path(target, project)
     pack_root: Path | None = None
     skill_path = skill
     try:
-        spec, skill_from_pack, pack_root = resolve_pack_and_spec(target, project)
-        if skill_from_pack is not None:
-            skill_path = skill or skill_from_pack
-    except SkillGateError as exc:
-        if suite_path.is_file():
-            spec = None
-            pack_root = None
+        if suite_path.is_dir() and (suite_path / "SKILL.md").is_file():
+            prepare_pack_fixtures(suite_path)
+            skill_path = skill or suite_path
+            pack_root = suite_path
+            if checks:
+                from skillgate_ai.case_pack import suite_from_checks
+
+                spec = suite_from_checks(suite_path, checks)
+            else:
+                from skillgate_ai.case_pack import expand_from_pack
+
+                spec = expand_from_pack(suite_path)
         else:
-            return CheckResult(
-                report=None,
-                exit_code=exc.exit_code,
-                error={"message": exc.message, "hint": exc.hint},
-            )
+            spec, skill_from_pack, pack_root = resolve_pack_and_spec(target, project)
+            if skill_from_pack is not None:
+                skill_path = skill or skill_from_pack
+    except SkillGateError as exc:
+        return CheckResult(
+            report=None,
+            exit_code=exc.exit_code,
+            error={"message": exc.message, "hint": exc.hint},
+        )
 
     rid = run_id or uuid.uuid4().hex[:12]
     skill_label = skill_path.name if skill_path else suite_path.stem
     run_cfg: EvalRunConfig | None = None
     demo_notice: str | None = None
+    started = False
     try:
         run_cfg = resolve_eval_config(
             harness_pref=harness,
@@ -149,23 +167,11 @@ def run_check(
             source=source,
         )
         cfg = apply_eval_config(cfg, run_cfg)
-        pref = (harness or "auto").strip().lower() or "auto"
-        if live:
-            resolved = live_harness_or_error(harness, cfg)
-        elif demo or pref in {"demo", "fixture", "offline"}:
-            resolved = DemoHarness()
-            demo_notice = DEMO_NOTICE
-        elif pref == "auto" and cfg.has_any_key:
-            resolved = live_harness_or_error("auto", cfg)
-        elif pref == "auto":
-            resolved = DemoHarness()
-            demo_notice = DEMO_NOTICE
-        else:
-            resolved = resolve_harness(harness, cfg, demo=False)
+        resolved = live_harness_or_error(harness, cfg)
         run_cfg = stamp_resolved(run_cfg, resolved.name, cfg)
         outcome_judge = resolve_judge(cfg, harness_name=resolved.name)
         run_cfg = with_judge(run_cfg, judge_stamp(outcome_judge))
-        mode = "live" if live else ("demo" if resolved.name == "demo" else "live")
+        mode = "live"
         with eval_transaction(
             run_id=rid,
             skill=skill_label,
@@ -174,6 +180,7 @@ def run_check(
             suite=suite_path.stem,
             sandbox=sandbox_kind,
         ):
+            started = True
             report = run_eval(
                 None if spec is not None else suite_path,
                 spec=spec,
@@ -188,6 +195,7 @@ def run_check(
                 on_progress=on_progress,
                 control=control,
                 judge=outcome_judge,
+                strict_ingest=source == "cli",
             )
             run_cfg = with_timeout_effective(run_cfg, report.timeout_effective)
             report.config = run_cfg.to_dict()
@@ -199,11 +207,14 @@ def run_check(
                 passed=report.passed,
             )
             persist_root = Path(report.skill_path) if report.skill_path else pack_root
+            payload = report_to_dict(report)
+            if tryout:
+                payload["tryout"] = True
             persist_eval(
                 pack_root=persist_root,
                 run_id=rid,
                 passed=report.passed,
-                report=report_to_dict(report),
+                report=payload,
                 config=run_cfg,
             )
     except SkillGateError as exc:
@@ -211,7 +222,8 @@ def run_check(
         persist_root = skill_path or pack_root
         err = {"message": exc.message, "hint": exc.hint}
         if (
-            run_cfg is not None
+            started
+            and run_cfg is not None
             and not isinstance(exc, (EvalConfigError, MissingLLMKeyError))
             and persist_root
         ):

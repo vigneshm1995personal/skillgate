@@ -71,14 +71,18 @@ def test_helper_and_sync_stay_cli_only() -> None:
 
 
 def test_cli_imports_without_hosted() -> None:
+    import skillgate_ai.api
+    import skillgate_ai.catalog
     import skillgate_ai.cli
     import skillgate_ai.config
     import skillgate_ai.engine
     import skillgate_ai.judge_bank
     import skillgate_ai.judge_openai
+    import skillgate_ai.local_ui.server
+    import skillgate_ai.mode
     import skillgate_ai.openai_http
     import skillgate_ai.output_match
-    import skillgate_ai.local_ui.server  # noqa: F401
+    import skillgate_ai.server
 
 
 def test_local_ui_may_exist_without_hosted_names() -> None:
@@ -86,10 +90,15 @@ def test_local_ui_may_exist_without_hosted_names() -> None:
     assert not (ROOT / "web.py").exists()
     assert not (ROOT / "wizard.py").exists()
     assert not (ROOT / "local_ui" / "wizard.py").exists()
+    assert (ROOT / "api.py").is_file()
+    assert (ROOT / "server.py").is_file()
+    assert (ROOT / "mode.py").is_file()
+    repo_web = ROOT.parents[1] / "web"
+    assert (repo_web / "package.json").is_file()
     tree = ast.parse((ROOT / "cli.py").read_text(encoding="utf-8"), filename="cli.py")
     imported = _imported_names(tree)
-    assert "uvicorn" not in imported
-    assert "fastapi" not in imported
+    assert "skillgate_ai.web" not in imported
+    assert "skillgate_ai.auth_siwv" not in imported
 
 
 def test_static_index_is_packaged() -> None:

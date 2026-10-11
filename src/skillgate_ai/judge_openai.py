@@ -38,6 +38,7 @@ from skillgate_ai.openai_http import (
 )
 
 DEFAULT_MODEL = "gpt-6-luna"
+GATEWAY_DECISIONS_MODEL = "openai/gpt-6-luna-decisions"
 DEFAULT_TIMEOUT_SEC = 20.0
 WHY_TIMEOUT_SEC = 10.0
 WHY_MAX_OUTPUT_TOKENS = 128
@@ -47,6 +48,32 @@ IMAGE_MAX_BYTES = 4 * 1024 * 1024
 IMAGE_MAX_COUNT = 3
 INLINE_MAGICS = {"jpeg": "image/jpeg", "png": "image/png"}
 DISPLAY_NAME = "OpenAI (your key)"
+GATEWAY_DISPLAY_NAME = "OpenAI Decisions via Vercel AI Gateway (your key)"
+
+
+def _decisions_model(model: str) -> str:
+    slug = (model or "").strip() or DEFAULT_MODEL
+    if slug == DEFAULT_MODEL or slug.endswith("-decisions"):
+        return slug
+    return DEFAULT_MODEL
+
+
+def _responses_model(model: str) -> str:
+    slug = (model or "").strip() or DEFAULT_MODEL
+    if slug.endswith("-decisions"):
+        return slug[: -len("-decisions")]
+    return slug
+
+
+def _model_supports_reasoning(model: str) -> bool:
+    slug = (model or "").strip().lower().rsplit("/", 1)[-1]
+    return slug.startswith(("o1", "o3", "o4", "gpt-5", "gpt-6"))
+
+
+def _reasoning_field(model: str, effort: str) -> dict[str, Any]:
+    if _model_supports_reasoning(model):
+        return {"reasoning": {"effort": effort}}
+    return {}
 
 
 class JudgeBackend(Protocol):
@@ -426,12 +453,10 @@ class DecisionsBackend(_OpenAIPosted):
         model: str = DEFAULT_MODEL,
         post: PostFn | None = None,
     ) -> None:
-        del model
-        # Decisions documents gpt-6-luna only. Do not send a Responses override.
         super().__init__(
             api_key=api_key,
             base_url=base_url,
-            model=DEFAULT_MODEL,
+            model=_decisions_model(model),
             post=post,
         )
 
@@ -502,7 +527,7 @@ class StructuredOutputsBackend(_OpenAIPosted):
             "/responses",
             {
                 "model": self.model,
-                "reasoning": {"effort": self.reasoning_effort},
+                **_reasoning_field(self.model, self.reasoning_effort),
                 "input": [
                     {
                         "role": "system",
@@ -563,12 +588,14 @@ class OutcomeJudge:
         why_enabled: bool = True,
         reasoning_effort: str = "low",
         timeout_sec: float = DEFAULT_TIMEOUT_SEC,
+        display_name: str = DISPLAY_NAME,
     ) -> None:
         self.backend = backend
         self.min_confidence = min_confidence
         self.why_enabled = why_enabled
         self.reasoning_effort = reasoning_effort
         self.timeout_sec = timeout_sec
+        self.display_name = display_name
 
     @property
     def model(self) -> str:
@@ -641,7 +668,7 @@ class OutcomeJudge:
             "status": status,
             "provider": "openai",
             "backend": self.backend.name,
-            "display_name": DISPLAY_NAME,
+            "display_name": self.display_name,
             "model": model,
             "passed": passed,
             "reasons": reasons,
@@ -767,10 +794,11 @@ class OutcomeJudge:
             user_blob["expected_output"] = expected
         if actual is not None:
             user_blob["actual_output"] = actual
+        why_model = _responses_model(self.backend.model)
         payload = {
-            "model": self.backend.model,
+            "model": why_model,
             "max_output_tokens": WHY_MAX_OUTPUT_TOKENS,
-            "reasoning": {"effort": self.reasoning_effort},
+            **_reasoning_field(why_model, self.reasoning_effort),
             "input": [
                 {
                     "role": "system",
@@ -846,6 +874,7 @@ def make_openai_judge(
     timeout_sec: float = DEFAULT_TIMEOUT_SEC,
     base_url: str = DEFAULT_BASE_URL,
     post: PostFn | None = None,
+    display_name: str = DISPLAY_NAME,
 ) -> OutcomeJudge:
     name = (backend or "decisions").strip().lower()
     if name in {"structured", "responses"}:
@@ -869,12 +898,14 @@ def make_openai_judge(
         why_enabled=why_enabled,
         reasoning_effort=reasoning_effort,
         timeout_sec=timeout_sec,
+        display_name=display_name,
     )
 
 
 # Re-export for tests
 __all__ = [
     "DISPLAY_NAME",
+    "GATEWAY_DISPLAY_NAME",
     "IMAGE_MAX_BYTES",
     "IMAGE_MAX_COUNT",
     "OUT_OF_CREDITS",

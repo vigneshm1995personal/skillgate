@@ -8,7 +8,7 @@ from typer.testing import CliRunner
 
 from conftest import plain_text
 from skillgate_ai.cli import app
-from skillgate_ai.deploy import latest_check_passed
+from skillgate_ai.deploy import CursorAdapter, DeployError, latest_check_passed
 from skillgate_ai.errors import friendly_os_error
 from skillgate_ai.history import append_eval
 from skillgate_ai.ingest import ingest_skill
@@ -156,15 +156,83 @@ def test_deploy_force_installs_failed_skill(
     assert "Installed pdf-sabotaged" in result.stdout
 
 
-def test_deploy_runs_check_when_no_history(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_deploy_force_refuses_never_checked(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    pack = _pdf_pack(tmp_path / "pack")
+    skills_root = tmp_path / "cursor-skills"
+    monkeypatch.setenv("SKILLGATE_CURSOR_SKILLS", str(skills_root))
+    assert latest_check_passed(pack) is None
+    result = runner.invoke(app, ["deploy", str(pack), "--force"])
+    out = plain_text(result.stdout + result.stderr)
+    assert result.exit_code == 1, out
+    assert "Run the checks first" in out
+    assert not (skills_root / "pdf").exists()
+    assert latest_check_passed(pack) is None
+
+
+def test_adapter_install_force_refuses_never_checked(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    pack = _pdf_pack(tmp_path / "pack")
+    skills_root = tmp_path / "cursor-skills"
+    monkeypatch.setenv("SKILLGATE_CURSOR_SKILLS", str(skills_root))
+    loaded = ingest_skill(pack)
+    with pytest.raises(DeployError, match="Run the checks first"):
+        CursorAdapter().install(skill=loaded, source=pack, force=True)
+    assert not (skills_root / "pdf").exists()
+
+
+def test_adapter_remote_gated_installs_never_checked(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    pack = _pdf_pack(tmp_path / "pack")
+    skills_root = tmp_path / "cursor-skills"
+    monkeypatch.setenv("SKILLGATE_CURSOR_SKILLS", str(skills_root))
+    loaded = ingest_skill(pack)
+    result = CursorAdapter().install(skill=loaded, source=pack, remote_gated=True)
+    assert result["status"] == "installed"
+    assert (skills_root / "pdf" / "SKILL.md").is_file()
+
+
+def test_deploy_refuses_never_checked(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     pack = _pdf_pack(tmp_path / "pack")
     skills_root = tmp_path / "cursor-skills"
     monkeypatch.setenv("SKILLGATE_CURSOR_SKILLS", str(skills_root))
     assert latest_check_passed(pack) is None
     result = runner.invoke(app, ["deploy", str(pack)])
+    out = plain_text(result.stdout + result.stderr)
+    assert result.exit_code == 1, out
+    assert "Run the checks first" in out
+    assert "skillgate check" in out
+    assert not (skills_root / "pdf").exists()
+    assert latest_check_passed(pack) is None
+
+
+def test_deploy_copy_excludes_evals(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    pack = _pdf_pack(tmp_path / "pack")
+    skills_root = tmp_path / "cursor-skills"
+    monkeypatch.setenv("SKILLGATE_CURSOR_SKILLS", str(skills_root))
+    append_eval(pack, run_id="green", passed=True)
+    result = runner.invoke(app, ["deploy", str(pack)])
     assert result.exit_code == 0, result.stdout
-    assert (skills_root / "pdf" / "SKILL.md").is_file()
-    assert latest_check_passed(pack) is True
+    dest = skills_root / "pdf"
+    assert (dest / "SKILL.md").is_file()
+    assert not (dest / "evals").exists()
+
+
+def test_deploy_targets_comma_list(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    pack = _pdf_pack(tmp_path / "pack")
+    cursor = tmp_path / "cursor-skills"
+    codex = tmp_path / "codex-skills"
+    monkeypatch.setenv("SKILLGATE_CURSOR_SKILLS", str(cursor))
+    monkeypatch.setenv("SKILLGATE_CODEX_SKILLS", str(codex))
+    append_eval(pack, run_id="green", passed=True)
+    result = runner.invoke(app, ["deploy", str(pack), "--targets", "cursor,codex"])
+    assert result.exit_code == 0, result.stdout
+    assert (cursor / "pdf" / "SKILL.md").is_file()
+    assert (codex / "pdf" / "SKILL.md").is_file()
+    assert not (cursor / "pdf" / "evals").exists()
 
 
 def test_deploy_reads_dotenv(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

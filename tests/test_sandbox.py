@@ -2,14 +2,11 @@ from __future__ import annotations
 
 import os
 import stat
-import subprocess
 import sys
 from pathlib import Path
 
 import pytest
 
-from skillgate_ai.harness import DemoHarness
-from skillgate_ai.ingest import Skill
 from skillgate_ai.sandbox import (
     LocalSandbox,
     _sandbox_env,
@@ -55,30 +52,15 @@ def test_local_sandbox_python3_uses_running_interpreter(
         sandbox.close()
 
 
-def test_demo_harness_runs_bundled_script_with_running_interpreter(tmp_path: Path) -> None:
-    selected = tmp_path / ".skillgate" / "skills" / "notes" / "scripts"
-    selected.mkdir(parents=True)
-    (selected / "agent_entry.py").write_text("print('ok')\n", encoding="utf-8")
-    (tmp_path / ".skillgate" / "selected.json").write_text(
-        '{"skill": "notes"}', encoding="utf-8"
-    )
-    recorded: list[list[str]] = []
-
-    class Capture:
-        workspace = tmp_path
-
-        def run(self, command, **kwargs):
-            recorded.append(list(command))
-            return subprocess.CompletedProcess(command, 0, stdout="ok", stderr="")
-
-    skill = Skill(
-        path=tmp_path / ".skillgate" / "skills" / "notes",
-        name="notes",
-        description="Write notes.",
-        body="",
-    )
-    result = DemoHarness().run(Capture(), "write notes", [skill], timeout_sec=10)
-    assert recorded, result.transcript
-    assert recorded[0][0] == sys.executable
-    assert recorded[0][1].endswith("agent_entry.py")
-    assert result.returncode == 0
+def test_sandbox_runs_agent_entry_with_running_interpreter(tmp_path: Path) -> None:
+    work = tmp_path / "work"
+    work.mkdir()
+    script = work / "agent_entry.py"
+    script.write_text("import sys; print(sys.executable, end='')\n", encoding="utf-8")
+    sandbox = LocalSandbox(work)
+    try:
+        proc = sandbox.run(["python3", str(script)])
+        assert proc.returncode == 0, proc.stderr
+        assert Path(proc.stdout).resolve() == Path(sys.executable).resolve()
+    finally:
+        sandbox.close()

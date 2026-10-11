@@ -17,6 +17,7 @@ RUN --mount=type=bind,source=pyproject.toml,target=/tmp/pyproject.toml \
     python -c "import tomllib, pathlib, subprocess; deps=tomllib.loads(pathlib.Path('/tmp/pyproject.toml').read_text())['project']['dependencies']; subprocess.check_call(['pip','install','--upgrade','pip']); subprocess.check_call(['pip','install','--no-compile',*deps])"
 
 COPY src ./src
+COPY skills ./skills
 COPY pyproject.toml README.md LICENSE ./
 RUN --mount=type=cache,target=/root/.cache/pip \
     pip install --no-deps --no-compile .

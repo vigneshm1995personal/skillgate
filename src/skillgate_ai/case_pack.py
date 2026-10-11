@@ -17,6 +17,7 @@ import yaml
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from skillgate_ai.errors import SuiteError, friendly_validation_error
+from skillgate_ai.ingest import folder_matches_skill
 from skillgate_ai.metrics import CaseBudgets, merge_budgets, parse_budgets
 from skillgate_ai.pack import (
     FIXTURE_DIR,
@@ -29,6 +30,8 @@ from skillgate_ai.pack import (
 from skillgate_ai.suite import DEFAULT_TASK_TIMEOUT_SEC, SuiteSpec, _normalize_suite
 
 CASES_REL = "evals/cases.yaml"
+PIN_NEEDS_EXPECTED = "Add expected output for this check, then save."
+PIN_NEEDS_EXPECTED_HINT = "Open Dataset and fill Expected output."
 GOLDEN_TAIL_CHARS = 8000
 _OUTPUT_MAGICS = (
     (b"\xff\xd8\xff", "jpeg", "image/jpeg"),
@@ -151,6 +154,12 @@ def load_case_pack(skill_path: str | Path) -> CasePack | None:
         pack = CasePack.model_validate(raw)
     except Exception as exc:
         raise SuiteError(friendly_validation_error(exc, kind="Case pack", raw=raw)) from None
+    folder = root.name
+    if not folder_matches_skill(folder, pack.skill):
+        raise SuiteError(
+            f"This check file is for `{pack.skill}`, but the folder is `{folder}`.",
+            hint="Set `skill:` in evals/cases.yaml to the folder name.",
+        )
     _validate_pack_on_disk(root, pack)
     return pack
 
@@ -390,7 +399,13 @@ def pin_case_ids(skill_path: str | Path, case_ids: list[str]) -> CasePack:
         if case.id in wanted:
             found.add(case.id)
             if case.should_trigger and case.golden is None:
-                raise ValueError("Pin needs a golden file or Expected text.")
+                attached = _disk_golden(root, case.id, None)
+                if attached is None:
+                    raise ValueError(PIN_NEEDS_EXPECTED)
+                updated.append(
+                    case.model_copy(update={"status": "pinned", "golden": attached})
+                )
+                continue
             updated.append(case.model_copy(update={"status": "pinned"}))
         else:
             updated.append(case)
@@ -425,11 +440,25 @@ def trust_suite_for_skill(skill_path: str | Path) -> TrustSuite | None:
     return _template_trust(root)
 
 
+def suite_from_checks(skill_path: str | Path, checks: list[dict[str, Any]]) -> SuiteSpec:
+    """Build a suite from the Checks tab without writing evals/cases.yaml."""
+    root = Path(skill_path).expanduser().resolve()
+    skill_name = _skill_name(root)
+    if not checks:
+        raise SuiteError("Need at least one check to run.")
+    cases = [_case_from_check(root, dict(raw), skill_name) for raw in checks]
+    pack = CasePack(schema_version=1, skill=skill_name, cases=cases)
+    return suite_from_pack(pack, str(root))
+
+
 def expand_from_pack(skill_path: str | Path) -> SuiteSpec:
     root = Path(skill_path).expanduser().resolve()
     pack = load_case_pack(root)
     if pack is None:
-        raise SuiteError(f"No case pack at {root / CASES_REL}")
+        raise SuiteError(
+            "This skill has no checks yet.",
+            hint="Add a check, then press Run.",
+        )
     return suite_from_pack(pack, str(root))
 
 
@@ -587,17 +616,23 @@ def _validate_pack_on_disk(root: Path, pack: CasePack) -> None:
                     f"Couldn't find {item.src} (listed as an input file for {case.id}).",
                     hint="Add the file under evals/fixtures/, or remove it from input.files.",
                 )
-        if case.golden:
-            golden = root / case.golden.path
-            if not golden.is_file():
-                raise SuiteError(
-                    f"Case {case.id} is missing golden file {case.golden.path}.",
-                    hint=f"Write the expected output under {GOLDEN_DIR}/.",
-                )
-        elif case.should_trigger and case.status == "pinned":
-            # Pinned completion-shaped rows must have a golden. Trigger-only
-            # (no golden, no output) is allowed.
-            pass
+        # Missing expected-output files fail that check at run time.
+        # Do not abort the whole suite here.
+
+
+MISSING_GOLDEN_REASON = "This check is missing its expected output file."
+
+
+def task_missing_golden(root: Path, task_id: str) -> bool:
+    """True when this pinned case names an expected-output file that is not on disk."""
+    try:
+        pack = load_case_pack(root)
+    except (SuiteError, OSError, ValueError):
+        return False
+    case = case_for_task(pack, task_id)
+    if case is None or case.golden is None:
+        return False
+    return not (root / case.golden.path).is_file()
 
 
 def _skill_name(root: Path) -> str:
@@ -606,7 +641,7 @@ def _skill_name(root: Path) -> str:
         try:
             from skillgate_ai.ingest import ingest_skill
 
-            return ingest_skill(root).name
+            return ingest_skill(root, strict=False).name
         except Exception:
             pass
     return root.name
@@ -733,6 +768,36 @@ def _persist_input_files(root: Path, files: object, *, case_id: str) -> list[Cas
     return out
 
 
+def _disk_golden(
+    root: Path, case_id: str, output_path: str | None
+) -> CaseGolden | None:
+    folder = root / GOLDEN_DIR
+    if not folder.is_dir():
+        return None
+    matches = sorted(
+        path
+        for path in folder.iterdir()
+        if path.is_file() and path.stem == case_id
+    )
+    if not matches:
+        return None
+    path = matches[0]
+    rel = f"{GOLDEN_DIR}/{path.name}"
+    suffix = path.suffix.lower()
+    kind: Literal["json", "text", "bytes"]
+    if suffix == ".json":
+        kind = "json"
+    elif suffix in {".pdf", ".png", ".jpg", ".jpeg", ".gif", ".webp"}:
+        kind = "bytes"
+    else:
+        kind = "text"
+    return CaseGolden(
+        output_path=output_path or "output/result.txt",
+        path=rel,
+        kind=kind,
+    )
+
+
 def _persist_golden(
     root: Path,
     *,
@@ -763,9 +828,13 @@ def _persist_golden(
             write_pack_file(root, rel=rel, content=src.read_bytes())
             kind = "json" if suffix.lower() == ".json" else "text"
             return CaseGolden(output_path=dest_output, path=rel, kind=kind)
-        raise ValueError("Pin needs a golden file or Expected text.")
+        kind = "json" if Path(rel).suffix.lower() == ".json" else "text"
+        return CaseGolden(output_path=dest_output, path=rel, kind=kind)
+    attached = _disk_golden(root, case_id, dest_output)
+    if attached is not None:
+        return attached
     if not contains_list:
-        raise ValueError("Pin needs a golden file or Expected text.")
+        raise ValueError(PIN_NEEDS_EXPECTED)
     body = contains_list[0]
     suffix = ".json" if dest_output.endswith(".json") and _JSONISH_RE.match(body) else ".txt"
     if dest_output.endswith(".json") and len(contains_list) == 1 and _JSONISH_RE.match(body):

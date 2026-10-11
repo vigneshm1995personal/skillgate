@@ -1,35 +1,31 @@
 # Score live checks with your OpenAI key
 
-Optional. Deterministic fixture checks still need **no key**. Live checks still run with Cursor, Codex, Claude, or OpenAI. **Scoring** with OpenAI uses **your** `OPENAI_API_KEY` only. Skill Gate does not ship a model or an account.
+Optional. Live checks still run with Cursor, Codex, Claude, or OpenAI. **Scoring** uses OpenAI’s scoring API (`POST /v1/decisions`): an OpenAI key in Settings talks to OpenAI directly; a gateway key without an OpenAI key uses that same API on AI Gateway. Skill Gate does not ship a model or an account. Ambient `OPENAI_API_KEY` is ignored unless you pass `--key-env`.
 
 ## What you get
 
-When `OPENAI_API_KEY` is set and you run a live check (`skillgate check --live`, or Run live in the local UI), Skill Gate asks OpenAI the same fixed questions on each live task. The check Passes only when those answers meet the bar (job done, correct, followed the rules, and so on). The built-in checker stays in charge when:
+When an OpenAI or AI Gateway key is set and you run a live check (`skillgate check`, or Run in the local UI), Skill Gate asks the same fixed questions on each live task. The check Passes only when those answers meet the bar (job done, correct, followed the rules, and so on). An OpenAI key is never rerouted through the gateway. Every check still needs a live model key; without one, `skillgate check` exits 2. Scoring is optional. File-exists / contains / page-count scorers grade the live run when:
 
-- there is no OpenAI key
+- there is no OpenAI key and no AI Gateway key in Settings (a Cursor or Codex key still runs the check)
 - you set `SKILLGATE_JUDGE=skip`
-- you use the built-in / demo path (`--demo`, or Skip in the wizard)
 
-The built-in checker only runs fixture checks such as “does the output contain this text?” and page counts. It does **not** compare the full output to the expected file. Scoring with your OpenAI key does read the expected and actual text (and a few images) and judges whether the work is done.
-
-`AI_GATEWAY_API_KEY` without `OPENAI_API_KEY` does **not** score.
+Scorers such as “does the output contain this text?” and page counts still apply. Scoring does **not** compare the full output to the expected file; it reads the expected and actual text (and a few images) and judges whether the work is done.
 
 ## Setup
 
 ```bash
-# .env — never commit this file
-OPENAI_API_KEY=sk-...
+skillgate keys set OPENAI_API_KEY
 ```
 
-Or paste the OpenAI key in `skillgate ui` (wizard **Your API key**, or the skill page **Add your API key**). Other keys run live checks; an OpenAI key also scores them.
+Or paste the OpenAI key in `skillgate ui` (Settings). Other keys run live checks; an OpenAI or AI Gateway key also scores them.
 
 Override if you need it:
 
 | Env | Meaning |
 | --- | --- |
-| `SKILLGATE_JUDGE=auto` | Default. Score when an OpenAI key is present; otherwise the built-in checker. |
+| `SKILLGATE_JUDGE=auto` | Default. Score when an OpenAI or AI Gateway key is present; otherwise file-exists / contains / page-count grade the live run. |
 | `SKILLGATE_JUDGE=openai` | Require scoring. Missing key → exit 2. |
-| `SKILLGATE_JUDGE=skip` | Never score with OpenAI. The built-in checker decides the result. |
+| `SKILLGATE_JUDGE=skip` | Never score with OpenAI. File-exists / contains / page-count grade the live run. |
 | `SKILLGATE_JUDGE_BACKEND=decisions` | Default scoring service. |
 | `SKILLGATE_JUDGE_BACKEND=responses` | If your key can't use the newer scoring service, set this yourself. Skill Gate does not switch on 403. |
 | `SKILLGATE_JUDGE_WHY=0` | Skip the short Fail explanation call (saves a follow-up request). |
@@ -43,10 +39,10 @@ If the scorer is not very sure about a Pass, the check still Passes. You will se
 ```yaml
 - uses: actions/setup-python@v5
   with: { python-version: "3.12" }
-- run: pip install skillgate-ai==0.4.2
-- run: skillgate check .
+- run: pip install skillgate-ai==0.5.0
+- run: skillgate check . --key-env OPENAI_API_KEY
   env:
-    OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}   # optional; omit for the built-in checker
+    OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
 ```
 
 Do not add a required OpenAI secret to merge CI.
@@ -56,7 +52,7 @@ Do not add a required OpenAI secret to merge CI.
 ```bash
 export OPENAI_API_KEY=sk-...     # never echo
 export SKILLGATE_JUDGE=openai
-skillgate check /path/to/one-case-pack --live --json
+skillgate check /path/to/one-case-pack --json
 # JSON names who scored. Exit 0 or 1 — never a traceback.
 ```
 

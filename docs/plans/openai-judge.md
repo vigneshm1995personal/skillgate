@@ -4,7 +4,7 @@
 
 **Goal:** Let a user score live checks with **their own OpenAI API key**. **v1 scores with the Decisions API** (`POST /v1/decisions`, `gpt-6-luna` only) as the primary backend — that is the product-owner lock after the official guide confirmed public beta for standard keys. Same fixed questions the hosted TypeSafe judge answers today, same Pass/Fail lock, same report shape. The rest of the gate (`skillgate check` exit 0/1, history JSONL, Docker `ENTRYPOINT`/`CMD`, copy-paste GitHub Action) stays unchanged.
 
-**Parent (locked):** [`docs/plans/2026-10-03-skillgate-oss-extract.md`](2026-10-03-skillgate-oss-extract.md). Decision rule unchanged: if a feature cannot work as **one pack on disk** plus `skillgate check` exiting **0 or 1** with **no Skill Gate account**, it does not belong here. OpenAI judge = the user’s key only. The built-in checker stays the skip/fallback when no OpenAI key is set.
+**Parent (locked):** [`docs/plans/2026-10-03-skillgate-oss-extract.md`](2026-10-03-skillgate-oss-extract.md). Decision rule unchanged: if a feature cannot work as **one pack on disk** plus `skillgate check` exiting **0 or 1** with **no Skill Gate account**, it does not belong here. OpenAI judge = the user’s key only. Without that key, `SkipJudge` leaves pass/fail to the deterministic scorers.
 
 Inspected OSS tree: `main` @ `6a3b0d3` (`Hold Checking then draw Passed or Failed on Run live (#7)`). PyPI dist **`skillgate-ai` 0.3.0**. CLI command **`skillgate`**. Hosted app stays private at [`vigneshm1995personal/skillgate-ai`](https://github.com/vigneshm1995personal/skillgate-ai).
 
@@ -66,7 +66,7 @@ Full choice lists (must be the Decisions `choices[].value` strings):
 
 Hosted extra (OSS `_live_verdict` does **not** do this today): no-trigger cases (`expect_skill is None`) keep **det** ownership; the five-cell bank is evidence only. Phase 2 should match that when a live judge is active, so an unrelated-prompt skip cannot fail on “Not completed”.
 
-Hosted skip-without-key **fails closed**. OSS must **not** copy that: no OpenAI key → `SkipJudge` → built-in checker (roadmap rule).
+Hosted skip-without-key **fails closed**. OSS must **not** copy that: no OpenAI key → `SkipJudge` → deterministic scorers own red/green.
 
 ### 0.3 Keys vs judge vs harness (easy to mix up)
 
@@ -83,7 +83,7 @@ A Cursor-only user can run live without OpenAI. A user with only `OPENAI_API_KEY
 
 1. One pack on disk + `skillgate check` exit **0 or 1**, no Skill Gate account.
 2. OpenAI judge uses the **user’s** `OPENAI_API_KEY` only. Never a Skill Gate-owned key. Never log or print the key (headers, traces, history, UI, CLI).
-3. No key / `SKILLGATE_JUDGE=skip` / demo harness → built-in checker. Det fixtures stay unlimited.
+3. No key / `SKILLGATE_JUDGE=skip` → `SkipJudge` (deterministic scorers). Det fixtures stay unlimited. Live-only: unknown harness names are rejected.
 4. Same questions, same Pass lock, same `tasks[].judge` shape as hosted TypeSafe, so history / `check` / Docker / Action stay compatible. Extra fields (`confidence`, `probabilities`, `why`) are additive.
 5. Customer copy is plain. Do **not** show “Jev”, “Jev cells”, “harness”, “BYOLLM”, “Option A” unless already user-facing (OSS UI already forbids `jev` in `test_ui_copy_has_no_internal_jargon`).
 6. Reuse Checking → slide → drawn Passed/Failed. No new hold screen, no “Evaluating”.
@@ -372,7 +372,7 @@ Judge.judge(...)
   "status": "completed" | "skip" | "error",
   "provider": "skip" | "openai",
   "backend": "skip" | "decisions" | "responses",
-  "display_name": "Built-in checker" | "OpenAI (your key)",
+  "display_name": "Checks" | "OpenAI (your key)",
   "model": str | None,
   "passed": bool | None,
   "reasons": list[str],
@@ -414,7 +414,7 @@ class JudgeBackend(Protocol):
 | `SKILLGATE_JUDGE` unset/`auto`, no `OPENAI_API_KEY` | `SkipJudge` |
 | `auto` + OpenAI key + live harness | `OutcomeJudge` + **Decisions** backend |
 | `SKILLGATE_JUDGE=openai` + key + live | same; missing key → exit 2 |
-| `SKILLGATE_JUDGE=openai` + demo | Skip (live-only) |
+| `SKILLGATE_JUDGE=openai` + unknown harness | error (live-only) |
 | `SKILLGATE_JUDGE=skip` | `SkipJudge` |
 | `SKILLGATE_JUDGE_BACKEND=decisions` (default) | `/v1/decisions` |
 | `SKILLGATE_JUDGE_BACKEND=responses` | Structured Outputs fallback (no auto-fallback on 403) |
@@ -478,11 +478,11 @@ Transcript tail: 4000 characters.
 
 ### 9.3 Do not change
 
-Docker `ENTRYPOINT`/`CMD`, pack schema, scorers, demo harness, deny-list.
+Docker `ENTRYPOINT`/`CMD`, pack schema, scorers, deny-list.
 
 ### 9.4 Customer copy and errors
 
-Use: “OpenAI (your key)”, “Built-in checker. This is not a live model.”, existing question labels. Avoid Jev / Decisions / `gpt-6-luna` in UI chrome (ids may appear in `--json`).
+Use: “OpenAI (your key)”, “Checks”, existing question labels. Avoid Jev / Decisions / `gpt-6-luna` in UI chrome (ids may appear in `--json`).
 
 | Case | User message | Verdict |
 | --- | --- | --- |
@@ -519,7 +519,7 @@ Monkeypatch `httpx.post` (no new dep).
 | 401 / 403 / 404 / 400 / 429 / timeout | public message, Fail, no key in exception/logs |
 | Why-call | On Fail, exactly one `/v1/responses`; `judge.why` set from schema; if why 500s, `passed` still False from Decisions |
 | Why on Pass | no Responses call |
-| Skip / demo / no key | no HTTP |
+| Skip / no key | no HTTP |
 | `SKILLGATE_JUDGE=openai` without key | exit 2 |
 | No-trigger | det owns |
 | Fallback backend | `SKILLGATE_JUDGE_BACKEND=responses` hits `/v1/responses` with `json_schema` `strict: true`, not `/v1/decisions` |

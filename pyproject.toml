@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "skillgate-ai"
-version = "0.4.2"
-description = "Local skill gate: pack on disk + skillgate check (exit 0/1), no account"
+version = "0.5.0"
+description = "Local skill gate: pack on disk + live skillgate check (exit 0/1/2), no account"
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "Apache-2.0" }
@@ -20,6 +20,9 @@ dependencies = [
   "python-dotenv>=1.0",
   "pypdf>=4.2",
   "reportlab>=4.2",
+  "fastapi>=0.115",
+  "uvicorn>=0.30",
+  "python-multipart>=0.0.9",
 ]
 
 [project.optional-dependencies]
@@ -31,9 +34,22 @@ skillgate = "skillgate_ai.cli:app"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+include = ["skillgate_ai*"]
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.cmdclass]
+build_py = "skillgate_build.build_py"
+sdist = "skillgate_build.sdist"
 
 [tool.setuptools.package-data]
-skillgate_ai = ["local_ui/static/*"]
+skillgate_ai = [
+  "local_ui/static/*",
+  "web_static/*",
+  "web_static/**/*",
+  "examples/**/*",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

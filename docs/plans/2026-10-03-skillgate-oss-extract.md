@@ -1,5 +1,7 @@
 # Skill Gate OSS extract + Docker — Implementation Plan
 
+> **Historical (2026-10-03).** This plan described the OSS extract. It is not current product docs. Skill Gate 0.5 is live-only (no demo harness). See [`0.5-decisions.md`](0.5-decisions.md).
+
 > **This document is Phase 1 (plan only) for the public staging repo `vigneshm1995personal/skillgate`.** Do **not** copy application code from `skillgate-ai` in this PR. Do **not** flip this repo public. Do **not** implement `check`, PyPI, GHCR, or the extract until Phase 2 is requested.
 
 **Goal:** Land a concrete, allowlist-based extract of the **local gate** into this repo (clean history, Apache-2.0) plus a production-quality Docker image whose `ENTRYPOINT` is `skillgate` and whose default argv is `check` (never `serve`).

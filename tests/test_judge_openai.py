@@ -446,6 +446,107 @@ def test_responses_fallback_uses_structured_outputs() -> None:
     assert "path_efficiency" not in fmt["schema"]["properties"]
     assert "decisions" not in post.calls[0]["url"]
     assert judged["cells"]["path_efficiency"]["reason"] == PATH_NOT_AVAILABLE
+    assert post.calls[0]["json"]["reasoning"] == {"effort": "low"}
+
+
+def test_gateway_decisions_posts_luna_decisions_not_responses() -> None:
+    post = FakePost([FakeResponse(200, decisions_payload())])
+    judged = _score(
+        make_openai_judge(
+            api_key="gw-test",
+            backend="decisions",
+            model="openai/gpt-6-luna-decisions",
+            base_url="https://ai-gateway.vercel.sh/v1",
+            why_enabled=False,
+            post=post,
+        )
+    )
+    assert judged["passed"] is True
+    assert post.calls[0]["url"].endswith("/v1/decisions")
+    assert "responses" not in post.calls[0]["url"]
+    assert post.calls[0]["json"]["model"] == "openai/gpt-6-luna-decisions"
+    assert "reasoning" not in post.calls[0]["json"]
+
+
+def test_gateway_why_call_uses_language_model_not_decisions() -> None:
+    post = FakePost(
+        [
+            FakeResponse(200, decisions_payload({"correctness": "Incorrect"})),
+            FakeResponse(200, why_payload("The numbers were wrong.")),
+        ]
+    )
+    passed, _failures, judged = _gated(
+        make_openai_judge(
+            api_key="gw-test",
+            backend="decisions",
+            model="openai/gpt-6-luna-decisions",
+            base_url="https://ai-gateway.vercel.sh/v1",
+            why_enabled=True,
+            post=post,
+        )
+    )
+    assert passed is False
+    assert judged["why"] == "The numbers were wrong."
+    assert post.calls[0]["url"].endswith("/v1/decisions")
+    assert post.calls[0]["json"]["model"] == "openai/gpt-6-luna-decisions"
+    assert post.calls[1]["url"].endswith("/v1/responses")
+    assert post.calls[1]["json"]["model"] == "openai/gpt-6-luna"
+    assert post.calls[1]["json"]["model"].endswith("-decisions") is False
+
+
+def test_gateway_mini_responses_omits_reasoning() -> None:
+    body = json.dumps(PASS_CHOICES)
+    post = FakePost([FakeResponse(200, {"output_text": body, "model": "openai/gpt-4o-mini"})])
+    judge = make_openai_judge(
+        api_key=SECRET,
+        backend="responses",
+        model="openai/gpt-4o-mini",
+        why_enabled=False,
+        post=post,
+    )
+    judged = _score(judge)
+    assert judged["passed"] is True
+    payload = post.calls[0]["json"]
+    assert payload["model"] == "openai/gpt-4o-mini"
+    assert "reasoning" not in payload
+
+
+def test_o_series_responses_includes_reasoning() -> None:
+    body = json.dumps(PASS_CHOICES)
+    post = FakePost([FakeResponse(200, {"output_text": body, "model": "openai/o3-mini"})])
+    judge = make_openai_judge(
+        api_key=SECRET,
+        backend="responses",
+        model="openai/o3-mini",
+        why_enabled=False,
+        post=post,
+    )
+    judged = _score(judge)
+    assert judged["passed"] is True
+    assert post.calls[0]["json"]["reasoning"] == {"effort": "low"}
+
+
+def test_gateway_mini_why_call_omits_reasoning() -> None:
+    body = json.dumps({**PASS_CHOICES, "correctness": "Incorrect"})
+    post = FakePost(
+        [
+            FakeResponse(200, {"output_text": body, "model": "openai/gpt-4o-mini"}),
+            FakeResponse(200, why_payload("The numbers were wrong.")),
+        ]
+    )
+    judge = make_openai_judge(
+        api_key=SECRET,
+        backend="responses",
+        model="openai/gpt-4o-mini",
+        why_enabled=True,
+        post=post,
+    )
+    passed, _failures, judged = _gated(judge)
+    assert passed is False
+    assert judged["why"] == "The numbers were wrong."
+    assert "reasoning" not in post.calls[0]["json"]
+    assert post.calls[1]["url"].endswith("/v1/responses")
+    assert "reasoning" not in post.calls[1]["json"]
 
 
 def test_images_inline_jpeg_png_only(tmp_path: Path) -> None:

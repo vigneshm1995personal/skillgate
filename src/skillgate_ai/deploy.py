@@ -8,7 +8,7 @@ from typing import NotRequired, Protocol, TypedDict
 
 from skillgate_ai.errors import DeployError, IngestError, friendly_os_error
 from skillgate_ai.history import latest_eval
-from skillgate_ai.ingest import Skill, ingest_skill
+from skillgate_ai.ingest import NAME_RE, Skill, folder_slug, ingest_skill
 from skillgate_ai.pack import copy_skill_pack
 
 
@@ -65,21 +65,29 @@ class _PackAdapter:
     def skills_root(self) -> Path:
         raise NotImplementedError
 
-    def install(self, *, skill: Skill, source: Path, force: bool = False) -> DeployResult:
+    def install(
+        self,
+        *,
+        skill: Skill,
+        source: Path,
+        force: bool = False,
+        remote_gated: bool = False,
+    ) -> DeployResult:
         source = source.expanduser().resolve()
-        name = (skill.name or "").strip()
-        if not name:
-            raise DeployError("Skill name is missing.")
-        if not force and latest_check_passed(source) is False:
-            raise refuse_ungated_install(name)
-        if source.name != name:
+        name = (skill.name or folder_slug(source) or "").strip()
+        if not NAME_RE.match(name):
             raise DeployError(
-                f"Skill folder {source.name!r} does not match name {name!r}.",
-                hint="The gated folder must match the skill name.",
+                "This skill needs a simple folder name before Install.",
+                hint="Use lowercase letters, numbers, and hyphens.",
             )
+        if remote_gated:
+            if latest_check_passed(source) is False:
+                raise refuse_ungated_install(name, never_checked=False)
+        else:
+            require_passing_check(source, name=name, force=force)
         if not source.is_dir() or not (source / "SKILL.md").is_file():
             raise DeployError(
-                "The gated skill folder is gone. Re-run `skillgate check`, then install.",
+                "The gated skill folder is gone. Pass the checks again, then install.",
             )
         dest = (self.skills_root() / name).resolve()
         if source == dest:
@@ -90,7 +98,7 @@ class _PackAdapter:
         try:
             self.skills_root().mkdir(parents=True, exist_ok=True)
             copied = copy_skill_pack(source, dest)
-            ingest_skill(dest)
+            ingest_skill(dest, strict=False)
         except IngestError as exc:
             raise DeployError(exc.message, hint=exc.hint) from exc
         except ValueError as exc:
@@ -108,7 +116,7 @@ class _PackAdapter:
             "dest_path": str(copied["dest_path"]),
             "pack_path": str(copied["pack_path"]),
             "file_count": file_count,
-            "message": f"Installed {name} ({file_count} files) → {copied['dest_path']}",
+            "message": f"Installed {name} ({file_count} files) into {self.label}'s skills folder.",
         }
 
 
@@ -179,7 +187,24 @@ def latest_check_passed(pack: Path) -> bool | None:
     return bool(row.get("passed"))
 
 
-def refuse_ungated_install(skill_name: str, *, exit_code: int = 1) -> DeployError:
+def require_passing_check(pack: Path, *, name: str, force: bool = False) -> None:
+    """Refuse never-checked always; `--force` only overrides a red latest check."""
+    latest = latest_check_passed(pack)
+    if latest is None:
+        raise refuse_ungated_install(name, never_checked=True)
+    if latest is not True and not force:
+        raise refuse_ungated_install(name, never_checked=False)
+
+
+def refuse_ungated_install(
+    skill_name: str, *, exit_code: int = 1, never_checked: bool = False
+) -> DeployError:
+    if never_checked:
+        return DeployError(
+            "Run the checks first (`skillgate check` or press Run), then install.",
+            hint=f"`{skill_name}` has no passing check in this folder.",
+            exit_code=exit_code,
+        )
     return DeployError(
         f"Not installing `{skill_name}` because the latest check did not pass.",
         hint="Fix the skill, or pass --force to install anyway.",

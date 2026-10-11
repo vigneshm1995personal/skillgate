@@ -25,8 +25,9 @@ from skillgate_ai.errors import (
     OFFLINE_MESSAGE,
     harness_http_error,
 )
+from skillgate_ai.harness_llm_run import command_allowed, llm_run_spans, parse_run_lines
 from skillgate_ai.ingest import Skill
-from skillgate_ai.sandbox import Sandbox, running_python
+from skillgate_ai.sandbox import Sandbox
 from skillgate_ai.scorers import TriggerEvidence
 from skillgate_ai.spans import spans_from_jsonl
 from skillgate_ai.usage import (
@@ -167,80 +168,6 @@ def is_live_harness(name: str | None) -> bool:
     return (name or "").strip().lower() in LIVE_HARNESS_NAMES
 
 
-class DemoHarness:
-    """Deterministic skill-native executor for the bundled demo and CI without keys.
-
-    Trigger uses name+description only (progressive disclosure). If a skill
-    activates, `scripts/agent_entry.py` inside that skill is run in the sandbox.
-    """
-
-    name = "demo"
-    supported_models: tuple[str, ...] = ()
-
-    def run(
-        self,
-        sandbox: Sandbox,
-        prompt: str,
-        skills: list[Skill],
-        timeout_sec: int,
-    ) -> HarnessResult:
-        pre = _read_selection(sandbox.workspace)
-        if pre is _MISSING:
-            selected = select_skill_from_descriptions(prompt, skills)
-            transcript = [
-                "phase 1: skill trigger from name + description only",
-                f"selected: {selected or 'none'}",
-            ]
-        else:
-            selected = pre  # type: ignore[assignment]
-            transcript = [
-                "phase 1: Gate pre-selected skill (skip catalog discovery)",
-                f"selected: {selected or 'none'}",
-            ]
-        stdout = ""
-        stderr = ""
-        returncode = 0
-        read_paths: list[str] = []
-        if selected:
-            entry = (
-                sandbox.workspace
-                / ".skillgate"
-                / "skills"
-                / selected
-                / "scripts"
-                / "agent_entry.py"
-            )
-            read_paths.append(str(Path(".skillgate") / "skills" / selected / "SKILL.md"))
-            transcript.append(f"phase 2: loaded {selected}/SKILL.md")
-            if entry.is_file():
-                proc = sandbox.run(
-                    [running_python(), str(entry)],
-                    env={"SKILLGATE_TASK": prompt, "PYTHONPATH": ""},
-                    timeout=timeout_sec,
-                )
-                stdout = proc.stdout
-                stderr = proc.stderr
-                returncode = proc.returncode
-                transcript.append(f"ran scripts/agent_entry.py exit={proc.returncode}")
-                if proc.returncode != 0:
-                    transcript.append(stderr[-500:])
-            else:
-                transcript.append("no scripts/agent_entry.py — skill body has no executable entry")
-        else:
-            transcript.append("no skill triggered; task left untouched")
-        _write_selection(sandbox.workspace, selected)
-        text = "\n".join(transcript)
-        return HarnessResult(
-            trigger=TriggerEvidence(
-                selected_skill=selected, read_paths=read_paths, transcript=text
-            ),
-            stdout=stdout,
-            stderr=stderr,
-            transcript=text,
-            returncode=returncode,
-        )
-
-
 class CursorAgentHarness:
     """v0 harness: Cursor Agent CLI in the sandbox workspace (not Claude Code)."""
 
@@ -267,9 +194,8 @@ class CursorAgentHarness:
                 "Cursor Agent CLI was not found (`agent` / `cursor-agent`).",
                 hint=(
                     "Install Cursor Agent (https://cursor.com/docs/cli/using) "
-                    "or set CURSOR_AGENT_BIN. Until then, run with `--demo` "
-                    "or `--harness llm` if you have a BYO key (OPENAI_API_KEY / "
-                    "AI_GATEWAY_API_KEY / ANTHROPIC_API_KEY)."
+                    "or set CURSOR_AGENT_BIN. Or use `--harness llm` with a key "
+                    "in Settings / `skillgate keys set`."
                 ),
             )
         pinned = _read_selection(sandbox.workspace)
@@ -536,6 +462,7 @@ class LLMHarness:
         stderr = ""
         returncode = 0
         read_paths: list[str] = []
+        ran: list[tuple[list[str], int]] = []
         if selected:
             skill = next(s for s in skills if s.name == selected)
             read_paths.append(f".skillgate/skills/{selected}/SKILL.md")
@@ -562,15 +489,16 @@ class LLMHarness:
                 usage = merge_usage(usage, act.usage)
             act_text = act.text
             transcript.append(act_text)
-            for command in _parse_run_lines(act_text):
-                if not _command_allowed(command, selected):
+            for command in parse_run_lines(act_text):
+                if not command_allowed(command, selected):
                     transcript.append(f"blocked command: {command}")
                     continue
                 proc = sandbox.run(command, env={"SKILLGATE_TASK": prompt}, timeout=timeout_sec)
                 stdout += proc.stdout
                 stderr += proc.stderr
                 returncode = proc.returncode
-                transcript.append(f"ran {command} exit={proc.returncode}")
+                ran.append((command, proc.returncode))
+                transcript.append(f"ran {' '.join(command)} exit={proc.returncode}")
         _write_selection(sandbox.workspace, selected)
         text = "\n".join(transcript)
         return HarnessResult(
@@ -582,6 +510,7 @@ class LLMHarness:
             transcript=text,
             returncode=returncode,
             usage=usage if usage.known else None,
+            spans=llm_run_spans(selected, ran),
         )
 
     def _complete(self, prompt: str, timeout_sec: int) -> Completion:
@@ -593,13 +522,7 @@ class LLMHarness:
 
 
 def harness_is_startable(harness: Harness, cfg: LLMConfig) -> bool:
-    """True when this harness can spawn (CLI on PATH / HTTP key present).
-
-    Auto must not pick Codex just because OPENAI_API_KEY filled ``codex_api_key``.
-    A missing ``codex`` binary is not startable — Gate falls back to demo.
-    """
-    if isinstance(harness, DemoHarness):
-        return True
+    """True when this harness can spawn (CLI on PATH / HTTP key present)."""
     if isinstance(harness, CodexCliHarness):
         return _resolve_codex_bin(cfg.codex_bin) is not None
     if isinstance(harness, CursorAgentHarness):
@@ -609,10 +532,7 @@ def harness_is_startable(harness: Harness, cfg: LLMConfig) -> bool:
     return True
 
 
-def resolve_harness(kind: str, cfg: LLMConfig, *, demo: bool = False) -> Harness:
-    kind = (kind or "auto").lower()
-    if demo or kind in {"demo", "fixture", "offline"}:
-        return DemoHarness()
+def _named_harness(kind: str, cfg: LLMConfig) -> Harness:
     if kind in {"cursor-agent", "cursor", "agent"}:
         return CursorAgentHarness(cfg)
     if kind == "codex":
@@ -622,66 +542,71 @@ def resolve_harness(kind: str, cfg: LLMConfig, *, demo: bool = False) -> Harness
     if kind in {"claude", "claude-code"}:
         raise HarnessError(
             "The Claude Code harness is not in this OSS package.",
-            hint="Use `--harness llm` with ANTHROPIC_API_KEY, or `--demo`.",
+            hint="Use `--harness llm` with an Anthropic key in Settings.",
         )
-    if kind != "auto":
-        raise HarnessError(
-            f"Unknown harness {kind!r}",
-            hint="Use auto, cursor-agent, codex, llm, or demo.",
-        )
-    # auto = built-in checker unless Gate sees a key (`run_check` / `--live`).
-    return DemoHarness()
+    raise HarnessError(
+        f"Unknown harness {kind!r}",
+        hint="Use auto, cursor-agent, codex, or llm.",
+    )
+
+
+def resolve_harness(kind: str, cfg: LLMConfig) -> Harness:
+    return live_harness_or_error(kind, cfg)
+
+
+_LIVE_HARNESS_KINDS = frozenset(
+    {
+        "auto",
+        "cursor-agent",
+        "cursor",
+        "agent",
+        "codex",
+        "llm",
+        "byollm",
+        "claude",
+        "claude-code",
+    }
+)
 
 
 def live_harness_or_error(kind: str, cfg: LLMConfig) -> Harness:
-    """Used when the user explicitly asked for a live run. Never returns DemoHarness."""
+    """Pick a live harness. Missing key → MissingLLMKeyError (exit 2)."""
     kind = (kind or "auto").lower()
-    if kind in {"claude", "claude-code"}:
-        raise HarnessError(
-            "The Claude Code harness is not in this OSS package.",
-            hint="Use `--harness llm` with ANTHROPIC_API_KEY.",
-        )
-    if kind in {"demo", "fixture", "offline"}:
-        raise HarnessError(
-            "Live runs cannot use the demo harness.",
-            hint=(
-                "Pass `--demo` for offline checks (the default with no key). "
-                "Set CURSOR_API_KEY, CODEX_API_KEY, OPENAI_API_KEY, or "
-                "ANTHROPIC_API_KEY for a live harness."
-            ),
-        )
+    if kind not in _LIVE_HARNESS_KINDS:
+        return _named_harness(kind, cfg)
     if kind == "codex":
         if not _codex_ready(cfg):
             raise missing_key_error(for_codex=True)
         return CodexCliHarness(cfg)
+    if kind != "auto":
+        if not cfg.has_any_key and kind not in {"claude", "claude-code"}:
+            raise missing_key_error()
+        return _named_harness(kind, cfg)
     if not cfg.has_any_key:
         raise missing_key_error()
-    harness = resolve_harness(kind, cfg, demo=False)
-    if isinstance(harness, DemoHarness):
-        if cfg.cursor_api_key and _resolve_agent_bin(cfg.cursor_agent_bin):
-            return CursorAgentHarness(cfg)
-        if cfg.codex_api_key and _resolve_codex_bin(cfg.codex_bin):
-            return CodexCliHarness(cfg)
-        if cfg.gateway_api_key or cfg.openai_api_key or cfg.anthropic_api_key:
-            return LLMHarness(cfg)
-        if cfg.cursor_api_key:
-            return CursorAgentHarness(cfg)
-        if cfg.codex_api_key:
-            return CodexCliHarness(cfg)
-        raise missing_key_error()
-    return harness
+    if cfg.cursor_api_key and _resolve_agent_bin(cfg.cursor_agent_bin):
+        return CursorAgentHarness(cfg)
+    if cfg.codex_api_key and _resolve_codex_bin(cfg.codex_bin):
+        return CodexCliHarness(cfg)
+    if cfg.gateway_api_key or cfg.openai_api_key or cfg.anthropic_api_key:
+        return LLMHarness(cfg)
+    if cfg.cursor_api_key:
+        return CursorAgentHarness(cfg)
+    if cfg.codex_api_key:
+        return CodexCliHarness(cfg)
+    raise missing_key_error()
 
 
 def auto_live_harness_name(cfg: LLMConfig) -> str:
     """Harness Auto Start will run — picker catalog key. Never ``demo``.
 
-    Same name as ``live_harness_or_error("auto")``. Empty keys still return
-    ``cursor-agent`` for UI chrome (status has no live catalog either way).
+    Same name as ``live_harness_or_error("auto")``. Empty keys return ``auto``
+    so UI chrome does not invent Cursor.
     """
     try:
         return live_harness_or_error("auto", cfg).name
     except MissingLLMKeyError:
-        return "cursor-agent"
+        return "auto"
 
 
 def _codex_auth_key(cfg: LLMConfig) -> str | None:
@@ -930,24 +855,16 @@ def _infer_from_reads(paths: list[str], skills: list[Skill]) -> str | None:
     return None
 
 
-def _parse_run_lines(text: str) -> list[list[str]]:
-    commands: list[list[str]] = []
-    for line in text.splitlines():
-        stripped = line.strip()
-        if stripped.upper().startswith("RUN:"):
-            payload = stripped[4:].strip()
-            commands.append(payload.split())
-    return commands
-
-
-def _command_allowed(command: list[str], skill_name: str) -> bool:
-    if not command:
-        return False
-    joined = " ".join(command)
-    if ".." in joined:
-        return False
-    needle = f".skillgate/skills/{skill_name}/"
-    return command[0] in {"python", "python3"} and needle in joined
+def _byo_provider_error(status: int) -> HarnessError:
+    if status == 429:
+        message = (
+            "Your model provider refused the request (out of credit or rate-limited)."
+        )
+    elif status == 401:
+        message = "Your model provider did not accept this key."
+    else:
+        message = "Your model provider refused the request."
+    return HarnessError(message, hint="Check your key in Settings.")
 
 
 def _gateway_complete(
@@ -993,8 +910,7 @@ def _gateway_complete_response(
     except httpx.HTTPError:
         raise HarnessError(OFFLINE_MESSAGE) from None
     if response.status_code >= 400:
-        openai = "openai.com" in url or bool(cfg.openai_api_key)
-        raise harness_http_error(response.status_code, openai=openai)
+        raise _byo_provider_error(response.status_code)
     data = response.json()
     try:
         text = data["choices"][0]["message"]["content"]

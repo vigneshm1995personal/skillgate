@@ -9,7 +9,6 @@ from pydantic import ValidationError
 from skillgate_ai.case_pack import CasePack
 from skillgate_ai.config import LLMConfig
 from skillgate_ai.errors import (
-    BAD_OPENAI_KEY_MESSAGE,
     OFFLINE_MESSAGE,
     friendly_validation_error,
 )
@@ -114,7 +113,8 @@ def test_gateway_401_is_bad_key(monkeypatch: pytest.MonkeyPatch, tmp_path: Path)
     from skillgate_ai.errors import HarnessError
 
     assert isinstance(caught.value, HarnessError)
-    assert caught.value.message == BAD_OPENAI_KEY_MESSAGE
+    assert caught.value.message == "Your model provider did not accept this key."
+    assert "Settings" in (caught.value.hint or "")
     assert "BYO" not in caught.value.message
     assert "401" not in caught.value.message
 

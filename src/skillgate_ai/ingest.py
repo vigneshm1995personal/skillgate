@@ -15,7 +15,14 @@ NAME_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 FRONTMATTER_RE = re.compile(r"\A---[ \t]*\n(.*?\n)---[ \t]*(?:\n|$)", re.DOTALL)
 # Dockerfile CMD is `check /pack`; Compose bind-mounts the skill at that path.
 # The agentskills name==folder rule still applies to the source pack on disk.
-_GENERIC_MOUNT_NAMES = frozenset({"pack"})
+GENERIC_MOUNT_NAMES = frozenset({"pack"})
+
+
+def folder_matches_skill(folder: str, name: str) -> bool:
+    """True when SKILL.md `name:` matches the folder, or a generic Docker mount."""
+    return name == folder or folder in GENERIC_MOUNT_NAMES
+
+
 OPTIONAL_STRING_FIELDS = ("license", "compatibility", "allowed-tools")
 KNOWN_FIELDS = {
     "name",
@@ -38,14 +45,31 @@ class Skill:
     allowed_tools: str | None = None
     metadata: dict[str, str] = field(default_factory=dict)
     extra_frontmatter: dict[str, Any] = field(default_factory=dict)
+    display_name: str = ""
+    warning: str | None = None
+
+    def __post_init__(self) -> None:
+        if not self.display_name:
+            self.display_name = self.name
 
     @property
     def skill_md(self) -> Path:
         return self.path / "SKILL.md"
 
 
-def ingest_skill(path: str | Path) -> Skill:
+def folder_slug(folder: Path) -> str:
+    """Stable id from the folder name. Display names live in frontmatter."""
+    name = folder.name.strip()
+    if NAME_RE.match(name):
+        return name
+    slug = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
+    return slug or "skill"
+
+
+def ingest_skill(path: str | Path, *, strict: bool = True) -> Skill:
     folder = Path(path).expanduser().resolve()
+    if not strict:
+        return _ingest_lenient(folder)
     if not folder.exists():
         raise IngestError(f"Skill folder not found: {folder}")
     if not folder.is_dir():
@@ -74,28 +98,12 @@ def ingest_skill(path: str | Path) -> Skill:
 
     name = _require_name(parsed.get("name"), folder)
     description = _require_description(parsed.get("description"), folder)
-
-    metadata = parsed.get("metadata") or {}
-    if metadata is None:
-        metadata = {}
-    if not isinstance(metadata, dict):
-        raise IngestError(f"{folder.name}: metadata must be a map of string keys to string values")
-    clean_meta: dict[str, str] = {}
-    for key, value in metadata.items():
-        if not isinstance(key, str) or not isinstance(value, (str, int, float, bool)):
-            raise IngestError(f"{folder.name}: metadata values must be strings (key {key!r})")
-        clean_meta[str(key)] = str(value)
-
-    extra = {k: v for k, v in parsed.items() if k not in KNOWN_FIELDS}
-
-    compatibility = parsed.get("compatibility")
-    if compatibility is not None:
-        if not isinstance(compatibility, str) or not (1 <= len(compatibility) <= 500):
-            raise IngestError(f"{folder.name}: compatibility must be 1–500 characters if set")
+    clean_meta, extra, compatibility = _frontmatter_extras(parsed, folder, strict=True)
 
     return Skill(
         path=folder,
         name=name,
+        display_name=name,
         description=description,
         body=body,
         license=_opt_str(parsed.get("license")),
@@ -106,8 +114,8 @@ def ingest_skill(path: str | Path) -> Skill:
     )
 
 
-def ingest_skills(paths: list[str | Path]) -> list[Skill]:
-    skills = [ingest_skill(p) for p in paths]
+def ingest_skills(paths: list[str | Path], *, strict: bool = True) -> list[Skill]:
+    skills = [ingest_skill(p, strict=strict) for p in paths]
     names = [s.name for s in skills]
     dupes = {n for n in names if names.count(n) > 1}
     if dupes:
@@ -137,6 +145,134 @@ def discover_skills(skills_root: str | Path) -> list[Skill]:
     return found
 
 
+def _ingest_lenient(folder: Path) -> Skill:
+    """List and run real-world skills. Slug is the folder; keep the display name.
+
+    Never raises. Broken SKILL.md is listed with a friendly warning.
+    """
+    slug = folder_slug(folder) if folder.name else "skill"
+    if not folder.exists() or not folder.is_dir():
+        return Skill(
+            path=folder,
+            name=slug,
+            display_name=folder.name or slug,
+            description="",
+            body="",
+            warning="This skill folder is missing.",
+        )
+    skill_md = folder / "SKILL.md"
+    if not skill_md.is_file():
+        return Skill(
+            path=folder,
+            name=slug,
+            display_name=folder.name,
+            description="",
+            body="",
+            warning="This skill is missing its SKILL.md file.",
+        )
+    try:
+        text = skill_md.read_text(encoding="utf-8")
+    except (OSError, UnicodeError):
+        return Skill(
+            path=folder,
+            name=slug,
+            display_name=folder.name,
+            description="",
+            body="",
+            warning="Couldn't read this skill’s details.",
+        )
+    match = FRONTMATTER_RE.match(text)
+    if not match:
+        return Skill(
+            path=folder,
+            name=slug,
+            display_name=folder.name,
+            description="",
+            body=text,
+            warning="This skill’s SKILL.md is missing its header.",
+        )
+    body = text[match.end() :]
+    try:
+        parsed = yaml.safe_load(match.group(1)) or {}
+    except yaml.YAMLError:
+        return Skill(
+            path=folder,
+            name=slug,
+            display_name=folder.name,
+            description="",
+            body=body,
+            warning="Couldn't read this skill’s details.",
+        )
+    if not isinstance(parsed, dict):
+        return Skill(
+            path=folder,
+            name=slug,
+            display_name=folder.name,
+            description="",
+            body=body,
+            warning="Couldn't read this skill’s details.",
+        )
+    raw_name = parsed.get("name")
+    display = raw_name.strip() if isinstance(raw_name, str) and raw_name.strip() else folder.name
+    description = ""
+    warning = None
+    raw_desc = parsed.get("description")
+    if isinstance(raw_desc, str) and raw_desc.strip():
+        description = raw_desc.strip()
+        if len(description) > 1024:
+            description = description[:1024]
+            warning = "This skill’s description was truncated."
+    elif raw_desc is None or (isinstance(raw_desc, str) and not raw_desc.strip()):
+        warning = "This skill is missing a description."
+    else:
+        warning = "This skill is missing a description."
+    try:
+        clean_meta, extra, compatibility = _frontmatter_extras(parsed, folder, strict=False)
+    except (TypeError, ValueError, IngestError):
+        clean_meta, extra, compatibility = {}, {}, None
+        warning = warning or "Couldn't read this skill’s details."
+    return Skill(
+        path=folder,
+        name=slug,
+        display_name=display,
+        description=description,
+        body=body,
+        license=_opt_str(parsed.get("license")),
+        compatibility=_opt_str(compatibility) if compatibility is not None else None,
+        allowed_tools=_opt_str(parsed.get("allowed-tools")),
+        metadata=clean_meta,
+        extra_frontmatter=extra,
+        warning=warning,
+    )
+
+
+def _frontmatter_extras(
+    parsed: dict[str, Any], folder: Path, *, strict: bool
+) -> tuple[dict[str, str], dict[str, Any], Any]:
+    metadata = parsed.get("metadata") or {}
+    if metadata is None:
+        metadata = {}
+    if not isinstance(metadata, dict):
+        if strict:
+            raise IngestError(f"{folder.name}: metadata must be a map of string keys to string values")
+        metadata = {}
+    clean_meta: dict[str, str] = {}
+    for key, value in metadata.items():
+        if not isinstance(key, str) or not isinstance(value, (str, int, float, bool)):
+            if strict:
+                raise IngestError(f"{folder.name}: metadata values must be strings (key {key!r})")
+            continue
+        clean_meta[str(key)] = str(value)
+    extra = {k: v for k, v in parsed.items() if k not in KNOWN_FIELDS}
+    compatibility = parsed.get("compatibility")
+    if compatibility is not None:
+        if not isinstance(compatibility, str) or not (1 <= len(compatibility) <= 500):
+            if strict:
+                raise IngestError(f"{folder.name}: compatibility must be 1–500 characters if set")
+            compatibility = None
+    return clean_meta, extra, compatibility
+
+
 def _require_name(value: Any, folder: Path) -> str:
     if not isinstance(value, str) or not value.strip():
         raise IngestError(f"{folder.name}/SKILL.md is missing required frontmatter field `name`")
@@ -148,7 +284,7 @@ def _require_name(value: Any, folder: Path) -> str:
             f"{folder.name}: name {name!r} is invalid",
             hint="Use lowercase letters, numbers, and single hyphens; no leading/trailing/double hyphens.",
         )
-    if name != folder.name and folder.name not in _GENERIC_MOUNT_NAMES:
+    if not folder_matches_skill(folder.name, name):
         raise IngestError(
             f"Skill name {name!r} must match the folder name {folder.name!r}",
             hint="Rename the folder or the `name` field so they match.",

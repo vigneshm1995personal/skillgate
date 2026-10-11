@@ -76,7 +76,7 @@ def test_ui_meta_no_account(project_root: Path) -> None:
         assert payload["has_any_key"] is False
         assert payload["has_openai_key"] is False
         assert payload["judge_provider"] == "skip"
-        assert payload["demo_default"] is True
+        assert payload["demo_default"] is False
         blob = json.dumps(payload)
         assert "sk-" not in blob
         assert "OPENAI_API_KEY" not in blob
@@ -133,10 +133,11 @@ def test_ui_copy_has_no_internal_jargon(project_root: Path) -> None:
         assert "Create a skill" in js
         assert "Try an example" in js
         assert "See a failing check" in js
-        assert "Run live" in js
-        assert "Skip — use the built-in checker" in js
-        assert "Built-in checker scored this run. This is not a live model." in js
-        assert "Built-in checker. This is not a live model." in js
+        assert "Run live uses your API key" in js
+        assert "Continue without a key" in js
+        assert "Checks scored this run." in js
+        assert "built-in checker" not in js.lower()
+        assert "not a live model" not in js.lower()
         assert "report.scored_by" in js
         assert "Create and run check" not in js
         assert "Checking…" not in js
@@ -160,17 +161,16 @@ def test_ui_copy_has_no_internal_jargon(project_root: Path) -> None:
         assert "function scoredByLine" in js
         assert "function displayNameFromJudge" not in js
         assert "OpenAI couldn't score this run" not in js
-        assert "The skill ran live. The built-in checker scored it." in js
+        assert "The skill ran live. Checks scored this run." in js
         checking = js.split("function checkingLine")[1].split("function checkingPanel")[0]
-        live_branch = checking.split("Built-in checker scored this run")[0]
-        assert "not a live model" not in live_branch
-        assert "The skill ran live. The built-in checker scored it." in checking
+        assert "not a live model" not in checking
+        assert "The skill ran live. Checks scored this run." in checking
         assert "decisions" not in js.lower()
         assert "gpt-6-luna" not in js
         assert "OpenAI (your key)" not in js
         assert "function happenedLine" in js
         assert "Output matched what was expected." in js
-        assert "What the built-in checker checked" in js
+        assert "What the checks recorded" in js
         assert "Not available" in js
         assert "function bindCheckRows" in js
         assert "why || warn" not in js
@@ -239,7 +239,7 @@ def test_ui_skill_page_run_motion_is_wired(project_root: Path) -> None:
     assert "sawChecking = false" in pack
     assert pack.index("sawChecking = false") < pack.index("replay: false")
     assert "startCheck(path, { live: true })" in pack
-    assert "startCheck(path, { live: false, demo: true })" in pack
+    assert "demo: true" not in pack
     create = js.split("async function createSkill")[1].split("function checksFromPack")[0]
     assert "<p class=\"gate\">Checking</p>" not in create
     assert "/api/check" not in create
@@ -277,9 +277,9 @@ def test_ui_wizard_is_setup_only_then_skill_page(project_root: Path) -> None:
     assert "function keyPayloadFrom" in js
     assert "Your API key" in js
     assert "Want to add your first skill?" in js
-    assert "Skip — use the built-in checker" in js
+    assert "Continue without a key" in js
     assert "You already have an API key. Live checks will use it." in js
-    assert "This is not a live model." in js
+    assert "This is not a live model." not in js
     assert "<label>OPENAI_API_KEY" not in js
     assert "<label>CURSOR_API_KEY" not in js
     assert "Your API key (optional)" not in js
@@ -292,7 +292,8 @@ def test_ui_wizard_is_setup_only_then_skill_page(project_root: Path) -> None:
     assert "/api/check" not in setup
     create = js.split("async function createSkill")[1].split("function checksFromPack")[0]
     assert "/api/check" not in create
-    assert 'id="live">Run live' in js
+    assert 'id="live"' in js
+    assert ">Run</button>" in js
     assert "live: true" in js
     assert "function checksFromPack" in js
     assert "function checkHeadline" in js
@@ -300,7 +301,8 @@ def test_ui_wizard_is_setup_only_then_skill_page(project_root: Path) -> None:
     assert "params.get(\"run\")" not in pack
     assert "params.get(\"live\")" not in pack
     assert "checksTable(checksFromPack(pack))" in pack
-    assert 'id="live">Run live' in pack
+    assert 'id="live"' in pack
+    assert ">Run</button>" in pack
     assert "SETUP_DONE_KEY" in js
     assert "skillgate-setup-done" in js
     paint = js.split("async function paintWizard")[1].split("function goFirstSkill")[0]
@@ -312,7 +314,7 @@ def test_ui_only_start_check_posts_check(project_root: Path) -> None:
     assert js.count('api("POST", "/api/check"') == 1
     start = js.split("async function startCheck")[1].split("async function pollRun")[0]
     assert 'api("POST", "/api/check"' in start
-    assert "live: !!opts.live" in start
+    assert "live: true" in start
     assert "startCheck(" not in start
     keys = js.split('if (step === "keys")')[1].split('if (step === "firstSkill")')[0]
     assert "/api/check" not in keys
@@ -339,10 +341,13 @@ def test_ui_env_writes_only_supplied_keys(tmp_path: Path) -> None:
         )
         assert status == 200, payload
         assert payload["ok"] is True
-        env = (tmp_path / ".env").read_text(encoding="utf-8")
-        assert "OPENAI_API_KEY=sk-test-not-a-real-key" in env
-        assert "CURSOR_API_KEY" not in env
-        assert "ANTHROPIC_API_KEY" not in env
+        vault = (tmp_path / ".skillgate" / "keys").read_text(encoding="utf-8")
+        assert "OPENAI_API_KEY=sk-test-not-a-real-key" in vault
+        assert "CURSOR_API_KEY" not in vault
+        assert "ANTHROPIC_API_KEY" not in vault
+        assert not (tmp_path / ".env").exists() or "sk-test-not-a-real-key" not in (
+            tmp_path / ".env"
+        ).read_text(encoding="utf-8")
         status, meta = _request("GET", f"{base}/api/meta")
         assert status == 200
         assert "sk-test-not-a-real-key" not in json.dumps(meta)
@@ -436,8 +441,8 @@ def test_ui_env_rejects_newlines(tmp_path: Path) -> None:
         )
         assert status == 400, payload
         assert "line break" in str(payload).lower()
-        env = tmp_path / ".env"
-        assert not env.exists() or "MALICIOUS" not in env.read_text(encoding="utf-8")
+        vault = tmp_path / ".skillgate" / "keys"
+        assert not vault.exists() or "MALICIOUS" not in vault.read_text(encoding="utf-8")
     finally:
         server.shutdown()
         server.server_close()
@@ -459,49 +464,43 @@ def test_ui_name_mismatch_400(project_root: Path, tmp_path: Path) -> None:
         server.server_close()
 
 
-def test_ui_check_sabotaged_json(project_root: Path, tmp_path: Path) -> None:
+def test_ui_check_without_key_is_409(project_root: Path, tmp_path: Path) -> None:
     dest = tmp_path / "pdf-sabotaged"
     shutil.copytree(project_root / "skills" / "pdf-sabotaged", dest)
     ensure_demo_pdfs(dest / "evals" / "fixtures")
     server, base, _state = start_background(root=project_root, host="127.0.0.1", port=0)
     try:
         status, started = _request("POST", f"{base}/api/check", {"path": str(dest)})
-        assert status == 202, started
-        assert started["exit_code"] is None
-        done = _poll_run(base, started["run_id"])
-        report = done["report"]
-        assert done["exit_code"] == 1
-        assert report["gate"] == "red"
-        assert report["passed_count"] == 1
-        paste = (report.get("advice") or {}).get("paste") or ""
-        assert "grocery" not in paste.lower()
-        assert "dinner" not in paste.lower()
-        assert "pdf" in paste.lower()
+        assert status == 409, started
+        blob = json.dumps(started).lower()
+        assert "api key" in blob or "no model key" in blob
+        assert "skillgate keys set" in blob
     finally:
         server.shutdown()
         server.server_close()
 
 
-def test_ui_apply_fix_then_green(project_root: Path, tmp_path: Path) -> None:
+def test_ui_apply_advice_does_not_run_without_key(
+    project_root: Path, tmp_path: Path
+) -> None:
     dest = tmp_path / "pdf-sabotaged"
     shutil.copytree(project_root / "skills" / "pdf-sabotaged", dest)
     ensure_demo_pdfs(dest / "evals" / "fixtures")
     server, base, _state = start_background(root=project_root, host="127.0.0.1", port=0)
     try:
-        _, started = _request("POST", f"{base}/api/check", {"path": str(dest)})
-        red = _poll_run(base, started["run_id"])
-        advice = (red["report"] or {}).get("advice") or {}
-        description = advice.get("description") or advice.get("paste")
         status, applied = _request(
             "POST",
             f"{base}/api/pack/apply-advice",
-            {"path": str(dest), "description": description},
+            {
+                "path": str(dest),
+                "description": (
+                    "Extract text from PDFs when the user asks to read or parse a PDF."
+                ),
+            },
         )
         assert status == 200, applied
-        _, started2 = _request("POST", f"{base}/api/check", {"path": str(dest)})
-        green = _poll_run(base, started2["run_id"])
-        assert green["exit_code"] == 0, green
-        assert green["report"]["gate"] == "green"
+        status, started = _request("POST", f"{base}/api/check", {"path": str(dest)})
+        assert status == 409, started
     finally:
         server.shutdown()
         server.server_close()
@@ -515,7 +514,8 @@ def test_ui_live_without_key_is_409(project_root: Path) -> None:
         )
         assert status == 409, payload
         blob = json.dumps(payload).lower()
-        assert "api key" in blob
+        assert "no model key" in blob or "api key" in blob
+        assert "skillgate keys set" in blob
         assert status != 202
     finally:
         server.shutdown()
@@ -525,7 +525,7 @@ def test_ui_live_without_key_is_409(project_root: Path) -> None:
 def test_ui_live_with_key_does_not_use_builtin(
     project_root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv("OPENAI_API_KEY", "sk-test-not-a-real-key")
+    monkeypatch.setenv("SKILLGATE_OPENAI_API_KEY", "sk-test-not-a-real-key")
     dest = tmp_path / "pdf"
     shutil.copytree(project_root / "skills" / "pdf", dest)
     ensure_demo_pdfs(dest / "evals" / "fixtures")
@@ -561,14 +561,25 @@ def test_ui_live_with_key_does_not_use_builtin(
         server.server_close()
 
 
-def test_ui_builtin_demo_stays_demo_when_keys_set(
+def test_ui_demo_flag_still_runs_live(
     project_root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv("OPENAI_API_KEY", "sk-test-not-a-real-key")
-    monkeypatch.setenv("AI_GATEWAY_API_KEY", "gw-test-not-a-real-key")
+    monkeypatch.setenv("SKILLGATE_OPENAI_API_KEY", "sk-test-not-a-real-key")
     dest = tmp_path / "pdf"
     shutil.copytree(project_root / "skills" / "pdf", dest)
     ensure_demo_pdfs(dest / "evals" / "fixtures")
+
+    class LiveStub:
+        name = "llm"
+
+        def run(self, *args, **kwargs):
+            from skillgate_ai.errors import HarnessError
+
+            raise HarnessError("live stub")
+
+    monkeypatch.setattr(
+        "skillgate_ai.gate.live_harness_or_error", lambda *a, **k: LiveStub()
+    )
     server, base, _state = start_background(root=project_root, host="127.0.0.1", port=0)
     try:
         status, started = _request(
@@ -576,18 +587,19 @@ def test_ui_builtin_demo_stays_demo_when_keys_set(
         )
         assert status == 202, started
         done = _poll_run(base, started["run_id"])
-        report = done["report"] or {}
-        assert done["exit_code"] == 0, done
-        assert report.get("harness") == "demo"
-        notice = (done.get("demo_notice") or "").lower()
-        assert "built-in checker" in notice
-        assert "not a live model" in notice
+        assert done.get("report") is None
+        assert done.get("demo_notice") is None
+        assert done["exit_code"] == 1
+        err = json.dumps(done.get("error") or {}).lower()
+        assert "built-in" not in err
+        assert "demo" not in err
+        assert (done.get("report") or {}).get("harness") != "demo"
     finally:
         server.shutdown()
         server.server_close()
 
 
-def test_ui_new_pack_no_key_green(project_root: Path, tmp_path: Path) -> None:
+def test_ui_new_pack_no_key_is_409(project_root: Path, tmp_path: Path) -> None:
     server, base, _state = start_background(root=project_root, host="127.0.0.1", port=0)
     try:
         status, created = _request(
@@ -596,14 +608,10 @@ def test_ui_new_pack_no_key_green(project_root: Path, tmp_path: Path) -> None:
             {"parent": str(tmp_path), "name": "doc-notes"},
         )
         assert status == 201, created
-        _, started = _request("POST", f"{base}/api/check", {"path": created["path"]})
-        done = _poll_run(base, started["run_id"])
-        assert done["exit_code"] == 0, done
-        assert done["report"]["gate"] == "green"
-        for row in done["report"]["tasks"]:
-            assert row.get("happened"), row
-            assert row.get("check_kind") in {"openai", "builtin"}
-            assert isinstance(row.get("check_answers"), list)
+        status, started = _request("POST", f"{base}/api/check", {"path": created["path"]})
+        assert status == 409, started
+        blob = json.dumps(started).lower()
+        assert "no model key" in blob or "api key" in blob
     finally:
         server.shutdown()
         server.server_close()
@@ -647,7 +655,7 @@ const builtin = detailInnerHtml({
   check_kind: "builtin",
   check_answers: [{label: "Task completed", answer: "Yes — All expected outputs present"}]
 });
-if (!builtin.includes("What the built-in checker checked")) process.exit(12);
+if (!builtin.includes("What the checks recorded")) process.exit(12);
 if (!builtin.includes("Task completed")) process.exit(13);
 const failWhy = detailInnerHtml({
   passed: false,

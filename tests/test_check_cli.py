@@ -11,6 +11,7 @@ from conftest import plain_text
 from skillgate_ai.cli import _emit_json, app
 from skillgate_ai.demo_files import ensure_demo_pdfs
 from skillgate_ai.deploy import latest_check_passed
+from skillgate_ai.keys import set_vault_key
 
 runner = CliRunner()
 
@@ -21,44 +22,32 @@ def _prepare(project_root: Path) -> None:
         ensure_demo_pdfs(pack / "evals" / "fixtures")
 
 
-def test_check_pdf_green(project_root: Path) -> None:
+def test_check_without_key_exits_2(project_root: Path) -> None:
     _prepare(project_root)
     result = runner.invoke(app, ["check", str(project_root / "skills" / "pdf")])
-    assert result.exit_code == 0, result.stdout
-    assert "GREEN" in result.stdout
-    assert "built-in checker" in result.stdout.lower()
-    assert "not a live model" in result.stdout.lower()
-    assert "scored this run" in result.stdout.lower()
-
-
-def test_check_sabotaged_red(project_root: Path) -> None:
-    _prepare(project_root)
-    result = runner.invoke(app, ["check", str(project_root / "skills" / "pdf-sabotaged")])
-    assert result.exit_code == 1, result.stdout
-    assert "RED" in result.stdout
-    assert "Corrected SKILL.md description" in result.stdout
-    paste_part = result.stdout.split("Corrected SKILL.md description")[-1].lower()
-    assert "grocery" not in paste_part
-    assert "dinner" not in paste_part
-
-
-def test_check_expect_fail_on_sabotaged(project_root: Path) -> None:
-    _prepare(project_root)
-    result = runner.invoke(
-        app, ["check", str(project_root / "skills" / "pdf-sabotaged"), "--expect-fail"]
-    )
-    assert result.exit_code == 0, result.stdout
-    assert "expected" in result.stdout.lower()
+    out = plain_text(result.stdout + result.stderr)
+    assert result.exit_code == 2, out
+    assert "Settings" in out
+    assert "skillgate keys set" in out
+    assert "built-in checker" not in out.lower()
+    assert "not a live model" not in out.lower()
 
 
 def test_check_live_without_key_errors(project_root: Path) -> None:
     _prepare(project_root)
-    result = runner.invoke(app, ["check", str(project_root / "skills" / "pdf"), "--live"])
+    result = runner.invoke(app, ["check", str(project_root / "skills" / "pdf")])
     assert result.exit_code == 2
     assert "No model key" in result.stdout
     assert "built-in checker" not in result.stdout.lower()
     assert "BYOLLM" not in result.stdout
     assert "BYO LLM" not in result.stdout
+
+
+def _wipe_history(pack: Path) -> None:
+    hist = pack / "evals" / "history"
+    if hist.is_dir():
+        for path in hist.glob("*.jsonl"):
+            path.unlink()
 
 
 def test_live_missing_key_is_not_recorded_as_failed_check(
@@ -67,22 +56,74 @@ def test_live_missing_key_is_not_recorded_as_failed_check(
     pack = tmp_path / "pdf"
     shutil.copytree(project_root / "skills" / "pdf", pack)
     ensure_demo_pdfs(pack / "evals" / "fixtures")
+    _wipe_history(pack)
     hist = pack / "evals" / "history"
-    if hist.is_dir():
-        for path in hist.glob("*.jsonl"):
-            path.unlink()
     assert latest_check_passed(pack) is None
-    result = runner.invoke(app, ["check", str(pack), "--live"])
+    result = runner.invoke(app, ["check", str(pack)])
     assert result.exit_code == 2
     assert "No model key" in result.stdout
     assert latest_check_passed(pack) is None
     assert not hist.exists() or not any(hist.glob("*.jsonl"))
 
 
+def test_unknown_harness_is_not_recorded_and_does_not_block_deploy(
+    project_root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from skillgate_ai.history import append_eval
+
+    monkeypatch.setenv("SKILLGATE_ROOT", str(tmp_path))
+    monkeypatch.setenv("SKILLGATE_CURSOR_SKILLS", str(tmp_path / "cursor-skills"))
+    set_vault_key(tmp_path, "OPENAI_API_KEY", "sk-test-not-a-real-key")
+    pack = tmp_path / "pdf"
+    shutil.copytree(project_root / "skills" / "pdf", pack)
+    ensure_demo_pdfs(pack / "evals" / "fixtures")
+    _wipe_history(pack)
+    append_eval(pack, run_id="green", passed=True)
+    assert latest_check_passed(pack) is True
+    result = runner.invoke(app, ["check", str(pack), "--harness", "demo"])
+    assert result.exit_code != 0
+    assert "Unknown harness" in plain_text(result.stdout + result.stderr)
+    assert latest_check_passed(pack) is True
+    hist = pack / "evals" / "history"
+    rows = []
+    if hist.is_dir():
+        for path in hist.glob("*.jsonl"):
+            rows.extend(path.read_text(encoding="utf-8").splitlines())
+    assert any("green" in line for line in rows)
+    assert not any('"run_id":' in line and "green" not in line for line in rows if line.strip())
+    deploy = runner.invoke(app, ["deploy", str(pack)])
+    assert deploy.exit_code == 0, deploy.stdout
+    assert (tmp_path / "cursor-skills" / "pdf" / "SKILL.md").is_file()
+
+
+def test_invalid_config_is_not_recorded_and_does_not_block_gate(
+    project_root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from skillgate_ai.history import append_eval
+
+    monkeypatch.setenv("SKILLGATE_ROOT", str(tmp_path))
+    set_vault_key(tmp_path, "OPENAI_API_KEY", "sk-test-not-a-real-key")
+    pack = tmp_path / "pdf"
+    shutil.copytree(project_root / "skills" / "pdf", pack)
+    ensure_demo_pdfs(pack / "evals" / "fixtures")
+    _wipe_history(pack)
+    append_eval(pack, run_id="green", passed=True)
+    result = runner.invoke(app, ["check", str(pack), "--timeout", "99999"])
+    assert result.exit_code == 2, result.stdout
+    assert latest_check_passed(pack) is True
+    hist = pack / "evals" / "history"
+    blob = ""
+    if hist.is_dir():
+        blob = "\n".join(path.read_text(encoding="utf-8") for path in hist.glob("*.jsonl"))
+    assert "green" in blob
+    assert blob.count('"run_id"') == 1
+
+
 def test_check_with_key_runs_live(
     project_root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv("OPENAI_API_KEY", "sk-test-not-a-real-key")
+    monkeypatch.setenv("SKILLGATE_ROOT", str(tmp_path))
+    monkeypatch.setenv("SKILLGATE_OPENAI_API_KEY", "sk-test-not-a-real-key")
     dest = tmp_path / "pdf"
     shutil.copytree(project_root / "skills" / "pdf", dest)
     ensure_demo_pdfs(dest / "evals" / "fixtures")
@@ -103,18 +144,27 @@ def test_check_with_key_runs_live(
     assert "GREEN" not in result.stdout
 
 
-def test_check_demo_flag_forces_builtin_when_keys_set(
+def test_check_with_key_env_flag(
     project_root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv("OPENAI_API_KEY", "sk-test-not-a-real-key")
+    monkeypatch.setenv("SKILLGATE_ROOT", str(tmp_path))
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-via-flag")
     dest = tmp_path / "pdf"
     shutil.copytree(project_root / "skills" / "pdf", dest)
     ensure_demo_pdfs(dest / "evals" / "fixtures")
-    result = runner.invoke(app, ["check", str(dest), "--demo"])
-    assert result.exit_code == 0, result.stdout
-    assert "GREEN" in result.stdout
-    assert "built-in checker" in result.stdout.lower()
-    assert "not a live model" in result.stdout.lower()
+
+    class LiveStub:
+        name = "llm"
+
+        def run(self, *args, **kwargs):
+            from skillgate_ai.errors import HarnessError
+
+            raise HarnessError("live stub")
+
+    monkeypatch.setattr("skillgate_ai.gate.live_harness_or_error", lambda *a, **k: LiveStub())
+    result = runner.invoke(app, ["check", str(dest), "--key-env", "OPENAI_API_KEY"])
+    assert result.exit_code == 1, result.stdout
+    assert "live stub" in result.stdout
 
 
 def test_emit_json_does_not_wrap_long_strings(capsys: pytest.CaptureFixture[str]) -> None:
@@ -125,33 +175,22 @@ def test_emit_json_does_not_wrap_long_strings(capsys: pytest.CaptureFixture[str]
     assert "n" * 200 in raw
 
 
-def test_check_json_is_parseable(project_root: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("COLUMNS", "40")
-    _prepare(project_root)
-    result = runner.invoke(app, ["check", str(project_root / "skills" / "pdf"), "--json"])
-    assert result.exit_code == 0, result.stdout
+def test_check_json_error_is_json(project_root: Path) -> None:
+    result = runner.invoke(
+        app, ["check", str(project_root / "skills" / "pdf"), "--json"]
+    )
+    assert result.exit_code == 2
     payload = json.loads(result.stdout)
-    assert payload["gate"] == "green"
-    assert payload["passed"] is True
-    assert payload["scored_by"] == ("Built-in checker scored this run. This is not a live model.")
-
-
-def test_check_json_error_is_json(project_root: Path, tmp_path: Path) -> None:
-    dest = tmp_path / "renamed"
-    shutil.copytree(project_root / "skills" / "pdf", dest)
-    result = runner.invoke(app, ["check", str(dest), "--json"])
-    assert result.exit_code == 1
-    payload = json.loads(result.stdout)
-    assert "must match the folder name" in str(payload.get("error") or "")
-    assert payload.get("exit_code") == 1
+    assert "No model key" in str(payload.get("error") or "")
+    assert payload.get("exit_code") == 2
 
 
 def test_run_prints_prefer_check_hint(project_root: Path) -> None:
     _prepare(project_root)
-    result = runner.invoke(app, ["run", str(project_root / "skills" / "pdf"), "--demo"])
+    result = runner.invoke(app, ["run", str(project_root / "skills" / "pdf")])
     combined = result.stdout + result.stderr
     assert "Prefer `skillgate check`" in combined
-    assert result.exit_code == 0, combined
+    assert result.exit_code == 2, combined
 
 
 def test_no_serve_command() -> None:
@@ -164,11 +203,16 @@ def test_no_serve_command() -> None:
     )
 
 
-def test_reasoning_effort_silly_is_rejected(project_root: Path) -> None:
-    _prepare(project_root)
+def test_reasoning_effort_silly_is_rejected(
+    project_root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("SKILLGATE_ROOT", str(tmp_path))
+    set_vault_key(tmp_path, "OPENAI_API_KEY", "sk-test")
+    dest = tmp_path / "pdf"
+    shutil.copytree(project_root / "skills" / "pdf", dest)
     result = runner.invoke(
         app,
-        ["check", str(project_root / "skills" / "pdf"), "--demo", "--reasoning-effort", "silly"],
+        ["check", str(dest), "--reasoning-effort", "silly"],
     )
     assert result.exit_code == 2, result.stdout
     combined = result.stdout + result.stderr
@@ -188,28 +232,9 @@ def test_check_relative_pack_from_subfolder(
     shutil.copytree(project_root / "skills" / "pdf", skills / "pdf")
     monkeypatch.chdir(work)
     monkeypatch.setenv("SKILLGATE_ROOT", str(proj))
-    result = runner.invoke(app, ["check", "./pdf", "--demo"])
-    assert result.exit_code == 0, result.stdout
-    assert "GREEN" in result.stdout
-
-
-def test_sabotaged_reasons_are_per_task(project_root: Path) -> None:
-    _prepare(project_root)
-    result = runner.invoke(app, ["check", str(project_root / "skills" / "pdf-sabotaged"), "--demo"])
-    assert result.exit_code == 1, result.stdout
-    lower = result.stdout.lower()
-    assert "rotate-hello" in lower
-    assert "merge-alpha-beta" in lower
-    rotate_idx = result.stdout.index("rotate-hello")
-    merge_idx = result.stdout.index("merge-alpha-beta")
-    hello = "Extract the text from hello.pdf"
-    # The first failed case may quote hello.pdf; later cases must not reuse it.
-    after_rotate = result.stdout[rotate_idx : rotate_idx + 500]
-    after_merge = result.stdout[merge_idx : merge_idx + 500]
-    assert hello not in after_rotate
-    assert hello not in after_merge
-    assert "Skill didn’t trigger" not in after_rotate
-    assert "Skill didn't trigger" not in after_rotate
+    result = runner.invoke(app, ["check", "./pdf"])
+    assert result.exit_code == 2, result.stdout
+    assert "No model key" in result.stdout
 
 
 def test_ui_help() -> None:

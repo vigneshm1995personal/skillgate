@@ -21,9 +21,8 @@ Prefer bundled scripts under `scripts/` if they exist.
 """
 
 DEFAULT_DESCRIPTION = (
-    "Produce {name} notes, extracts, and local file outputs. "
-    "Use when the user asks for {name}, mentions invoices or documents, "
-    "or wants the documented {name} workflow."
+    "Help with {name} tasks in this workspace. "
+    "Use when the user asks for {name} or wants the documented {name} workflow."
 )
 
 

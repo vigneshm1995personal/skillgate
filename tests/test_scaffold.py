@@ -35,12 +35,54 @@ def test_name_mismatch_on_write(tmp_path: Path) -> None:
         )
 
 
-def test_trigger_only_pack_greens_without_keys(tmp_path: Path, project_root: Path) -> None:
+def test_trigger_only_pack_needs_a_key(tmp_path: Path, project_root: Path) -> None:
     dest = create_pack(tmp_path, "doc-notes")
     scaffold_trigger_cases(dest)
-    result = run_check(dest, source="test", root=project_root)
-    assert result.exit_code == 0, result.error
-    assert result.report is not None and result.report.passed
+    result = run_check(dest, source="test", root=tmp_path)
+    assert result.exit_code == 2
+    assert result.report is None
+    assert result.error is not None
+    assert "skillgate keys set" in ((result.error.get("hint") or "") + (result.error.get("message") or ""))
+
+
+def test_scaffold_accepts_display_name_frontmatter(tmp_path: Path) -> None:
+    dest = tmp_path / "idea-brainstorming"
+    dest.mkdir()
+    (dest / "SKILL.md").write_text(
+        "---\nname: Idea brainstorming\n"
+        "description: Brainstorm product ideas with the user when they ask.\n"
+        "---\n\n# Go\n",
+        encoding="utf-8",
+    )
+    pack = scaffold_trigger_cases(dest)
+    assert pack.skill == "idea-brainstorming"
+    assert (dest / "evals" / "cases.yaml").is_file()
+
+
+def test_run_uses_inline_checks_when_skill_has_no_dataset(
+    tmp_path: Path, project_root: Path
+) -> None:
+    dest = create_pack(tmp_path, "idea-notes")
+    empty = run_check(dest, source="ui", root=tmp_path)
+    assert empty.error
+    blob = f"{empty.error.get('message') or ''} {empty.error.get('hint') or ''}"
+    assert "evals/" not in blob
+    result = run_check(
+        dest,
+        source="ui",
+        root=tmp_path,
+        checks=[
+            {
+                "id": "should-trigger-1",
+                "prompt": "Brainstorm product ideas for a notes app.",
+                "should_trigger": True,
+            }
+        ],
+    )
+    assert result.exit_code == 2
+    assert result.report is None
+    assert result.error is not None
+    assert "skillgate keys set" in ((result.error.get("hint") or "") + (result.error.get("message") or ""))
 
 
 def test_invalid_cases_yaml_is_suite_error(tmp_path: Path) -> None:

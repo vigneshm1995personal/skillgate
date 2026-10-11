@@ -19,6 +19,9 @@ docs/
 *.md
 !README.md
 !LICENSE
+# Example packs must stay in the image (`COPY skills` + `skillgate example`).
+!skills/
+!skills/**
 
 # Docker files (avoid recursive inclusion)
 Dockerfile*
@@ -53,9 +56,6 @@ htmlcov/
 .pytest_cache/
 .ruff_cache/
 tests/
-
-# Sample packs — bind-mount /pack at runtime
-skills/
 
 # OS files
 .DS_Store

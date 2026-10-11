@@ -10,6 +10,7 @@ from typing import Any
 from skillgate_ai.config import (
     CODEX_REASONING_EFFORTS,
     DEFAULT_CODEX_REASONING_EFFORT,
+    DEFAULT_OPENAI_BASE_URL,
     LLMConfig,
     normalize_codex_reasoning_effort,
 )
@@ -236,12 +237,19 @@ def stamp_resolved(run: EvalRunConfig, harness_name: str, cfg: LLMConfig) -> Eva
         effort = None
     else:
         effort = None
+    applied = applied_knobs(name, model=model)
+    if name == "llm":
+        applied = {
+            **applied,
+            "via_gateway": bool(cfg.gateway_api_key)
+            or (cfg.gateway_base_url or "").rstrip("/") != DEFAULT_OPENAI_BASE_URL.rstrip("/"),
+        }
     return replace(
         run,
         harness=name,
         model=model,
         reasoning_effort=effort,
-        applied=applied_knobs(name, model=model),
+        applied=applied,
     )
 
 
@@ -276,13 +284,41 @@ def config_fingerprint(run: EvalRunConfig | None) -> str | None:
     return hashlib.sha256(blob.encode("utf-8")).hexdigest()[:16]
 
 
+def harness_display_name(pref: str | None, resolved: str | None = None) -> str:
+    key = (pref or resolved or "").strip().lower()
+    if key == "auto":
+        labels = {
+            "codex": "Codex",
+            "claude": "Claude",
+            "llm": "LLM",
+            "cursor-agent": "Cursor",
+        }
+        resolved_key = (resolved or "").strip().lower()
+        label = labels.get(resolved_key)
+        if label:
+            return f"Auto · {label}"
+        return "Auto"
+    names = {
+        "cursor-agent": "Cursor",
+        "codex": "Codex",
+        "claude": "Claude",
+        "llm": "LLM",
+    }
+    if key in names:
+        return names[key]
+    return (pref or resolved or "Auto").strip() or "Auto"
+
+
 def config_label(run: EvalRunConfig | dict[str, Any] | None) -> str:
     cfg = coerce_eval_config(run)
     if cfg is None:
         return ""
-    parts: list[str] = [cfg.harness or "eval"]
+    parts: list[str] = [harness_display_name(cfg.harness, cfg.harness)]
     if cfg.model:
-        parts.append(cfg.model)
+        if (cfg.applied or {}).get("via_gateway"):
+            parts.append(f"{cfg.model} via gateway")
+        else:
+            parts.append(cfg.model)
     timeout = cfg.timeout_effective if cfg.timeout_effective is not None else cfg.timeout_sec
     if timeout:
         parts.append(f"{timeout}s")

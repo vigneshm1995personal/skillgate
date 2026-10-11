@@ -244,7 +244,9 @@ def process_job(url: str, config: dict, job: dict) -> dict:
         failed = False
         for target in targets:
             try:
-                get_adapter(target).install(skill=loaded, source=skill_dir)
+                get_adapter(target).install(
+                    skill=loaded, source=skill_dir, remote_gated=True
+                )
                 results.append({"target": target, "status": "installed"})
             except SkillGateError as exc:
                 failed = True

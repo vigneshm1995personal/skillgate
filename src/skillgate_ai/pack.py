@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import Any
 
 from skillgate_ai.demo_files import write_pdf
+from skillgate_ai.errors import SkillGateError
 
 FIXTURE_DIR = "evals/fixtures"
 GOLDEN_DIR = "evals/goldens"
@@ -182,9 +183,15 @@ def write_pack_file(
     root = Path(skill_path).expanduser().resolve()
     if not root.is_dir():
         raise ValueError("Skill folder not found.")
-    relative = safe_relpath(rel)
-    dest_path = (root / relative).resolve()
-    dest_path.relative_to(root)
+    try:
+        relative = safe_relpath(rel)
+        dest_path = (root / relative).resolve()
+        dest_path.relative_to(root)
+    except ValueError as exc:
+        raise SkillGateError(
+            "That path is outside the skill folder.",
+            hint="Pick a file inside this skill.",
+        ) from exc
     dest_path.parent.mkdir(parents=True, exist_ok=True)
     data = content.encode("utf-8") if isinstance(content, str) else content
     dest_path.write_bytes(data)
@@ -433,19 +440,14 @@ def copy_skill_pack(
     dest: str | Path,
     *,
     include_goldens: bool = False,
+    include_evals: bool | None = None,
 ) -> dict[str, Any]:
     """Recursive copy of a skill pack root, preserving the relative tree.
 
-    Copies SKILL.md plus scripts/, assets/, references/, evals/fixtures/, and
-    any other pack files. Skips VCS/cache dirs.
+    Default (deploy / sandbox): SKILL.md, scripts/, assets/, references/, and
+    other non-eval files. ``evals/`` stays in the source pack.
 
-    Write into a temp directory next to dest, then swap. Never empty an
-    existing install first — a failed copy leaves dest intact.
-
-    ``skill_pack_hash`` (the recorded pass) includes ``evals/goldens/``. Deploy
-    bundle and git publish pass ``include_goldens=True`` so the copied tree
-    hashes the same. Sandbox and editor installs keep goldens out so the
-    agent cannot read expected answers.
+    Import into this project passes ``include_goldens=True`` so checks can score.
     """
     src = Path(source).expanduser().resolve()
     dst = Path(dest).expanduser().resolve()
@@ -459,14 +461,15 @@ def copy_skill_pack(
     tmp = parent / f".{dst.name}.skillgate-tmp-{token}"
     old = parent / f".{dst.name}.skillgate-old-{token}"
 
-    def ignore_keep(_directory: str, names: list[str]) -> set[str]:
-        return {
-            name
-            for name in names
-            if name.lower() in _SKIP_DIR_NAMES or name.lower() in _SKIP_FILE_NAMES
-        }
+    keep_evals = include_goldens if include_evals is None else include_evals
 
-    ignore = _pack_copy_ignore if not include_goldens else ignore_keep
+    def ignore(_directory: str, names: list[str]) -> set[str]:
+        return _pack_copy_ignore(
+            _directory,
+            names,
+            include_evals=keep_evals,
+            include_goldens=include_goldens,
+        )
     try:
         if tmp.exists():
             shutil.rmtree(tmp)
@@ -565,14 +568,22 @@ def _path_under_skill(skill_root: Path, rel: str) -> Path | None:
     return candidate
 
 
-def _pack_copy_ignore(directory: str, names: list[str]) -> set[str]:
+def _pack_copy_ignore(
+    directory: str,
+    names: list[str],
+    *,
+    include_evals: bool = False,
+    include_goldens: bool = False,
+) -> set[str]:
     ignored: set[str] = set()
     parent = Path(directory).name.lower()
     for name in names:
         key = name.lower()
         if key in _SKIP_DIR_NAMES or key in _SKIP_FILE_NAMES:
             ignored.add(name)
-        if parent == "evals" and key == "goldens":
+        if not include_evals and key == "evals":
+            ignored.add(name)
+        if include_evals and not include_goldens and parent == "evals" and key == "goldens":
             ignored.add(name)
     return ignored
 
