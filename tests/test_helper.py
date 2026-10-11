@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import http.client
 import io
 import json
 import os
@@ -213,6 +214,24 @@ def test_read_json_wraps_bad_payload(monkeypatch: pytest.MonkeyPatch) -> None:
     assert exc.value.message == helper_mod._UNREACHABLE
 
 
+def test_http_get_wraps_incomplete_read(monkeypatch: pytest.MonkeyPatch) -> None:
+    class _Resp:
+        def read(self) -> bytes:
+            raise http.client.IncompleteRead(b"abc", 100)
+
+        def __enter__(self) -> "_Resp":
+            return self
+
+        def __exit__(self, *args) -> bool:
+            return False
+
+    monkeypatch.setattr(urllib.request, "urlopen", lambda *args, **kwargs: _Resp())
+    with pytest.raises(helper_mod.SkillGateError) as exc:
+        helper_mod._http_get("https://host.example/bundle")
+    assert exc.value.message == helper_mod._UNREACHABLE
+    assert "IncompleteRead" not in exc.value.message
+
+
 def test_run_helper_reports_network_error_after_claim(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -242,4 +261,42 @@ def test_run_helper_reports_network_error_after_claim(
     blob = json.dumps(reported[0])
     assert "timed out" not in blob
     assert "URLError" not in blob
+    assert "Couldn't reach Skill Gate" in reported[0]["error"]
+
+
+def test_run_helper_reports_incomplete_read_after_claim(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    reported: list[dict] = []
+
+    def fake_post(url, payload, **kwargs):
+        if url.endswith("/api/helper/poll"):
+            return {
+                "job": {
+                    "id": "j1",
+                    "skill_name": "pdf",
+                    "skill_md_hash": "abc",
+                    "targets": ["cursor"],
+                }
+            }
+        reported.append(payload)
+        return {}
+
+    class _Resp:
+        def read(self) -> bytes:
+            raise http.client.IncompleteRead(b"abc", 100)
+
+        def __enter__(self) -> "_Resp":
+            return self
+
+        def __exit__(self, *args) -> bool:
+            return False
+
+    monkeypatch.setattr(helper_mod, "_http_post", fake_post)
+    monkeypatch.setattr(urllib.request, "urlopen", lambda *args, **kwargs: _Resp())
+    run_helper({"url": "https://host.example", "token": "tok"}, once=True)
+    assert reported
+    assert reported[0]["status"] == "failed"
+    blob = json.dumps(reported[0])
+    assert "IncompleteRead" not in blob
     assert "Couldn't reach Skill Gate" in reported[0]["error"]

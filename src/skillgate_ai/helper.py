@@ -7,6 +7,7 @@ never listens on a port.
 
 from __future__ import annotations
 
+import http.client
 import io
 import json
 import os
@@ -57,7 +58,12 @@ def _http_get(url: str, *, headers: dict | None = None) -> bytes:
     try:
         with urllib.request.urlopen(req, timeout=120) as resp:
             return resp.read()
-    except (urllib.error.URLError, TimeoutError, OSError) as exc:
+    except (
+        urllib.error.URLError,
+        TimeoutError,
+        OSError,
+        http.client.HTTPException,
+    ) as exc:
         raise _request_error(exc) from exc
 
 
@@ -65,7 +71,12 @@ def _read_json(req: urllib.request.Request, *, timeout: int) -> dict:
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             body = resp.read()
-    except (urllib.error.URLError, TimeoutError, OSError) as exc:
+    except (
+        urllib.error.URLError,
+        TimeoutError,
+        OSError,
+        http.client.HTTPException,
+    ) as exc:
         raise _request_error(exc) from exc
     if not body:
         return {}
@@ -148,6 +159,10 @@ def _auth_headers(config: dict) -> dict:
 def _friendly_reason(exc: BaseException) -> str:
     if isinstance(exc, SkillGateError):
         return customer_job_error(exc.message)
+    if isinstance(
+        exc, (urllib.error.URLError, TimeoutError, OSError, http.client.HTTPException)
+    ):
+        return _UNREACHABLE
     message = str(exc).strip() or exc.__class__.__name__
     return customer_job_error(message[:200]) or _INSTALL_FAILED
 
@@ -257,7 +272,7 @@ def run_helper(config: dict, *, once: bool = False, sleep_sec: int = 5) -> None:
         if job:
             try:
                 result = process_job(url, config, job)
-            except SkillGateError as exc:
+            except Exception as exc:  # noqa: BLE001 — claimed jobs must report failed
                 result = _failed_result(
                     job.get("targets") or [], _friendly_reason(exc)
                 )
