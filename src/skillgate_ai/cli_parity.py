@@ -32,6 +32,9 @@ WRITE_ROUTE_CLI: dict[tuple[str, str], str] = {
     ("POST", "/api/runs/{run_id}/skip"): "check",
     ("POST", "/api/runs/{run_id}/kill"): "check",
     ("POST", "/api/deploy"): "deploy",
+    ("POST", "/api/compare/models"): "compare models",
+    ("POST", "/api/compare/versions"): "compare versions",
+    ("POST", "/api/compare/{compare_id}/cancel"): "compare cancel",
 }
 
 READ_ROUTE_CLI: dict[tuple[str, str], str] = {

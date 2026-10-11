@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { Columns2Icon } from "lucide-react"
 
+import { EvalConfigFields } from "@/components/dashboard/eval-config-fields"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -10,6 +11,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import {
@@ -35,29 +37,43 @@ import {
   passLabel,
   type ComparePayload,
 } from "@/lib/compare"
+import {
+  DEFAULT_EVAL_CONFIG_DRAFT,
+  draftToApiConfig,
+  type EvalConfigDraft,
+} from "@/lib/eval-config"
 import { useDashboard } from "@/lib/dashboard-provider"
 import { api } from "@/lib/api"
-import type { HarnessPref } from "@/lib/types"
+import { resolvedHarnessName } from "@/lib/types"
 
-const HARNESS_OPTS: { value: HarnessPref; label: string }[] = [
+type CompareHarnessPref = "auto" | "cursor-agent" | "codex" | "claude" | "llm"
+
+type ArmDraft = {
+  label: string
+  harness: CompareHarnessPref
+  config: EvalConfigDraft
+}
+
+const HARNESS_OPTS: { value: CompareHarnessPref; label: string }[] = [
   { value: "auto", label: "Auto" },
+  { value: "llm", label: "LLM (gateway / Other)" },
   { value: "cursor-agent", label: "Cursor" },
   { value: "codex", label: "Codex" },
   { value: "claude", label: "Claude" },
 ]
 
-type ArmDraft = { label: string; harness: HarnessPref }
-
 export function ComparePage() {
   const { skill, skills, setStage, openHistoryRun, status } = useDashboard()
   const [mode, setMode] = useState<"models" | "versions">("models")
   const [arms, setArms] = useState<ArmDraft[]>([
-    { label: "Arm A", harness: "codex" },
-    { label: "Arm B", harness: "cursor-agent" },
+    { label: "Arm A", harness: "auto", config: { ...DEFAULT_EVAL_CONFIG_DRAFT } },
+    { label: "Arm B", harness: "auto", config: { ...DEFAULT_EVAL_CONFIG_DRAFT } },
   ])
   const [maxSpend, setMaxSpend] = useState("5")
   const [runA, setRunA] = useState("")
   const [runB, setRunB] = useState("")
+  const [caseIds, setCaseIds] = useState<string[] | null>(null)
+  const [datasetChecks, setDatasetChecks] = useState<Array<{ id: string; prompt: string }>>([])
   const [result, setResult] = useState<ComparePayload | null>(null)
   const [running, setRunning] = useState(false)
   const [activeCompareId, setActiveCompareId] = useState<string | null>(null)
@@ -65,6 +81,17 @@ export function ComparePage() {
   const [error, setError] = useState("")
 
   const activeSkill = skill?.name || skills[0]?.name || ""
+  const resolvedHarness = resolvedHarnessName("auto", status)
+
+  const allCaseIds = useMemo(
+    () => datasetChecks.map((row) => row.id),
+    [datasetChecks]
+  )
+
+  const selectedCaseIds = useMemo(
+    () => caseIds ?? allCaseIds,
+    [caseIds, allCaseIds]
+  )
 
   const pollCompare = useCallback(async (compareId: string) => {
     for (let i = 0; i < 120; i++) {
@@ -101,11 +128,22 @@ export function ComparePage() {
     try {
       const started = await api.startCompareModels({
         skill: activeSkill,
-        arms: arms.map((arm) => ({
-          label: arm.label,
-          harness_pref: arm.harness,
-        })),
+        arms: arms.map((arm) => {
+          const cfg = draftToApiConfig(
+            arm.config,
+            arm.harness === "codex" || resolvedHarness === "codex"
+          )
+          return {
+            label: arm.label,
+            harness_pref: arm.harness,
+            model: cfg.model,
+            timeout_sec: cfg.timeout_sec,
+            temperature: cfg.temperature,
+            reasoning_effort: cfg.reasoning_effort,
+          }
+        }),
         max_spend_usd: Number(maxSpend) || 5,
+        case_ids: caseIds ?? undefined,
       })
       setActiveCompareId(started.compare_id)
       await pollCompare(started.compare_id)
@@ -153,6 +191,22 @@ export function ComparePage() {
     })
   }, [activeSkill])
 
+  useEffect(() => {
+    if (!activeSkill) {
+      setDatasetChecks([])
+      setCaseIds(null)
+      return
+    }
+    void api.dataset(activeSkill).then((payload) => {
+      const rows = (payload.cases ?? []).map((row) => ({
+        id: String(row.id),
+        prompt: String(row.prompt || ""),
+      }))
+      setDatasetChecks(rows)
+      setCaseIds(null)
+    })
+  }, [activeSkill])
+
   const cancelCompare = async () => {
     if (!activeCompareId) {
       return
@@ -162,6 +216,22 @@ export function ComparePage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not cancel.")
     }
+  }
+
+  const toggleCase = (id: string, checked: boolean) => {
+    setCaseIds((prev) => {
+      const base = prev ?? allCaseIds
+      let next: string[]
+      if (checked) {
+        next = base.includes(id) ? base : [...base, id]
+      } else {
+        next = base.filter((item) => item !== id)
+      }
+      if (next.length === allCaseIds.length) {
+        return null
+      }
+      return next
+    })
   }
 
   const disagreements = disagreementCount(result?.cases)
@@ -195,45 +265,108 @@ export function ComparePage() {
           </TabsList>
           <TabsContent value="models" className="space-y-4 pt-4">
             {arms.map((arm, index) => (
-              <div key={index} className="grid gap-3 sm:grid-cols-2">
-                <div>
-                  <Label>Arm {index + 1} label</Label>
-                  <Input
-                    value={arm.label}
-                    onChange={(e) => {
+              <Card key={index}>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base">Arm {index + 1}</CardTitle>
+                </CardHeader>
+                <CardContent className="grid gap-4">
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div>
+                      <Label>Label</Label>
+                      <Input
+                        value={arm.label}
+                        onChange={(e) => {
+                          const next = [...arms]
+                          next[index] = { ...next[index], label: e.target.value }
+                          setArms(next)
+                        }}
+                      />
+                    </div>
+                    <div>
+                      <Label>Agent</Label>
+                      <Select
+                        value={arm.harness}
+                        onValueChange={(value) => {
+                          const next = [...arms]
+                          next[index] = {
+                            ...next[index],
+                            harness: value as CompareHarnessPref,
+                          }
+                          setArms(next)
+                        }}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {HARNESS_OPTS.map((opt) => (
+                            <SelectItem key={opt.value} value={opt.value}>
+                              {opt.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  <EvalConfigFields
+                    value={arm.config}
+                    onChange={(config) => {
                       const next = [...arms]
-                      next[index] = { ...next[index], label: e.target.value }
+                      next[index] = { ...next[index], config }
                       setArms(next)
                     }}
+                    harnessPref={arm.harness}
+                    resolvedHarness={
+                      arm.harness === "auto" ? resolvedHarness : arm.harness
+                    }
+                    disabled={running}
+                    supportedModels={status?.supported_models}
+                    supportedModelsMeta={status?.supported_models_meta}
+                    defaultTimeoutSec={status?.default_eval_config?.timeout_sec}
                   />
-                </div>
-                <div>
-                  <Label>Agent</Label>
-                  <Select
-                    value={arm.harness}
-                    onValueChange={(value) => {
-                      const next = [...arms]
-                      next[index] = {
-                        ...next[index],
-                        harness: value as HarnessPref,
-                      }
-                      setArms(next)
-                    }}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {HARNESS_OPTS.map((opt) => (
-                        <SelectItem key={opt.value} value={opt.value}>
-                          {opt.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
+                </CardContent>
+              </Card>
             ))}
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">Checks</CardTitle>
+                <CardDescription>
+                  Leave all selected to run the full Dataset ({datasetChecks.length} checks).
+                  Uncheck to match `skillgate compare models --cases`.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="max-h-56 space-y-2 overflow-y-auto">
+                {datasetChecks.map((row) => {
+                  const checked =
+                    caseIds === null || caseIds.includes(row.id)
+                  return (
+                    <label
+                      key={row.id}
+                      className="flex cursor-pointer items-start gap-2 text-sm"
+                    >
+                      <Checkbox
+                        checked={checked}
+                        onCheckedChange={(value) =>
+                          toggleCase(row.id, value === true)
+                        }
+                      />
+                      <span>
+                        <span className="font-mono text-xs text-muted-foreground">
+                          {row.id}
+                        </span>
+                        <span className="block text-muted-foreground">
+                          {row.prompt.slice(0, 120)}
+                        </span>
+                      </span>
+                    </label>
+                  )
+                })}
+              </CardContent>
+              <CardContent className="border-t pt-3 text-sm text-muted-foreground">
+                Will run {selectedCaseIds.length} check
+                {selectedCaseIds.length === 1 ? "" : "s"}.
+              </CardContent>
+            </Card>
             <div className="max-w-xs">
               <Label>Spend cap (USD)</Label>
               <Input value={maxSpend} onChange={(e) => setMaxSpend(e.target.value)} />
@@ -320,38 +453,44 @@ export function ComparePage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="flex flex-wrap gap-2">
-              {result.arms.map((arm) => (
-                <Badge key={arm.arm_id} variant="secondary">
-                  {arm.label}: {armChecksLine(arm)}
-                </Badge>
-              ))}
-            </div>
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Check</TableHead>
+                  <TableHead />
                   {result.arms.map((arm) => (
                     <TableHead key={arm.arm_id}>{arm.label}</TableHead>
                   ))}
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {(result.cases ?? []).map((row) => (
-                  <TableRow key={row.case_id}>
-                    <TableCell className="font-mono text-xs">{row.case_id}</TableCell>
-                    {result.arms?.map((arm) => {
-                      const cell = row.results?.[arm.arm_id]
-                      const label = passLabel(cell?.passed)
-                      const tone =
-                        label === "Pass"
-                          ? "text-success"
-                          : label === "Fail"
-                            ? "text-destructive"
-                            : ""
+                <TableRow>
+                  <TableCell className="font-medium">Checks</TableCell>
+                  {result.arms.map((arm) => (
+                    <TableCell key={arm.arm_id}>{armChecksLine(arm)}</TableCell>
+                  ))}
+                </TableRow>
+                {(result.cases ?? []).map((caseRow) => (
+                  <TableRow key={caseRow.case_id}>
+                    <TableCell className="font-mono text-xs">{caseRow.case_id}</TableCell>
+                    {(result.arms ?? []).map((arm) => {
+                      const cell = caseRow.results?.[arm.arm_id]
+                      const passed = cell?.passed
                       return (
-                        <TableCell key={arm.arm_id} className={tone}>
-                          {label}
+                        <TableCell key={arm.arm_id}>
+                          {passed === true ? (
+                            <Badge variant="outline" className="border-emerald-600 text-emerald-700">
+                              {passLabel(passed)}
+                            </Badge>
+                          ) : passed === false ? (
+                            <Badge variant="outline" className="border-destructive text-destructive">
+                              {passLabel(passed)}
+                            </Badge>
+                          ) : (
+                            passLabel(passed ?? null)
+                          )}
+                          {caseRow.disagreement ? (
+                            <span className="ml-1 text-xs text-muted-foreground">≠</span>
+                          ) : null}
                         </TableCell>
                       )
                     })}
@@ -359,26 +498,28 @@ export function ComparePage() {
                 ))}
               </TableBody>
             </Table>
-            <div className="flex flex-wrap gap-2">
-              {result.arms.map((arm) =>
-                arm.run_id ? (
-                  <Button
-                    key={arm.arm_id}
-                    size="sm"
-                    variant="outline"
-                    onClick={() =>
-                      void openHistoryRun({
-                        kind: "run",
-                        id: arm.run_id!,
-                        skill: result.skill,
-                      })
-                    }
-                  >
-                    Open {arm.label} run
-                  </Button>
-                ) : null
-              )}
-            </div>
+            {result.arms.some((arm) => arm.run_id) ? (
+              <div className="flex flex-wrap gap-2">
+                {result.arms.map((arm) =>
+                  arm.run_id ? (
+                    <Button
+                      key={arm.arm_id}
+                      size="sm"
+                      variant="outline"
+                      onClick={() =>
+                        void openHistoryRun({
+                          kind: "run",
+                          id: arm.run_id!,
+                          skill: result.skill,
+                        })
+                      }
+                    >
+                      Open {arm.label} run
+                    </Button>
+                  ) : null
+                )}
+              </div>
+            ) : null}
           </CardContent>
         </Card>
       ) : null}

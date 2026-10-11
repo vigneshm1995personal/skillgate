@@ -869,6 +869,8 @@ def judge_provider_test() -> None:
         raise typer.Exit(exc.exit_code) from None
     console.print(str(result.get("message") or ""))
     raise typer.Exit(0 if result.get("ok") else 1)
+
+
 compare_app = typer.Typer(
     add_completion=False,
     no_args_is_help=True,

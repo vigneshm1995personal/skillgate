@@ -473,7 +473,14 @@ export const api = {
     ),
   startCompareModels: (payload: {
     skill: string
-    arms: Array<{ label: string; harness_pref: string }>
+    arms: Array<{
+      label: string
+      harness_pref: string
+      model?: string | null
+      timeout_sec?: number | null
+      temperature?: number | null
+      reasoning_effort?: string | null
+    }>
     max_spend_usd?: number
     case_ids?: string[]
   }) =>

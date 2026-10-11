@@ -21,6 +21,7 @@ from skillgate_ai.live import create_control, drop_control
 MAX_ARMS = 4
 MIN_ARMS = 2
 DEFAULT_MAX_SPEND_USD = 5.0
+ALLOWED_COMPARE_HARNESS = frozenset({"auto", "cursor-agent", "codex", "claude", "llm"})
 
 
 class CompareError(SkillGateError):
@@ -62,6 +63,11 @@ def parse_arm_spec(raw: str, *, arm_id: str, index: int) -> CompareArmSpec:
     text = (raw or "").strip()
     if not text:
         raise CompareError("Each arm needs a label and harness.", hint="Use --arm 'Label:codex'.")
+    if ":" not in text:
+        raise CompareError(
+            "Each --arm needs Label:harness[:model].",
+            hint="Example: --arm 'Arm A:codex:gpt-4o-mini'.",
+        )
     parts = text.split(":")
     label = parts[0].strip() or arm_label_defaults(index + 1)[index]
     harness = (parts[1] if len(parts) > 1 else "auto").strip() or "auto"
@@ -113,6 +119,134 @@ def arm_id_for_index(index: int) -> str:
     if index < 0 or index >= MAX_ARMS:
         raise CompareError(f"Compare supports at most {MAX_ARMS} arms.")
     return chr(ord("a") + index)
+
+
+def validate_compare_plan(
+    arms: list[CompareArmSpec],
+    *,
+    max_spend_usd: float | None,
+) -> None:
+    if max_spend_usd is not None and max_spend_usd < 0:
+        raise CompareError("Spend cap must be zero or positive.")
+    if len(arms) < MIN_ARMS or len(arms) > MAX_ARMS:
+        raise CompareError(f"Compare needs {MIN_ARMS}–{MAX_ARMS} arms.")
+    labels: list[str] = []
+    for spec in arms:
+        harness = (spec.harness_pref or "auto").strip().lower()
+        if harness not in ALLOWED_COMPARE_HARNESS:
+            raise CompareError(
+                f"Unknown harness {spec.harness_pref!r}.",
+                hint="Use auto, cursor-agent, codex, claude, or llm.",
+            )
+        labels.append(spec.label.strip().lower())
+    if len(labels) != len(set(labels)):
+        raise CompareError("Arm labels must be unique.")
+
+
+def _resolve_compare_case_ids(pack: Path, case_ids: list[str] | None) -> list[str]:
+    from skillgate_ai.case_pack import checks_from_pack, load_case_pack
+
+    loaded = load_case_pack(pack)
+    if loaded is None:
+        raise CompareError("This skill has no checks yet.")
+    all_checks = checks_from_pack(loaded)
+    all_ids = [str(item["id"]) for item in all_checks if item.get("id")]
+    if not all_ids:
+        raise CompareError("This skill has no pinned checks to compare.")
+    if not case_ids:
+        return all_ids
+    by_id = {str(item["id"]): item for item in all_checks}
+    missing = [cid for cid in case_ids if cid not in by_id]
+    if missing:
+        raise CompareError(
+            f"Unknown case ids: {', '.join(missing)}.",
+            hint="Use `skillgate case list` to see check ids.",
+        )
+    return list(case_ids)
+
+
+def checks_for_case_ids(pack: Path, case_ids: list[str]) -> list[dict[str, Any]]:
+    from skillgate_ai.case_pack import checks_from_pack, load_case_pack
+
+    loaded = load_case_pack(pack)
+    if loaded is None:
+        raise CompareError("This skill has no checks yet.")
+    by_id = {case.id: case for case in loaded.cases}
+    ordered = _resolve_compare_case_ids(pack, case_ids)
+    all_checks = {str(c["id"]): c for c in checks_from_pack(loaded)}
+    return [all_checks[cid] for cid in ordered]
+
+
+def _usage_for_task_ids(report: dict[str, Any], task_ids: list[str]) -> dict[str, Any] | None:
+    tasks = _task_map(report)
+    tokens = 0
+    cost = 0.0
+    found = False
+    for task_id in task_ids:
+        task = tasks.get(task_id) or {}
+        usage = task.get("usage") if isinstance(task.get("usage"), dict) else {}
+        if usage.get("tokens_total") is not None:
+            tokens += int(usage["tokens_total"])
+            found = True
+        if usage.get("cost_usd") is not None:
+            cost += float(usage["cost_usd"])
+            found = True
+    if not found:
+        return _usage_from_report(report)
+    out: dict[str, Any] = {}
+    if tokens:
+        out["tokens_total"] = tokens
+    if cost:
+        out["cost_usd"] = round(cost, 6)
+    return out or None
+
+
+def _dry_run_payload(
+    pack: Path,
+    *,
+    arms: list[CompareArmSpec],
+    compare_id: str,
+    case_ids: list[str],
+    max_spend_usd: float | None,
+) -> dict[str, Any]:
+    arm_rows = [
+        {
+            "arm_id": spec.arm_id,
+            "label": spec.label,
+            "subtitle": harness_display_name(spec.harness_pref, spec.harness_pref),
+            "source": "plan",
+            "passed_count": None,
+            "task_count": len(case_ids),
+            "usage": None,
+            "duration_sec": None,
+        }
+        for spec in arms
+    ]
+    cases = [
+        {
+            "case_id": cid,
+            "results": {spec.arm_id: {"passed": None} for spec in arms},
+            "disagreement": False,
+        }
+        for cid in case_ids
+    ]
+    return {
+        "kind": "compare",
+        "compare_id": compare_id,
+        "mode": "models",
+        "skill": pack.name,
+        "pack_fingerprint": None,
+        "pack_case_ids": case_ids,
+        "status": "dry_run",
+        "arms": arm_rows,
+        "cases": cases,
+        "spend": {
+            "cap_usd": max_spend_usd,
+            "spent_usd": None,
+            "stopped_reason": None,
+        },
+        "error": None,
+    }
 
 
 def _skill_pack_hash_from_report(report: dict[str, Any]) -> str | None:
@@ -209,26 +343,28 @@ def run_models_compare(
     run_check_fn: Callable[..., Any] | None = None,
 ) -> CompareResult:
     pack = pack.expanduser().resolve()
-    if len(arms) < MIN_ARMS or len(arms) > MAX_ARMS:
-        raise CompareError(f"Compare needs {MIN_ARMS}–{MAX_ARMS} arms.")
+    validate_compare_plan(arms, max_spend_usd=max_spend_usd)
     runner = run_check_fn or run_check
     compare_id = compare_id or uuid.uuid4().hex[:12]
+    resolved_case_ids = _resolve_compare_case_ids(pack, case_ids)
     if dry_run:
         return CompareResult(
             exit_code=0,
-            payload={
-                "compare_id": compare_id,
-                "mode": "models",
-                "status": "dry_run",
-                "arm_count": len(arms),
-                "case_filter": case_ids,
-            },
+            payload=_dry_run_payload(
+                pack,
+                arms=arms,
+                compare_id=compare_id,
+                case_ids=resolved_case_ids,
+                max_spend_usd=max_spend_usd,
+            ),
         )
 
     arm_rows: list[dict[str, Any]] = []
     pack_fp: str | None = None
-    pack_case_ids: list[str] = []
+    pack_case_ids: list[str] = resolved_case_ids
     spent = 0.0
+    run_checks = checks_for_case_ids(pack, resolved_case_ids) if case_ids else None
+    active_case_ids = resolved_case_ids
     stopped_reason: str | None = None
     exit_code = 0
     job_control = create_compare_control(root, compare_id)
@@ -252,6 +388,7 @@ def run_models_compare(
                     source="compare",
                     root=root,
                     control=run_control,
+                    checks=run_checks,
                     **spec.to_run_kwargs(),
                 )
             finally:
@@ -273,16 +410,16 @@ def run_models_compare(
             fp = str(report.get("pack_fingerprint") or "")
             if pack_fp is None:
                 pack_fp = fp
-                pack_case_ids = list(report.get("pack_case_ids") or [])
             elif fp and fp != pack_fp:
                 raise CompareError(
                     "Dataset fingerprint changed between arms.",
                     hint=f"First arm: {pack_fp[:12]}… · this arm: {fp[:12]}…",
                 )
             tasks = _task_map(report)
-            if case_ids:
-                tasks = {key: tasks[key] for key in case_ids if key in tasks}
-            usage = _usage_from_report(report)
+            tasks = {key: tasks[key] for key in active_case_ids if key in tasks}
+            passed_count = sum(1 for task in tasks.values() if task.get("passed") is True)
+            task_count = len(active_case_ids)
+            usage = _usage_for_task_ids(report, active_case_ids)
             if usage and usage.get("cost_usd") is not None:
                 spent += float(usage["cost_usd"])
             arm_rows.append(
@@ -292,9 +429,9 @@ def run_models_compare(
                     "subtitle": _subtitle_for_arm(spec, report.get("harness")),
                     "source": "live",
                     "run_id": run_id,
-                    "passed": report.get("passed"),
-                    "passed_count": report.get("passed_count"),
-                    "task_count": report.get("task_count"),
+                    "passed": passed_count == task_count and task_count > 0,
+                    "passed_count": passed_count,
+                    "task_count": task_count,
                     "usage": usage,
                     "duration_sec": duration_sec,
                     "config": report.get("config"),
@@ -317,7 +454,7 @@ def run_models_compare(
             )
 
     status = "cancelled" if stopped_reason == "cancelled" else "done"
-    cases = _build_cases(arm_rows, pack_case_ids if not case_ids else case_ids)
+    cases = _build_cases(arm_rows, active_case_ids)
     payload: dict[str, Any] = {
         "kind": "compare",
         "compare_id": compare_id,
@@ -397,7 +534,13 @@ def run_versions_compare(
                     reasoning_effort=_blank(cfg.get("reasoning_effort")),
                 )
             )
-        return run_models_compare(pack, arms=arms, root=root, run_check_fn=run_check_fn)
+        return run_models_compare(
+            pack,
+            arms=arms,
+            root=root,
+            compare_id=compare_id,
+            run_check_fn=run_check_fn,
+        )
 
     reports = [_history_report(pack, rid) for rid in run_ids]
     fps = [str(r.get("pack_fingerprint") or "") for r in reports]

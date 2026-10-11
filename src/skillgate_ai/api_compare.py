@@ -29,6 +29,32 @@ from skillgate_ai.config import get_llm_config, load_env
 from skillgate_ai.errors import MissingLLMKeyError
 
 
+def _finish_compare_job(
+    state: AppState,
+    compare_id: str,
+    result: Any,
+) -> None:
+    payload = scrub_compare_payload(result.payload)
+    payload["status"] = str(result.payload.get("status") or "done")
+    with state.lock:
+        state.compares[compare_id] = payload
+
+
+def _fail_compare_job(
+    state: AppState,
+    compare_id: str,
+    *,
+    message: str,
+    hint: str | None = None,
+) -> None:
+    with state.lock:
+        state.compares[compare_id] = {
+            "compare_id": compare_id,
+            "status": "error",
+            "error": {"message": message, "hint": hint},
+        }
+
+
 def _busy(state: AppState) -> bool:
     with state.lock:
         if any(item.get("status") == "running" for item in state.runs.values()):
@@ -142,24 +168,11 @@ def _start_models_compare(state: AppState, body: dict[str, Any]) -> dict[str, An
                 case_ids=body.get("case_ids"),
                 compare_id=compare_id,
             )
-            payload = scrub_compare_payload(result.payload)
-            payload["status"] = str(result.payload.get("status") or "done")
-            with state.lock:
-                state.compares[compare_id] = payload
+            _finish_compare_job(state, compare_id, result)
         except CompareError as exc:
-            with state.lock:
-                state.compares[compare_id] = {
-                    "compare_id": compare_id,
-                    "status": "error",
-                    "error": {"message": exc.message, "hint": exc.hint},
-                }
+            _fail_compare_job(state, compare_id, message=exc.message, hint=exc.hint)
         except Exception as exc:  # noqa: BLE001
-            with state.lock:
-                state.compares[compare_id] = {
-                    "compare_id": compare_id,
-                    "status": "error",
-                    "error": {"message": str(exc)},
-                }
+            _fail_compare_job(state, compare_id, message=str(exc))
 
     threading.Thread(target=worker, name=f"skillgate-compare-{compare_id}", daemon=True).start()
     return {"compare_id": compare_id, "status": "running"}
@@ -187,24 +200,11 @@ def _start_versions_compare(state: AppState, body: dict[str, Any]) -> dict[str, 
                 rerun=bool(body.get("rerun")),
                 compare_id=compare_id,
             )
-            payload = scrub_compare_payload(result.payload)
-            payload["status"] = str(result.payload.get("status") or "done")
-            with state.lock:
-                state.compares[compare_id] = payload
+            _finish_compare_job(state, compare_id, result)
         except CompareError as exc:
-            with state.lock:
-                state.compares[compare_id] = {
-                    "compare_id": compare_id,
-                    "status": "error",
-                    "error": {"message": exc.message, "hint": exc.hint},
-                }
+            _fail_compare_job(state, compare_id, message=exc.message, hint=exc.hint)
         except Exception as exc:  # noqa: BLE001
-            with state.lock:
-                state.compares[compare_id] = {
-                    "compare_id": compare_id,
-                    "status": "error",
-                    "error": {"message": str(exc)},
-                }
+            _fail_compare_job(state, compare_id, message=str(exc))
 
     with state.lock:
         state.compares[compare_id] = {"compare_id": compare_id, "status": "running", "mode": "versions"}
