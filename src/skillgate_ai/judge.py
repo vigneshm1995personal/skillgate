@@ -87,14 +87,14 @@ def missing_openai_judge_key() -> MissingLLMKeyError:
 
 def missing_provider_key(provider: str) -> MissingLLMKeyError:
     labels = {
-        "openai": ("OpenAI", "OPENAI_API_KEY"),
-        "jev": ("Jev", "JEV_API_KEY"),
-        "aws": ("AWS", "AWS_ACCESS_KEY_ID"),
-        "compatible": ("Other", "AI_GATEWAY_API_KEY"),
+        "openai": "OpenAI",
+        "jev": "Jev",
+        "aws": "AWS",
+        "compatible": "Other",
     }
-    label, key_name = labels.get(provider, ("scoring", "the matching key"))
+    label = labels.get(provider, "scoring")
     return MissingLLMKeyError(
-        f"Add a {label} key in Settings (`skillgate keys set {key_name}`), or pick a different scoring provider.",
+        f"Add your {label} key in Settings (`skillgate keys set`), or pick a different scoring provider.",
         exit_code=2,
     )
 

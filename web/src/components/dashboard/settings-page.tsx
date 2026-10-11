@@ -41,7 +41,7 @@ const KEY_ROWS: Array<{
   name: SettingsKeyId
   label: string
   hint: string
-  slug: "cursor" | "codex" | "openai" | "gateway" | "anthropic"
+  slug: "cursor" | "codex" | "openai" | "other" | "anthropic"
 }> = [
   {
     name: "CURSOR_API_KEY",
@@ -63,9 +63,9 @@ const KEY_ROWS: Array<{
   },
   {
     name: "AI_GATEWAY_API_KEY",
-    label: "OpenAI-compatible",
+    label: "Other",
     hint: "Runs live checks. Scores them when Other is selected.",
-    slug: "gateway",
+    slug: "other",
   },
   {
     name: "ANTHROPIC_API_KEY",
@@ -98,7 +98,7 @@ const PROVIDER_ITEMS = [
   { value: "openai", label: "OpenAI" },
   { value: "jev", label: "Jev" },
   { value: "aws", label: "AWS" },
-  { value: "compatible", label: "Other" },
+  { value: "compatible", label: "Other (OpenAI-compatible)" },
 ]
 
 const PROVIDER_KEYS: Record<string, SettingsKeyId[]> = {

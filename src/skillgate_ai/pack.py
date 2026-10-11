@@ -194,6 +194,9 @@ def write_pack_file(
         ) from exc
     dest_path.parent.mkdir(parents=True, exist_ok=True)
     data = content.encode("utf-8") if isinstance(content, str) else content
+    from skillgate_ai.pack_schema import guard_cases_yaml_write
+
+    guard_cases_yaml_write(root, relative, data)
     dest_path.write_bytes(data)
     return {"src": relative, "dest": Path(relative).name, "path": relative}
 

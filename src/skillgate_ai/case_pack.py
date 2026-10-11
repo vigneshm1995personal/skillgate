@@ -38,8 +38,11 @@ from skillgate_ai.pack_schema import (
     ExtraQuestion as ExtraQuestion,
     JudgeBlock,
     SEED_CASE_IDS,
+    SEED_LOCK_HINT,
+    SEED_LOCK_MESSAGE,
     case_is_locked,
     parse_judge_block,
+    reject_missing_seed_cases,
 )
 from skillgate_ai.suite import DEFAULT_TASK_TIMEOUT_SEC, SuiteSpec, _normalize_suite
 
@@ -47,6 +50,9 @@ CASES_REL = "evals/cases.yaml"
 PIN_NEEDS_EXPECTED = "Add expected output for this check, then save."
 PIN_NEEDS_EXPECTED_HINT = "Open Dataset and fill Expected output."
 NO_TRIGGER_OUTPUT_WARNING = "Expected output on a no-trigger check is ignored."
+EXPECTED_WITHOUT_TARGET = (
+    "This check has expected text, but no output file to compare it with."
+)
 PACK_FINGERPRINT_FIELDS = ("id", "prompt", "should_trigger", "input", "golden", "budgets", "judge")
 _CASE_ID_RE = re.compile(r"^[a-z0-9-]+$")
 _JSONISH_RE = re.compile(r"^\s*[\{\[]")
@@ -137,17 +143,7 @@ class TrustSuite:
 
 
 def _reject_missing_seed_cases(pack: CasePack) -> None:
-    locked = SEED_CASE_IDS.get(pack.skill)
-    if not locked:
-        return
-    present = {case.id for case in pack.cases}
-    missing = sorted(locked - present)
-    if missing:
-        raise SuiteError(
-            "Seed checks cannot be removed from this pack.",
-            hint="Add a new check instead of deleting the original ones.",
-            exit_code=2,
-        )
+    reject_missing_seed_cases(pack.skill, {case.id for case in pack.cases})
 
 
 def _reject_removed_seed_cases(previous: CasePack | None, pack: CasePack) -> None:
@@ -158,11 +154,7 @@ def _reject_removed_seed_cases(previous: CasePack | None, pack: CasePack) -> Non
     present = {case.id for case in pack.cases}
     missing = sorted((locked & prev_ids) - present)
     if missing:
-        raise SuiteError(
-            "Seed checks cannot be removed from this pack.",
-            hint="Add a new check instead of deleting the original ones.",
-            exit_code=2,
-        )
+        raise SuiteError(SEED_LOCK_MESSAGE, hint=SEED_LOCK_HINT, exit_code=2)
 
 
 def pack_judge_dict(pack: CasePack | None) -> dict[str, Any] | None:
@@ -192,6 +184,27 @@ def reset_pack_judge(skill_path: str | Path) -> CasePack:
     return updated
 
 
+def expected_without_target_warning(
+    *,
+    contains: str | None,
+    output_path: str | None,
+    golden_path: str | None,
+    should_trigger: bool = True,
+) -> str | None:
+    if not should_trigger:
+        leftover = bool(
+            str(contains or "").strip()
+            or str(output_path or "").strip()
+            or str(golden_path or "").strip()
+        )
+        return NO_TRIGGER_OUTPUT_WARNING if leftover else None
+    if not str(contains or "").strip():
+        return None
+    if str(output_path or "").strip() or str(golden_path or "").strip():
+        return None
+    return EXPECTED_WITHOUT_TARGET
+
+
 def cases_path(skill_path: str | Path) -> Path:
     return Path(skill_path).expanduser().resolve() / CASES_REL
 
@@ -205,9 +218,15 @@ def load_case_pack(skill_path: str | Path) -> CasePack | None:
     try:
         raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     except yaml.YAMLError:
-        raise SuiteError("Case pack is not valid YAML.") from None
+        raise SuiteError(
+            "Couldn't load these checks.",
+            hint="evals/cases.yaml must be valid YAML.",
+        ) from None
     if not isinstance(raw, dict):
-        raise SuiteError("Case pack must be a YAML mapping.")
+        raise SuiteError(
+            "Couldn't load these checks.",
+            hint="evals/cases.yaml must be a YAML mapping.",
+        )
     schema = raw.get("schema")
     if schema is not None and schema != 1:
         raise SuiteError(
@@ -226,6 +245,7 @@ def load_case_pack(skill_path: str | Path) -> CasePack | None:
             hint="Set `skill:` in evals/cases.yaml to the folder name.",
         )
     _validate_pack_on_disk(root, pack)
+    _reject_missing_seed_cases(pack)
     return pack
 
 
@@ -245,6 +265,7 @@ def save_case_pack(skill_path: str | Path, pack: CasePack) -> Path:
         except Exception:
             previous = None
     _reject_removed_seed_cases(previous, pack)
+    _reject_missing_seed_cases(pack)
     _validate_pack_on_disk(root, pack)
     dest.parent.mkdir(parents=True, exist_ok=True)
     dest.write_text(_dump_pack(pack), encoding="utf-8")
@@ -293,7 +314,7 @@ def suite_fingerprint(spec: SuiteSpec) -> str:
 def suite_from_pack(pack: CasePack, skill_rel: str) -> SuiteSpec:
     pinned = [case for case in pack.cases if case.status == "pinned"]
     if not pinned:
-        raise SuiteError("Case pack has no pinned cases to run.")
+        raise SuiteError("This Dataset has no saved checks to run.")
     raw_tasks: list[dict[str, Any]] = []
     for case in pinned:
         scorers: list[dict[str, Any]] = [{"type": "skill_trigger"}]
@@ -337,7 +358,7 @@ def suite_from_pack(pack: CasePack, skill_rel: str) -> SuiteSpec:
         {
             "suite": f"{pack.skill}-pack",
             "skill": skill_rel,
-            "title": f"{pack.skill} Dataset",
+            "title": "Dataset",
             "description": "This skill's Dataset.",
             "timeout_sec": DEFAULT_TASK_TIMEOUT_SEC,
             "tasks": raw_tasks,
@@ -346,7 +367,7 @@ def suite_from_pack(pack: CasePack, skill_rel: str) -> SuiteSpec:
     try:
         return SuiteSpec.model_validate(raw)
     except Exception as exc:
-        raise SuiteError(f"Case pack could not become a suite: {exc}") from exc
+        raise SuiteError(f"Couldn't turn these checks into a run: {exc}") from exc
 
 
 def checks_from_pack(pack: CasePack, *, include_drafts: bool = False) -> list[dict[str, Any]]:
@@ -372,6 +393,8 @@ def checks_from_pack(pack: CasePack, *, include_drafts: bool = False) -> list[di
         if case.judge is not None and not case.judge.is_empty():
             check["judge"] = case.judge.to_sparse_dict()
         warning = no_trigger_output_warning(case)
+        if warning is None and case.contains and case.golden is None:
+            warning = EXPECTED_WITHOUT_TARGET
         if warning:
             check["warning"] = warning
         effective = merge_budgets(pack.budgets, case.budgets)

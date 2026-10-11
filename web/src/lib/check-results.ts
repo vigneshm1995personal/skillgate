@@ -257,6 +257,13 @@ function customerScorerName(judge: JudgeResult | null | undefined): string {
   if (provider === "skip") {
     return "Checks"
   }
+  const name = trimText(judge?.display_name)
+  if (name === "Checks") {
+    return "Checks"
+  }
+  if (name === "OpenAI" || name === "Jev" || name === "AWS" || name === "Other") {
+    return name
+  }
   if (stampIsChosen(judge)) {
     if (provider === "openai") {
       return "OpenAI"

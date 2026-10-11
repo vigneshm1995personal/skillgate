@@ -323,8 +323,12 @@ function scoredByFromStamp(judge?: EvalRunConfig["judge"]): string {
     return ""
   }
   const provider = (judge.provider || "").toLowerCase()
-  if (!provider || provider === "skip") {
+  const name = (judge.display_name || "").trim()
+  if (name === "Checks" || provider === "skip") {
     return ""
+  }
+  if (name === "OpenAI" || name === "Jev" || name === "AWS" || name === "Other") {
+    return `Scored by ${name}`
   }
   if (stampIsChosen(judge)) {
     if (provider === "openai") {
@@ -339,6 +343,9 @@ function scoredByFromStamp(judge?: EvalRunConfig["judge"]): string {
     if (provider === "compatible") {
       return "Scored by Other"
     }
+  }
+  if (!provider || provider === "skip") {
+    return ""
   }
   return JUDGE_SCORED
 }

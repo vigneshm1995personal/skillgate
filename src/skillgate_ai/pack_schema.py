@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
+from pathlib import Path
 from typing import Any, Literal
 
+import yaml
 from pydantic import BaseModel, Field
 
 from skillgate_ai.errors import SuiteError, friendly_validation_error
@@ -34,6 +37,10 @@ SEED_CASE_IDS = {
         }
     ),
 }
+
+CASES_RELS = frozenset({"evals/cases.yaml", "evals/cases.yml"})
+SEED_LOCK_MESSAGE = "This pack's original checks stay. Add a new check instead of deleting them."
+SEED_LOCK_HINT = "Add a new check instead of deleting the original ones."
 
 
 class ExtraQuestion(BaseModel):
@@ -78,6 +85,44 @@ class JudgeBlock(BaseModel):
 
 def case_is_locked(skill: str, case_id: str) -> bool:
     return case_id in SEED_CASE_IDS.get(skill, frozenset())
+
+
+def reject_missing_seed_cases(skill: str, case_ids: Iterable[str]) -> None:
+    locked = SEED_CASE_IDS.get(skill)
+    if not locked:
+        return
+    present = {item for item in case_ids if item}
+    missing = sorted(locked - present)
+    if missing:
+        raise SuiteError(SEED_LOCK_MESSAGE, hint=SEED_LOCK_HINT, exit_code=2)
+
+
+def guard_cases_yaml_write(root: Path, rel: str, content: str | bytes) -> None:
+    cleaned = rel.replace("\\", "/").lstrip("/")
+    if cleaned not in CASES_RELS:
+        return
+    try:
+        text = content.decode("utf-8") if isinstance(content, bytes) else content
+        raw = yaml.safe_load(text) or {}
+    except (UnicodeDecodeError, yaml.YAMLError) as exc:
+        raise SuiteError(
+            "Couldn't load these checks.",
+            hint="evals/cases.yaml must be valid YAML.",
+        ) from exc
+    if not isinstance(raw, dict):
+        raise SuiteError(
+            "Couldn't load these checks.",
+            hint="evals/cases.yaml must be a YAML mapping.",
+        )
+    cases = raw.get("cases") or []
+    ids: set[str] = set()
+    if isinstance(cases, list):
+        for item in cases:
+            if isinstance(item, dict) and item.get("id"):
+                ids.add(str(item.get("id")))
+    skill = str(raw.get("skill") or root.name).strip()
+    reject_missing_seed_cases(skill, ids)
+    reject_missing_seed_cases(root.name, ids)
 
 
 def parse_judge_block(raw: object) -> JudgeBlock | None:

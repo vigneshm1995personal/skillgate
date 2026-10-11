@@ -611,9 +611,9 @@ def judge_show(
     if extras:
         console.print("Your questions")
         for question in extras:
-            kind = {"predicate": "yes/no", "choice": "pick one", "score": "score"}[question.type]
+            kind = {"predicate": "Yes/No", "choice": "Pick one", "score": "Score"}[question.type]
             severity = "Warn only" if question.on_fail == "warn" else "Fail the check"
-            console.print(f"  {question.id}  {kind}  {severity}")
+            console.print(f"  {question.label}  {kind}  {severity}")
     else:
         console.print("No extra questions.")
 
@@ -632,6 +632,74 @@ def judge_reset(
         console.print(exc.render())
         raise typer.Exit(exc.exit_code) from None
     console.print("Extra scoring questions removed. Skill Gate’s six stay.")
+
+
+@judge_app.command("add-question")
+def judge_add_question_cmd(
+    pack: Path | None = typer.Argument(None, help="Skill pack"),
+    ask: str = typer.Option(..., "--ask", help="Question text"),
+    kind: str = typer.Option("Yes/No", "--type", help="Yes/No | pick one | score"),
+    question_id: str | None = typer.Option(None, "--id", help="Optional question id"),
+    warn_only: bool = typer.Option(False, "--warn-only", help="Warn instead of failing the check"),
+) -> None:
+    """Add an extra scoring question to this skill."""
+    from skillgate_ai.pack_edit import add_judge_question
+
+    try:
+        dest = _resolve_pack_arg(pack)
+        add_judge_question(
+            dest,
+            ask=ask,
+            kind=kind,
+            question_id=question_id,
+            on_fail="warn" if warn_only else "block",
+        )
+    except SkillGateError as exc:
+        console.print(exc.render())
+        raise typer.Exit(exc.exit_code) from None
+    console.print(ask)
+
+
+case_app = typer.Typer(
+    add_completion=False,
+    no_args_is_help=True,
+    help="Add checks to evals/cases.yaml.",
+)
+app.add_typer(case_app, name="case")
+
+
+@case_app.command("add")
+def case_add_cmd(
+    pack: Path | None = typer.Argument(None, help="Skill pack"),
+    prompt: str = typer.Option(..., "--prompt", help="What the agent should do"),
+    case_id: str | None = typer.Option(None, "--id", help="Optional check id"),
+    expected: str | None = typer.Option(None, "--expected", help="Expected text in the output"),
+    output_path: str | None = typer.Option(None, "--output", help="Output file to compare"),
+    no_trigger: bool = typer.Option(False, "--no-trigger", help="This check should not run the skill"),
+) -> None:
+    """Add a check to this skill's Dataset."""
+    from skillgate_ai.pack_edit import add_pack_case
+
+    try:
+        dest = _resolve_pack_arg(pack)
+        pack_out, warning = add_pack_case(
+            dest,
+            prompt=prompt,
+            case_id=case_id,
+            expected=expected,
+            output_path=output_path,
+            should_trigger=not no_trigger,
+        )
+    except SkillGateError as exc:
+        console.print(exc.render())
+        raise typer.Exit(exc.exit_code) from None
+    except ValueError as exc:
+        console.print(str(exc))
+        raise typer.Exit(1) from None
+    added = pack_out.cases[-1].id if pack_out.cases else case_id or prompt
+    console.print(f"Added check {added}.")
+    if warning:
+        console.print(warning)
 
 
 @judge_provider_app.command("show")

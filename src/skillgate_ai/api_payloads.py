@@ -76,9 +76,36 @@ def _row_is_tryout(row: dict[str, Any], report: dict[str, Any] | None) -> bool:
     return bool(row.get("tryout") or (report or {}).get("tryout"))
 
 
+_BROWSER_DROP = frozenset(
+    {"config_label_raw", "check_kind", "provider", "backend", "via_gateway"}
+)
+
+
 def _scrub_judge(judge: dict[str, Any]) -> dict[str, Any]:
-    out = {key: value for key, value in judge.items() if key != "model"}
+    out: dict[str, Any] = {}
+    for key, value in judge.items():
+        if key in _BROWSER_DROP or key == "model":
+            continue
+        out[key] = _scrub_browser(value)
     out["display_name"] = customer_scorer_name(judge)
+    return out
+
+
+def _scrub_config(item: dict[str, Any]) -> dict[str, Any]:
+    out: dict[str, Any] = {}
+    for key, value in item.items():
+        if key in _BROWSER_DROP or key == "model":
+            continue
+        if key == "judge" and isinstance(value, dict):
+            out[key] = _scrub_judge(value)
+            continue
+        if key == "applied" and isinstance(value, dict):
+            applied = {k: v for k, v in value.items() if k != "via_gateway"}
+            if applied:
+                out[key] = applied
+            continue
+        out[key] = _scrub_browser(value)
+    out["label"] = customer_config_label(item)
     return out
 
 
@@ -89,15 +116,15 @@ def _scrub_browser(value: Any) -> Any:
         return value
     out: dict[str, Any] = {}
     for key, item in value.items():
-        if key in {"config_label_raw", "check_kind"}:
+        if key in _BROWSER_DROP:
             continue
         if key == "judge" and isinstance(item, dict):
             out[key] = _scrub_judge(item)
             continue
         if key == "config" and isinstance(item, dict):
-            scrubbed = _scrub_browser(item)
-            scrubbed["label"] = customer_config_label(item)
-            out[key] = scrubbed
+            out[key] = _scrub_config(item)
+            continue
+        if key == "model" and isinstance(item, str):
             continue
         out[key] = _scrub_browser(item)
     return out

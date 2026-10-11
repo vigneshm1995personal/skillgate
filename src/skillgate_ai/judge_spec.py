@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, replace
-from typing import Any, Mapping
+from typing import Any, Mapping, Sequence
 
 from skillgate_ai.errors import SuiteError
 from skillgate_ai.judge_bank import (
@@ -42,7 +42,7 @@ RESERVED_ID_MESSAGE = (
     "`{id}` is a Skill Gate question. Add a new id, or change Fail vs warn for the built-in."
 )
 CAP_MESSAGE = "A check can ask at most 20 scoring questions (Skill Gate’s 6 plus yours)."
-TYPE_MESSAGE = "Question {id}: type must be yes/no, pick one, or score."
+TYPE_MESSAGE = "Question {id}: type must be Yes/No, pick one, or score."
 
 
 @dataclass(frozen=True)
@@ -266,9 +266,11 @@ def spec_verdict(
     *,
     supports_confidence: bool = False,
     include_path: bool = True,
+    skipped: Sequence[str] | None = None,
 ) -> tuple[bool, list[str], list[str]]:
     if not isinstance(answers, Mapping):
         answers = {}
+    skipped_ids = {str(item) for item in (skipped or []) if str(item).strip()}
     blocking = [q for q in spec.questions if q.builtin and q.id in CHECK_CELL_ORDER]
     builtin_lock = {q.id: q for q in blocking}
     passed_lock, lock_reasons = outcome_verdict(
@@ -287,6 +289,8 @@ def spec_verdict(
                 failed = True
                 reasons.append(reason)
     for question in spec.questions:
+        if question.id in skipped_ids:
+            continue
         if question.builtin and question.id in CHECK_CELL_ORDER:
             continue
         if question.include_when == "path_recorded" and not include_path:
@@ -306,6 +310,24 @@ def spec_verdict(
             low_confidence_for_spec(spec, answers, min_confidence=spec.min_confidence)
         )
     return (not failed), reasons, warnings
+
+
+def extra_block_failures(
+    spec: JudgeSpec,
+    answers: Mapping[str, Any] | None,
+    *,
+    skipped: Sequence[str] | None = None,
+) -> list[str]:
+    blob = answers if isinstance(answers, Mapping) else {}
+    skip = {str(item) for item in (skipped or []) if str(item).strip()}
+    failures: list[str] = []
+    for question in spec.extras:
+        if question.id in skip or question.on_fail != "block":
+            continue
+        ok, detail = extra_question_passed(question, blob.get(question.id))
+        if not ok and detail:
+            failures.append(detail)
+    return failures
 
 
 def extra_question_passed(question: JudgeQuestion, answer: Any) -> tuple[bool, str | None]:
@@ -468,13 +490,15 @@ def _gte(pass_if: Mapping[str, Any] | None, *, default: float | None) -> float |
         return default
 
 
-def coerce_extra_answer(raw: Any) -> Any:
+def coerce_extra_answer(raw: Any, *, kind: str | None = None) -> Any:
     """Turn a schema scalar into the mapping shape Decisions answers use."""
     if isinstance(raw, Mapping):
         return raw
     if isinstance(raw, str) and raw.strip():
         return {"choice": raw.strip()}
     if isinstance(raw, (int, float)) and not isinstance(raw, bool):
+        if kind == "score":
+            return {"score": float(raw)}
         return {"probability": float(raw)}
     return raw
 

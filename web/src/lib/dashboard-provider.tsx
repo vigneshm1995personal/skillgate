@@ -20,6 +20,7 @@ import {
   shouldSeedChecks,
   uniqueCheckId,
 } from "@/lib/dashboard-helpers"
+import { expectedWithoutTargetWarning } from "@/lib/case-pack"
 import { authenticFixtureDefaults, startBlockedMessage } from "@/lib/check-guards"
 import { type DashboardContextValue } from "@/lib/dashboard-context"
 import { slotOn } from "@/lib/mode"
@@ -486,6 +487,20 @@ export function DashboardProvider({
           }
         }
         toast.add({ title: "Saved to Dataset", type: "success" })
+        const seen = new Set<string>()
+        for (const check of toPin) {
+          const warning = expectedWithoutTargetWarning(check)
+          if (warning && !seen.has(warning)) {
+            seen.add(warning)
+            toast.add({ title: warning, type: "warning" })
+          }
+        }
+        for (const warning of (data as { warnings?: string[] }).warnings ?? []) {
+          if (warning && !seen.has(warning)) {
+            seen.add(warning)
+            toast.add({ title: warning, type: "warning" })
+          }
+        }
         return true
       } catch (err) {
         const error = asApiError(err)

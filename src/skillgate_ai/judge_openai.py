@@ -27,7 +27,7 @@ from skillgate_ai.judge_spec import (
     JudgeSpec,
     builtin_spec,
     coerce_extra_answer,
-    extra_question_passed,
+    extra_block_failures,
     spec_decisions_questions,
     spec_structured_schema,
     spec_verdict,
@@ -313,7 +313,9 @@ def _normalize_answers(
     if spec is not None:
         for question in spec.extras:
             if question.id in raw:
-                answers[question.id] = coerce_extra_answer(raw.get(question.id))
+                answers[question.id] = coerce_extra_answer(
+                    raw.get(question.id), kind=question.type
+                )
     return answers
 
 
@@ -686,11 +688,13 @@ class OutcomeJudge:
         confidence = bool(
             getattr(self.backend, "supports_confidence", self.supports_confidence)
         )
+        skipped = [str(i) for i in (evaluated.get("skipped") or []) if str(i).strip()]
         passed, reasons, warnings = spec_verdict(
             resolved,
             answers,
             supports_confidence=confidence,
             include_path=include_path,
+            skipped=skipped,
         )
         warnings = extra_warnings + warnings
         pass_answers = {key: answers[key] for key in CHECK_CELL_ORDER if key in answers}
@@ -718,13 +722,7 @@ class OutcomeJudge:
             cells[question.id] = cell
         merged_answers = {**pass_answers, **extra_answers}
         extra_questions = {q.id: {"instructions": q.ask, "type": q.type} for q in resolved.extras}
-        extra_failures: list[str] = []
-        for question in resolved.extras:
-            if question.on_fail != "block":
-                continue
-            ok, detail = extra_question_passed(question, answers.get(question.id))
-            if not ok and detail:
-                extra_failures.append(detail)
+        extra_failures = extra_block_failures(resolved, answers, skipped=skipped)
         return self._finish_payload(
             self._payload(
                 status="completed",

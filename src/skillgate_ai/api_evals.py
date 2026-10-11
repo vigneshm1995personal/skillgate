@@ -12,6 +12,7 @@ from skillgate_ai.case_pack import (
     PIN_NEEDS_EXPECTED_HINT,
     checks_from_pack,
     dataset_view,
+    expected_without_target_warning,
     load_case_pack,
     pack_judge_dict,
     pin_case_ids,
@@ -69,8 +70,20 @@ def register_eval_routes(app: FastAPI) -> None:
         skill_path = find_skill(state.root, str(body.get("skill") or ""))
         checks = body.get("checks")
         case_ids = body.get("case_ids")
+        warnings: list[str] = []
         try:
             if isinstance(checks, list) and checks:
+                for raw in checks:
+                    if not isinstance(raw, dict):
+                        continue
+                    warn = expected_without_target_warning(
+                        contains=str(raw.get("contains") or raw.get("expected") or ""),
+                        output_path=str(raw.get("output_path") or ""),
+                        golden_path=str(raw.get("golden_path") or ""),
+                        should_trigger=bool(raw.get("should_trigger", True)),
+                    )
+                    if warn and warn not in warnings:
+                        warnings.append(warn)
                 pack = pin_checks(skill_path, [dict(item) for item in checks])
             elif isinstance(case_ids, list) and case_ids:
                 pack = pin_case_ids(skill_path, [str(item) for item in case_ids])
@@ -95,6 +108,7 @@ def register_eval_routes(app: FastAPI) -> None:
             "yaml": yaml_out,
             "skill": skill_payload(state, skill_path),
             "pack_judge": pack_judge_dict(pack),
+            "warnings": warnings,
         }
 
     @app.get("/api/evals/dataset")

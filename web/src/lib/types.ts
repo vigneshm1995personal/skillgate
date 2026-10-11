@@ -640,8 +640,7 @@ export type StatusPayload = {
   mode?: ProductMode
   slots?: FeatureSlots
   has_key: boolean
-  has_gateway_key?: boolean
-  live_backends: string[]
+  live_backends?: string[]
   available_harnesses?: LiveHarnessId[]
   default_harness?: ResolvedHarnessId
   missing_key_message?: string
@@ -685,7 +684,6 @@ export type StatusPayload = {
     has_cursor_api_key?: boolean
     has_codex_api_key?: boolean
     has_anthropic_api_key?: boolean
-    has_gateway_api_key?: boolean
     selected_provider?: string
   }
   skills_dir_exists?: boolean

@@ -14,6 +14,8 @@ from skillgate_ai.judge_bank import (
 from skillgate_ai.judge_spec import (
     MAX_QUESTIONS,
     builtin_spec,
+    coerce_extra_answer,
+    extra_question_passed,
     resolve_judge_spec,
     spec_decisions_questions,
     spec_verdict,
@@ -200,6 +202,50 @@ def test_builtin_verdict_matches_today_for_empty_spec() -> None:
     assert reasons == expected_reasons
 
 
+def test_skipped_extras_do_not_fail_the_check() -> None:
+    spec = resolve_judge_spec(
+        pack={
+            "extra_questions": [
+                {
+                    "id": "numbers_match",
+                    "type": "predicate",
+                    "ask": "Totals match?",
+                    "on_fail": "block",
+                    "pass_if": {"gte": 0.8},
+                }
+            ]
+        }
+    )
+    passed, reasons, _ = spec_verdict(spec, _pass_answers(), skipped=["numbers_match"])
+    assert passed is True
+    assert reasons == []
+
+
+def test_numeric_score_extra_passes_after_coerce() -> None:
+    spec = resolve_judge_spec(
+        pack={
+            "extra_questions": [
+                {
+                    "id": "quality_score",
+                    "type": "score",
+                    "ask": "How complete is the result?",
+                    "on_fail": "block",
+                    "pass_if": {"gte": 0.7},
+                }
+            ]
+        }
+    )
+    coerced = coerce_extra_answer(0.9, kind="score")
+    ok, detail = extra_question_passed(spec.extras[0], coerced)
+    assert ok is True
+    assert detail is None
+    answers = _pass_answers()
+    answers["quality_score"] = coerced
+    passed, reasons, _ = spec_verdict(spec, answers)
+    assert passed is True
+    assert reasons == []
+
+
 def test_unknown_type_is_plain() -> None:
     with pytest.raises(SuiteError) as caught:
         resolve_judge_spec(
@@ -209,12 +255,13 @@ def test_unknown_type_is_plain() -> None:
                 ]
             }
         )
-    assert "yes/no, pick one, or score" in caught.value.message
+    assert "Yes/No, pick one, or score" in caught.value.message
 
 
 def test_seed_cases_cannot_be_removed_once_saved(tmp_path: Path) -> None:
     from skillgate_ai.case_pack import CasePack, PackCase, save_case_pack
     from skillgate_ai.errors import SuiteError
+    from skillgate_ai.pack_schema import SEED_CASE_IDS
 
     dest = tmp_path / "pdf"
     dest.mkdir()
@@ -223,8 +270,8 @@ def test_seed_cases_cannot_be_removed_once_saved(tmp_path: Path) -> None:
         schema_version=1,
         skill="pdf",
         cases=[
-            PackCase(id="extract-hello", status="pinned", prompt="Extract hello"),
-            PackCase(id="merge-alpha-beta", status="pinned", prompt="Merge"),
+            PackCase(id=case_id, status="pinned", prompt=case_id)
+            for case_id in sorted(SEED_CASE_IDS["pdf"])
         ],
     )
     save_case_pack(dest, first)
@@ -238,18 +285,19 @@ def test_seed_cases_cannot_be_removed_once_saved(tmp_path: Path) -> None:
             ),
         )
     assert caught.value.exit_code == 2
-    assert "cannot be removed" in caught.value.message.lower()
+    assert "original checks stay" in caught.value.message.lower()
+    assert "seed checks cannot be removed" not in caught.value.message.lower()
 
 
 def test_dump_seed_pack_omits_empty_judge(tmp_path: Path) -> None:
     from skillgate_ai.case_pack import CasePack, PackCase, save_case_pack
 
-    dest = tmp_path / "pdf"
+    dest = tmp_path / "notes"
     dest.mkdir()
-    (dest / "SKILL.md").write_text("---\nname: pdf\ndescription: d\n---\n# pdf\n", encoding="utf-8")
+    (dest / "SKILL.md").write_text("---\nname: notes\ndescription: d\n---\n# notes\n", encoding="utf-8")
     pack = CasePack(
         schema_version=1,
-        skill="pdf",
+        skill="notes",
         cases=[
             PackCase(id="extract-hello", status="pinned", prompt="Extract hello"),
         ],

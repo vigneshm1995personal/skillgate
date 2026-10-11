@@ -52,7 +52,7 @@ export function SkillUpdateChecklist() {
   )
   const runId = lastResult?.id
   const payload = runId ? suggestByRunId[runId] ?? null : null
-  const hasGatewayKey = Boolean(status?.has_gateway_key)
+  const hasKey = Boolean(status?.has_key)
   const items = payload?.items ?? []
 
   if (!canSuggest) {
@@ -133,9 +133,9 @@ export function SkillUpdateChecklist() {
           id="btn-suggest-skill-updates"
           variant="outline"
           size="lg"
-          disabled={!hasGatewayKey || suggestBusy}
+          disabled={!hasKey || suggestBusy}
           title={
-            hasGatewayKey
+            hasKey
               ? undefined
               : "Add a model key in Settings to suggest skill updates."
           }

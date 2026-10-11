@@ -19,7 +19,7 @@ import {
 } from "@/lib/judge-spec"
 
 const TYPE_ITEMS = [
-  { value: "predicate", label: "Yes/no" },
+  { value: "predicate", label: "Yes/No" },
   { value: "choice", label: "Pick one" },
   { value: "score", label: "Score" },
 ]

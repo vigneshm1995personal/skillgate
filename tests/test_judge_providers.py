@@ -150,6 +150,9 @@ def test_jev_skips_extras_with_plain_note() -> None:
         supports_confidence=False,
     ).judge("goal", [], "tail", spec=spec, path={"had_path": True, "steps": 2})
     assert judged["status"] == "completed"
+    assert judged["passed"] is True
+    assert not any("Totals match" in str(item) for item in judged.get("reasons") or [])
+    assert judged.get("extra_failures") == []
     assert JEV_EXTRAS_NOTE in judged["warnings"]
     assert "numbers_match" not in (posted[0].get("questions") or [{}])[0].get("name", "")
     names = [row["name"] for row in posted[0]["questions"]]

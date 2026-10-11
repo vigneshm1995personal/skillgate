@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest"
 import {
   canPinCheck,
   expectedFieldValue,
+  expectedWithoutTargetWarning,
   noTriggerOutputWarning,
   showsExpectedOutputFields,
 } from "./case-pack"
@@ -79,6 +80,26 @@ describe("no-trigger expected output", () => {
       noTriggerOutputWarning({
         prompt: leftover.prompt,
         should_trigger: false,
+      })
+    ).toBeNull()
+  })
+})
+
+describe("expected text without a target", () => {
+  it("warns when expected text has nothing to check it against", () => {
+    const warning = expectedWithoutTargetWarning({
+      prompt: "Extract hello.pdf",
+      should_trigger: true,
+      contains: "Hello Skill Gate",
+    })
+    expect(warning).toMatch(/expected text/i)
+    expect(warning).not.toMatch(/output_path|golden|contains/)
+    expect(
+      expectedWithoutTargetWarning({
+        prompt: "Extract hello.pdf",
+        should_trigger: true,
+        contains: "Hello Skill Gate",
+        output_path: "output/extracted.txt",
       })
     ).toBeNull()
   })

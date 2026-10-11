@@ -328,6 +328,7 @@ _LEAKY_CONFIG = {
         "LLM · openai/gpt-4o-mini via gateway · 300s · "
         "OpenAI Decisions via Vercel AI Gateway (your key)"
     ),
+    "applied": {"via_gateway": True, "model": False},
     "judge": _LEAKY_JUDGE,
 }
 _LEAKY_REPORT = {
@@ -355,7 +356,13 @@ def _assert_browser_payload_is_scrubbed(payload: object) -> None:
     assert "gpt-6-luna" not in lower
     assert "openai decisions" not in lower
     assert "vercel ai gateway" not in lower
+    assert "openai/gpt-4o-mini" not in lower
+    assert "via_gateway" not in lower
+    assert '"provider": "openai"' not in blob
+    assert '"provider": "compatible"' not in blob
+    assert '"backend": "decisions"' not in blob
     assert '"display_name": "openai"' not in lower
+    assert '"display_name": "compatible"' not in lower
 
 
 def test_browser_api_scrubs_provider_model_names(tmp_path: Path, monkeypatch) -> None:
@@ -414,30 +421,117 @@ def test_browser_api_scrubs_provider_model_names(tmp_path: Path, monkeypatch) ->
             },
         },
     )
+    append_eval(
+        pack,
+        run_id="chosen-other",
+        passed=True,
+        report={
+            "skill": "pdf",
+            "harness": "llm",
+            "task_count": 1,
+            "passed": True,
+            "config": {
+                "harness": "llm",
+                "model": "gpt-4o-mini",
+                "label": "LLM · Other",
+                "judge": {
+                    "provider": "compatible",
+                    "backend": "decisions",
+                    "display_name": "Other",
+                    "model": "hidden-compatible-model",
+                    "chosen": True,
+                },
+            },
+            "tasks": [
+                {
+                    "id": "extract-hello",
+                    "passed": True,
+                    "check_kind": "openai",
+                    "judge": {
+                        "provider": "compatible",
+                        "backend": "decisions",
+                        "display_name": "Other",
+                        "model": "hidden-compatible-model",
+                        "chosen": True,
+                    },
+                }
+            ],
+        },
+        config={
+            "harness": "llm",
+            "model": "gpt-4o-mini",
+            "judge": {
+                "provider": "compatible",
+                "backend": "decisions",
+                "display_name": "Other",
+                "model": "hidden-compatible-model",
+                "chosen": True,
+            },
+        },
+    )
     disk = "".join(path.read_text(encoding="utf-8") for path in hist_dir.glob("*.jsonl"))
     assert "gpt-6-luna" in disk
     assert "check_kind" in disk
     assert "OpenAI Decisions" in disk
     assert "jev-hidden-model" in disk
+    assert '"provider": "compatible"' in disk
 
     client = _client(tmp_path, monkeypatch)
     hist = client.get("/api/history", params={"skill": "pdf"}).json()
     skill = client.get("/api/skills/pdf").json()
+    listed = client.get("/api/skills").json()
     auto_run = client.get("/api/runs/auto-judge").json()
     jev_run = client.get("/api/runs/chosen-jev").json()
+    other_run = client.get("/api/runs/chosen-other").json()
     _assert_browser_payload_is_scrubbed(hist)
     _assert_browser_payload_is_scrubbed(skill)
+    _assert_browser_payload_is_scrubbed(listed)
     _assert_browser_payload_is_scrubbed(auto_run)
     _assert_browser_payload_is_scrubbed(jev_run)
+    _assert_browser_payload_is_scrubbed(other_run)
     assert "jev-hidden-model" not in json.dumps(jev_run)
-    assert hist["last_run"]["config_label"] == "Scored by Jev"
+    assert hist["last_run"]["config_label"] == "Scored by Other"
     auto_row = next(item for item in hist["runs"] if item["id"] == "auto-judge")
     assert auto_row["config_label"] == "Scored by the judge"
     assert auto_row["config"]["label"] == "Scored by the judge"
     assert auto_row["config"]["judge"]["display_name"] == "the judge"
     assert "model" not in auto_row["config"]["judge"]
+    assert "provider" not in auto_row["config"]["judge"]
+    assert "backend" not in auto_row["config"]["judge"]
+    assert "model" not in auto_row["config"]
     assert jev_run["config"]["judge"]["display_name"] == "Jev"
+    assert "provider" not in jev_run["config"]["judge"]
     assert jev_run["config_label"] == "Scored by Jev"
+    assert other_run["config"]["judge"]["display_name"] == "Other"
+    assert "provider" not in other_run["config"]["judge"]
+    assert other_run["config_label"] == "Scored by Other"
+
+
+def test_status_hides_gateway_fields(tmp_path: Path, monkeypatch) -> None:
+    client = _client(tmp_path, monkeypatch)
+    data = client.get("/api/status").json()
+    assert "has_gateway_key" not in data
+    assert "live_backends" not in data
+    assert "OpenAI-compatible" not in json.dumps(data.get("available_harnesses"))
+    harness_auth = data.get("harness_auth") or {}
+    assert "has_gateway_api_key" not in harness_auth
+    assert data["has_key"] is False
+
+
+def test_pack_file_cannot_wipe_seed_cases(tmp_path: Path, monkeypatch) -> None:
+    pack = _copy_pack(tmp_path)
+    original = (pack / "evals" / "cases.yaml").read_text(encoding="utf-8")
+    client = _client(tmp_path, monkeypatch)
+    res = client.post(
+        "/api/skills/pack-file",
+        json={"skill": "pdf", "path": "evals/cases.yaml", "content": "schema: 1\nskill: pdf\ncases: []\n"},
+    )
+    assert res.status_code == 400, res.text
+    detail = res.json()["detail"]
+    message = detail.get("message") if isinstance(detail, dict) else str(detail)
+    assert "original checks stay" in message.lower()
+    assert "seed checks cannot be removed" not in message.lower()
+    assert (pack / "evals" / "cases.yaml").read_text(encoding="utf-8") == original
 
 
 def test_local_gate_tryout_stays_pending() -> None:

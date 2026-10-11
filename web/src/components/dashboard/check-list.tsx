@@ -15,6 +15,7 @@ import {
   canPinCheck,
   expectedFieldValue,
   isPinnedCheck,
+  expectedWithoutTargetWarning,
   noTriggerOutputWarning,
   showsExpectedOutputFields,
 } from "@/lib/case-pack"
@@ -89,6 +90,7 @@ export function CheckList({
         const task = matchTask(check, index, checkRun, skillName)
         const overBudget = task?.metrics?.status === "fail"
         const ignoredOutput = noTriggerOutputWarning(check)
+        const expectedOrphan = expectedWithoutTargetWarning(check)
         return (
           <div
             key={check.id ?? index}
@@ -233,6 +235,9 @@ export function CheckList({
                       }
                     />
                   </Field>
+                  {expectedOrphan ? (
+                    <p className="text-sm text-muted-foreground">{expectedOrphan}</p>
+                  ) : null}
                 </>
               ) : ignoredOutput ? (
                 <p className="text-sm text-muted-foreground">{ignoredOutput}</p>

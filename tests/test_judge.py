@@ -77,6 +77,19 @@ def test_resolve_judge_openai_without_key() -> None:
     assert "OpenAI API key" in caught.value.message
 
 
+def test_missing_provider_key_uses_add_your() -> None:
+    from skillgate_ai.judge import missing_provider_key
+
+    aws = missing_provider_key("aws")
+    assert aws.message.startswith("Add your AWS key")
+    assert "Add a AWS" not in aws.message
+    other = missing_provider_key("compatible")
+    assert other.message.startswith("Add your Other key")
+    assert "Add a Other" not in other.message
+    assert "AI_GATEWAY_API_KEY" not in other.message
+    assert "gateway" not in other.message.lower()
+
+
 def test_resolve_judge_openai_pref_uses_gateway_decisions() -> None:
     judge = resolve_judge(
         _cfg(
