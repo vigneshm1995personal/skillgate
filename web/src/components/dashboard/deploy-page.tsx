@@ -90,12 +90,15 @@ export function DeployPage() {
   let title = deployAllowed ? "Ready" : "Blocked"
   if (!skill) {
     note = "Pick a skill on Evaluate. Pass the checks to unlock Install."
-  } else if (deployAllowed && lastDeploy?.mode === "git" && (lastDeploy.url || lastDeploy.dest_path)) {
+  } else if (deployAllowed && lastDeploy?.mode === "git" && (lastDeploy.url || lastDeploy.dest_label || lastDeploy.dest_path)) {
     note = lastDeploy.url
       ? `Published ${skillName} to git.`
       : `Published ${skillName} to git.`
     title = "Published"
-  } else if (deployAllowed && lastDeploy?.dest_path) {
+  } else if (
+    deployAllowed &&
+    (lastDeploy?.dest_label || lastDeploy?.dest_path || lastDeploy?.status === "installed")
+  ) {
     const ver = lastDeploy.semver ? ` v${lastDeploy.semver}` : ""
     const target = lastDeploy.target ? ` to ${lastDeploy.target}` : ""
     note = `Installed ${skillName}${ver}${target}.`

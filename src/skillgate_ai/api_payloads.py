@@ -11,7 +11,7 @@ from typing import Any
 from fastapi import HTTPException, Request
 
 from skillgate_ai.case_pack import skill_has_dataset
-from skillgate_ai.catalog import catalog_entries
+from skillgate_ai.catalog import SOURCE_LABELS, catalog_entries
 from skillgate_ai.eval_config import config_label, harness_display_name
 from skillgate_ai.history import load_deploys, load_history
 from skillgate_ai.ingest import ingest_skill
@@ -137,7 +137,8 @@ def _newest_full_run(runs: list[dict[str, Any]]) -> dict[str, Any] | None:
 
 def _deploy_payload(row: dict[str, Any], *, index: int = 0) -> dict[str, Any]:
     target = str(row.get("target") or "")
-    dest_label = str(row.get("dest_label") or "").strip()
+    label = SOURCE_LABELS.get(target, target or "agent")
+    dest_label = f"{label}'s skills folder"
     return {
         "id": index + 1,
         "target": target,
@@ -145,8 +146,7 @@ def _deploy_payload(row: dict[str, Any], *, index: int = 0) -> dict[str, Any]:
         "created_at": row.get("ts"),
         "file_count": row.get("file_count"),
         "mode": row.get("mode") or "local",
-        "dest_path": dest_label or None,
-        "dest_label": dest_label or None,
+        "dest_label": dest_label,
     }
 
 

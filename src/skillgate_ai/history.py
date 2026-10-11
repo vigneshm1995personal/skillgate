@@ -1,4 +1,4 @@
-"""Append-only pack-local eval history under ``<pack>/evals/history/``."""
+"""Append-only pack-local eval history and deploy log."""
 
 from __future__ import annotations
 
@@ -8,11 +8,47 @@ from pathlib import Path
 from typing import Any
 
 HISTORY_DIR = "evals/history"
-DEPLOY_FILE = "deploys.jsonl"
+DEPLOY_REL = "evals/deploys.jsonl"
 
 
 def history_dir(pack_root: str | Path) -> Path:
     return Path(pack_root).expanduser().resolve() / HISTORY_DIR
+
+
+def _now() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _append_jsonl(dest: Path, row: dict[str, Any]) -> Path | None:
+    payload = json.dumps(row, ensure_ascii=True) + "\n"
+    try:
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        with dest.open("a", encoding="utf-8") as handle:
+            handle.write(payload)
+    except OSError:
+        return None
+    return dest
+
+
+def _read_jsonl(path: Path) -> list[dict[str, Any]]:
+    if not path.is_file():
+        return []
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError:
+        return []
+    rows: list[dict[str, Any]] = []
+    for line in text.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            item = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(item, dict):
+            rows.append(item)
+    return rows
 
 
 def append_eval(
@@ -25,50 +61,35 @@ def append_eval(
     config: dict[str, Any] | None = None,
 ) -> Path | None:
     """Append one JSONL row. Returns the file path, or None on EACCES/EROFS."""
-    dest_dir = history_dir(pack_root)
     stamp = datetime.now(timezone.utc).strftime("%Y%m%d")
-    dest = dest_dir / f"{stamp}.jsonl"
-    row = {
-        "ts": datetime.now(timezone.utc).isoformat(),
-        "run_id": run_id,
-        "passed": passed,
-        "gate": "green" if passed else "red",
-        "report": report,
-        "error": error,
-        "config": config,
-        "tryout": bool((report or {}).get("tryout")),
-    }
-    payload = json.dumps(row, ensure_ascii=True) + "\n"
-    try:
-        dest_dir.mkdir(parents=True, exist_ok=True)
-        with dest.open("a", encoding="utf-8") as handle:
-            handle.write(payload)
-    except OSError:
-        return None
-    return dest
+    dest = history_dir(pack_root) / f"{stamp}.jsonl"
+    return _append_jsonl(
+        dest,
+        {
+            "ts": _now(),
+            "kind": "run",
+            "run_id": run_id,
+            "passed": passed,
+            "gate": "green" if passed else "red",
+            "report": report,
+            "error": error,
+            "config": config,
+            "tryout": bool((report or {}).get("tryout")),
+        },
+    )
 
 
 def load_history(pack_root: str | Path, *, limit: int = 50) -> list[dict[str, Any]]:
-    """Newest-last rows from JSONL files. Missing dir → empty list."""
+    """Newest-last eval rows. Missing dir → empty list. Never reads the deploy log."""
     dest_dir = history_dir(pack_root)
     if not dest_dir.is_dir():
         return []
     rows: list[dict[str, Any]] = []
     for path in sorted(dest_dir.glob("*.jsonl")):
-        try:
-            text = path.read_text(encoding="utf-8")
-        except OSError:
-            continue
-        for line in text.splitlines():
-            line = line.strip()
-            if not line:
+        for item in _read_jsonl(path):
+            if item.get("kind") == "deploy" or not item.get("run_id"):
                 continue
-            try:
-                item = json.loads(line)
-            except json.JSONDecodeError:
-                continue
-            if isinstance(item, dict):
-                rows.append(item)
+            rows.append(item)
     if limit > 0:
         return rows[-limit:]
     return rows
@@ -82,49 +103,22 @@ def append_deploy(
     file_count: int | None = None,
     mode: str = "local",
 ) -> Path | None:
-    dest_dir = history_dir(pack_root)
-    dest = dest_dir / DEPLOY_FILE
-    label = {"cursor": "Cursor", "codex": "Codex", "claude": "Claude"}.get(
-        (target or "").strip().lower(), (target or "agent").strip()
+    dest = Path(pack_root).expanduser().resolve() / DEPLOY_REL
+    return _append_jsonl(
+        dest,
+        {
+            "ts": _now(),
+            "kind": "deploy",
+            "target": (target or "").strip().lower(),
+            "status": status,
+            "file_count": file_count,
+            "mode": mode,
+        },
     )
-    row = {
-        "ts": datetime.now(timezone.utc).isoformat(),
-        "kind": "deploy",
-        "target": (target or "").strip().lower(),
-        "status": status,
-        "file_count": file_count,
-        "mode": mode,
-        "dest_label": f"{label}'s skills folder",
-    }
-    payload = json.dumps(row, ensure_ascii=True) + "\n"
-    try:
-        dest_dir.mkdir(parents=True, exist_ok=True)
-        with dest.open("a", encoding="utf-8") as handle:
-            handle.write(payload)
-    except OSError:
-        return None
-    return dest
 
 
 def load_deploys(pack_root: str | Path, *, limit: int = 50) -> list[dict[str, Any]]:
-    dest = history_dir(pack_root) / DEPLOY_FILE
-    if not dest.is_file():
-        return []
-    rows: list[dict[str, Any]] = []
-    try:
-        text = dest.read_text(encoding="utf-8")
-    except OSError:
-        return []
-    for line in text.splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            item = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        if isinstance(item, dict):
-            rows.append(item)
+    rows = _read_jsonl(Path(pack_root).expanduser().resolve() / DEPLOY_REL)
     if limit > 0:
         return rows[-limit:]
     return rows

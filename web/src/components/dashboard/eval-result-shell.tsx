@@ -42,7 +42,6 @@ export function EvalResultShell({
   children: (opts: { mode: EvalMarkMode }) => ReactNode
   onResultVisible?: (visible: boolean) => void
 }) {
-  const sawChecking = useRef(true)
   const checkingShownAt = useRef<number | null>(Date.now())
   const slideTimer = useRef(0)
   const [phase, setPhase] = useState<Phase>("checking")
@@ -53,7 +52,6 @@ export function EvalResultShell({
 
   useEffect(() => {
     if (target === "checking") {
-      sawChecking.current = true
       checkingShownAt.current = Date.now()
       setPhase("checking")
       return
@@ -66,14 +64,9 @@ export function EvalResultShell({
     const plan = resultHoldPlan({
       target,
       reducedMotion: reduced,
-      sawChecking: sawChecking.current,
+      sawChecking: true,
       elapsedMs: elapsed,
     })
-    if (plan.showCheckingFirst && !sawChecking.current) {
-      sawChecking.current = true
-      checkingShownAt.current = Date.now()
-      setPhase("checking")
-    }
     const holdTimer = window.setTimeout(() => {
       if (reduced || !plan.showCheckingFirst) {
         setPhase("settled")

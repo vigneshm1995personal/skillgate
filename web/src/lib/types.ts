@@ -92,6 +92,7 @@ export type DeployAttempt = {
   semver?: string | null
   skill_md_hash?: string | null
   dest_path?: string | null
+  dest_label?: string | null
   error?: string | null
   pack_path?: string | null
   file_count?: number | null

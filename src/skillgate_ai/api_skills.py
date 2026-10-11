@@ -228,11 +228,6 @@ def register_skill_routes(app: FastAPI) -> None:
             file_count=result.get("file_count"),
             mode="local",
         )
-        dest_label = {
-            "cursor": "Cursor's skills folder",
-            "codex": "Codex's skills folder",
-            "claude": "Claude's skills folder",
-        }.get(target, "the agent's skills folder")
         return {
             "status": status,
             "note": result.get("message") or f"Installed {loaded.name}",
@@ -242,7 +237,6 @@ def register_skill_routes(app: FastAPI) -> None:
             "attempt": {
                 "target": target,
                 "status": status,
-                "dest_path": dest_label,
                 "mode": "local",
                 "file_count": result.get("file_count"),
             },
