@@ -40,6 +40,7 @@ class CompatibleBackend:
             model=model,
             post=post,
             who=DISPLAY_NAME,
+            decisions_path=self.decisions_path,
         )
         self._structured = StructuredOutputsBackend(
             api_key=api_key,

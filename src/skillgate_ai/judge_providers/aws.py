@@ -7,7 +7,7 @@ import hashlib
 import hmac as hmac_mod
 import json
 from typing import Any, Mapping
-from urllib.parse import urlparse
+from urllib.parse import quote, urlparse
 
 import httpx
 
@@ -144,9 +144,9 @@ class AwsBackend:
         retries: bool = True,
     ) -> dict[str, Any]:
         del retries
+        encoded = quote(self.model.strip(), safe="-._~")
         host = f"bedrock-runtime.{self.region}.amazonaws.com"
-        path = f"/model/{self.model}/converse"
-        url = f"https://{host}{path}"
+        url = f"https://{host}/model/{encoded}/converse"
         body = json.dumps(payload, separators=(",", ":"), ensure_ascii=True).encode("utf-8")
         headers = _sigv4_headers(
             method="POST",

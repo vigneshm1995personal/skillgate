@@ -273,6 +273,153 @@ def test_aws_backend_does_not_read_environ(monkeypatch: pytest.MonkeyPatch) -> N
     assert os.environ.get("AWS_ACCESS_KEY_ID") == "AKIAAAMBIENT"
 
 
+def test_aws_encodes_colon_in_model_id() -> None:
+    seen: dict[str, str] = {}
+
+    def post(url, headers=None, json=None, content=None, timeout=None):
+        del headers, json, content, timeout
+        seen["url"] = url
+        return FakeResponse(
+            200,
+            {
+                "output": {
+                    "message": {
+                        "content": [
+                            {
+                                "toolUse": {
+                                    "input": {
+                                        "task_completion": "Fully completed",
+                                        "correctness": "Correct",
+                                        "instruction_adherence": "Fully followed",
+                                        "evidence_action_validity": "Fully supported",
+                                        "result_quality": "Clear and complete",
+                                        "path_efficiency": "Efficient",
+                                    }
+                                }
+                            }
+                        ]
+                    }
+                }
+            },
+        )
+
+    backend = AwsBackend(
+        access_key="AKIATEST",
+        secret_key="vault-secret",
+        region="us-east-1",
+        model="anthropic.claude-3-haiku-20240307-v1:0",
+        post=post,
+    )
+    judged = backend.evaluate(
+        state={"check_prompt": "p", "path": {"had_path": True, "steps": 1}},
+        images=[],
+        timeout_sec=5,
+    )
+    assert judged["status"] == "completed"
+    assert "%3A0" in seen["url"]
+    assert "v1:0" not in seen["url"]
+
+
+def test_compatible_evaluate_uses_decisions_path() -> None:
+    calls: list[str] = []
+
+    def post(url, headers=None, json=None, timeout=None):
+        del headers, json, timeout
+        calls.append(url)
+        return FakeResponse(
+            200,
+            {
+                "answers": [
+                    {"name": "task_completion", "choice": "Fully completed"},
+                    {"name": "correctness", "choice": "Correct"},
+                    {"name": "instruction_adherence", "choice": "Fully followed"},
+                    {"name": "evidence_action_validity", "choice": "Fully supported"},
+                    {"name": "result_quality", "choice": "Clear and complete"},
+                    {"name": "path_efficiency", "choice": "Efficient"},
+                ],
+                "model": "compat",
+            },
+        )
+
+    backend = CompatibleBackend(
+        api_key="gw-key",
+        base_url="https://compat.example/v1",
+        decisions_path="/score",
+        post=post,
+    )
+    judged = OutcomeJudge(
+        backend,
+        display_name="Other",
+        provider="compatible",
+        chosen=True,
+        supports_why=True,
+        supports_confidence=True,
+    ).judge("goal", [], "tail", spec=resolve_judge_spec(), path={"had_path": True, "steps": 1})
+    assert judged["status"] == "completed"
+    assert any(url.endswith("/score") for url in calls)
+    assert not any(url.rstrip("/").endswith("/decisions") for url in calls)
+
+
+def test_aws_extra_choice_is_visible() -> None:
+    spec = resolve_judge_spec(
+        pack={
+            "extra_questions": [
+                {
+                    "id": "totals_match",
+                    "type": "choice",
+                    "ask": "Do the totals match?",
+                    "choices": [{"value": "yes", "pass": True}, {"value": "no"}],
+                }
+            ]
+        }
+    )
+
+    def post(url, headers=None, json=None, content=None, timeout=None):
+        del url, headers, json, content, timeout
+        return FakeResponse(
+            200,
+            {
+                "output": {
+                    "message": {
+                        "content": [
+                            {
+                                "toolUse": {
+                                    "input": {
+                                        "task_completion": "Fully completed",
+                                        "correctness": "Correct",
+                                        "instruction_adherence": "Fully followed",
+                                        "evidence_action_validity": "Fully supported",
+                                        "result_quality": "Clear and complete",
+                                        "path_efficiency": "Efficient",
+                                        "totals_match": "yes",
+                                    }
+                                }
+                            }
+                        ]
+                    }
+                }
+            },
+        )
+
+    backend = AwsBackend(
+        access_key="AKIATEST",
+        secret_key="vault-secret",
+        region="us-east-1",
+        model="amazon.nova-lite",
+        post=post,
+    )
+    judged = OutcomeJudge(
+        backend,
+        display_name="AWS",
+        provider="aws",
+        chosen=True,
+        supports_why=True,
+        supports_confidence=False,
+    ).judge("goal", [], "tail", spec=spec, path={"had_path": True, "steps": 1})
+    assert judged["status"] == "completed"
+    assert judged["cells"]["totals_match"]["choice"] == "yes"
+
+
 def test_save_provider_marks_chosen(tmp_path: Path) -> None:
     settings = save_judge_settings(tmp_path, provider="openai")
     assert settings.chosen is True

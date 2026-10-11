@@ -374,6 +374,7 @@ class DecisionsBackend(_OpenAIPosted):
         model: str = DEFAULT_MODEL,
         post: PostFn | None = None,
         who: str = DISPLAY_NAME,
+        decisions_path: str = "/decisions",
     ) -> None:
         super().__init__(
             api_key=api_key,
@@ -382,6 +383,8 @@ class DecisionsBackend(_OpenAIPosted):
             post=post,
             who=who,
         )
+        path = (decisions_path or "/decisions").strip() or "/decisions"
+        self.decisions_path = path if path.startswith("/") else f"/{path}"
 
     def evaluate(
         self,
@@ -401,7 +404,7 @@ class DecisionsBackend(_OpenAIPosted):
         include_path = _path_is_recorded(state.get("path"))
         resolved = spec or builtin_spec()
         result = self.post_json(
-            "/decisions",
+            self.decisions_path,
             {
                 "model": self.model,
                 "input": payload_input,
@@ -702,13 +705,16 @@ class OutcomeJudge:
                 cells[key] = _path_not_available_cell()
         for question in resolved.extras:
             raw = extra_answers.get(question.id)
-            cells[question.id] = {
+            cell: dict[str, Any] = {
                 "label": question.ask,
-                "choice": extract_choice(raw) if isinstance(raw, Mapping) else None,
+                "choice": extract_choice(raw),
                 "reason": None,
             }
             if isinstance(raw, Mapping) and raw.get("probability") is not None:
-                cells[question.id]["probability"] = raw.get("probability")
+                cell["probability"] = raw.get("probability")
+            elif isinstance(raw, (int, float)) and not isinstance(raw, bool):
+                cell["probability"] = float(raw)
+            cells[question.id] = cell
         merged_answers = {**pass_answers, **extra_answers}
         extra_questions = {q.id: {"instructions": q.ask, "type": q.type} for q in resolved.extras}
         extra_failures: list[str] = []
