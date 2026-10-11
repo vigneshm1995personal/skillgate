@@ -168,7 +168,10 @@ def safe_relpath(rel: str, *, default_dir: str = FIXTURE_DIR) -> str:
     if not parts:
         raise ValueError("A file path is required.")
     if len(parts) == 1:
-        return f"{default_dir}/{_safe_filename(parts[0])}"
+        name = _safe_filename(parts[0])
+        if name.lower() == "skill.md":
+            return "SKILL.md"
+        return f"{default_dir}/{name}"
     parts[-1] = _safe_filename(parts[-1])
     return "/".join(parts)
 

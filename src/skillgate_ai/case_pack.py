@@ -41,7 +41,9 @@ from skillgate_ai.pack_schema import (
     SEED_LOCK_HINT,
     SEED_LOCK_MESSAGE,
     case_is_locked,
+    merge_judge_block,
     parse_judge_block,
+    parse_judge_patch,
     reject_missing_seed_cases,
 )
 from skillgate_ai.suite import DEFAULT_TASK_TIMEOUT_SEC, SuiteSpec, _normalize_suite
@@ -168,7 +170,9 @@ def save_pack_judge(skill_path: str | Path, raw: dict[str, Any] | None) -> CaseP
     pack = load_case_pack(root)
     if pack is None:
         raise SuiteError("This skill has no case pack yet.")
-    updated = pack.model_copy(update={"judge": parse_judge_block(raw or {})})
+    incoming, removed = parse_judge_patch(raw)
+    merged = merge_judge_block(pack.judge, incoming, removed_ids=removed)
+    updated = pack.model_copy(update={"judge": merged})
     save_case_pack(root, updated)
     return updated
 
@@ -794,6 +798,7 @@ def _case_from_check(root: Path, raw: dict[str, Any], skill_name: str) -> PackCa
     del skill_name
     case_id = _slug_id(str(raw.get("id") or "example"))
     should = bool(raw.get("should_trigger", True))
+    judge = parse_judge_block(raw.get("judge"))
     file_items = raw.get("files") if isinstance(raw.get("files"), list) else []
     inline = _inline_input_text(raw)
     if inline is not None:
@@ -813,12 +818,13 @@ def _case_from_check(root: Path, raw: dict[str, Any], skill_name: str) -> PackCa
     elif isinstance(contains, list):
         contains_list = [str(item).strip() for item in contains if str(item).strip()]
     golden: CaseGolden | None = None
-    if should and (output_path or contains_list or raw.get("golden_path")):
+    golden_path = str(raw.get("golden_path") or "").strip() or None
+    if should and (output_path or golden_path):
         golden = _persist_golden(
             root,
             case_id=case_id,
             output_path=output_path,
-            golden_path=str(raw.get("golden_path") or "").strip() or None,
+            golden_path=golden_path,
             contains_list=contains_list,
         )
     return PackCase(
@@ -831,7 +837,7 @@ def _case_from_check(root: Path, raw: dict[str, Any], skill_name: str) -> PackCa
         contains=contains_list,
         min_pages=raw.get("min_pages"),
         budgets=parse_budgets(raw.get("budgets")),
-        judge=parse_judge_block(raw.get("judge")),
+        judge=judge,
     )
 
 

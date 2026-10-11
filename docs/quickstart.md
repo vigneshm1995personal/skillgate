@@ -45,7 +45,7 @@ skillgate check pdf-sabotaged --expect-fail
 echo $?    # 0
 ```
 
-Live scoring is optional — pick OpenAI, Jev, AWS, or Other in Settings. See [openai-judge.md](https://github.com/vigneshm1995personal/skillgate/blob/main/docs/openai-judge.md). Every check is a live model run; without a key, `skillgate check` exits 2. Default results say “Scored by the judge” unless you picked a provider.
+Live scoring is optional — pick OpenAI, Jev, AWS, or Other in Settings. See [judge.md](https://github.com/vigneshm1995personal/skillgate/blob/main/docs/judge.md). Every check is a live model run; without a key, `skillgate check` exits 2. Default results say “Scored by the judge” unless you picked a provider.
 
 ## Deploy (after a green check)
 

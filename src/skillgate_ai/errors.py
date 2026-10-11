@@ -191,6 +191,9 @@ def _plain_pydantic_msg(msg: object) -> str:
         text = text.removeprefix(prefix)
     if "should be 1" in text.lower() or text.lower() == "input should be 1":
         return "Skill Gate supports schema 1"
+    lower = text.lower()
+    if "input should be" in lower and "block" in lower and "warn" in lower:
+        return "on_fail must be Fail the check or Warn only"
     return text.rstrip(".")
 
 

@@ -336,6 +336,7 @@ _LEAKY_REPORT = {
     "harness": "llm",
     "task_count": 1,
     "passed": True,
+    "scored_by": "Scored by OpenAI Decisions",
     "config": _LEAKY_CONFIG,
     "tasks": [
         {
@@ -490,8 +491,15 @@ def test_browser_api_scrubs_provider_model_names(tmp_path: Path, monkeypatch) ->
     _assert_browser_payload_is_scrubbed(jev_run)
     _assert_browser_payload_is_scrubbed(other_run)
     assert "jev-hidden-model" not in json.dumps(jev_run)
-    assert hist["last_run"]["config_label"] == "Scored by Other"
     auto_row = next(item for item in hist["runs"] if item["id"] == "auto-judge")
+    auto_skill = next(
+        item
+        for item in (skill.get("runs") or [skill.get("last_run")])
+        if item and item.get("id") == "auto-judge"
+    )
+    assert auto_skill["report"]["scored_by"] == "Scored by the judge"
+    assert auto_row["report"]["scored_by"] == "Scored by the judge"
+    assert hist["last_run"]["config_label"] == "Scored by Other"
     assert auto_row["config_label"] == "Scored by the judge"
     assert auto_row["config"]["label"] == "Scored by the judge"
     assert auto_row["config"]["judge"]["display_name"] == "the judge"
@@ -505,6 +513,164 @@ def test_browser_api_scrubs_provider_model_names(tmp_path: Path, monkeypatch) ->
     assert other_run["config"]["judge"]["display_name"] == "Other"
     assert "provider" not in other_run["config"]["judge"]
     assert other_run["config_label"] == "Scored by Other"
+
+
+def test_browser_api_keeps_couldnt_score_copy(tmp_path: Path, monkeypatch) -> None:
+    pack = _copy_pack(tmp_path)
+    hist_dir = pack / "evals" / "history"
+    for path in hist_dir.glob("*.jsonl"):
+        path.unlink()
+    append_eval(
+        pack,
+        run_id="failed-score",
+        passed=False,
+        report={
+            **_LEAKY_REPORT,
+            "passed": False,
+            "scored_by": "OpenAI couldn't score this run. Your OpenAI account is out of credits.",
+        },
+        config=_LEAKY_CONFIG,
+    )
+    client = _client(tmp_path, monkeypatch)
+    run = client.get("/api/runs/failed-score").json()
+    line = run["report"]["scored_by"]
+    assert "couldn't score this run" in line.lower()
+    assert "openai decisions" not in line.lower()
+    assert line.startswith("The judge couldn't score this run.")
+
+
+def test_settings_keys_use_other_not_gateway_name(tmp_path: Path, monkeypatch) -> None:
+    client = _client(tmp_path, monkeypatch)
+    listed = client.get("/api/settings/keys")
+    blob = json.dumps(listed.json())
+    assert "AI_GATEWAY_API_KEY" not in blob
+    assert "Other" in listed.json()["keys"]
+    saved = client.put("/api/settings/keys/Other", json={"value": "gw-test-local"})
+    assert saved.status_code == 200, saved.text
+    assert saved.json()["keys"]["Other"]["from_vault"] is True
+    vault = (tmp_path / ".skillgate" / "keys").read_text(encoding="utf-8")
+    assert "AI_GATEWAY_API_KEY=gw-test-local" in vault
+    judge = client.get("/api/settings/judge").json()["judge"]
+    assert "decisions_path" not in judge
+
+
+def test_pin_validates_judge_before_writing_cases(tmp_path: Path, monkeypatch) -> None:
+    pack = _copy_pack(tmp_path)
+    before = (pack / "evals" / "cases.yaml").read_text(encoding="utf-8")
+    client = _client(tmp_path, monkeypatch)
+    res = client.post(
+        "/api/evals/pin",
+        json={
+            "skill": "pdf",
+            "checks": [
+                {
+                    "id": "brand-new-check",
+                    "prompt": "A new check that must not be saved.",
+                    "should_trigger": True,
+                }
+            ],
+            "pack_judge": {
+                "extra_questions": [
+                    {
+                        "id": "bad_fail",
+                        "type": "predicate",
+                        "ask": "Broken?",
+                        "on_fail": "nope",
+                    }
+                ]
+            },
+        },
+    )
+    assert res.status_code == 400, res.text
+    detail = res.json()["detail"]
+    message = detail.get("message") if isinstance(detail, dict) else str(detail)
+    assert "input should be" not in message.lower()
+    assert "block or warn" not in message.lower()
+    assert "Fail the check" in message or "Warn only" in message
+    after = (pack / "evals" / "cases.yaml").read_text(encoding="utf-8")
+    assert after == before
+    assert "brand-new-check" not in after
+
+
+def test_pin_merges_pack_judge_extras(tmp_path: Path, monkeypatch) -> None:
+    pack = _copy_pack(tmp_path)
+    from skillgate_ai.case_pack import load_case_pack, save_pack_judge
+
+    save_pack_judge(
+        pack,
+        {
+            "extra_questions": [
+                {
+                    "id": "cli_extra",
+                    "type": "predicate",
+                    "ask": "CLI question?",
+                    "on_fail": "block",
+                    "pass_if": {"gte": 0.8},
+                }
+            ]
+        },
+    )
+    client = _client(tmp_path, monkeypatch)
+    res = client.post(
+        "/api/evals/pin",
+        json={
+            "skill": "pdf",
+            "checks": [
+                {
+                    "id": "extract-hello",
+                    "prompt": "Extract hello",
+                    "should_trigger": True,
+                }
+            ],
+            "pack_judge": {
+                "extra_questions": [
+                    {
+                        "id": "ui_extra",
+                        "type": "predicate",
+                        "ask": "UI question?",
+                        "on_fail": "block",
+                        "pass_if": {"gte": 0.8},
+                    }
+                ]
+            },
+        },
+    )
+    assert res.status_code == 200, res.text
+    loaded = load_case_pack(pack)
+    assert loaded is not None
+    ids = [q.id for q in (loaded.judge.extra_questions if loaded.judge else [])]
+    assert "cli_extra" in ids
+    assert "ui_extra" in ids
+    removed = client.post(
+        "/api/evals/pin",
+        json={
+            "skill": "pdf",
+            "checks": [
+                {
+                    "id": "extract-hello",
+                    "prompt": "Extract hello",
+                    "should_trigger": True,
+                }
+            ],
+            "pack_judge": {
+                "extra_questions": [
+                    {
+                        "id": "ui_extra",
+                        "type": "predicate",
+                        "ask": "UI question?",
+                        "on_fail": "block",
+                        "pass_if": {"gte": 0.8},
+                    }
+                ],
+                "removed_extra_ids": ["cli_extra"],
+            },
+        },
+    )
+    assert removed.status_code == 200, removed.text
+    loaded = load_case_pack(pack)
+    ids = [q.id for q in (loaded.judge.extra_questions if loaded and loaded.judge else [])]
+    assert "cli_extra" not in ids
+    assert "ui_extra" in ids
 
 
 def test_status_hides_gateway_fields(tmp_path: Path, monkeypatch) -> None:

@@ -426,14 +426,16 @@ app.add_typer(keys_app, name="keys")
 
 @keys_app.command("set")
 def keys_set(
-    name: str = typer.Argument(..., help="CURSOR_API_KEY | CODEX_API_KEY | OPENAI_API_KEY | …"),
+    name: str = typer.Argument(
+        ..., help="CURSOR_API_KEY | CODEX_API_KEY | OPENAI_API_KEY | Other | …"
+    ),
     value: str | None = typer.Argument(
         None,
         help="The secret. Omit to paste hidden (TTY) or read stdin.",
     ),
 ) -> None:
     """Write a key into `.skillgate/keys` (mode 0600)."""
-    from skillgate_ai.keys import set_vault_key
+    from skillgate_ai.keys import public_key_name, set_vault_key
 
     root = _boot()
     secret = value
@@ -447,7 +449,7 @@ def keys_set(
     except SkillGateError as exc:
         console.print(exc.render())
         raise typer.Exit(exc.exit_code) from None
-    console.print(f"Saved {name} in Settings (`.skillgate/keys`).")
+    console.print(f"Saved {public_key_name(name)} in Settings (`.skillgate/keys`).")
 
 
 @keys_app.command("clear")
@@ -455,7 +457,7 @@ def keys_clear(
     name: str = typer.Argument(..., help="Key name to remove"),
 ) -> None:
     """Remove a key from `.skillgate/keys`."""
-    from skillgate_ai.keys import clear_vault_key
+    from skillgate_ai.keys import clear_vault_key, public_key_name
 
     root = _boot()
     try:
@@ -463,7 +465,7 @@ def keys_clear(
     except SkillGateError as exc:
         console.print(exc.render())
         raise typer.Exit(exc.exit_code) from None
-    console.print(f"Cleared {name}.")
+    console.print(f"Cleared {public_key_name(name)}.")
 
 
 @keys_app.command("list")
@@ -474,12 +476,14 @@ def keys_list() -> None:
     root = _boot()
     presence = key_presence(root)
     found = False
+    from skillgate_ai.keys import public_key_name
+
     for name, meta in presence.items():
         if not meta["set"]:
             continue
         found = True
         source = "Settings" if meta["from_vault"] else "SKILLGATE_* / --key-env"
-        console.print(f"{name}  ({source})")
+        console.print(f"{public_key_name(name)}  ({source})")
     if not found:
         console.print("No keys set. Use `skillgate keys set` or Settings in `skillgate ui`.")
 
@@ -675,6 +679,9 @@ def case_add_cmd(
     case_id: str | None = typer.Option(None, "--id", help="Optional check id"),
     expected: str | None = typer.Option(None, "--expected", help="Expected text in the output"),
     output_path: str | None = typer.Option(None, "--output", help="Output file to compare"),
+    inputs: list[Path] | None = typer.Option(
+        None, "--input", "--fixture", help="Input/fixture file to copy into this skill"
+    ),
     no_trigger: bool = typer.Option(False, "--no-trigger", help="This check should not run the skill"),
 ) -> None:
     """Add a check to this skill's Dataset."""
@@ -689,6 +696,7 @@ def case_add_cmd(
             expected=expected,
             output_path=output_path,
             should_trigger=not no_trigger,
+            inputs=[str(path) for path in inputs] if inputs else None,
         )
     except SkillGateError as exc:
         console.print(exc.render())
@@ -721,11 +729,11 @@ def judge_provider_show() -> None:
 
 @judge_provider_app.command("set")
 def judge_provider_set(
-    provider: str = typer.Argument(..., help="auto | openai | jev | aws | compatible"),
+    provider: str = typer.Argument(..., help="auto | openai | jev | aws | Other"),
     base_url: str | None = typer.Option(None, "--base-url"),
     region: str | None = typer.Option(None, "--region"),
     model: str | None = typer.Option(None, "--model"),
-    decisions_path: str | None = typer.Option(None, "--decisions-path"),
+    decisions_path: str | None = typer.Option(None, "--decisions-path", hidden=True),
 ) -> None:
     """Write `.skillgate/judge`. Does not print keys."""
     from skillgate_ai.judge_settings import save_judge_settings
@@ -804,6 +812,11 @@ def ui_cmd(
     except OSError as exc:
         console.print(f"Could not bind {host}:{port}: {exc}")
         raise typer.Exit(1) from exc
+
+
+from skillgate_ai.cli_pack import register_pack_commands
+
+register_pack_commands(app, case_app, judge_app)
 
 
 if __name__ == "__main__":

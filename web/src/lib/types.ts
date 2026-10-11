@@ -695,7 +695,7 @@ export type SettingsKeyId =
   | "CURSOR_API_KEY"
   | "CODEX_API_KEY"
   | "OPENAI_API_KEY"
-  | "AI_GATEWAY_API_KEY"
+  | "Other"
   | "ANTHROPIC_API_KEY"
   | "JEV_API_KEY"
   | "AWS_ACCESS_KEY_ID"

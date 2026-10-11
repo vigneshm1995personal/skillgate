@@ -102,7 +102,7 @@ def test_customer_copy_denylist() -> None:
         ROOT / "docs" / "quickstart.md",
         ROOT / "docs" / "ui.md",
         ROOT / "docs" / "pack.md",
-        ROOT / "docs" / "openai-judge.md",
+        ROOT / "docs" / "judge.md",
         ROOT / ".env.example",
     ]
     hits: list[str] = []

@@ -38,7 +38,10 @@ def test_public_docs_drop_internal_words() -> None:
 def test_readme_points_at_docs() -> None:
     text = README.read_text(encoding="utf-8")
     assert "docs/quickstart.md" in text
-    assert "docs/openai-judge.md" in text
+    assert "docs/judge.md" in text
+    assert "docs/openai-judge.md" not in text
+    assert "Bring your own judge" in text
+    assert "custom" in text.lower()
 
 
 def test_release_yml_example_tag_is_current() -> None:
@@ -52,7 +55,7 @@ def test_package_and_docs_pin_060() -> None:
     init = (ROOT / "src" / "skillgate_ai" / "__init__.py").read_text(encoding="utf-8")
     readme = README.read_text(encoding="utf-8")
     quickstart = QUICKSTART.read_text(encoding="utf-8")
-    judge = (ROOT / "docs" / "openai-judge.md").read_text(encoding="utf-8")
+    judge = (ROOT / "docs" / "judge.md").read_text(encoding="utf-8")
     assert 'version = "0.6.0"' in pyproject
     assert '__version__ = "0.6.0"' in init
     assert "skillgate-ai==0.6.0" in readme
@@ -92,7 +95,7 @@ def test_quickstart_does_not_promise_fixture_checks_without_a_key() -> None:
 
 
 def test_openai_judge_docs_do_not_say_fixture_checks_decide_pass_fail() -> None:
-    text = (ROOT / "docs" / "openai-judge.md").read_text(encoding="utf-8").lower()
+    text = (ROOT / "docs" / "judge.md").read_text(encoding="utf-8").lower()
     assert "fixture checks decide pass/fail" not in text
     assert "otherwise fixture checks" not in text
     assert "fixture checks decide the result" not in text

@@ -28,6 +28,7 @@ export type JudgeBlock = {
   on_fail?: Record<string, "block" | "warn">
   extra_questions?: ExtraQuestion[]
   score_no_trigger?: boolean
+  removed_extra_ids?: string[]
 }
 
 export function totalQuestionCount(pack?: JudgeBlock | null, check?: JudgeBlock | null): number {

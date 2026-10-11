@@ -101,7 +101,8 @@ describe("unsupportedModelHint", () => {
     expect(short).not.toMatch(/openai\/gpt-4o-mini/)
     expect(listed).toContain("gpt-5.6-luna")
     expect(listed).not.toMatch(/openai\/gpt-4o-mini/)
-    expect(listed).toMatch(/not a gateway model id/i)
+    expect(listed).not.toMatch(/gateway model id/i)
+    expect(listed).toMatch(/not a Codex model/i)
   })
 })
 

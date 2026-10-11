@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 import yaml
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from skillgate_ai.errors import SuiteError, friendly_validation_error
 
@@ -53,12 +53,34 @@ class ExtraQuestion(BaseModel):
     pass_if: dict[str, Any] | None = None
     include_when: str | None = None
 
+    @field_validator("on_fail", mode="before")
+    @classmethod
+    def _on_fail_plain(cls, value: object) -> str:
+        from skillgate_ai.judge_spec import _on_fail_value
+
+        try:
+            return _on_fail_value(value, default="block")
+        except SuiteError as exc:
+            raise ValueError(exc.message) from exc
+
 
 class JudgeBlock(BaseModel):
     min_confidence: float | None = None
     on_fail: dict[str, Literal["block", "warn"]] | None = None
     extra_questions: list[ExtraQuestion] = Field(default_factory=list)
     score_no_trigger: bool = False
+
+    @field_validator("on_fail", mode="before")
+    @classmethod
+    def _on_fail_map(cls, value: object) -> object:
+        if not isinstance(value, dict):
+            return value
+        from skillgate_ai.judge_spec import _on_fail_value
+
+        try:
+            return {str(key): _on_fail_value(item, default="block") for key, item in value.items()}
+        except SuiteError as exc:
+            raise ValueError(exc.message) from exc
 
     def is_empty(self) -> bool:
         return (
@@ -123,6 +145,47 @@ def guard_cases_yaml_write(root: Path, rel: str, content: str | bytes) -> None:
     skill = str(raw.get("skill") or root.name).strip()
     reject_missing_seed_cases(skill, ids)
     reject_missing_seed_cases(root.name, ids)
+
+
+def merge_judge_block(
+    existing: JudgeBlock | None,
+    incoming: JudgeBlock | None,
+    *,
+    removed_ids: Iterable[str] | None = None,
+) -> JudgeBlock | None:
+    removed = {str(item).strip() for item in (removed_ids or []) if str(item).strip()}
+    by_id: dict[str, ExtraQuestion] = {}
+    if existing is not None:
+        for question in existing.extra_questions:
+            if question.id not in removed:
+                by_id[question.id] = question
+    if incoming is not None:
+        for question in incoming.extra_questions:
+            by_id[question.id] = question
+    extras = list(by_id.values())
+    if incoming is None:
+        if existing is None:
+            return None
+        block = existing.model_copy(update={"extra_questions": extras})
+        return None if block.is_empty() else block
+    updates: dict[str, Any] = {"extra_questions": extras}
+    if incoming.on_fail is None and existing is not None and existing.on_fail:
+        updates["on_fail"] = existing.on_fail
+    if incoming.min_confidence is None and existing is not None:
+        updates["min_confidence"] = existing.min_confidence
+    block = incoming.model_copy(update=updates)
+    return None if block.is_empty() else block
+
+
+def parse_judge_patch(raw: object) -> tuple[JudgeBlock | None, list[str]]:
+    if not isinstance(raw, dict):
+        return parse_judge_block(raw), []
+    payload = dict(raw)
+    removed_raw = payload.pop("removed_extra_ids", None) or []
+    if not isinstance(removed_raw, list):
+        removed_raw = [removed_raw]
+    removed = [str(item).strip() for item in removed_raw if str(item).strip()]
+    return parse_judge_block(payload), removed
 
 
 def parse_judge_block(raw: object) -> JudgeBlock | None:

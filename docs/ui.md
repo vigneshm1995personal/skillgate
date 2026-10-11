@@ -48,3 +48,32 @@ PACK=./skills/pdf-sabotaged docker compose run --rm --no-TTY skillgate   # exit 
 ```
 
 Image `ENTRYPOINT` is `skillgate`; `CMD` is `check /pack`.
+
+## UI / CLI parity
+
+Everything the local UI can do has a CLI command. New API writes must update this table and `WRITE_ROUTE_CLI` in `cli_parity.py`.
+
+| UI action | API | CLI |
+| --- | --- | --- |
+| Save a key | `PUT /api/settings/keys/{name}` | `skillgate keys set` |
+| Clear a key | `DELETE /api/settings/keys/{name}` | `skillgate keys clear` |
+| List keys | `GET /api/settings/keys` | `skillgate keys list` |
+| Pick who scores | `PUT /api/settings/judge` | `skillgate judge provider set` |
+| Test scoring | `POST /api/judge/ping` | `skillgate judge provider test` |
+| Show scoring provider | `GET /api/settings/judge` | `skillgate judge provider show` |
+| Import from agent folders / zip / SKILL.md | `POST /api/skills/import`, `POST /api/skills/upload` | `skillgate import` |
+| Create a skill | `POST /api/skills/paste` | `skillgate skill paste` / `skillgate new` |
+| Edit SKILL.md or pack files | `POST /api/skills/pack-file`, `POST /api/skills/pack-upload`, `POST /api/skills/apply-fix`, `POST /api/evals/generate` | `skillgate skill write` |
+| List skills | `GET /api/skills` | `skillgate list` |
+| Add a check | `POST /api/evals/pin` | `skillgate case add` |
+| Edit a check | `POST /api/evals/pin` | `skillgate case edit` |
+| Remove a check | `POST /api/evals/pin` | `skillgate case remove` |
+| List checks | `GET /api/evals/dataset` | `skillgate case list` |
+| Bind fixtures | `POST /api/evals/fixture-bind` | `skillgate case bind` |
+| Add a scoring question | Checks editor → pin | `skillgate judge add-question` |
+| Edit Fail vs warn | Checks editor → pin | `skillgate judge set-question` |
+| Remove an extra question | Checks editor → pin | `skillgate judge remove-question` |
+| Run | `POST /api/runs` | `skillgate check` |
+| Skip / stop a run | `POST /api/runs/{run_id}/skip`, `POST /api/runs/{run_id}/kill` | `skillgate check` (Ctrl+C) |
+| History | `GET /api/history` | `skillgate history` |
+| Deploy | `POST /api/deploy` | `skillgate deploy` |

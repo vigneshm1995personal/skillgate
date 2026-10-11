@@ -12,12 +12,8 @@ from skillgate_ai.case_pack import (
     PIN_NEEDS_EXPECTED_HINT,
     checks_from_pack,
     dataset_view,
-    expected_without_target_warning,
     load_case_pack,
     pack_judge_dict,
-    pin_case_ids,
-    pin_checks,
-    save_pack_judge,
 )
 from skillgate_ai.catalog import find_skill
 from skillgate_ai.errors import SuiteError
@@ -72,26 +68,15 @@ def register_eval_routes(app: FastAPI) -> None:
         case_ids = body.get("case_ids")
         warnings: list[str] = []
         try:
-            if isinstance(checks, list) and checks:
-                for raw in checks:
-                    if not isinstance(raw, dict):
-                        continue
-                    warn = expected_without_target_warning(
-                        contains=str(raw.get("contains") or raw.get("expected") or ""),
-                        output_path=str(raw.get("output_path") or ""),
-                        golden_path=str(raw.get("golden_path") or ""),
-                        should_trigger=bool(raw.get("should_trigger", True)),
-                    )
-                    if warn and warn not in warnings:
-                        warnings.append(warn)
-                pack = pin_checks(skill_path, [dict(item) for item in checks])
-            elif isinstance(case_ids, list) and case_ids:
-                pack = pin_case_ids(skill_path, [str(item) for item in case_ids])
-            else:
-                fail(400, "Pin needs checks or case ids.")
-            if isinstance(body.get("pack_judge"), dict) or body.get("pack_judge") is None:
-                if "pack_judge" in body:
-                    pack = save_pack_judge(skill_path, body.get("pack_judge"))
+            from skillgate_ai.pack_edit import apply_pin
+
+            pack, warnings = apply_pin(
+                skill_path,
+                checks=checks if isinstance(checks, list) else None,
+                case_ids=case_ids if isinstance(case_ids, list) else None,
+                pack_judge=body.get("pack_judge") if isinstance(body.get("pack_judge"), dict) else None,
+                has_pack_judge="pack_judge" in body,
+            )
         except ValueError as exc:
             fail(400, str(exc), hint=PIN_NEEDS_EXPECTED_HINT)
         except SuiteError as exc:

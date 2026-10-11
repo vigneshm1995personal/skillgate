@@ -25,7 +25,6 @@ from skillgate_ai.api_shims import register_hosted_shims
 from skillgate_ai.api_skills import register_skill_routes
 from skillgate_ai.catalog import catalog_entries
 from skillgate_ai.config import (
-    ROOT_ENV_NAMES,
     UI_NO_KEY_HINT,
     get_llm_config,
     load_env,
@@ -144,7 +143,10 @@ def _register_core_routes(app: FastAPI) -> None:
     @app.put("/api/settings/keys/{name}")
     async def set_key(name: str, request: Request) -> dict[str, Any]:
         state = state_of(request)
-        if name not in SETTINGS_KEYS or name not in ROOT_ENV_NAMES:
+        from skillgate_ai.keys import internal_key_name
+
+        vault_name = internal_key_name(name)
+        if vault_name not in SETTINGS_KEYS:
             fail(400, "Unknown key name.")
         body = await request.json()
         value = str((body or {}).get("value") or "").strip()
@@ -152,15 +154,18 @@ def _register_core_routes(app: FastAPI) -> None:
             fail(400, "Paste a key before saving.")
         if any(ch in value for ch in "\r\n"):
             fail(400, "API keys cannot contain line breaks.")
-        set_vault_key(state.root, name, value)
+        set_vault_key(state.root, vault_name, value)
         return {"keys": keys_payload(state)}
 
     @app.delete("/api/settings/keys/{name}")
     def clear_key(name: str, request: Request) -> dict[str, Any]:
         state = state_of(request)
-        if name not in SETTINGS_KEYS:
+        from skillgate_ai.keys import internal_key_name
+
+        vault_name = internal_key_name(name)
+        if vault_name not in SETTINGS_KEYS:
             fail(400, "Unknown key name.")
-        clear_vault_key(state.root, name)
+        clear_vault_key(state.root, vault_name)
         return {"keys": keys_payload(state)}
 
     @app.get("/api/settings/judge")

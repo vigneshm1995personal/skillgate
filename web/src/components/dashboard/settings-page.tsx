@@ -62,7 +62,7 @@ const KEY_ROWS: Array<{
     slug: "openai",
   },
   {
-    name: "AI_GATEWAY_API_KEY",
+    name: "Other",
     label: "Other",
     hint: "Runs live checks. Scores them when Other is selected.",
     slug: "other",
@@ -85,7 +85,7 @@ const EMPTY_DRAFTS: Record<SettingsKeyId, string> = {
   CURSOR_API_KEY: "",
   CODEX_API_KEY: "",
   OPENAI_API_KEY: "",
-  AI_GATEWAY_API_KEY: "",
+  Other: "",
   ANTHROPIC_API_KEY: "",
   JEV_API_KEY: "",
   AWS_ACCESS_KEY_ID: "",
@@ -105,7 +105,7 @@ const PROVIDER_KEYS: Record<string, SettingsKeyId[]> = {
   openai: ["OPENAI_API_KEY"],
   jev: ["JEV_API_KEY"],
   aws: ["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN"],
-  compatible: ["AI_GATEWAY_API_KEY"],
+  compatible: ["Other"],
 }
 
 export function SettingsPage() {
@@ -155,7 +155,7 @@ export function SettingsPage() {
           CURSOR_API_KEY: EMPTY_PRESENCE,
           CODEX_API_KEY: EMPTY_PRESENCE,
           OPENAI_API_KEY: EMPTY_PRESENCE,
-          AI_GATEWAY_API_KEY: EMPTY_PRESENCE,
+          Other: EMPTY_PRESENCE,
           ANTHROPIC_API_KEY: EMPTY_PRESENCE,
           JEV_API_KEY: EMPTY_PRESENCE,
           AWS_ACCESS_KEY_ID: EMPTY_PRESENCE,
@@ -184,7 +184,7 @@ export function SettingsPage() {
           CURSOR_API_KEY: EMPTY_PRESENCE,
           CODEX_API_KEY: EMPTY_PRESENCE,
           OPENAI_API_KEY: EMPTY_PRESENCE,
-          AI_GATEWAY_API_KEY: EMPTY_PRESENCE,
+          Other: EMPTY_PRESENCE,
           ANTHROPIC_API_KEY: EMPTY_PRESENCE,
           JEV_API_KEY: EMPTY_PRESENCE,
           AWS_ACCESS_KEY_ID: EMPTY_PRESENCE,
@@ -440,7 +440,7 @@ export function SettingsPage() {
                 AWS_SECRET_ACCESS_KEY: "AWS secret",
                 AWS_SESSION_TOKEN: "AWS session token",
                 OPENAI_API_KEY: "OpenAI",
-                AI_GATEWAY_API_KEY: "Other",
+                Other: "Other",
               }
               return (
                 <Field key={name} orientation="vertical">

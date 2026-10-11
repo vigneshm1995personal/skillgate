@@ -158,11 +158,26 @@ export function PackScoringExtras({
           disabled={disabled}
           onChange={(next) => {
             const list = extras.map((item, i) => (i === extraIndex ? next : item))
-            onPackJudge({ ...(packJudge ?? {}), extra_questions: list })
+            const removed =
+              extra.id && next.id !== extra.id
+                ? [...(packJudge?.removed_extra_ids ?? []), extra.id]
+                : packJudge?.removed_extra_ids
+            onPackJudge({
+              ...(packJudge ?? {}),
+              extra_questions: list,
+              removed_extra_ids: removed,
+            })
           }}
           onRemove={() => {
             const list = extras.filter((_, i) => i !== extraIndex)
-            onPackJudge(list.length ? { ...(packJudge ?? {}), extra_questions: list } : null)
+            const removed = extra.id
+              ? [...(packJudge?.removed_extra_ids ?? []), extra.id]
+              : packJudge?.removed_extra_ids
+            onPackJudge(
+              list.length || removed?.length
+                ? { ...(packJudge ?? {}), extra_questions: list, removed_extra_ids: removed }
+                : null
+            )
           }}
         />
       ))}

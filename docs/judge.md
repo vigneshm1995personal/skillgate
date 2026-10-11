@@ -1,15 +1,17 @@
-# Score live checks with your OpenAI key
+# Bring your own judge
 
-Optional. Live checks still run with Cursor, Codex, Claude, or OpenAI. **Scoring** uses OpenAI’s scoring API (`POST /v1/decisions`): an OpenAI key in Settings talks to OpenAI directly; a gateway key without an OpenAI key uses that same API on AI Gateway. Skill Gate does not ship a model or an account. Ambient `OPENAI_API_KEY` is ignored unless you pass `--key-env`.
+Optional. Live checks still run with Cursor, Codex, Claude, or OpenAI. **Scoring** uses the judge you pick in Settings (or `skillgate judge provider set`): OpenAI, Jev, AWS, or Other. Skill Gate does not ship a model or an account. Ambient `OPENAI_API_KEY` is ignored unless you pass `--key-env`.
 
 ## What you get
 
-When an OpenAI or AI Gateway key is set and you run a live check (`skillgate check`, or Run in the local UI), Skill Gate asks the same fixed questions on each live task. The check Passes only when those answers meet the bar (job done, correct, followed the rules, and so on). An OpenAI key is never rerouted through the gateway. Every check still needs a live model key; without one, `skillgate check` exits 2. Scoring is optional. File-exists / contains / page-count scorers grade the live run when:
+When a scoring key is set and you run a live check (`skillgate check`, or Run in the local UI), Skill Gate asks the same fixed questions on each live task. The check Passes only when those answers meet the bar (job done, correct, followed the rules, and so on). Every check still needs a live model key; without one, `skillgate check` exits 2. Scoring is optional. File-exists / contains / page-count scorers grade the live run when:
 
-- there is no OpenAI key and no AI Gateway key in Settings (a Cursor or Codex key still runs the check)
+- there is no scoring key in Settings (a Cursor or Codex key still runs the check)
 - you set `SKILLGATE_JUDGE=skip`
 
 Scorers such as “does the output contain this text?” and page counts still apply. Scoring does **not** compare the full output to the expected file; it reads the expected and actual text (and a few images) and judges whether the work is done.
+
+Add extra scoring questions on top of Skill Gate’s six (`skillgate judge add-question`, or the Checks editor). Built-in questions cannot be deleted; they can be Warn only. Seed pdf cases cannot be removed.
 
 ## Setup
 
@@ -17,24 +19,22 @@ Scorers such as “does the output contain this text?” and page counts still a
 skillgate keys set OPENAI_API_KEY
 ```
 
-Or paste the OpenAI key in `skillgate ui` (Settings). Other keys run live checks. An OpenAI key scores them when the scoring provider is Auto or OpenAI. Other providers (Jev, AWS, Other) need their own key — they never reuse OpenAI.
+Or paste the key in `skillgate ui` (Settings). Other keys run live checks. An OpenAI key scores them when the scoring provider is Auto or OpenAI. Jev, AWS, and Other need their own key — they never reuse OpenAI.
 
 Pick a scoring provider in Settings or:
 
 ```bash
-skillgate judge provider set openai|jev|aws|compatible
+skillgate judge provider set openai|jev|aws|Other
 skillgate judge provider test
 ```
 
-Add extra scoring questions on top of Skill Gate’s six in the Checks editor or in `evals/cases.yaml` (`judge.extra_questions`). Built-in questions cannot be deleted; they can be Warn only. Seed pdf cases cannot be removed.
-
-Override if you need it:
+Override if you need it (CI / scripts — keep these `SKILLGATE_*` names):
 
 | Env | Meaning |
 | --- | --- |
-| `SKILLGATE_JUDGE=auto` | Default. Score when an OpenAI or AI Gateway key is present; otherwise file-exists / contains / page-count grade the live run. |
+| `SKILLGATE_JUDGE=auto` | Default. Score when an OpenAI or Other key is present; otherwise file-exists / contains / page-count grade the live run. |
 | `SKILLGATE_JUDGE=openai` | Require scoring. Missing key → exit 2. |
-| `SKILLGATE_JUDGE=skip` | Never score with OpenAI. File-exists / contains / page-count grade the live run. |
+| `SKILLGATE_JUDGE=skip` | Never score with the judge. File-exists / contains / page-count grade the live run. |
 | `SKILLGATE_JUDGE_BACKEND=decisions` | Default scoring service. |
 | `SKILLGATE_JUDGE_BACKEND=responses` | If your key can't use the newer scoring service, set this yourself. Skill Gate does not switch on 403. |
 | `SKILLGATE_JUDGE_WHY=0` | Skip the short Fail explanation call (saves a follow-up request). |

@@ -22,7 +22,10 @@ skillgate check pdf
 
 From a clone of this repo, `pip install -e .` works the same once the virtualenv is on Python 3.11+.
 
-Optional local UI (same engine, no account): `skillgate ui` → http://127.0.0.1:8765. See [`docs/ui.md`](docs/ui.md). Docker still runs `skillgate check /pack` (exit 2 until a key is mounted).
+Optional local UI (same engine, no account): `skillgate ui` → http://127.0.0.1:8765. See [`docs/ui.md`](docs/ui.md). Docker still runs `skillgate check /pack` (exit 2 until a key is mounted). Everything the UI can do has a CLI command.
+
+- **Bring your own judge** — pick OpenAI, Jev, AWS, or Other in Settings (`skillgate judge provider set`). Skill Gate does not ship a scorer account. See [`docs/judge.md`](docs/judge.md).
+- **Custom scoring questions** — add extras on top of Skill Gate’s six (`skillgate judge add-question`). Built-ins stay.
 
 `--expect-fail` inverts the exit code (CI for a skill that should fail):
 
@@ -83,7 +86,7 @@ Or set `SKILLGATE_OPENAI_API_KEY` in the job env instead of `--key-env`.
 - [`docs/quickstart.md`](docs/quickstart.md) — keys, example pdf, live check
 - [`docs/pack.md`](docs/pack.md) — `evals/cases.yaml` schema 1, fixtures, goldens, history
 - [`docs/plans/0.5-decisions.md`](docs/plans/0.5-decisions.md) — 0.5 live-only / explicit keys
-- [Score live checks](docs/openai-judge.md) — optional; pick OpenAI, Jev, AWS, or Other in Settings
+- [`docs/judge.md`](docs/judge.md) — bring your own judge; custom scoring questions
 - [`docs/ui.md`](docs/ui.md) — local React UI (`skillgate ui`), red path, Docker stays `check /pack`
 - [`docs/proof/PUBLISH.md`](docs/proof/PUBLISH.md) — secret scan, tag, PyPI Trusted Publishing, GHCR
 

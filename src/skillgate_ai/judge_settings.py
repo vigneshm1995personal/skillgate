@@ -36,7 +36,6 @@ class JudgeProviderSettings:
             "region": self.region,
             "model": self.model,
             "base_url": self.base_url,
-            "decisions_path": self.decisions_path,
         }
 
 
@@ -77,6 +76,8 @@ def save_judge_settings(
     decisions_path: str | None = None,
 ) -> JudgeProviderSettings:
     name = (provider or "auto").strip().lower() or "auto"
+    if name == "other":
+        name = "compatible"
     if name not in PROVIDER_IDS:
         raise SkillGateError(
             "Scoring provider must be auto, OpenAI, Jev, AWS, or Other.",
