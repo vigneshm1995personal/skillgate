@@ -15,13 +15,15 @@ from skillgate_ai.config import load_env
 from skillgate_ai.errors import SkillGateError
 from skillgate_ai.gate import run_check
 from skillgate_ai.ingest import ingest_skill
-from skillgate_ai.paths import is_skill_pack, project_root
+from skillgate_ai.paths import is_skill_pack, project_root, resolve_user_path
 from skillgate_ai.report import format_cli, format_github, report_to_dict
 from skillgate_ai.suite import discover_suites
 
 app = typer.Typer(
     add_completion=False,
     no_args_is_help=True,
+    pretty_exceptions_enable=False,
+    pretty_exceptions_show_locals=False,
     help="Skill Gate — evaluate agent skills. Pack on disk + `skillgate check` (exit 0/1).",
 )
 console = Console(stderr=False)
@@ -59,9 +61,21 @@ def ingest(
         loaded = ingest_skill(skill)
     except SkillGateError as exc:
         console.print(exc.render())
-        raise typer.Exit(exc.exit_code) from exc
+        raise typer.Exit(exc.exit_code) from None
     console.print(f"OK  {loaded.name}")
     console.print(loaded.description)
+
+
+def _present_check(result) -> None:
+    if result.demo_notice:
+        console.print(f"[dim]{result.demo_notice}[/dim]\n")
+    if result.error:
+        console.print(result.error["message"])
+        hint = result.error.get("hint")
+        if hint:
+            console.print(hint)
+    elif result.report is not None:
+        console.print(format_cli(result.report))
 
 
 def _run_gate(
@@ -95,10 +109,18 @@ def _run_gate(
         source="cli",
     )
     machine = json_out or summary == "json"
-    if result.demo_notice and not machine:
-        console.print(f"[dim]{result.demo_notice}[/dim]\n")
-    elif result.demo_notice:
-        sys.stderr.write(f"{result.demo_notice}\n")
+    if not machine and summary != "github":
+        _present_check(result)
+        if result.error or result.report is None:
+            raise typer.Exit(result.exit_code)
+        if result.expect_fail_notice:
+            console.print(result.expect_fail_notice)
+        raise typer.Exit(result.exit_code)
+    if result.demo_notice:
+        if machine:
+            sys.stderr.write(f"{result.demo_notice}\n")
+        else:
+            console.print(f"[dim]{result.demo_notice}[/dim]\n")
     if result.error:
         if machine:
             _emit_json(
@@ -119,7 +141,7 @@ def _run_gate(
         raise typer.Exit(result.exit_code)
     if machine:
         _emit_json(report_to_dict(report))
-    elif summary == "github":
+    else:
         text = format_github(report)
         console.print(text)
         gh = os.environ.get("GITHUB_STEP_SUMMARY")
@@ -127,8 +149,6 @@ def _run_gate(
             path = Path(gh)
             prev = path.read_text(encoding="utf-8") if path.exists() else ""
             path.write_text(prev + text, encoding="utf-8")
-    else:
-        console.print(format_cli(report))
     if result.expect_fail_notice:
         if machine:
             sys.stderr.write(f"{result.expect_fail_notice}\n")
@@ -161,7 +181,7 @@ def check_pack(
     json_out: bool = typer.Option(False, "--json", help="Machine JSON (not the primary UX)"),
     model: str | None = typer.Option(None, "--model", help="Requested model id"),
     timeout: int | None = typer.Option(None, "--timeout", help="Per-task timeout seconds"),
-    temperature: float | None = typer.Option(None, "--temperature", help="BYOLLM temperature (0–2)"),
+    temperature: float | None = typer.Option(None, "--temperature", help="Temperature (0–2)"),
     reasoning_effort: str | None = typer.Option(
         None, "--reasoning-effort", help="Codex reasoning: low | medium | high | ultra"
     ),
@@ -205,12 +225,17 @@ def run_suite(
     json_out: bool = typer.Option(False, "--json", help="Machine JSON (not the primary UX)"),
     model: str | None = typer.Option(None, "--model", help="Requested model id"),
     timeout: int | None = typer.Option(None, "--timeout", help="Per-task timeout seconds"),
-    temperature: float | None = typer.Option(None, "--temperature", help="BYOLLM temperature (0–2)"),
+    temperature: float | None = typer.Option(None, "--temperature", help="Temperature (0–2)"),
     reasoning_effort: str | None = typer.Option(
         None, "--reasoning-effort", help="Codex reasoning: low | medium | high | ultra"
     ),
 ) -> None:
     """Run an eval pack or suite YAML. Prefer `skillgate check` for CI."""
+    notice = "Prefer `skillgate check` for CI."
+    if json_out or summary == "json":
+        sys.stderr.write(notice + "\n")
+    else:
+        console.print(notice)
     _run_gate(
         target=suite,
         skill=skill,
@@ -232,16 +257,43 @@ def run_suite(
 def deploy(
     pack: Path = typer.Argument(..., help="Gated skill pack to copy"),
     target: str = typer.Option("cursor", "--target", help="cursor | claude | codex"),
+    force: bool = typer.Option(
+        False,
+        "--force",
+        help="Install even if the latest check did not pass. The skill may still be broken.",
+    ),
 ) -> None:
-    """Copy a skill pack into a local agent skills directory."""
-    from skillgate_ai.deploy import get_adapter
+    """Copy a skill pack into a local agent skills directory.
 
+    Refuses to install unless the latest `skillgate check` on this pack passed.
+    If this pack has never been checked, deploy runs the check first.
+    Pass --force to install anyway.
+    """
+    from skillgate_ai.deploy import get_adapter, latest_check_passed, refuse_ungated_install
+
+    root = _boot()
+    path = resolve_user_path(pack, root)
     try:
-        loaded = ingest_skill(pack)
-        result = get_adapter(target).install(skill=loaded, source=Path(pack))
+        adapter = get_adapter(target)
+        loaded = ingest_skill(path)
+        if not force:
+            latest = latest_check_passed(path)
+            fail_exit = 1
+            if latest is None:
+                checked = run_check(path, source="cli", root=root)
+                _present_check(checked)
+                latest = bool(
+                    checked.exit_code == 0
+                    and checked.report is not None
+                    and checked.report.passed
+                )
+                fail_exit = checked.exit_code or 1
+            if not latest:
+                raise refuse_ungated_install(loaded.name, exit_code=fail_exit)
+        result = adapter.install(skill=loaded, source=path, force=force)
     except SkillGateError as exc:
         console.print(exc.render())
-        raise typer.Exit(exc.exit_code) from exc
+        raise typer.Exit(exc.exit_code) from None
     console.print(result["message"])
 
 
@@ -271,7 +323,9 @@ def sync(
             run_sync_loop(repo, targets=selected, interval=interval)
         else:
             result = sync_once(repo, targets=selected)
-            for name in result["skills"]:
+            for name in result.get("skipped") or []:
+                console.print(f"skipped {name}: latest check did not pass")
+            for name in result.get("synced") or []:
                 console.print(f"synced  {name}")
             for target_key, summary in result["targets"].items():
                 console.print(

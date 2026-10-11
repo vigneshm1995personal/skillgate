@@ -13,9 +13,8 @@ from pathlib import Path
 from typing import Any
 
 from skillgate_ai.config import get_llm_config, load_env
-from skillgate_ai.demo_files import ensure_demo_pdfs
 from skillgate_ai.engine import EvalProgress, SuiteReport, run_eval
-from skillgate_ai.errors import SkillGateError
+from skillgate_ai.errors import MissingLLMKeyError, SkillGateError
 from skillgate_ai.eval_config import (
     EvalConfigError,
     EvalRunConfig,
@@ -35,7 +34,7 @@ from skillgate_ai.observability import (
     log_eval_finished,
     set_eval_passed,
 )
-from skillgate_ai.paths import is_skill_pack, project_root
+from skillgate_ai.paths import is_skill_pack, project_root, resolve_user_path
 from skillgate_ai.report import report_to_dict
 
 DEMO_NOTICE = "Using the built-in checker. This is not a live model."
@@ -49,11 +48,6 @@ class CheckResult:
     error: dict[str, str | None] | None = None
     expect_fail_notice: str | None = None
     run_id: str = ""
-
-
-def prepare_pack_fixtures(pack: Path) -> None:
-    if (pack / "SKILL.md").is_file():
-        ensure_demo_pdfs(pack / "evals" / "fixtures")
 
 
 def persist_eval(
@@ -82,14 +76,12 @@ def resolve_pack_and_spec(target: Path, root: Path):
     """Return (spec, skill_path, pack_root) for a pack dir or a suite YAML."""
     from skillgate_ai.case_pack import expand_from_pack
 
-    path = target if target.is_absolute() else (root / target)
+    path = resolve_user_path(target, root)
     if path.is_dir() and (path / "SKILL.md").is_file():
-        prepare_pack_fixtures(path)
         return expand_from_pack(path), path, path
-    if path.is_file() and path.suffix in {".yaml", ".yml"}:
+    if path.is_file() and path.suffix.lower() in {".yaml", ".yml"}:
         return None, None, None
     if is_skill_pack(path):
-        prepare_pack_fixtures(path)
         return expand_from_pack(path), path, path
     raise SkillGateError(
         f"Not a skill pack or suite: {target}",
@@ -122,7 +114,7 @@ def run_check(
     cfg = get_llm_config()
     sandbox_kind = sandbox or cfg.sandbox_pref
     spec = None
-    suite_path = target if target.is_absolute() else project / target
+    suite_path = resolve_user_path(target, project)
     pack_root: Path | None = None
     skill_path = skill
     try:
@@ -218,7 +210,11 @@ def run_check(
         capture_run_failure(exc)
         persist_root = skill_path or pack_root
         err = {"message": exc.message, "hint": exc.hint}
-        if run_cfg is not None and not isinstance(exc, EvalConfigError) and persist_root:
+        if (
+            run_cfg is not None
+            and not isinstance(exc, (EvalConfigError, MissingLLMKeyError))
+            and persist_root
+        ):
             persist_eval(
                 pack_root=persist_root,
                 run_id=rid,
