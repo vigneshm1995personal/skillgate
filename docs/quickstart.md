@@ -22,8 +22,9 @@ Skill scripts run with that same Python — install the skill’s own packages t
 Skill Gate does not read `OPENAI_API_KEY` from the shell unless you pass `--key-env`. Set a key explicitly:
 
 ```bash
-skillgate keys set OPENAI_API_KEY "$OPENAI_API_KEY"
-# or: skillgate ui  → Settings
+skillgate keys set OPENAI_API_KEY
+# hidden prompt; or pipe stdin: printf '%s\n' "$OPENAI_API_KEY" | skillgate keys set OPENAI_API_KEY
+# or paste in Settings (`skillgate ui`)
 skillgate example pdf
 skillgate check pdf
 echo $?    # 0 when the live run is green
@@ -44,7 +45,7 @@ skillgate check pdf-sabotaged --expect-fail
 echo $?    # 0
 ```
 
-Live scoring with your OpenAI key is optional — see [openai-judge.md](https://github.com/vigneshm1995personal/skillgate/blob/main/docs/openai-judge.md). Without that key, fixture checks (file exists, contains, page count) still decide pass/fail.
+Live scoring with your OpenAI key is optional — see [openai-judge.md](https://github.com/vigneshm1995personal/skillgate/blob/main/docs/openai-judge.md). Every check is a live model run; without a key, `skillgate check` exits 2.
 
 ## Deploy (after a green check)
 

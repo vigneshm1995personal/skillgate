@@ -66,6 +66,18 @@ def test_demo_flag_is_unknown(tmp_path: Path, monkeypatch) -> None:
     assert "no such option" in combined or "unrecognized" in combined or "unexpected" in combined
 
 
+def test_harness_demo_is_unknown(tmp_path: Path, monkeypatch) -> None:
+    pack = tmp_path / "pdf"
+    shutil.copytree(ROOT / "skills" / "pdf", pack)
+    monkeypatch.setenv("SKILLGATE_ROOT", str(tmp_path))
+    set_vault_key(tmp_path, "OPENAI_API_KEY", "sk-test-not-a-real-key")
+    result = runner.invoke(app, ["check", str(pack), "--harness", "demo"])
+    combined = plain_text(result.stdout + result.stderr)
+    assert result.exit_code != 0, combined
+    assert "Unknown harness" in combined
+    assert "No model key found" not in combined
+
+
 def test_resolve_harness_auto_is_not_demo(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("SKILLGATE_ROOT", str(tmp_path))
     set_vault_key(tmp_path, "OPENAI_API_KEY", "sk-test-not-a-real-key")

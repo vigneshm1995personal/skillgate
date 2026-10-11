@@ -82,6 +82,16 @@ export function gateTone(gate?: string | null, passed?: boolean | null) {
   return "pending" as const
 }
 
+export function stampBadgeProps(kind: "pass" | "fail"): {
+  gate: "green" | "red"
+  passed: boolean
+} {
+  if (kind === "pass") {
+    return { gate: "green", passed: true }
+  }
+  return { gate: "red", passed: false }
+}
+
 export function GateBadge({
   gate,
   passed,

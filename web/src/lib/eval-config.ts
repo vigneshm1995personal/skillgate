@@ -145,9 +145,6 @@ export function harnessDisplayName(
   if (pref === "llm") {
     return "LLM"
   }
-  if (pref === "demo" || pref === "eval") {
-    return "Auto"
-  }
   return pref
 }
 
@@ -228,11 +225,35 @@ function collapseDuplicateTimeout(label: string): string {
   return out.join(" · ")
 }
 
+const LIVE_HARNESS_NAMES = new Set(["llm", "cursor-agent", "codex", "claude"])
+
+export function stampRunConfig(
+  runConfig?: EvalRunConfig | null,
+  reportConfig?: EvalRunConfig | null
+): EvalRunConfig | null {
+  const live = (cfg?: EvalRunConfig | null) =>
+    LIVE_HARNESS_NAMES.has((cfg?.harness || "").toLowerCase())
+  if (live(reportConfig)) {
+    return reportConfig ?? null
+  }
+  if (live(runConfig)) {
+    return runConfig ?? null
+  }
+  return reportConfig || runConfig || null
+}
+
+function isStaleAutoLabel(label: string, harness?: string): boolean {
+  if (!LIVE_HARNESS_NAMES.has((harness || "").toLowerCase())) {
+    return false
+  }
+  return /^auto(\s*·|\s*$)/i.test(label.trim())
+}
+
 export function configLabel(config?: EvalRunConfig | null): string {
   if (!config) {
     return ""
   }
-  if (config.label) {
+  if (config.label && !isStaleAutoLabel(config.label, config.harness)) {
     return collapseDuplicateTimeout(
       config.label
         .replace(/\bcursor-agent\b/g, "Cursor")
@@ -240,14 +261,14 @@ export function configLabel(config?: EvalRunConfig | null): string {
         .replace(/\bclaude\b/g, "Claude")
     )
   }
-  const parts: string[] = [
-    harnessDisplayName(
-      config.harness || config.harness_pref || "auto",
-      config.harness
-    ),
-  ]
+  const resolved = (config.harness || config.harness_pref || "auto").trim()
+  const parts: string[] = [harnessDisplayName(resolved, config.harness)]
   if (config.model) {
-    parts.push(config.model)
+    if (config.applied?.via_gateway) {
+      parts.push(`${config.model} via gateway`)
+    } else {
+      parts.push(config.model)
+    }
   }
   const timeout = config.timeout_effective ?? config.timeout_sec
   if (timeout) {

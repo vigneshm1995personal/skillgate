@@ -550,16 +550,30 @@ def _named_harness(kind: str, cfg: LLMConfig) -> Harness:
     )
 
 
-def resolve_harness(kind: str, cfg: LLMConfig, *, demo: bool = False) -> Harness:
-    del demo
+def resolve_harness(kind: str, cfg: LLMConfig) -> Harness:
     return live_harness_or_error(kind, cfg)
+
+
+_LIVE_HARNESS_KINDS = frozenset(
+    {
+        "auto",
+        "cursor-agent",
+        "cursor",
+        "agent",
+        "codex",
+        "llm",
+        "byollm",
+        "claude",
+        "claude-code",
+    }
+)
 
 
 def live_harness_or_error(kind: str, cfg: LLMConfig) -> Harness:
     """Pick a live harness. Missing key → MissingLLMKeyError (exit 2)."""
     kind = (kind or "auto").lower()
-    if kind in {"demo", "fixture", "offline"}:
-        raise missing_key_error()
+    if kind not in _LIVE_HARNESS_KINDS:
+        return _named_harness(kind, cfg)
     if kind == "codex":
         if not _codex_ready(cfg):
             raise missing_key_error(for_codex=True)

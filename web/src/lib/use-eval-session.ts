@@ -273,9 +273,13 @@ export function useEvalSession(opts: EvalSessionOpts) {
       setStage("eval")
       const checkList = nextChecks || collectChecksForRun(checks, skill)
       const includeReasoning = resolvedHarness === "codex"
-      const apiConfig = draftToApiConfig(evalConfig, includeReasoning)
+      const apiConfig = {
+        ...draftToApiConfig(evalConfig, includeReasoning),
+        harness: harnessPref,
+        harness_pref: harnessPref,
+      }
       const requestedConfig = {
-        harness: resolvedHarness,
+        harness: harnessPref,
         harness_pref: harnessPref,
         model: apiConfig.model,
         timeout_sec: apiConfig.timeout_sec,
@@ -295,7 +299,7 @@ export function useEvalSession(opts: EvalSessionOpts) {
           : tryout
             ? { ...seededRunningReport([], name), tryout: true }
             : null,
-        harness: resolvedHarness,
+        harness: harnessPref === "auto" ? resolvedHarness : harnessPref,
         config: requestedConfig,
         model: apiConfig.model,
         timeout_sec: apiConfig.timeout_sec,

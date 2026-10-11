@@ -4,7 +4,9 @@ import {
   MODEL_CUSTOM_VALUE,
   MODEL_DEFAULT_VALUE,
   configLabel,
+  stampRunConfig,
   emptyCatalogHint,
+  harnessDisplayName,
   knownModelsForHarness,
   modelSelectValue,
   modelsForHarness,
@@ -130,8 +132,40 @@ describe("configLabel", () => {
     )
   })
 
-  it("names Auto instead of a removed demo harness", () => {
-    expect(configLabel({ harness: "demo" })).toBe("Auto")
-    expect(configLabel({ harness: "eval" })).toBe("Auto")
+  it("does not alias a removed demo harness to Auto", () => {
+    expect(harnessDisplayName("demo")).not.toBe("Auto")
+    expect(configLabel({ harness: "demo" })).not.toBe("Auto")
+  })
+
+  it("shows the actual LLM model via gateway, not Auto · Cursor", () => {
+    expect(
+      configLabel({
+        harness: "llm",
+        harness_pref: "auto",
+        model: "openai/gpt-4o-mini",
+        applied: { via_gateway: true },
+        label: "Auto · Cursor",
+      })
+    ).toBe("LLM · openai/gpt-4o-mini via gateway")
+  })
+
+  it("prefers the stamped report config over an Auto request", () => {
+    expect(
+      configLabel(
+        stampRunConfig(
+          {
+            harness: "auto",
+            harness_pref: "auto",
+            model: "openai/gpt-4o-mini",
+            label: "Auto · Cursor",
+          },
+          {
+            harness: "llm",
+            model: "openai/gpt-4o-mini",
+            applied: { via_gateway: true },
+          }
+        )
+      )
+    ).toBe("LLM · openai/gpt-4o-mini via gateway")
   })
 })

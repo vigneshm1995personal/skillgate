@@ -17,6 +17,13 @@ from skillgate_ai.live import create_control, drop_control, get_control
 from skillgate_ai.report import progress_to_dict, report_to_dict
 
 
+def attach_stamped_config(record: dict[str, Any], report: dict[str, Any] | None) -> None:
+    """Replace the request config with the resolved stamp so UI Result/Metrics match the run."""
+    stamped = report.get("config") if isinstance(report, dict) else None
+    if isinstance(stamped, dict):
+        record["config"] = stamped
+
+
 def start_run(state: AppState, body: dict[str, Any]) -> dict[str, Any]:
     load_env(state.root)
     skill_raw = str(body.get("skill") or "").strip()
@@ -73,9 +80,12 @@ def start_run(state: AppState, body: dict[str, Any]) -> dict[str, Any]:
                 record["current_task_id"] = payload.get("current_task_id")
                 record["harness"] = payload.get("harness") or record.get("harness")
 
+            pref = str(config.get("harness_pref") or "").strip().lower()
+            requested = str(body.get("harness") or "").strip().lower()
+            harness = pref if pref in {"auto", "cursor-agent", "codex", "claude", "llm"} else (requested or "auto")
             result = run_check(
                 skill_path,
-                harness=str(body.get("harness") or "auto"),
+                harness=harness,
                 on_progress=on_progress,
                 control=control,
                 run_id=run_id,
@@ -112,6 +122,7 @@ def start_run(state: AppState, body: dict[str, Any]) -> dict[str, Any]:
                     "task_count": (report or {}).get("task_count"),
                 }
             )
+            attach_stamped_config(record, report)
         except Exception as exc:  # noqa: BLE001 — surface to the poller
             message = exc.message if isinstance(exc, SkillGateError) else str(exc)
             record.update(

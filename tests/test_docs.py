@@ -75,3 +75,17 @@ def test_quickstart_uses_example_and_keys() -> None:
     assert "skillgate example pdf" in text
     assert "skillgate keys set" in text
     assert "--key-env" in text
+
+
+def test_docs_keys_set_never_puts_value_on_the_command_line() -> None:
+    blob = README.read_text(encoding="utf-8") + "\n" + QUICKSTART.read_text(encoding="utf-8")
+    assert "keys set OPENAI_API_KEY \"$OPENAI_API_KEY\"" not in blob
+    assert "keys set OPENAI_API_KEY $OPENAI_API_KEY" not in blob
+    assert "keys set OPENAI_API_KEY sk-" not in blob
+    assert "skillgate keys set OPENAI_API_KEY" in blob
+
+
+def test_quickstart_does_not_promise_fixture_checks_without_a_key() -> None:
+    text = QUICKSTART.read_text(encoding="utf-8").lower()
+    assert "without that key, fixture checks" not in text
+    assert "fixture checks (file exists, contains, page count) still decide pass/fail" not in text

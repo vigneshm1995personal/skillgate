@@ -356,6 +356,26 @@ def test_tryout_history_does_not_unlock_deploy(tmp_path: Path, monkeypatch) -> N
     assert skill["last_run"]["id"] == "full-pass"
 
 
+def test_root_level_example_pack_is_listed_and_history_shows_cli_runs(
+    tmp_path: Path, monkeypatch
+) -> None:
+    pack = tmp_path / "pdf"
+    shutil.copytree(ROOT / "skills" / "pdf", pack)
+    append_eval(
+        pack,
+        run_id="cli-1",
+        passed=True,
+        report={"skill": "pdf", "harness": "llm", "task_count": 1, "passed": True},
+        config={"harness": "llm", "model": "openai/gpt-4o-mini"},
+    )
+    client = _client(tmp_path, monkeypatch)
+    names = {item["name"] for item in client.get("/api/skills").json()["skills"]}
+    assert "pdf" in names
+    hist = client.get("/api/history").json()
+    ids = [item.get("id") for item in hist.get("timeline") or []]
+    assert "cli-1" in ids
+
+
 def test_generate_sample_writes_fixture(tmp_path: Path, monkeypatch) -> None:
     _copy_pack(tmp_path)
     client = _client(tmp_path, monkeypatch)

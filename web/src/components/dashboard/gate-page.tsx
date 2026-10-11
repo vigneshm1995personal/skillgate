@@ -33,7 +33,7 @@ import { SkillUpdateChecklist } from "@/components/dashboard/skill-update-checkl
 import { api } from "@/lib/api"
 import { useDashboard } from "@/lib/dashboard-provider"
 import { slotOn } from "@/lib/mode"
-import { configLabel, harnessDisplayName } from "@/lib/eval-config"
+import { configLabel, harnessDisplayName, stampRunConfig } from "@/lib/eval-config"
 import {
   customerGateCopy,
   hidePassFileWarning,
@@ -129,7 +129,8 @@ export function GatePage({ embedded = false }: { embedded?: boolean }) {
   const harnessName = rawHarness
     ? harnessDisplayName(rawHarness, rawHarness)
     : "—"
-  const runConfig = scopedResult?.config || report?.config || null
+  const runConfig =
+    stampRunConfig(scopedResult?.config, report?.config) || null
   const stampLine =
     configLabel(runConfig) || (harnessName !== "—" ? harnessName : "")
   const modelValue = runConfig?.model || scopedResult?.model || "—"

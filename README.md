@@ -15,7 +15,7 @@ pip install skillgate-ai
 ```bash
 python3 -m venv .venv && source .venv/bin/activate
 pip install skillgate-ai
-skillgate keys set OPENAI_API_KEY "$OPENAI_API_KEY"   # or paste in Settings (`skillgate ui`)
+skillgate keys set OPENAI_API_KEY   # hidden prompt; or pipe stdin. Or paste in Settings (`skillgate ui`)
 skillgate example pdf
 skillgate check pdf
 ```

@@ -13,7 +13,7 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty"
 import { EvalResultMark } from "@/components/dashboard/eval-result-mark"
-import { GateBadge } from "@/components/dashboard/chrome"
+import { GateBadge, stampBadgeProps } from "@/components/dashboard/chrome"
 import type { EvalMarkMode } from "@/components/dashboard/eval-result-shell"
 import { plainConfigDiff } from "@/lib/eval-config"
 import { useDashboard } from "@/lib/dashboard-provider"
@@ -193,10 +193,7 @@ export function EvalPassFailPanel({
         {scoredBy ? (
           <p className="text-sm text-muted-foreground">{scoredBy}</p>
         ) : null}
-        <GateBadge
-          gate={deployAllowed ? "cleared" : "blocked"}
-          passed={deployAllowed ? true : false}
-        />
+        <GateBadge {...stampBadgeProps(kind)} />
       </div>
       {errorNote ? (
         <Alert variant="destructive">

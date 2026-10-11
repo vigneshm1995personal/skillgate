@@ -14,7 +14,7 @@ Fixture checks such as “does the output contain this text?” and page counts 
 ## Setup
 
 ```bash
-skillgate keys set OPENAI_API_KEY sk-...
+skillgate keys set OPENAI_API_KEY
 ```
 
 Or paste the OpenAI key in `skillgate ui` (Settings). Other keys run live checks; an OpenAI or AI Gateway key also scores them.

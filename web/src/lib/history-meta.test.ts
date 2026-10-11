@@ -3,14 +3,14 @@ import { describe, expect, it } from "vitest"
 import { historyMeta } from "./history-meta"
 
 describe("historyMeta", () => {
-  it("shows Auto instead of a removed demo harness", () => {
+  it("does not alias a removed demo harness to Auto", () => {
     expect(
       historyMeta({
         kind: "run",
         skill: "pdf",
         harness: "demo",
       }).config
-    ).toBe("Auto")
+    ).not.toBe("Auto")
   })
 
   it("capitalizes Install to Cursor", () => {

@@ -130,7 +130,7 @@ class LLMConfig:
     @property
     def available_harnesses(self) -> list[str]:
         found = ["cursor-agent", "codex"]
-        if self.anthropic_api_key:
+        if self.anthropic_api_key or self.gateway_api_key or self.openai_api_key:
             found.append("llm")
         return found
 
