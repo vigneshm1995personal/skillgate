@@ -12,7 +12,7 @@ When `OPENAI_API_KEY` is set and you run a live check (`skillgate check --live`,
 
 The built-in checker only runs fixture checks such as “does the output contain this text?” and page counts. It does **not** compare the full output to the expected file. Scoring with your OpenAI key does read the expected and actual text (and a few images) and judges whether the work is done.
 
-`AI_GATEWAY_API_KEY` without `OPENAI_API_KEY` does **not** score.
+`AI_GATEWAY_API_KEY` without `OPENAI_API_KEY` scores through the same OpenAI scoring API on AI Gateway (`POST /v1/decisions`). An OpenAI key still talks to OpenAI directly and is never rerouted through the gateway.
 
 ## Setup
 

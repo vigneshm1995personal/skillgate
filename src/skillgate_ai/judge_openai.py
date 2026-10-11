@@ -38,6 +38,7 @@ from skillgate_ai.openai_http import (
 )
 
 DEFAULT_MODEL = "gpt-6-luna"
+GATEWAY_DECISIONS_MODEL = "openai/gpt-6-luna-decisions"
 DEFAULT_TIMEOUT_SEC = 20.0
 WHY_TIMEOUT_SEC = 10.0
 WHY_MAX_OUTPUT_TOKENS = 128
@@ -47,6 +48,13 @@ IMAGE_MAX_BYTES = 4 * 1024 * 1024
 IMAGE_MAX_COUNT = 3
 INLINE_MAGICS = {"jpeg": "image/jpeg", "png": "image/png"}
 DISPLAY_NAME = "OpenAI (your key)"
+
+
+def _decisions_model(model: str) -> str:
+    slug = (model or "").strip() or DEFAULT_MODEL
+    if slug == DEFAULT_MODEL or slug.endswith("-decisions"):
+        return slug
+    return DEFAULT_MODEL
 
 
 def _model_supports_reasoning(model: str) -> bool:
@@ -437,12 +445,10 @@ class DecisionsBackend(_OpenAIPosted):
         model: str = DEFAULT_MODEL,
         post: PostFn | None = None,
     ) -> None:
-        del model
-        # Decisions documents gpt-6-luna only. Do not send a Responses override.
         super().__init__(
             api_key=api_key,
             base_url=base_url,
-            model=DEFAULT_MODEL,
+            model=_decisions_model(model),
             post=post,
         )
 

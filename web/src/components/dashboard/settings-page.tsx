@@ -50,13 +50,13 @@ const KEY_ROWS: Array<{
   {
     name: "OPENAI_API_KEY",
     label: "OpenAI",
-    hint: "Scores live checks. Other keys only run them.",
+    hint: "Scores live checks with your OpenAI key.",
     slug: "openai",
   },
   {
     name: "AI_GATEWAY_API_KEY",
     label: "OpenAI-compatible",
-    hint: "Optional HTTP base for an OpenAI-compatible key",
+    hint: "Runs live checks. Also scores them through the same OpenAI scoring API.",
     slug: "gateway",
   },
   {

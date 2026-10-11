@@ -4,7 +4,7 @@ import httpx
 
 from skillgate_ai.errors import HarnessError
 from skillgate_ai.harness import _command_allowed, _gateway_complete_response, _parse_run_lines
-from tests.test_judge import _cfg
+from test_judge import _cfg
 
 
 def test_parse_run_lines_keeps_quoted_title() -> None:
