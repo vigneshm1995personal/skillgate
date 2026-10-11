@@ -47,7 +47,22 @@ def test_readme_doc_links_are_absolute() -> None:
 def test_release_yml_example_tag_is_current() -> None:
     text = RELEASE.read_text(encoding="utf-8")
     assert "v0.3.0" not in text
-    assert "v0.4.0" in text
+    assert "v0.4.2" in text
+
+
+def test_package_and_docs_pin_042() -> None:
+    pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    init = (ROOT / "src" / "skillgate_ai" / "__init__.py").read_text(encoding="utf-8")
+    readme = README.read_text(encoding="utf-8")
+    quickstart = QUICKSTART.read_text(encoding="utf-8")
+    judge = (ROOT / "docs" / "openai-judge.md").read_text(encoding="utf-8")
+    assert 'version = "0.4.2"' in pyproject
+    assert '__version__ = "0.4.2"' in init
+    assert "skillgate-ai==0.4.2" in readme
+    assert "skillgate-ai==0.4.2" in quickstart
+    assert "skillgate-ai==0.4.2" in judge
+    assert "v0.4.2" in readme
+    assert "# 0.4.2" in quickstart
 
 
 def test_deploy_docs_explain_force() -> None:

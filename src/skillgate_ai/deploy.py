@@ -65,11 +65,13 @@ class _PackAdapter:
     def skills_root(self) -> Path:
         raise NotImplementedError
 
-    def install(self, *, skill: Skill, source: Path) -> DeployResult:
+    def install(self, *, skill: Skill, source: Path, force: bool = False) -> DeployResult:
         source = source.expanduser().resolve()
         name = (skill.name or "").strip()
         if not name:
             raise DeployError("Skill name is missing.")
+        if not force and latest_check_passed(source) is False:
+            raise refuse_ungated_install(name)
         if source.name != name:
             raise DeployError(
                 f"Skill folder {source.name!r} does not match name {name!r}.",

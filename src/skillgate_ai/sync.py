@@ -17,7 +17,7 @@ import tempfile
 import time
 from pathlib import Path
 
-from skillgate_ai.deploy import adapters
+from skillgate_ai.deploy import adapters, latest_check_passed
 from skillgate_ai.errors import SkillGateError
 from skillgate_ai.ingest import ingest_skill
 from skillgate_ai.pack import copy_skill_pack
@@ -132,6 +132,8 @@ def _sync_one_target(
     for name in names:
         source = repo_root / (path_prefix or "skills") / name
         if not source.is_dir() or not (source / "SKILL.md").is_file():
+            continue
+        if latest_check_passed(source) is False:
             continue
         copy_skill_pack(source, root / name)
         ingest_skill(root / name)

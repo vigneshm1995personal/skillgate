@@ -231,6 +231,11 @@ def run_suite(
     ),
 ) -> None:
     """Run an eval pack or suite YAML. Prefer `skillgate check` for CI."""
+    notice = "Prefer `skillgate check` for CI."
+    if json_out or summary == "json":
+        sys.stderr.write(notice + "\n")
+    else:
+        console.print(notice)
     _run_gate(
         target=suite,
         skill=skill,
@@ -284,7 +289,7 @@ def deploy(
                 fail_exit = checked.exit_code or 1
             if not latest:
                 raise refuse_ungated_install(loaded.name, exit_code=fail_exit)
-        result = get_adapter(target).install(skill=loaded, source=path)
+        result = get_adapter(target).install(skill=loaded, source=path, force=force)
     except SkillGateError as exc:
         console.print(exc.render())
         raise typer.Exit(exc.exit_code) from None

@@ -126,6 +126,14 @@ def test_check_json_error_is_json(project_root: Path, tmp_path: Path) -> None:
     assert payload.get("exit_code") == 1
 
 
+def test_run_prints_prefer_check_hint(project_root: Path) -> None:
+    _prepare(project_root)
+    result = runner.invoke(app, ["run", str(project_root / "skills" / "pdf"), "--demo"])
+    combined = result.stdout + result.stderr
+    assert "Prefer `skillgate check`" in combined
+    assert result.exit_code == 0, combined
+
+
 def test_no_serve_command() -> None:
     result = runner.invoke(app, ["serve"])
     assert result.exit_code != 0

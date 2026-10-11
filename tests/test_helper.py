@@ -132,6 +132,66 @@ def test_helper_verifies_goldens_in_recorded_hash(
     assert not (installed / "evals" / "goldens").exists()
 
 
+def test_helper_refuses_red_latest_check(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, project_root: Path
+) -> None:
+    from skillgate_ai.history import append_eval
+
+    skill_dir = _write_skill(tmp_path / "pdf", "pdf")
+    append_eval(skill_dir, run_id="red", passed=False)
+    correct_hash = skill_pack_hash(skill_dir)
+    monkeypatch.setattr(
+        helper_mod,
+        "_http_get",
+        lambda url, **kwargs: _bundle(skill_dir, "pdf", correct_hash),
+    )
+    config = {"url": "https://host.example", "token": "tok"}
+    job = {
+        "id": "j1",
+        "skill_name": "pdf",
+        "skill_md_hash": correct_hash,
+        "targets": ["cursor"],
+    }
+    result = process_job("https://host.example", config, job)
+    assert result["status"] == "failed"
+    assert "did not pass" in result["targets"][0]["error"]
+    assert not (Path(os.environ["SKILLGATE_CURSOR_SKILLS"]) / "pdf").exists()
+
+
+def test_helper_failed_copy_leaves_existing_install(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, project_root: Path
+) -> None:
+    skill_dir = _write_skill(tmp_path / "pdf", "pdf")
+    correct_hash = skill_pack_hash(skill_dir)
+    dest = Path(os.environ["SKILLGATE_CURSOR_SKILLS"]) / "pdf"
+    dest.mkdir(parents=True)
+    marker = dest / "KEEP.txt"
+    marker.write_text("old-install", encoding="utf-8")
+    monkeypatch.setattr(
+        helper_mod,
+        "_http_get",
+        lambda url, **kwargs: _bundle(skill_dir, "pdf", correct_hash),
+    )
+
+    def boom(*_args, **_kwargs):
+        raise PermissionError(13, "Permission denied")
+
+    monkeypatch.setattr("skillgate_ai.pack.shutil.copytree", boom)
+    result = process_job(
+        "https://host.example",
+        {"url": "https://host.example", "token": "tok"},
+        {
+            "id": "j1",
+            "skill_name": "pdf",
+            "skill_md_hash": correct_hash,
+            "targets": ["cursor"],
+        },
+    )
+    assert result["status"] == "failed"
+    assert marker.is_file()
+    assert marker.read_text(encoding="utf-8") == "old-install"
+
+
 def test_helper_installs_and_reports(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, project_root: Path
 ) -> None:

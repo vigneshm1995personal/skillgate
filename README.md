@@ -52,7 +52,7 @@ Public image tag:
 
 ```bash
 docker run --rm -v "$PWD/skills/pdf:/pack:ro" \
-  ghcr.io/vigneshm1995personal/skillgate:v0.4.1
+  ghcr.io/vigneshm1995personal/skillgate:v0.4.2
 ```
 
 A `:ro` mount skips writing `evals/history/*.jsonl` (not writable). Compose mounts the pack read-write so history can append.
@@ -64,7 +64,7 @@ Working directory is the skill pack. Exit 1 fails the job. No account. Needs Pyt
 ```yaml
 - uses: actions/setup-python@v5
   with: { python-version: "3.12" }
-- run: pip install skillgate-ai==0.4.1
+- run: pip install skillgate-ai==0.4.2
 - run: skillgate check .
 ```
 
