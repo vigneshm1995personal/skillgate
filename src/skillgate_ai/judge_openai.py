@@ -26,6 +26,7 @@ from skillgate_ai.judge_images import IMAGE_MAX_BYTES, IMAGE_MAX_COUNT, collect_
 from skillgate_ai.judge_spec import (
     JudgeSpec,
     builtin_spec,
+    coerce_extra_answer,
     extra_question_passed,
     spec_decisions_questions,
     spec_structured_schema,
@@ -312,7 +313,7 @@ def _normalize_answers(
     if spec is not None:
         for question in spec.extras:
             if question.id in raw:
-                answers[question.id] = raw.get(question.id)
+                answers[question.id] = coerce_extra_answer(raw.get(question.id))
     return answers
 
 

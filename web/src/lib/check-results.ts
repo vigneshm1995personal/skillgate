@@ -461,12 +461,16 @@ export function openedCheckAnswers(task: TaskResult): OpenedAnswer[] {
     seen.add(id)
     const question = task.judge?.questions?.[id]
     const cell = cells?.[id]
+    const probability =
+      typeof answers?.[id]?.probability === "number"
+        ? answers[id].probability
+        : typeof cell?.probability === "number"
+          ? cell.probability
+          : null
     const choice =
       trimText(answers?.[id]?.choice) ||
       trimText(cell?.choice) ||
-      (typeof answers?.[id]?.probability === "number"
-        ? String(answers?.[id]?.probability)
-        : "")
+      (probability === null ? "" : String(probability))
     extras.push({
       id,
       label:

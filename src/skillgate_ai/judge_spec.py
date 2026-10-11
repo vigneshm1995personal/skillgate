@@ -468,6 +468,17 @@ def _gte(pass_if: Mapping[str, Any] | None, *, default: float | None) -> float |
         return default
 
 
+def coerce_extra_answer(raw: Any) -> Any:
+    """Turn a schema scalar into the mapping shape Decisions answers use."""
+    if isinstance(raw, Mapping):
+        return raw
+    if isinstance(raw, str) and raw.strip():
+        return {"choice": raw.strip()}
+    if isinstance(raw, (int, float)) and not isinstance(raw, bool):
+        return {"probability": float(raw)}
+    return raw
+
+
 def _extract_probability(answer: Any) -> float | None:
     if isinstance(answer, (int, float)) and not isinstance(answer, bool):
         return float(answer)

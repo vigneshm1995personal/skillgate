@@ -19,7 +19,7 @@ from skillgate_ai.judge_openai import (
     _path_is_recorded,
     _state_text,
 )
-from skillgate_ai.judge_spec import JudgeSpec, builtin_spec, spec_structured_schema
+from skillgate_ai.judge_spec import JudgeSpec, builtin_spec, coerce_extra_answer, spec_structured_schema
 from skillgate_ai.openai_http import PostFn
 
 DISPLAY_NAME = "AWS"
@@ -295,7 +295,7 @@ def _fill_extra_answers(
 ) -> None:
     for question in spec.extras:
         if question.id in parsed and question.id not in answers:
-            answers[question.id] = parsed[question.id]
+            answers[question.id] = coerce_extra_answer(parsed[question.id])
 
 
 # Silence unused-import lints for cell constants used as documentation of the mapping.

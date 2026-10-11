@@ -352,6 +352,22 @@ describe("openedCheckAnswers / low confidence", () => {
       "Delivered a good result?",
       "Do the totals match?",
     ])
+    expect(
+      openedCheckAnswers({
+        ...passTask,
+        judge: {
+          ...passTask.judge,
+          cells: {
+            ...passTask.judge!.cells,
+            totals_ok: { label: "Are the totals OK?", probability: 0.91 },
+          },
+        },
+      }).at(-1)
+    ).toEqual({
+      id: "totals_ok",
+      label: "Are the totals OK?",
+      answer: "0.91",
+    })
   })
 
   it("names a chosen scoring provider and not Auto OpenAI", () => {

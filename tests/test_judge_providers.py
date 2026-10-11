@@ -418,6 +418,67 @@ def test_aws_extra_choice_is_visible() -> None:
     ).judge("goal", [], "tail", spec=spec, path={"had_path": True, "steps": 1})
     assert judged["status"] == "completed"
     assert judged["cells"]["totals_match"]["choice"] == "yes"
+    assert judged["answers"]["totals_match"]["choice"] == "yes"
+
+
+def test_aws_extra_predicate_is_visible() -> None:
+    spec = resolve_judge_spec(
+        pack={
+            "extra_questions": [
+                {
+                    "id": "totals_ok",
+                    "type": "predicate",
+                    "ask": "Are the totals OK?",
+                }
+            ]
+        }
+    )
+
+    def post(url, headers=None, json=None, content=None, timeout=None):
+        del url, headers, json, content, timeout
+        return FakeResponse(
+            200,
+            {
+                "output": {
+                    "message": {
+                        "content": [
+                            {
+                                "toolUse": {
+                                    "input": {
+                                        "task_completion": "Fully completed",
+                                        "correctness": "Correct",
+                                        "instruction_adherence": "Fully followed",
+                                        "evidence_action_validity": "Fully supported",
+                                        "result_quality": "Clear and complete",
+                                        "path_efficiency": "Efficient",
+                                        "totals_ok": 0.91,
+                                    }
+                                }
+                            }
+                        ]
+                    }
+                }
+            },
+        )
+
+    backend = AwsBackend(
+        access_key="AKIATEST",
+        secret_key="vault-secret",
+        region="us-east-1",
+        model="amazon.nova-lite",
+        post=post,
+    )
+    judged = OutcomeJudge(
+        backend,
+        display_name="AWS",
+        provider="aws",
+        chosen=True,
+        supports_why=True,
+        supports_confidence=False,
+    ).judge("goal", [], "tail", spec=spec, path={"had_path": True, "steps": 1})
+    assert judged["status"] == "completed"
+    assert judged["answers"]["totals_ok"]["probability"] == 0.91
+    assert judged["cells"]["totals_ok"]["probability"] == 0.91
 
 
 def test_save_provider_marks_chosen(tmp_path: Path) -> None:

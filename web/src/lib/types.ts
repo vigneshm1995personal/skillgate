@@ -237,7 +237,15 @@ export type JudgeResult = {
   blocks_deploy?: boolean
   require_artifacts?: boolean
   skipped_questions?: string[]
-  cells?: Record<string, { label?: string; choice?: string | null; reason?: string | null }>
+  cells?: Record<
+    string,
+    {
+      label?: string
+      choice?: string | null
+      reason?: string | null
+      probability?: number
+    }
+  >
   citations?: { artifacts?: JudgeCitationArtifact[] }
 }
 
