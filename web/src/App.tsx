@@ -6,6 +6,7 @@ import { AppSidebar } from "@/components/dashboard/app-sidebar"
 import { AppTopbar } from "@/components/dashboard/app-topbar"
 import { DeployPage } from "@/components/dashboard/deploy-page"
 import { EvalPage } from "@/components/dashboard/eval-page"
+import { ComparePage } from "@/components/dashboard/compare-page"
 import { HistoryPage } from "@/components/dashboard/history-page"
 import { HistorySheet } from "@/components/dashboard/history-sheet"
 import { HomePage } from "@/components/dashboard/home-page"
@@ -67,6 +68,7 @@ function DashboardMain() {
           {stage === "deploy" ? <DeployPage /> : null}
           {stage === "repository" ? <RepositoryPage /> : null}
           {stage === "history" ? <HistoryPage /> : null}
+          {stage === "compare" ? <ComparePage /> : null}
           {stage === "settings" ? <SettingsPage /> : null}
         </main>
       </div>

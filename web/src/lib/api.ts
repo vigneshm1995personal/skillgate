@@ -22,6 +22,7 @@ import type {
   CatalogError,
 } from "@/lib/types"
 
+import type { ComparePayload } from "@/lib/compare"
 import type { EvalRunConfig } from "@/lib/eval-config"
 
 export class ApiError extends Error {
@@ -469,6 +470,41 @@ export const api = {
         headers: jsonHeaders,
         body: JSON.stringify({ target, skill, mode }),
       }
+    ),
+  startCompareModels: (payload: {
+    skill: string
+    arms: Array<{ label: string; harness_pref: string }>
+    max_spend_usd?: number
+    case_ids?: string[]
+  }) =>
+    request<{ compare_id: string; status: string }>("/api/compare/models", {
+      method: "POST",
+      headers: jsonHeaders,
+      body: JSON.stringify(payload),
+    }),
+  startCompareVersions: (payload: {
+    skill: string
+    run_ids?: string[]
+    git_refs?: string[]
+    rerun?: boolean
+  }) =>
+    request<{ compare_id: string; status: string }>("/api/compare/versions", {
+      method: "POST",
+      headers: jsonHeaders,
+      body: JSON.stringify(payload),
+    }),
+  getCompare: (compareId: string, skill?: string) =>
+    request<ComparePayload>(
+      `/api/compare/${encodeURIComponent(compareId)}?skill=${encodeURIComponent(skill || "")}`
+    ),
+  listCompares: (skill: string) =>
+    request<{ skill: string; compares: ComparePayload[] }>(
+      `/api/compare?skill=${encodeURIComponent(skill)}`
+    ),
+  cancelCompare: (compareId: string) =>
+    request<{ ok: boolean; compare_id: string; status: string }>(
+      `/api/compare/${encodeURIComponent(compareId)}/cancel`,
+      { method: "POST", headers: jsonHeaders, body: "{}" }
     ),
 }
 

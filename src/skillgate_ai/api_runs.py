@@ -49,6 +49,8 @@ def start_run(state: AppState, body: dict[str, Any]) -> dict[str, Any]:
         busy = [item for item in state.runs.values() if item.get("status") == "running"]
         if busy:
             fail(409, "A check is already running.")
+        if any(item.get("status") == "running" for item in state.compares.values()):
+            fail(409, "A compare is already running.")
         run_id = uuid.uuid4().hex[:12]
         seed = {
             "id": run_id,

@@ -81,9 +81,15 @@ Working directory is the skill pack. Exit 1 fails the job. No account. Needs Pyt
 
 Or set `SKILLGATE_OPENAI_API_KEY` in the job env instead of `--key-env`.
 
+## Compare
+
+- **Compare models** — run the same Dataset on multiple harness setups side by side (CLI: `skillgate compare models`, UI: **Compare** tab).
+- **Compare versions** — diff two history runs (or git refs when the pack lives in a git tree) on one Dataset (`skillgate compare versions`).
+
 ## Docs
 
 - [`docs/quickstart.md`](docs/quickstart.md) — keys, example pdf, live check
+- [`docs/plans/compare.md`](docs/plans/compare.md) — compare design
 - [`docs/pack.md`](docs/pack.md) — `evals/cases.yaml` schema 1, fixtures, goldens, history
 - [`docs/plans/0.5-decisions.md`](docs/plans/0.5-decisions.md) — 0.5 live-only / explicit keys
 - [`docs/judge.md`](docs/judge.md) — bring your own judge; custom scoring questions

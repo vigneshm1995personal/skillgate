@@ -107,7 +107,36 @@ def load_history(pack_root: str | Path, *, limit: int = 50) -> list[dict[str, An
     rows: list[dict[str, Any]] = []
     for path in dest_dir.glob("*.jsonl"):
         for item in _read_jsonl(path):
-            if item.get("kind") == "deploy" or not item.get("run_id"):
+            if item.get("kind") in {"deploy", "compare"}:
+                continue
+            if not item.get("run_id"):
+                continue
+            rows.append(item)
+    rows.sort(key=_row_ts)
+    if limit > 0:
+        return rows[-limit:]
+    return rows
+
+
+def append_compare(pack_root: str | Path, *, row: dict[str, Any]) -> Path | None:
+    """Append one compare job row to pack history JSONL."""
+    now = _local_now()
+    dest = history_dir(pack_root) / f"{now.strftime('%Y%m%d')}.jsonl"
+    payload = dict(row)
+    payload.setdefault("ts", now.isoformat())
+    payload.setdefault("kind", "compare")
+    return _append_jsonl(dest, payload)
+
+
+def load_compares(pack_root: str | Path, *, limit: int = 50) -> list[dict[str, Any]]:
+    """Newest-last compare rows. Does not include eval runs or deploy log."""
+    dest_dir = history_dir(pack_root)
+    if not dest_dir.is_dir():
+        return []
+    rows: list[dict[str, Any]] = []
+    for path in dest_dir.glob("*.jsonl"):
+        for item in _read_jsonl(path):
+            if item.get("kind") != "compare" or not item.get("compare_id"):
                 continue
             rows.append(_scrub_history_row(item))
     rows.sort(key=_row_ts)

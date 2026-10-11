@@ -20,6 +20,7 @@ from skillgate_ai.api_payloads import (
     keys_payload,
     state_of,
 )
+from skillgate_ai.api_compare import register_compare_routes
 from skillgate_ai.api_runs import register_run_routes
 from skillgate_ai.api_shims import register_hosted_shims
 from skillgate_ai.api_skills import register_skill_routes
@@ -96,6 +97,7 @@ def create_app(*, root: Path | None = None, pack: Path | None = None) -> FastAPI
     register_skill_routes(app)
     register_eval_routes(app)
     register_run_routes(app)
+    register_compare_routes(app)
     register_hosted_shims(app)
     return app
 

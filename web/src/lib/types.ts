@@ -2,7 +2,14 @@ import type { ConfigDiffEntry, EvalRunConfig, SupportedModelsMeta } from "@/lib/
 
 export type { ConfigDiffEntry, EvalRunConfig }
 
-export type Stage = "home" | "eval" | "deploy" | "repository" | "history" | "settings"
+export type Stage =
+  | "home"
+  | "eval"
+  | "deploy"
+  | "repository"
+  | "history"
+  | "compare"
+  | "settings"
 
 export type EvalTab = "skill" | "checks" | "gate"
 

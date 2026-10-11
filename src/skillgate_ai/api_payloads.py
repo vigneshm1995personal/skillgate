@@ -36,6 +36,7 @@ class AppState:
     root: Path
     lock: threading.Lock = field(default_factory=threading.Lock)
     runs: dict[str, dict[str, Any]] = field(default_factory=dict)
+    compares: dict[str, dict[str, Any]] = field(default_factory=dict)
 
 
 def state_of(request: Request) -> AppState:
