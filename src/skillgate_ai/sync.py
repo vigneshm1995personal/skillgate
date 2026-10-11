@@ -165,8 +165,15 @@ def sync_once(
                 f"That repo has no '{path_prefix or 'skills'}/' folder. Nothing was changed."
             )
         names = _skill_names(work, path_prefix)
+        prefix = path_prefix or "skills"
         for name in names:
-            _reject_symlinks(work / (path_prefix or "skills") / name)
+            _reject_symlinks(work / prefix / name)
+        skipped = [
+            name
+            for name in names
+            if latest_check_passed(work / prefix / name) is False
+        ]
+        skipped_set = set(skipped)
         roots = target_roots()
         per_target = {
             target: _sync_one_target(
@@ -174,7 +181,12 @@ def sync_once(
             )
             for target in selected
         }
-    return {"skills": names, "targets": per_target}
+    return {
+        "skills": names,
+        "synced": [name for name in names if name not in skipped_set],
+        "skipped": skipped,
+        "targets": per_target,
+    }
 
 
 def run_sync_loop(

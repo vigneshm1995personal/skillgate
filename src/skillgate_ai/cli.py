@@ -274,6 +274,7 @@ def deploy(
     root = _boot()
     path = resolve_user_path(pack, root)
     try:
+        adapter = get_adapter(target)
         loaded = ingest_skill(path)
         if not force:
             latest = latest_check_passed(path)
@@ -289,7 +290,7 @@ def deploy(
                 fail_exit = checked.exit_code or 1
             if not latest:
                 raise refuse_ungated_install(loaded.name, exit_code=fail_exit)
-        result = get_adapter(target).install(skill=loaded, source=path, force=force)
+        result = adapter.install(skill=loaded, source=path, force=force)
     except SkillGateError as exc:
         console.print(exc.render())
         raise typer.Exit(exc.exit_code) from None
@@ -322,7 +323,9 @@ def sync(
             run_sync_loop(repo, targets=selected, interval=interval)
         else:
             result = sync_once(repo, targets=selected)
-            for name in result["skills"]:
+            for name in result.get("skipped") or []:
+                console.print(f"skipped {name}: latest check did not pass")
+            for name in result.get("synced") or []:
                 console.print(f"synced  {name}")
             for target_key, summary in result["targets"].items():
                 console.print(

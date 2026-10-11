@@ -14,7 +14,7 @@ from typing import Any
 
 from skillgate_ai.config import get_llm_config, load_env
 from skillgate_ai.engine import EvalProgress, SuiteReport, run_eval
-from skillgate_ai.errors import SkillGateError
+from skillgate_ai.errors import MissingLLMKeyError, SkillGateError
 from skillgate_ai.eval_config import (
     EvalConfigError,
     EvalRunConfig,
@@ -210,7 +210,11 @@ def run_check(
         capture_run_failure(exc)
         persist_root = skill_path or pack_root
         err = {"message": exc.message, "hint": exc.hint}
-        if run_cfg is not None and not isinstance(exc, EvalConfigError) and persist_root:
+        if (
+            run_cfg is not None
+            and not isinstance(exc, (EvalConfigError, MissingLLMKeyError))
+            and persist_root
+        ):
             persist_eval(
                 pack_root=persist_root,
                 run_id=rid,

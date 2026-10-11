@@ -7,8 +7,10 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
+from conftest import plain_text
 from skillgate_ai.cli import _emit_json, app
 from skillgate_ai.demo_files import ensure_demo_pdfs
+from skillgate_ai.deploy import latest_check_passed
 
 runner = CliRunner()
 
@@ -57,6 +59,24 @@ def test_check_live_without_key_errors(project_root: Path) -> None:
     assert "built-in checker" not in result.stdout.lower()
     assert "BYOLLM" not in result.stdout
     assert "BYO LLM" not in result.stdout
+
+
+def test_live_missing_key_is_not_recorded_as_failed_check(
+    project_root: Path, tmp_path: Path
+) -> None:
+    pack = tmp_path / "pdf"
+    shutil.copytree(project_root / "skills" / "pdf", pack)
+    ensure_demo_pdfs(pack / "evals" / "fixtures")
+    hist = pack / "evals" / "history"
+    if hist.is_dir():
+        for path in hist.glob("*.jsonl"):
+            path.unlink()
+    assert latest_check_passed(pack) is None
+    result = runner.invoke(app, ["check", str(pack), "--live"])
+    assert result.exit_code == 2
+    assert "No model key" in result.stdout
+    assert latest_check_passed(pack) is None
+    assert not hist.exists() or not any(hist.glob("*.jsonl"))
 
 
 def test_check_with_key_runs_live(
@@ -193,9 +213,9 @@ def test_sabotaged_reasons_are_per_task(project_root: Path) -> None:
 
 
 def test_ui_help() -> None:
-    result = runner.invoke(app, ["ui", "--help"])
+    result = runner.invoke(app, ["ui", "--help"], color=False)
     assert result.exit_code == 0, result.stdout
-    combined = result.stdout + result.stderr
+    combined = plain_text(result.stdout + result.stderr)
     assert "127.0.0.1" in combined
     assert "no account" in combined.lower()
     assert "8765" in combined

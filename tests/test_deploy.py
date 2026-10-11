@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
+from conftest import plain_text
 from skillgate_ai.cli import app
 from skillgate_ai.deploy import latest_check_passed
 from skillgate_ai.errors import friendly_os_error
@@ -108,9 +109,10 @@ def test_deploy_refuses_failed_latest_check(
     monkeypatch.setenv("SKILLGATE_CURSOR_SKILLS", str(skills_root))
     append_eval(pack, run_id="red", passed=False)
     result = runner.invoke(app, ["deploy", str(pack)])
-    assert result.exit_code == 1, result.stdout
-    assert "did not pass" in result.stdout
-    assert "--force" in result.stdout
+    out = plain_text(result.stdout)
+    assert result.exit_code == 1, out
+    assert "did not pass" in out
+    assert "--force" in out
     assert not (skills_root / "pdf-sabotaged").exists()
 
 
@@ -185,12 +187,30 @@ def test_deploy_reads_dotenv(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) ->
 
 
 def test_deploy_help_labels_force() -> None:
-    result = runner.invoke(app, ["deploy", "--help"])
+    result = runner.invoke(app, ["deploy", "--help"], color=False)
     assert result.exit_code == 0, result.stdout
-    assert "--force" in result.stdout
-    assert "even if the latest check did not pass" in result.stdout.lower() or (
-        "did not pass" in result.stdout
+    help_text = plain_text(result.stdout)
+    assert "--force" in help_text
+    assert "even if the latest check did not pass" in help_text.lower() or (
+        "did not pass" in help_text
     )
+
+
+def test_deploy_invalid_target_before_gate(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    pack = _pdf_pack(tmp_path / "pack")
+    skills_root = tmp_path / "cursor-skills"
+    monkeypatch.setenv("SKILLGATE_CURSOR_SKILLS", str(skills_root))
+    assert latest_check_passed(pack) is None
+    result = runner.invoke(app, ["deploy", str(pack), "--target", "not-a-tool"])
+    combined = plain_text(result.stdout + result.stderr)
+    assert result.exit_code == 1, combined
+    assert "Cursor, Claude, or Codex" in combined
+    assert latest_check_passed(pack) is None
+    assert "GREEN" not in combined
+    assert "built-in checker" not in combined.lower()
+    assert not (skills_root / "pdf").exists()
 
 
 def test_ingest_then_install_uses_atomic_copy(tmp_path: Path) -> None:

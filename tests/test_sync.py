@@ -6,8 +6,13 @@ import subprocess
 from pathlib import Path
 
 import pytest
+from typer.testing import CliRunner
 
+from conftest import plain_text
+from skillgate_ai.cli import app
 from skillgate_ai.sync import install_launchd_plist, sync_once
+
+runner = CliRunner()
 
 
 def _init_repo(path: Path, skills: list[str]) -> Path:
@@ -82,6 +87,39 @@ def test_sync_skips_skill_whose_latest_check_failed(
     cursor_root = Path(os.environ["SKILLGATE_CURSOR_SKILLS"])
     assert (cursor_root / "ok-skill" / "SKILL.md").is_file()
     assert not (cursor_root / "red-skill").exists()
+
+
+def test_sync_cli_reports_skipped_not_synced(
+    project_root: Path, tmp_path: Path
+) -> None:
+    from skillgate_ai.history import append_eval
+
+    repo = _init_repo(tmp_path / "repo", ["ok-skill", "red-skill"])
+    append_eval(repo / "skills" / "red-skill", run_id="red", passed=False)
+    subprocess.run(["git", "add", "-A"], cwd=repo, check=True, capture_output=True)
+    subprocess.run(
+        [
+            "git",
+            "-c",
+            "user.email=t@example.com",
+            "-c",
+            "user.name=Test",
+            "commit",
+            "-m",
+            "red history",
+        ],
+        cwd=repo,
+        check=True,
+        capture_output=True,
+    )
+    result = runner.invoke(
+        app, ["sync", "--repo", str(repo), "--targets", "cursor"]
+    )
+    out = plain_text(result.stdout + result.stderr)
+    assert result.exit_code == 0, out
+    assert "skipped red-skill: latest check did not pass" in out
+    assert "synced  red-skill" not in out
+    assert "synced  ok-skill" in out
 
 
 def test_sync_failed_copy_leaves_existing_install(
