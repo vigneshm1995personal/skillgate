@@ -1,31 +1,49 @@
 # Custom judge checks — Implementation Plan
 
-> **Phase 1 is this plan.** Phase 2 implements engine / schema / CLI / tests. Phase 3 implements the Checks editor **after PR #19 merges**. Do **not** write product code in this PR. Do **not** bump/publish PyPI. Do **not** merge until Vignesh says so.
+> **Phase 1 is this plan.** Phase 2 implements engine / schema / CLI / providers / tests. Phase 3 implements Settings + the Checks editor **after PR #19 merges**. Do **not** write product code in this PR. Do **not** bump/publish PyPI. Do **not** merge until Vignesh says so.
+>
+> **Scope change (Vignesh, 2026-10-11):** (1) bring-your-own judge **provider** (OpenAI Decisions, Jev, AWS, OpenAI-compatible / other) with an explicit key — never ambient env. (2) Custom checks and judge questions are **added on top of** Skill Gate built-ins; they do not replace them.
 
-**Goal:** Let the end user add, remove, and edit the questions Skill Gate asks when it scores a live check. Today every check is scored by the OpenAI Decisions judge (`gpt-6-luna`, `POST /v1/decisions`) answering five fixed Pass-lock questions plus Path, plus per-case expectations in `evals/cases.yaml` (`should_trigger`, `contains` / golden, `output_path`). Example: pdf 8/8 green, and the no-trigger `no-trigger-unrelated` case that should not pick pdf.
+**Goal:** Let the end user (a) pick who scores live checks, with their own key, and (b) add extra checks and extra scoring questions **alongside** the built-ins. Today every live check is scored by OpenAI Decisions (`gpt-6-luna`, `POST /v1/decisions`) answering five fixed Pass-lock questions plus Path, plus per-case expectations in `evals/cases.yaml`. Example: pdf **8/8** green, including `no-trigger-unrelated` (should not pick pdf).
 
-**Parents:** `main` @ `7a0ab4e` (0.5.0, #18). OpenAI judge plan [`openai-judge.md`](openai-judge.md). Product locks in [`0.5-decisions.md`](0.5-decisions.md). **PR #19** (`cursor/ui-revamp-tokens-df92`, “Full UI revamp: black and white…”) is **open, draft, unmerged**. UI work in this feature **lands after #19**, not in parallel.
+**Parents:** `main` @ `7a0ab4e` (0.5.0, #18). OpenAI judge plan [`openai-judge.md`](openai-judge.md). Product locks in [`0.5-decisions.md`](0.5-decisions.md). **PR #19** (`cursor/ui-revamp-tokens-df92`) is **open, draft, unmerged**. UI work **lands after #19**.
 
-**Hosted:** private `vigneshm1995personal/skillgate-ai` keeps pinning the public `skillgate-ai` wheel. One codebase: the resolver, Pass/warn rule, and React Checks editor live in OSS. Hosted does not fork a second question bank.
+**Hosted:** private `vigneshm1995personal/skillgate-ai` pins the public wheel. **One codebase:** provider interface, question resolver, and React Settings/Checks editor live in OSS `web/` + `skillgate_ai`. Hosted does not fork a second bank or a second provider stack.
 
-Inspected OSS tree: `main` @ `7a0ab4e`. PyPI dist **`skillgate-ai` 0.5.0**. CLI **`skillgate`**.
+Inspected OSS tree: `main` @ `7a0ab4e`. PyPI **`skillgate-ai` 0.5.0**. CLI **`skillgate`**.
+
+---
+
+## Open questions for Vignesh
+
+Answer these before Phase 2 starts. Recommendations are in *italics*.
+
+1. **Can built-ins be disabled?** *Recommend: cannot delete. Built-in judge questions can be marked **Warn only** (still asked, never fail the check / never block Deploy). Built-in pack cases (pdf’s 8, including no-trigger) cannot be removed from that pack; users only **add** cases. On a skill the user created, every case is theirs and can be deleted.* Confirm or pick another rule (e.g. allow hiding a built-in question entirely).
+2. **Jev + extra questions.** Hosted Jev today scores the **fixed six cells**. If Jev’s public API cannot take arbitrary extra questions: *fail the extras with a plain message (“Jev scores Skill Gate’s built-in questions only. Pick OpenAI or another provider for extra questions.”) and still score the six.* Or refuse the whole run. Which?
+3. **Jev customer name.** Settings/CLI: **Jev** vs **TypeSafe**. OSS UI currently treats `jev` as internal jargon in the vanilla wizard tests. *Recommend the Settings option is “Jev” once it is a user-chosen provider.*
+4. **AWS Bedrock model / API.** *Recommend: Bedrock **Converse** + JSON schema (same mapping as today’s Responses fallback). User picks region + model id in Settings. No default AWS credential chain (`~/.aws`, instance role, ambient `AWS_*`).* Need a first-class model default? *Leave blank; require the user to set it.*
+5. **Why-call (Fail sentence) on non-OpenAI providers.** Today a Fail may follow up on OpenAI `/responses`. *Recommend: use the selected provider if it can write a short sentence; if not (typical Jev), skip why and keep the cell reasons. Never fail a check because why failed.*
+6. **OpenAI key dual-use.** Today `OPENAI_API_KEY` is both a live-harness fallback and the judge key. *Keep that when the scoring provider is OpenAI. Other providers need their own key and must not silently reuse OpenAI.*
 
 ---
 
 ## 0. Locked product decisions
 
-These are not open questions. If a later change fights one of these, the lock wins.
+These are not open questions except where §Open questions says so. If a later change fights one of these, the lock wins.
 
-1. **One pack on disk** + `skillgate check` exit **0 or 1** (or **2** with no live key). No Skill Gate account.
-2. **Missing `judge:` = today’s bank.** Existing packs (`skills/pdf`, `skills/pdf-sabotaged`, user packs on schema 1) keep the five Pass-lock questions + Path, the same ordinals, the same Pass lock, the same no-trigger det-owns rule. Schema stays **1**. `judge:` is additive.
-3. **Low-confidence rule stays:** a Pass-lock / blocking `choice` or `score` answer that would Pass, with confidence missing or `< 0.5`, **keeps Pass** and warns: *The judge wasn't very sure about this one.* Never fails the check. Never blocks Deploy. Never changes exit 0/1. Default `SKILLGATE_JUDGE_MIN_CONFIDENCE=0.5` remains. Predicate answers have no `confidence` field (official Decisions); do not invent one.
-4. **Trigger expectation and expected output stay first-class case fields**, not judge questions. `should_trigger`, `contains` / golden, `output_path` remain in `evals/cases.yaml` and the Checks editor. The new `judge:` block is the LLM questions only.
-5. **`on_fail: block` vs `on_fail: warn`.** Block fails the check (`passed=false`, exit 1) → Deploy refuses (latest check did not pass). Warn never flips `passed`. Deploy already keys off `passed`; do not add a second Deploy gate. Path stays warn by default. The five current Pass-lock questions stay block by default.
-6. **No-trigger cases still keep det ownership** (`expect_skill is None`). Custom questions on those cases are evidence only, unless the case sets `judge.score_no_trigger: true` (off by default).
-7. **Customer copy is plain words.** UI/CLI: “Got the job done?”, “Yes/no”, “Pick one”, “Score”, “Fail the check”, “Warn only”. Do not show `task_completion`, Decisions, Jev, `gpt-6-luna`, or schema keys in chrome. `--json` may keep ids.
-8. **Hosted reuses this code.** Private TypeSafe/Jev remains the hosted default **only when the resolved bank is the built-in one**. A pack with a custom `judge:` uses the OSS `OutcomeJudge` (Decisions) from the wheel. Do not copy `judge_bank` into the private repo.
-9. **UI after #19.** Phase 2 may ship schema + CLI + engine with no React editor. Phase 3 rebases onto merged #19 (black-and-white tokens) and extends the existing Checks editor. Do not restyle `web/` against `main` while #19 is open.
-10. **Decisions remains the scoring API.** Custom questions still go in one `questions[]` on `POST /v1/decisions`. Responses + Structured Outputs stays the operator fallback (`SKILLGATE_JUDGE_BACKEND=responses`) and the Fail why-call. Generate that schema from the resolved bank; do not keep a hardcoded six-field enum once questions are custom.
+1. **One pack on disk** + `skillgate check` exit **0 or 1** (or **2** with no live harness key). No Skill Gate account.
+2. **Built-ins stay.** The five Pass-lock judge questions + Path are always in the resolved bank. Pack cases that already exist (pdf 8/8, including `no-trigger-unrelated`) stay. Users **add** extra cases and extra judge questions on top (per skill, optionally project-wide). Schema stays **1**. See §3.
+3. **Cannot delete built-in judge questions** (recommendation, pending Vignesh). They can be marked `on_fail: warn`. Path is already warn. Extra questions can be edited or removed.
+4. **Low-confidence rule stays** when the provider returns confidence: a blocking `choice`/`score` that would Pass, with confidence missing or `< 0.5`, **keeps Pass** and warns: *The judge wasn't very sure about this one.* Never fails the check. Never blocks Deploy. Never changes exit 0/1. Default `0.5`. **If the provider has no confidence channel, do not warn** (same as today’s Responses fallback — do not warn on every Pass). Predicate answers have no official `confidence`; do not invent one.
+5. **Trigger expectation and expected output stay case fields**, not judge questions. `should_trigger`, `contains` / golden, `output_path` remain in `evals/cases.yaml` and the Checks editor.
+6. **`on_fail: block` vs `on_fail: warn`.** Block fails the check → Deploy refuses. Warn never flips `passed`. Path default warn; five built-ins default block.
+7. **No-trigger cases still keep det ownership** (`expect_skill is None`). Extra questions on those cases are evidence only unless `judge.score_no_trigger: true` (off by default).
+8. **BYO scoring provider, explicit keys only.** OpenAI Decisions, Jev, AWS (Bedrock), or OpenAI-compatible / other. Configured in Settings and `skillgate keys set` + `skillgate judge provider …`. **Never** ambient `OPENAI_API_KEY` / `AWS_*` / `AWS_PROFILE` / `~/.aws` unless `--key-env`. Same 0.5 key lock.
+9. **Canonical question shape is Decisions-style.** Providers adapt *to* that shape (types `predicate` | `choice` | `score`). OpenAI Decisions is the reference adapter. Map the **same** resolved list (built-ins + extras) onto each provider.
+10. **Customer copy is plain words** except chosen provider names in Settings (“OpenAI”, “Jev”, “AWS”, “Other”). Chrome: “Got the job done?”, “Yes/no”, “Pick one”, “Score”, “Fail the check”, “Warn only”, “Test connection”. `--json` may keep ids.
+11. **Hosted reuses this code.** OSS `JudgeProvider` + `judge_spec`. Private TypeSafe/Jev becomes the **Jev adapter** (user or hosted key), not a private fork of the bank. Do not copy `jev_qa.py`; do not name a public module `jev_qa.py` (deny-list stays).
+12. **UI after #19.** Phase 2 may ship schema + CLI + providers with no React editor. Phase 3 rebases onto merged #19 (black-and-white) for Settings + Checks. One `web/` tree for local and hosted.
+13. **Responses / structured JSON remains a fallback mapping**, not a second product path: used by AWS Bedrock and by OpenAI-compatible endpoints that have no `/decisions`, and for the Fail why-call when the provider can write prose.
 
 ---
 
@@ -35,19 +53,18 @@ These are not open questions. If a later change fights one of these, the lock wi
 
 | Piece | Path | Fact |
 | --- | --- | --- |
-| Fixed bank | `src/skillgate_ai/judge_bank.py` | `CHECK_CELL_ORDER` (5) + `SOFT_CELL_ORDER` (`path_efficiency`). All type `choice`. `PASS_LOCK` is a frozenset of allowed ordinals per key. `DEFAULT_MIN_CONFIDENCE = 0.5`. |
-| Pass lock | `outcome_verdict` | All five must be in-lock. Path is ignored. Missing/unknown enum → `UNUSABLE_ANSWER`, fail closed. |
-| Low confidence | `low_confidence_warnings` | Only if the five would Pass. Decisions backend only. Warning list; `passed` unchanged. |
-| HTTP | `judge_openai.py` | Default `DecisionsBackend` builds `decisions_questions()`. Fallback `StructuredOutputsBackend` uses `structured_output_schema()`. |
-| Engine | `engine._live_verdict` | Skip → det owns. Error → fail closed. `expect_skill is None` → det owns, judge stored as evidence. Completed bool `passed` overrides det. Output mismatch still fails. |
-| Gate | `gate.run_check` | `resolve_judge` → `run_eval(..., judge=)`. No OpenAI/gateway key → `SkipJudge`; det scorers own red/green. |
-| Deploy | `deploy.require_passing_check` | Needs a **passing** latest history row. Warnings do not matter. `--force` only overrides a red latest, never never-checked. |
-| Pack SoR | `evals/cases.yaml` schema 1 | `PackCase`: `id`, `status`, `prompt`, `should_trigger`, `input`, `golden`, `contains`, `min_pages`, `budgets`. **No `judge` field.** |
-| Fingerprint | `PACK_FINGERPRINT_FIELDS` | `id`, `prompt`, `should_trigger`, `input`, `golden`, `budgets`. Changing questions today would **not** invalidate Deploy trust. |
-| CLI | `cli.py` | `keys` is a Typer sub-app (`show` pattern). No `judge` command. `check` has no question flags. |
-| Seed packs | `skills/pdf/evals/cases.yaml` | 8 pinned cases. `no-trigger-unrelated`: `should_trigger: false`, `golden: null`. |
+| Fixed bank | `judge_bank.py` | Five Pass-lock `choice` questions + Path. `DEFAULT_MIN_CONFIDENCE = 0.5`. |
+| HTTP | `judge_openai.py` | **Only** OpenAI Decisions (`gpt-6-luna`) + optional Responses fallback. |
+| Resolve | `judge.resolve_judge` | `SKILLGATE_JUDGE=auto\|openai\|skip`. OpenAI or gateway key → Decisions. No Jev/AWS adapter in OSS. |
+| Keys | `keys.py` | Vault names: `CURSOR_API_KEY`, `CODEX_API_KEY`, `OPENAI_API_KEY`, `AI_GATEWAY_API_KEY`, `ANTHROPIC_API_KEY`. Ambient ignored unless `--key-env`. |
+| Settings UI | `settings-page.tsx` | Those five keys. OpenAI hint: “Scores live checks with your OpenAI key.” No provider picker, no Test connection. |
+| Engine | `engine._live_verdict` | Skip → det owns. Error → fail closed. No-trigger → det owns. |
+| Pack SoR | `evals/cases.yaml` schema 1 | Cases + `should_trigger` / golden / contains. **No `judge` field.** |
+| Fingerprint | `PACK_FINGERPRINT_FIELDS` | Does **not** include questions. |
+| Deny-list | `test_oss_surface.py` | Forbids `skillgate_ai.jev_qa` on disk and as an import. |
+| Seed pack | `skills/pdf/evals/cases.yaml` | 8 pinned cases, including `no-trigger-unrelated`. |
 
-Built-in questions (user-facing labels → Pass ordinals):
+Built-in judge questions:
 
 | Key | Ask | Pass | Default `on_fail` |
 | --- | --- | --- | --- |
@@ -56,315 +73,324 @@ Built-in questions (user-facing labels → Pass ordinals):
 | `instruction_adherence` | Followed the rules? | Fully followed | block |
 | `evidence_action_validity` | Used the right evidence/actions? | Fully supported **or** N/A | block |
 | `result_quality` | Delivered a good result? | Clear and complete **or** Mostly good | block |
-| `path_efficiency` | Path | (not in lock; Efficient / Acceptable / Looping / Wasteful) | warn |
+| `path_efficiency` | Path | not in Pass lock | warn |
 
-### 1.2 Already user-configurable (keep; do not move into `judge:`)
+### 1.2 Already user-configurable (keep)
 
-These stay on the case, edited in the Checks editor today (`check-list.tsx`):
-
-- **Trigger expectation** — checkbox “This should trigger the skill” → `should_trigger`.
-- **Expected output** — Expected / Output file / fixtures → `contains`, `golden`, `output_path`.
-- **Budgets** — optional token/step caps; a set number **blocks Deploy** if exceeded (`metrics.py`). Independent of the judge.
+Checks editor today (`check-list.tsx`): trigger checkbox, Expected / Output file / fixtures, optional budgets. Adding a check already appends a card; pinning writes another case. **Gap:** nothing stops deleting a seed case in the UI — Phase 3 should lock seed/built-in rows if Vignesh confirms §Open questions 1.
 
 ### 1.3 UI facts and PR #19
 
-- Primary UI is React `web/`, served by `skillgate ui` from packaged `web_static`.
-- Checks editor: `web/src/components/dashboard/check-list.tsx` + `add-check-dialog.tsx` on the skill/eval Checks tab (`eval-page.tsx`).
-- Tokens today on `main` still include cream/oxblood leftovers in some screens; **#19 restyles the whole tree to black and white** (white/near-black light, black/white dark, chroma only for Pass/Fail, Geist). Head `e5a2432`, draft, mergeable, **do not merge from this work**.
-- Vanilla `local_ui/static/` is the older wizard. Do not add a second Checks editor there. Phase 3 targets React only.
-- `frontend-design`: reuse Field / Checkbox / Button / Accordion; no new palette; no purple-on-white, no extra radii.
+- Primary UI is React `web/`, packaged as `web_static`.
+- Settings and Checks are the two surfaces for this work. Vanilla `local_ui/static/` does not get a second editor.
+- **#19** restyles `web/` to black and white (Geist, chroma only for Pass/Fail). Head `e5a2432`, draft. Do not restyle against `main` while it is open.
+- `frontend-design`: reuse Field / Button / Select; no new palette.
 
-### 1.4 Decisions API limits (verified vs labeled)
+### 1.4 Decisions API (reference mapping)
 
-Official [Decisions guide](https://developers.openai.com/api/docs/guides/decisions) (re-fetched 2026-10-11):
+Official [Decisions guide](https://developers.openai.com/api/docs/guides/decisions) (2026-10-11): `POST /v1/decisions`, model `gpt-6-luna` only; types `predicate` | `choice` | `score`; unique `name`; predicate → `probability` (no `confidence` in the official excerpt); choice/score → `confidence` + `probabilities[]`. Score is a weighted average of **level indices from 0** and can fall between levels.
 
-- `POST /v1/decisions`, model **`gpt-6-luna` only**.
-- Question types: **`predicate` | `choice` | `score`**.
-- Names must be unique; echoed on answers.
-- `predicate` → `probability` (0–1). **No `confidence` in the official predicate excerpt.**
-- `choice` → `choice`, `probabilities[]`, `confidence`.
-- `score` → weighted average of **level indices starting at 0** (can fall between levels), `probabilities[]`, `confidence`. Adjacent levels must have distinct criteria. Use `choice` when you need one named category.
-- Independent questions share one `input`.
+OpenAPI / downstream (not on the guide page): max **200** questions/request; choice **1–255** options; score **2–10** levels.
 
-**Not on that guide page (do not cite as OpenAI product copy):** a published per-request question cap. OpenAPI + downstream docs (pydantic-ai `openai_decisions`, Vercel AI Gateway Decisions) state:
-
-| Limit | Value | Source |
-| --- | --- | --- |
-| Questions per request | **200** (201 → HTTP 400) | OpenAPI `DecisionRequest.questions.maxItems` |
-| `choice` options | **1–255** | Gateway + OpenAPI |
-| `score` levels | **2–10** | Gateway + OpenAPI |
-
-**Product cap (ours, not OpenAI’s):** at most **20** questions per resolved check (built-in is 6). Keeps the UI readable and stays far under 200. Over 20 or over API hard limits → friendly validation error **before** HTTP. If OpenAI still returns 400, fail closed with the existing “OpenAI rejected this scoring request.”
+**Product cap:** **20** questions per resolved check = **6 built-ins + up to 14 extras**. Validate before HTTP.
 
 ---
 
 ## 2. What becomes user-configurable
 
-| Lever | Scope | Default if omitted |
+| Lever | Scope | Default |
 | --- | --- | --- |
-| Add / remove / edit questions | Pack `judge.questions` and per-case override | Built-in six |
-| Question type | Per question: `predicate` / `choice` / `score` | `choice` (built-in) |
-| Ask text + criteria | Per question `ask` + choice/level descriptions | Today’s labels/criteria |
-| Pass threshold | `choice`: which values Pass; `predicate`: min probability; `score`: min (or max) numeric score | Today’s `PASS_LOCK`; predicate `>= 0.5`; score documented per question |
-| Fail vs warn | Per question `on_fail: block \| warn` | Five block, Path warn |
-| Low-confidence cutoff | Pack/project `min_confidence` | `0.5`; behavior locked (Pass + warning) |
-| Trigger expectation | Case `should_trigger` | `true` |
-| Expected output | Case `golden` / `contains` / `output_path` | none (required to pin a should-trigger completion check) |
-| Score no-trigger with LLM | Case `judge.score_no_trigger` | `false` (det owns) |
+| Scoring **provider** | Settings / `skillgate judge provider` | `auto`: OpenAI Decisions if an OpenAI/gateway key is set; else skip (det only). Never auto-pick Jev/AWS. |
+| Provider **key** + endpoint | Settings / `skillgate keys set` | unset |
+| Extra **cases** (checks) | Pack `cases:` + project extras | seed/existing cases stay |
+| Extra **judge questions** | Pack / case / project `judge.extra_questions` | none; built-ins always included |
+| Extra question type / ask / Pass bar / Fail vs warn | per extra question | — |
+| Built-in question Fail vs warn | pack/project `judge.on_fail.<id>` | five block, Path warn |
+| Low-confidence cutoff | pack/project `min_confidence` | `0.5`; behavior locked |
+| Trigger / expected output | per case | unchanged |
+| Score no-trigger with LLM | case `judge.score_no_trigger` | `false` |
 
-Not configurable in v1 (out of scope): swapping `gpt-6-luna`, changing the why-call, turning low-confidence into a Fail, averaging questions, free-form prose questions, hosted-only question types.
+Not in v1: deleting built-in questions (pending Vignesh); inventing confidence; averaging questions; free-form prose questions; ambient AWS/OpenAI keys; swapping Decisions off `gpt-6-luna` for the OpenAI adapter.
 
 ---
 
 ## 3. Where config lives
 
-### 3.1 Precedence (highest last)
+### 3.1 Questions — append, do not replace
 
-1. Built-in bank in `judge_bank.py` (code).
-2. Project file **`skillgate.yaml`** at the workspace root (next to `skills/`). Optional. **Not** `{project}/.skillgate/` — that directory is gitignored because of keys.
-3. Pack **`evals/cases.yaml`** top-level `judge:`.
-4. Per-case **`cases[].judge:`**.
+**Supersedes** the earlier “replace the whole bank” draft.
 
-Resolved bank is what Decisions sees. Save the resolved snapshot on `tasks[].judge.questions` (already a dict today) so history is self-describing.
+Precedence for **extra** questions (all layers **append**, built-ins first):
 
-### 3.2 Schema 1 additive shape
+1. Built-in six from `judge_bank.py` (always).
+2. Project `skillgate.yaml` → `judge.extra_questions` (optional, committed; **not** `.skillgate/`).
+3. Pack `evals/cases.yaml` top-level `judge.extra_questions`.
+4. Per-case `cases[].judge.extra_questions`.
 
-Keep `schema: 1`. Unknown keys already fail pydantic validation — new fields must be declared on `CasePack` / `PackCase`.
+Ids must be unique across the resolved list. Extra id colliding with a built-in → error: “`{id}` is a Skill Gate question. Add a new id, or change Fail vs warn for the built-in.”
+
+Optional `judge.on_fail:` map overrides severity for **built-in ids only** (`block` | `warn`). Cannot omit a built-in.
 
 ```yaml
 schema: 1
 skill: pdf
 judge:
   min_confidence: 0.5
-  questions:
-    - id: task_completion
-      type: choice
-      ask: Got the job done?
+  on_fail:
+    result_quality: warn          # still asked; no longer blocks Deploy
+  extra_questions:
+    - id: numbers_match
+      type: predicate
+      ask: Do the invoice totals in the output match the input PDF?
       on_fail: block
-      choices:
-        - value: Fully completed
-          description: The requested work is fully done.
-          pass: true
-        - value: Partially completed
-          description: Some of the requested work is done but incomplete.
-          pass: false
-        - value: Not completed
-          description: The requested work was not done.
-          pass: false
-    - id: path_efficiency
-      type: choice
-      ask: Path
-      on_fail: warn
-      # ...
+      pass_if: { gte: 0.8 }
 cases:
   - id: extract-hello
-    prompt: Extract the text from hello.pdf and save it to output/extracted.txt
-    should_trigger: true
-    golden:
-      output_path: output/extracted.txt
-      path: evals/goldens/extract-hello.txt
-      kind: text
-    contains:
-      - Hello Skill Gate
-    # omit judge: → pack/project/built-in
-  - id: no-trigger-unrelated
-    prompt: Write a pytest for a FastAPI /health endpoint. Do not touch any PDFs.
-    should_trigger: false
-    golden: null
+    # … existing pdf case unchanged …
   - id: extract-invoice
-    # per-case replace (full list). Overlay-by-id is rejected: two merge rules confuse authors.
     judge:
-      questions:
-        - id: numbers_match
-          type: predicate
-          ask: Do the invoice totals in the output match the input PDF?
+      extra_questions:
+        - id: currency_usd
+          type: choice
+          ask: Is the extracted currency USD?
           on_fail: block
-          pass_if: { gte: 0.8 }
+          choices:
+            - { value: "Yes", description: "Amounts are in USD.", pass: true }
+            - { value: "No", description: "A different currency.", pass: false }
+  - id: my-new-check          # user-added case; the original 8 stay
+    prompt: …
+    should_trigger: true
 ```
 
-**Replace, do not overlay.** If `judge.questions` is present at a layer, it is the full list for that layer. The UI starts from the parent list so add/remove/edit is still one save. Empty `questions: []` means “no LLM questions; det scorers only” for that layer.
+Dump omits empty `judge:` so seed `cases.yaml` stays byte-stable until the user adds extras.
 
-`skillgate.yaml` (project):
+Project `skillgate.yaml` (committed extras, no secrets):
 
 ```yaml
 judge:
-  min_confidence: 0.5
-  questions: []   # omit questions to keep the built-in bank; set min_confidence only if needed
+  extra_questions: []
 ```
 
-Dump code (`_dump_pack`) omits empty `judge:` so seed packs stay byte-stable unless the user opts in.
+Provider choice and secrets do **not** live here.
 
-### 3.3 Per-question fields
+### 3.2 Extra cases (checks)
 
-| YAML | Plain words | Rules |
+- **Seed / existing pack cases stay.** Phase 3 UI: built-in/seed rows have no Remove (if Vignesh confirms).
+- **Add check** appends a new case id (today’s dialog). Pin still writes `evals/cases.yaml`.
+- **Project-wide extra cases** (optional): `skillgate.yaml` → `extra_cases:` copied into every pack at resolve time with ids prefixed `project-` to avoid collisions. *If this feels heavy, v1 can ship project-wide **questions** only and leave extra **cases** per-skill.* Flag: see §Open questions — treat project-wide **cases** as v1 if easy, else questions-only.
+
+### 3.3 Per-extra-question fields
+
+Same as Decisions mapping: `id`, `type` (`predicate` | `choice` | `score`), `ask`, `on_fail`, `choices` / `levels`, `pass_if`, optional `include_when: path_recorded`.
+
+Built-in ids are reserved. Extra `id`: `^[a-z][a-z0-9_]*$`, ≤ 64 chars, not in `CHECK_CELL_ORDER` ∪ `SOFT_CELL_ORDER`.
+
+### 3.4 Provider config (secrets vs settings)
+
+| What | Where | Git |
 | --- | --- | --- |
-| `id` | (hidden; slug) | `^[a-z][a-z0-9_]*$`, unique in the list, ≤ 64 chars |
-| `type` | Yes/no · Pick one · Score | `predicate` \| `choice` \| `score` |
-| `ask` | The question | non-empty, ≤ 500 chars; this is Decisions `instructions` |
-| `on_fail` | Fail the check · Warn only | default `block` except built-in Path = `warn` |
-| `choices` | Options | required for `choice`; 1–255; ≥1 with `pass: true` unless `on_fail: warn` |
-| `levels` | Score levels, lowest first | required for `score`; 2–10; ordered |
-| `pass_if` | Pass when | `predicate`: `{gte: 0..1}` default `0.5`. `score`: `{gte: number}` (index scale) or `{lte: number}`. `choice`: use `pass:` on values, not `pass_if` |
-| `include_when` | (advanced, optional) | `path_recorded` for Path-like questions. Omit = always. Built-in Path keeps today’s skip when no path. |
+| Keys | `{project}/.skillgate/keys` (0600), or `SKILLGATE_*`, or `--key-env` | gitignored |
+| Provider id, base URL, region, model | `{project}/.skillgate/judge` (0600 JSON) written by Settings / `skillgate judge provider set` | gitignored |
+| Extra questions / cases | `evals/cases.yaml`, `skillgate.yaml` | committed |
 
-### 3.4 Fingerprint and Deploy
+New vault names (extend `PROVIDER_KEY_NAMES`; unknown name still errors plainly):
 
-Add resolved `judge` (questions ids, types, pass sets, thresholds, `on_fail`) to `PACK_FINGERPRINT_FIELDS` / `pack_fingerprint`. Editing questions is a skill change: latest green history no longer matches → “This skill changed since it passed. Run the checks again, then install.” Same pattern as budgets.
+| Provider | Key name(s) | Non-secret in `.skillgate/judge` |
+| --- | --- | --- |
+| OpenAI Decisions | `OPENAI_API_KEY` (existing) | `provider: openai` |
+| Jev | `JEV_API_KEY` (or reuse `AI_GATEWAY_API_KEY` if Vignesh prefers one gateway key — default: **dedicated `JEV_API_KEY`**) | `provider: jev`, optional `base_url` |
+| AWS Bedrock | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` (optional `AWS_SESSION_TOKEN`) | `provider: aws`, `region`, `model` |
+| Other / OpenAI-compatible | `AI_GATEWAY_API_KEY` (existing) or a dedicated compatible key | `provider: compatible`, `base_url`, optional `decisions_path` default `/decisions` |
+
+CI: `SKILLGATE_JEV_API_KEY`, `SKILLGATE_AWS_ACCESS_KEY_ID`, `SKILLGATE_AWS_SECRET_ACCESS_KEY` overlays. **No** ambient `AWS_ACCESS_KEY_ID`.
+
+`.skillgate/judge` example (no secrets):
+
+```json
+{
+  "provider": "openai",
+  "region": null,
+  "model": null,
+  "base_url": null
+}
+```
+
+Fingerprint **pack** questions (extras + on_fail overrides), not the local provider — so switching a laptop from OpenAI → AWS does not by itself invalidate Deploy trust. Changing extras does.
 
 ---
 
-## 4. Engine changes (Phase 2)
+## 4. Judge-provider interface
 
-### 4.1 New module `skillgate_ai/judge_spec.py`
+### 4.1 Protocol (OSS, shared with hosted)
 
-Load / validate / merge / resolve. No HTTP. Shared with hosted.
-
-- `DEFAULT_SPEC` built from current `judge_bank` constants (single source; do not duplicate ordinals).
-- `resolve_judge_spec(*, project, pack, case) -> ResolvedJudgeSpec`
-- `to_decisions_questions(spec, *, include_path: bool) -> list[dict]`
-- `to_structured_schema(spec, *, include_path: bool) -> dict`
-- `verdict(spec, answers) -> (passed: bool, reasons: list[str], warnings: list[str])`
-
-Generalize today’s `outcome_verdict` / `unusable_answers` / `low_confidence_warnings` to walk `spec.questions` instead of `CHECK_CELL_ORDER`. Keep those names as wrappers around the built-in spec so existing tests stay meaningful.
-
-### 4.2 Answer handling by type
-
-| Type | Unusable (fail closed) | Pass? | Low-confidence warning |
-| --- | --- | --- | --- |
-| `choice` | missing / not in values | `choice` in `pass: true` set | yes, if would Pass and confidence `< min` |
-| `predicate` | missing / non-numeric probability | `probability >= pass_if.gte` | **no** (no official confidence) |
-| `score` | missing / non-numeric | `score` vs `pass_if` | yes, if would Pass and confidence `< min` |
-
-Unusable **blocking** question → check Fail (`UNUSABLE_ANSWER` / per-question plain reason). Unusable **warn** question → warning, check can still Pass.
-
-`on_fail: warn` miss → append warning (“Path was Wasteful”), do not set `passed=false`.
-
-### 4.3 Call chain
+Canonical input = resolved `JudgeSpec` (built-ins + extras) + the same JSON **state** Decisions uses today (prompt, expect/selected skill, scorer rows, artifacts, golden/actual, path, transcript tail, optional images).
 
 ```
-load_case_pack
-  → resolve_judge_spec (project + pack + case)
-      → OutcomeJudge.judge(..., spec=)
-          → backend.evaluate(..., questions=from spec)
-          → verdict(spec, answers)
-      → _live_verdict (unchanged skip / error / no-trigger / mismatch)
+JudgeProvider
+  id: openai | jev | aws | compatible
+  display_name: str
+  supports_confidence: bool
+  supports_probabilities: bool
+  evaluate(*, state, spec, images, timeout) -> {status, answers, usage?, reason?}
+  ping() -> {ok: bool, message: str}   # Test connection; never log the key
 ```
 
-`SkipJudge` ignores spec. No key → det only, as today.
+`answers` is **normalized** to the Decisions-shaped dict used by `verdict()`:
 
-### 4.4 Report / CLI / history
+- `choice`: `{choice, confidence?, probabilities?}`
+- `predicate`: `{probability}`
+- `score`: `{score, confidence?, probabilities?}`
 
-- `tasks[].judge.cells` already keyed by id + `{label, choice, reason, confidence}`. Add `type`, `on_fail`, and for predicate/score the numeric value (`probability` / `score`).
-- CLI `format_cli`: blocking misses stay Fail reasons; warn misses print as warnings (Path already does this in spirit).
-- Fail why-call unchanged (Responses, after a real Fail, not after warn-only).
+Missing required field → unusable (fail closed for `on_fail: block`; warn for warn-only). Adapters **must not invent** `confidence` or `probabilities`.
+
+`OutcomeJudge` (rename conceptually to “applies spec + Pass lock”; keep module split) calls `provider.evaluate` then `verdict(spec, answers)` then low-confidence warnings **only if** `supports_confidence` and a blocking choice/score returned a numeric confidence.
+
+`SkipJudge` remains when pref is skip or no provider key.
+
+### 4.2 Adapters
+
+| Adapter | Transport | How questions map | Confidence | `<0.5` warning |
+| --- | --- | --- | --- | --- |
+| **OpenAI Decisions** (reference) | `POST {openai}/v1/decisions`, `gpt-6-luna` | spec → `questions[]` as today | choice/score: yes. predicate: no | Yes, on blocking choice/score Pass with missing/`< min` confidence |
+| **Jev** | User `JEV_API_KEY` + configured base URL. Do **not** vendor `jev_qa.py`. New module e.g. `judge_providers/jev.py`. | Built-in six → existing Jev/TypeSafe cells. Extras: send if the API accepts extra named questions; otherwise §Open questions 2 | **Hunch:** may return scores; persist if present, never invent | Apply only when a numeric `confidence` is actually present on a blocking choice/score |
+| **AWS Bedrock** | Bedrock **Converse** (region + model from Settings). IAM key from vault only | spec → JSON schema (same shape as `structured_output_schema()`), one tool/JSON response | **No** native Decisions confidence | **Do not warn** (no channel) |
+| **OpenAI-compatible / other** | `base_url` + key. Try `POST {base}/decisions` first if `decisions_path` set/default; if 404, structured JSON on `/chat/completions` or `/responses` | Same spec | If the `/decisions` body includes `confidence`, treat like OpenAI. Structured-JSON fallback: no | Warn only when confidence is present |
+
+OpenAI-compatible **with** a working `/decisions` is how “any compatible provider” stays honest. A random chat model gets the structured-JSON mapping (choice enums / score levels / predicate 0–1), not fake probabilities.
+
+Images: JPEG/PNG data URLs only on adapters that document vision (OpenAI Decisions, compatible `/decisions`). Bedrock: include images only if the chosen model’s Converse vision is documented; otherwise omit and score from text (same fail-closed as omitted images today). Jev: follow whatever that endpoint already accepts; do not invent `file_id`.
+
+### 4.3 Resolve order
+
+```
+skillgate judge provider set   →  .skillgate/judge.provider
+SKILLGATE_JUDGE=skip           →  SkipJudge (unchanged)
+SKILLGATE_JUDGE=openai         →  force OpenAI adapter (need OpenAI key)
+auto + provider file           →  that adapter
+auto + no provider file        →  today’s auto (OpenAI/gateway key → Decisions, else skip)
+```
+
+Explicit provider without its key → exit **2**: “Add a {OpenAI / Jev / AWS} key in Settings (`skillgate keys set`), or pick a different scoring provider.”
+
+### 4.4 Test connection
+
+CLI: `skillgate judge provider test`. Settings: **Test connection**.
+
+Behavior: `ping()` — smallest legal request (Decisions: one `predicate` “Is this a connection test?” on input `"ping"`; Bedrock: Converse with max 1 token / tiny schema; Jev: documented health or a one-cell evaluate). Success: “Connected to {display_name}.” Failures: existing friendly HTTP map (401 key, 403 not enabled, 404 no endpoint, 429 quota, timeout) with the **provider’s** plain name, never a traceback, never the key.
+
+Do not run `ping()` in merge CI. Unit-test with mocked HTTP.
+
+### 4.5 Why-call
+
+Keep “one short Fail sentence, ignore errors.” Provider-specific: OpenAI/compatible → `/responses` or chat JSON `{why}`; AWS → Converse JSON `{why}`; Jev → skip if no prose channel. Pending Vignesh §Open questions 5.
 
 ---
 
 ## 5. CLI
 
-Typer sub-app, same shape as `keys`:
-
 ```
+skillgate keys set OPENAI_API_KEY | JEV_API_KEY | AWS_ACCESS_KEY_ID | …
 skillgate judge show [PACK] [--case ID]
-skillgate judge reset [PACK]
+skillgate judge reset [PACK]          # drop extras + on_fail overrides; built-ins remain
+skillgate judge provider show
+skillgate judge provider set openai|jev|aws|compatible [--base-url] [--region] [--model]
+skillgate judge provider test
 ```
 
 | Command | Behavior |
 | --- | --- |
-| `show` | Resolve and print the bank in plain words (ask, type, pass bar, Fail vs warn). `--json` dumps the spec. Invalid YAML → exit 2, friendly error. Default pack: cwd if it is a skill folder. |
-| `reset` | Remove pack-level `judge:` so the built-in bank returns. Does not rewrite per-case `judge:` unless `--all-cases`. Prints “Using Skill Gate’s default questions.” |
+| `judge show` | Print built-ins (locked) then extras, in plain words. `--json` dumps resolved spec (no secrets). |
+| `judge reset` | Remove pack `judge.extra_questions` / `on_fail`. Built-ins stay. |
+| `judge provider show` | “Scoring with OpenAI (your key)” / “No scoring provider — file checks only.” |
+| `judge provider set` | Writes `.skillgate/judge`. Does not print keys. |
+| `judge provider test` | `ping()`; exit 0/1; plain message. |
 
-**No interactive TUI `edit`.** Authors edit YAML or (Phase 3) the Checks editor. `show` is the validator. Optional later: `skillgate judge set --from FILE` if YAML-in-YAML is painful; not v1.
+`skillgate check` uses the resolved spec + selected provider. No `--questions` flag.
 
-`skillgate check` reads the resolved spec automatically. **No** `--questions` flag (easy to desync from the pack).
-
-`skillgate --help` lists `judge`.
+`keys set` hint lists the new names. Ambient still ignored.
 
 ---
 
 ## 6. Validation and friendly errors
 
-Reuse `SuiteError` + `friendly_validation_error` (`errors.py`). Never pydantic.dev URLs, never tracebacks as primary UX. Exit **2** for author errors (bad YAML), exit **1** for a scored Fail.
+Reuse `SuiteError` + `friendly_validation_error`. Author mistakes exit **2**; scored Fail exit **1**; missing provider key exit **2**.
 
-| Mistake | Message (plain) |
+| Mistake | Message |
 | --- | --- |
-| `type: ranking` | `Question {id}: type must be yes/no, pick one, or score.` |
-| `choice` with 0 options | `Question {id}: add at least one option.` |
-| `choice` with 256 options | `Question {id}: pick-one questions can have at most 255 options.` |
-| `score` with 1 level | `Question {id}: a score needs between 2 and 10 levels.` |
-| Duplicate `id` | `Two questions use the same id ({id}). Rename one.` |
-| 21 questions | `A check can ask at most 20 scoring questions.` |
-| `choice` with no `pass: true` and `on_fail: block` | `Question {id}: mark at least one option as a Pass, or set it to warn only.` |
-| predicate `pass_if.gte: 1.5` | `Question {id}: yes/no Pass bar must be between 0 and 1.` |
-| schema 2 | unchanged: `This case pack uses schema 2; Skill Gate supports schema 1.` |
-| unknown key under `judge` | `Case pack is invalid: …` (existing pydantic loc labeling; extend `_loc_label` for `judge` / `questions`) |
-
-`test_friendly_errors.py` style: loc includes `case {id} (judge)` when nested under a case.
+| Extra id `task_completion` | `` `task_completion` is a Skill Gate question. Add a new id, or change Fail vs warn for the built-in. `` |
+| Extra type `ranking` | `Question {id}: type must be yes/no, pick one, or score.` |
+| 15 extras (21 total) | `A check can ask at most 20 scoring questions (Skill Gate’s 6 plus yours).` |
+| AWS provider, no region | `AWS scoring needs a region in Settings.` |
+| AWS provider, no key | `Add an AWS key in Settings (`skillgate keys set AWS_ACCESS_KEY_ID`).` |
+| Ambient-only `AWS_ACCESS_KEY_ID` | ignored; same as OpenAI ambient |
+| Compatible 404 on `/decisions` then JSON fallback fails | `This endpoint did not accept scoring requests. Check the base URL.` |
+| Jev extras unsupported (if that is the lock) | `Jev scores Skill Gate’s built-in questions only. Extra questions need OpenAI or another provider.` |
 
 ---
 
 ## 7. Backward compatibility
 
-| Pack | Result after Phase 2 |
+| Surface | After Phase 2 |
 | --- | --- |
-| `skills/pdf` (no `judge:`) | Identical six questions, identical Pass lock, 8/8 contract unchanged |
+| `skills/pdf` (no `judge:`) | Same 8 cases, same six questions, same Pass lock |
 | `skills/pdf-sabotaged` | Unchanged red twin |
-| User schema-1 packs | Load as today |
-| History JSONL | Additive fields; old rows still render |
-| `SkipJudge` / no OpenAI key | Det scorers unchanged |
-| Docker `CMD check /pack` | Unchanged; keyless still exit 2 |
-| Responses fallback | Built-in spec still emits today’s enum schema; custom spec emits a generated schema |
+| User schema-1 packs | Load as today; extras optional |
+| No scoring key | `SkipJudge`; det scorers; exit 0/1/2 unchanged |
+| `SKILLGATE_JUDGE` / `SKILLGATE_JUDGE_BACKEND=responses` | Still work for the OpenAI adapter |
+| Docker `CMD check /pack` | Unchanged; keyless exit 2 |
+| History JSONL | Additive `provider` / extra cells |
+| Hosted Jev | Same wheel protocol; private wrapper implements or **is replaced by** OSS `judge_providers/jev.py` |
 
-Do **not** rewrite seed `cases.yaml` in Phase 2. Reset-to-defaults in the UI writes “no `judge:` key”, not a dumped copy of the bank.
+Do **not** rewrite seed `cases.yaml`. `judge reset` deletes extras only.
 
 ---
 
 ## 8. UI (Phase 3 — after PR #19)
 
-**Do not start this while #19 is open.** Rebase onto merged #19 (or merge `origin/main` once #19 is in). One `web/` tree for local and hosted.
+One `web/` tree. Black-and-white tokens from #19. No new route.
 
-### 8.1 Where
+### 8.1 Settings (provider + key + test)
 
-Skill page → Checks tab → each check card (`CheckList`). Add a **Scoring questions** accordion under Expected / Output / budgets (same Field pattern as token budget). Pack-level defaults: a **Default scoring questions** accordion above the list (skill-wide `judge:`).
+Below today’s key rows:
 
-Do not add a new route or Settings page for this.
+- **Scoring provider** — Select: OpenAI · Jev · AWS · Other (OpenAI-compatible). Default Auto (hidden as “Auto (OpenAI when a key is set)”).
+- Conditional fields: AWS region + model; Other base URL; Jev optional base URL.
+- Matching key row(s) with the same hide/show pattern as today.
+- **Test connection** — calls `POST /api/judge/ping`. Toast: “Connected to OpenAI.” / the plain error.
+- Copy: “This key scores live checks. It is not read from your shell unless you pass `--key-env`.”
 
-### 8.2 Copy and controls (plain words, B&W)
+Do not show “Decisions”, “Bedrock Converse”, “gpt-6-luna” in chrome. Model/region are Settings fields, so those ids may appear as the user’s values.
 
-- Heading: “Scoring questions”
-- Description: “These are the questions Skill Gate asks after a live run. Fail the check blocks Install. Warn only still Passes.”
-- Button: “Use Skill Gate defaults” → delete custom `judge:` at that layer.
-- Per question: ask (textarea), type (Yes/no · Pick one · Score), Fail the check / Warn only (checkbox or two-option control using existing tokens, not a new color).
-- Pick one: list of option value + description + “This option is a Pass”.
-- Score: ordered levels + “Pass when score is at least / at most”.
-- Yes/no: “Pass when yes-probability is at least” (0–1).
-- Add question / Remove. Disable Add at 20.
-- Trigger checkbox and Expected fields stay exactly where they are.
+### 8.2 Checks editor
 
-### 8.3 Design (frontend-design + #19)
+Skill page → Checks tab.
 
-- Follow `web/src/index.css` tokens from **#19**: white/near-black, black primary buttons, gray borders, Geist, chroma only on Pass/Fail badges.
-- Reuse `Field`, `FieldLabel`, `FieldDescription`, `Checkbox`, `Input`, `Textarea`, `Button`, `Accordion`, `Badge`.
-- No new radius, no gradients, no emoji, no Inter.
-- Keyboard and focus states from existing Field/Button. Muted text stays ≥ 4.5:1 (`oklch(0.32)` on #19).
-- Checking → slide → drawn Passed/Failed **unchanged** (700 / 350 / 400). Extra cells just render as more answer chips in the result panel (`eval-result-mark` / cells list).
+- Existing cards for the pack’s cases. Seed/built-in cases: **no Remove** (pending Vignesh). **Add check** appends.
+- Per card, accordion **Scoring questions**:
+  - Built-in six as locked rows (ask text read-only). Control: **Fail the check** / **Warn only**.
+  - Extra questions: full editor (type, ask, options, Pass bar, Fail vs warn, Remove).
+  - **Add scoring question**. Disable at 20 total.
+  - Hint: “Skill Gate always asks the first six. Yours run in the same scoring request.”
+- Pack-level extras accordion above the list (skill-wide `extra_questions` + `on_fail`).
+- Trigger / Expected / Output / budgets unchanged.
 
-### 8.4 API
+Result panel: built-in chips first, then extra chips. Checking motion unchanged (700 / 350 / 400).
 
-Pin/save path already writes `evals/cases.yaml` (`POST /api/evals/pin`, `pin_checks`). Extend `Check` in `web/src/lib/types.ts` with optional `judge`. `checks_from_pack` / `_case_from_check` round-trip the block. `GET` skill payload includes pack-level `judge` + project defaults for the editor’s “inherited” hint.
+### 8.3 API
 
-Hosted: same React, `status.mode === "cloud"`. No `hostedJudge` slot required for editing questions; scoring still uses the wheel.
+- `GET/PUT /api/settings/judge` — provider file, no secrets in GET (presence flags only).
+- `POST /api/judge/ping` — test connection.
+- Pin path already writes cases; extend `Check` with `judge.extra_questions` / `on_fail`.
+- `checks_from_pack` round-trips extras.
 
 ---
 
 ## 9. Hosted app (one codebase)
 
-Private follow-up after OSS Phase 2 is on PyPI (or a git pin):
-
-1. Pin `skillgate-ai` with `judge_spec`.
-2. Import `resolve_judge_spec` + `verdict` from the wheel. Delete any private copy of ordinals.
-3. `resolve_judge` hosted: if resolved spec **equals** the built-in bank → keep TypeSafe/Jev as today. If custom → OSS `OutcomeJudge` (user/gateway key, Decisions).
-4. Same `web/` Checks editor; hosted does not add a second form.
+1. Pin the wheel that contains `judge_spec` + `JudgeProvider`.
+2. Hosted Jev: implement or wrap as `judge_providers/jev.py` using the hosted endpoint/key policy. **Same spec, same verdict.**
+3. Settings + Checks are the OSS React app (`status.mode === "cloud"` can keep billing slots hidden; scoring provider stays visible).
+4. Do not keep a private copy of ordinals.
 5. This Phase 1 PR does **not** touch the private repo.
 
 ---
@@ -375,57 +401,69 @@ Private follow-up after OSS Phase 2 is on PyPI (or a git pin):
 
 | Path | Why |
 | --- | --- |
-| `src/skillgate_ai/judge_spec.py` | Resolve / validate / Decisions payload / verdict |
-| `tests/test_judge_spec.py` | Merge, types, thresholds, block vs warn, low-confidence, limits, empty questions |
-| `tests/test_judge_cli.py` | `show` / `reset`, friendly errors, help |
+| `src/skillgate_ai/judge_spec.py` | Built-ins + extras merge, validate, Decisions payload, verdict |
+| `src/skillgate_ai/judge_providers/` | Protocol + `openai.py`, `jev.py`, `aws.py`, `compatible.py`, `ping` |
+| `tests/test_judge_spec.py` | Append extras, reserved ids, on_fail override, caps |
+| `tests/test_judge_providers.py` | Mocked HTTP per adapter; no invented confidence; ping |
+| `tests/test_judge_cli.py` | `show` / `reset` / `provider set|show|test` |
 
 ### Phase 2 — change
 
 | Path | Why |
 | --- | --- |
-| `judge_bank.py` | Keep constants as the built-in spec; verdict helpers delegate to `judge_spec` |
-| `judge_openai.py` | Questions/schema from spec; predicate/score answer rows |
-| `judge.py` / `engine.py` / `gate.py` | Pass resolved spec into the judge |
-| `case_pack.py` | `judge` on `CasePack` and `PackCase`; fingerprint; dump omits empty; `checks_from_pack` |
-| `cli.py` | `judge` Typer group |
-| `errors.py` | `judge` loc labels |
-| `report.py` | Extra cell types; warn-only lines |
-| `docs/pack.md`, `docs/openai-judge.md`, `README.md` | Schema + CLI + “defaults if omitted” |
-| `tests/test_judge_bank.py`, `test_judge_openai.py`, `test_case_pack_cli.py`, `test_friendly_errors.py`, `test_eval_config.py` | Spec-driven requests; fingerprint includes judge |
+| `judge_bank.py` | Stay the built-in constants; verdict delegates to spec |
+| `judge_openai.py` | Become the OpenAI adapter (keep module or thin-wrap) |
+| `judge.py` / `engine.py` / `gate.py` | Resolve provider + spec |
+| `keys.py` / `config.py` | New vault names; load `.skillgate/judge`; never ambient AWS |
+| `case_pack.py` | `judge.extra_questions`, `on_fail`; fingerprint extras |
+| `cli.py` | `judge` group |
+| `errors.py` | loc labels + provider messages |
+| `report.py` | Extra cells; provider display name |
+| `docs/pack.md`, `docs/openai-judge.md`, `README.md` | Providers + extras-on-top |
+| existing judge/keys tests | Auto path unchanged; new names in `keys set` hint |
 
 ### Phase 2 — do not change
 
-Docker `ENTRYPOINT`/`CMD`, seed `cases.yaml` contents, Checking motion, `web/` (wait for #19), private hosted repo, PyPI version (bump on the implementation PR if the schema is public — **0.5.0 → 0.6.0** because custom questions are a feature; this plan PR does not bump).
+Docker `ENTRYPOINT`/`CMD`, seed `cases.yaml` **contents**, Checking motion, `web/` (wait for #19), deny-list `jev_qa`, private repo, PyPI version (**0.6.0** on the implementation PR, not this one).
 
-### Phase 3 — change (after #19)
+### Phase 3 — after #19
 
-`web/src/components/dashboard/check-list.tsx`, `add-check-dialog.tsx`, `eval-page.tsx`, `web/src/lib/types.ts`, `web/src/lib/case-pack.ts`, matching vitest files, result-cell rendering. Rebuild `web_static` the way #19 does (CI fails if git tree ≠ fresh `pnpm build`).
+`settings-page.tsx`, `check-list.tsx`, `add-check-dialog.tsx`, `eval-page.tsx`, `types.ts`, `api.ts`, vitest, rebuild `web_static`.
 
 ---
 
-## 11. Test plan (TDD — Phase 2)
+## 11. Test plan (TDD)
 
 Write failing tests first; never weaken.
 
-1. **Default bank** — pack without `judge:` → `decisions_questions()` identical to today (names, ordinals, Path optional).
-2. **Replace at pack** — custom two-question list is what HTTP sends; built-in keys absent.
-3. **Replace at case** — one case differs; siblings keep pack/default.
-4. **Project `skillgate.yaml`** — applies when pack omits `judge:`; pack wins when present.
-5. **choice Pass lock** — user `pass: true` set; unknown choice fail closed.
-6. **predicate** — `probability >= 0.8` Pass; `0.4` Fail if block; warn if `on_fail: warn`.
-7. **score** — `gte` / `lte`; between-level float (1.1) vs threshold.
-8. **Low confidence** — blocking choice Pass + `confidence: 0.2` → Pass + warning. Predicate never warns on confidence. Warn-only miss does not add the low-confidence sentence.
-9. **No-trigger** — custom blocking Fail does **not** override det Pass unless `score_no_trigger: true`.
-10. **Limits** — 21 questions, 256 choices, 11 levels, 1 score level → SuiteError, no HTTP.
-11. **Fingerprint** — changing `ask` or `on_fail` changes `pack_fingerprint`.
-12. **Dump** — default pack YAML has no `judge:` key.
-13. **CLI** — `judge show skills/pdf` prints the five asks + Path; `judge reset` is a no-op on seed; invalid type exit 2.
-14. **Friendly errors** — no pydantic URL; mentions `case extract-hello`.
-15. **Responses fallback** — generated `json_schema` matches the custom spec, `strict: true`.
-16. **Existing** — `tests/test_judge_bank.py`, `test_judge_openai.py`, pdf/sabotaged contracts, `test_oss_surface.py` still green.
-17. Full CI locally before push (see §13): pytest, pnpm test, gate keyless exit 2, web-build, oss-surface, docker.
+**Built-ins + extras**
 
-Phase 3 tests: vitest for add/remove/edit, Fail vs warn label, reset-to-defaults, 20-cap, round-trip pin API. Browser pass on Checks editor (desktop + a narrow viewport) after #19 tokens.
+1. Pack without `judge:` → six questions identical to today.
+2. Pack extras append **after** built-ins; HTTP `questions[].name` is six + extras.
+3. Extra id `correctness` → SuiteError, no HTTP.
+4. `on_fail.result_quality: warn` → quality miss does not fail; other built-ins still can.
+5. Per-case extras append for that case only.
+6. Project `skillgate.yaml` extras apply to every pack; pack extras follow.
+7. Adding a ninth pdf case does not drop the original eight.
+8. `judge reset` drops extras, keeps six.
+9. Dump: no `judge:` key on seed packs.
+
+**Providers**
+
+10. OpenAI adapter: `/v1/decisions`, six+extras, confidence warning path unchanged.
+11. Compatible adapter: `/decisions` 200 with confidence → warn rule; `/decisions` 404 then JSON schema → **no** confidence warning on Pass.
+12. AWS adapter: Converse mocked; no `AWS_*` from ambient; missing region exit 2.
+13. Jev adapter: mocked evaluate; no import of `jev_qa`; extras per Vignesh lock.
+14. `provider test` 401 → “did not accept this API key”; secret absent from logs.
+15. Explicit `aws` without key → exit 2, Settings hint.
+16. `auto` with only Cursor key → SkipJudge (today).
+
+**Existing**
+
+17. Low-confidence Pass; no-trigger det-owns; pdf/sabotaged contracts; `test_oss_surface.py`; `test_keys.py` ambient ignore includes `AWS_ACCESS_KEY_ID`.
+18. Full CI locally before push: pytest, pnpm test, gate keyless exit 2, web-build, oss-surface, docker.
+
+Phase 3: vitest for locked built-in rows, Add question, Test connection, provider select. Browser: Settings ping + Checks add-on, desktop and narrow viewport, after #19 tokens.
 
 ---
 
@@ -433,29 +471,28 @@ Phase 3 tests: vitest for add/remove/edit, Fail vs warn label, reset-to-defaults
 
 | Item | Status | Mitigation |
 | --- | --- | --- |
-| PR #19 file overlap on `web/` | Fact; 139 files | Phase 3 after merge; Phase 2 has no `web/` diff |
-| Hosted Jev vs custom questions | Fact: Jev is the fixed bank | Custom → OSS Decisions; built-in → Jev |
-| Schema 1 vs a v2 bump | Additive `judge:` is enough | Stay on 1 so old packs load |
-| `.skillgate/` for project defaults | Would be gitignored | Use committed `skillgate.yaml` |
-| Overlay-by-id merge bugs | Hunch | Replace-only lists |
-| `score` between levels vs Pass chip | Official: score can be 1.1 | Threshold on the float; chip shows the number + nearest label |
-| 200 cap unused | Product 20 | Document both |
-| Fingerprint invalidates old greens | Intended | Same as budgets; copy already exists |
-| Seed YAML churn | Avoid | Do not dump defaults into `skills/pdf` |
-| Responses schema explosion | Custom enums | Generate; keep `additionalProperties: false` and all required |
+| PR #19 vs Settings/Checks | Fact | Phase 3 after merge |
+| Jev extras | Unknown API | §Open questions 2; adapter must not pretend |
+| Bedrock JSON ≠ Decisions calibration | Fact | Do not claim parity; same ordinals only |
+| Invented confidence | Tempting on Bedrock | Forbidden; skip warning |
+| AWS credential chain | Easy footgun | Vault only; tests prove ambient ignore |
+| `jev` deny-list / jargon tests | Fact | New module name; Settings copy exception once it is a provider |
+| Dual OpenAI key meaning | Fact | Document; other providers never reuse it |
+| Fingerprint vs provider switch | Choice | Questions yes, provider no |
+| 20-cap vs 14 extras | Product | Friendly error before HTTP |
 
 ---
 
 ## 13. Implementation order
 
-1. **This PR (Phase 1):** this document only. Draft PR. Stop.
-2. **Phase 2a:** `judge_spec` + tests for default ≡ today’s bank.
-3. **Phase 2b:** pydantic on `CasePack`/`PackCase`, fingerprint, friendly errors, dump-omit.
-4. **Phase 2c:** wire `OutcomeJudge` + engine; predicate/score; block vs warn; no-trigger lock.
-5. **Phase 2d:** `skillgate judge show/reset`; docs (`pack.md`, `openai-judge.md`).
-6. **Phase 2e:** full CI; Thermos; implementation PR (not this one). Version **0.6.0** on that PR.
-7. **Phase 3:** wait for #19; rebase; Checks editor + vitest + `web_static`; browser verify.
-8. **Hosted follow-up:** pin wheel; Jev only for built-in spec.
+1. **This PR (Phase 1):** this document. Draft PR. Stop.
+2. **Phase 2a:** `judge_spec` extras-on-top + reserved ids + tests (still OpenAI-only HTTP).
+3. **Phase 2b:** provider protocol + OpenAI adapter extracted; `auto` behavior unchanged.
+4. **Phase 2c:** compatible + AWS + Jev adapters, ping, keys, `judge provider` CLI; ambient-AWS tests.
+5. **Phase 2d:** pack schema dump/fingerprint; `judge show/reset`; docs.
+6. **Phase 2e:** full CI; Thermos; implementation PR; version **0.6.0**.
+7. **Phase 3:** after #19; Settings + Checks; `web_static`; browser verify.
+8. **Hosted:** pin wheel; Jev adapter.
 
 ---
 
@@ -463,16 +500,16 @@ Phase 3 tests: vitest for add/remove/edit, Fail vs warn label, reset-to-defaults
 
 - Implementing any of the above in this branch
 - Merging or rebasing onto PR #19
-- Changing seed pdf cases
-- Ambient OpenAI keys
+- Rewriting seed pdf cases
+- Ambient OpenAI/AWS keys or default AWS credential chain
 - Making low-confidence a Fail
-- Per-question model / temperature
+- Deleting built-in questions (unless Vignesh overrides §Open questions 1)
 - Marketplace / hosted billing
-- Vanilla `local_ui` Checks editor
-- Private `skillgate-ai` repo edits
+- Vanilla `local_ui` Settings/Checks editor
+- Private `skillgate-ai` repo edits in this PR
 
 ---
 
 ## 15. This PR
 
-Plan only: `docs/plans/custom-judge-checks.md`. Base `main` (0.5.0). Draft. No code, no version bump, no UI restyle.
+Plan only: `docs/plans/custom-judge-checks.md`. Incorporates the 2026-10-11 scope change (BYO provider + extras on top of built-ins). Base `main` (0.5.0). Draft. No code, no version bump, no UI restyle.
