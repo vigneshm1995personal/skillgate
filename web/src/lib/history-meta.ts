@@ -1,7 +1,7 @@
 import { customerScoredBy } from "@/lib/check-results"
 import { deployLabel } from "@/lib/dashboard-helpers"
 import {
-  friendlyModelName,
+  customerConfigLabel,
   harnessDisplayName,
   isLegacyRunCopy,
   OLDER_RUN_LABEL,
@@ -37,7 +37,9 @@ export function historyMeta(
     ? OLDER_RUN_LABEL
     : looksCustomerConfig(stamped)
       ? stamped
-      : customerHistoryConfig(rawConfig, item.harness)
+      : customerConfigLabel({ label: rawConfig, harness: item.harness }, item.harness) ||
+        customerScoredBy(rawConfig) ||
+        rawConfig
   const fingerprint = item.config_fingerprint || item.hash || ""
   return { skill, version, config, configRaw: rawConfig === "—" ? "" : rawConfig, fingerprint }
 }
@@ -48,25 +50,4 @@ function looksCustomerConfig(text: string): boolean {
     !/via gateway/i.test(text) &&
     !/openai\//i.test(text)
   )
-}
-
-function customerHistoryConfig(raw: string, harness?: string): string {
-  if (isLegacyRunCopy(raw, harness)) {
-    return OLDER_RUN_LABEL
-  }
-  const modelHit = raw.match(/gpt-[\w.-]+/i)
-  const model = modelHit ? friendlyModelName(modelHit[0]) : ""
-  const scored = /openai/i.test(raw)
-    ? "Scored by OpenAI"
-    : customerScoredBy(raw)
-  if (model && scored === "Scored by OpenAI") {
-    return `${model} · ${scored}`
-  }
-  if (model) {
-    return model
-  }
-  if (scored && scored !== raw) {
-    return scored
-  }
-  return raw
 }

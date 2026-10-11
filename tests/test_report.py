@@ -115,6 +115,14 @@ def test_happened_never_blank_on_pass() -> None:
     assert row["check_kind"] == "builtin"
 
 
+def test_happened_no_trigger_pass_is_plain() -> None:
+    task = _task(judge=None, passed=True)
+    task.expect_skill = None
+    task.selected_skill = None
+    payload = report_to_dict(_report(harness="llm", tasks=[task]))
+    assert payload["tasks"][0]["happened"] == "No skill was picked, as expected."
+
+
 def test_happened_uses_warning_on_pass() -> None:
     payload = report_to_dict(
         _report(

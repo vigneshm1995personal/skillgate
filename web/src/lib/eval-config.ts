@@ -13,6 +13,12 @@ export type EvalRunConfig = {
   applied?: Record<string, boolean>
   fingerprint?: string
   label?: string
+  judge?: {
+    provider?: string
+    display_name?: string
+    backend?: string
+    model?: string
+  } | null
 }
 
 export type ConfigDiffEntry = {
@@ -294,6 +300,52 @@ export function friendlyModelName(model?: string | null): string {
       return part.charAt(0).toUpperCase() + part.slice(1)
     })
     .join(" ")
+}
+
+function customerLabelFromRaw(raw: string, harness?: string | null): string {
+  if (isLegacyRunCopy(raw, harness)) {
+    return OLDER_RUN_LABEL
+  }
+  const modelHit = raw.match(/gpt-[\w.-]+/i)
+  const model = modelHit ? friendlyModelName(modelHit[0]) : ""
+  const scored = /openai/i.test(raw) ? "Scored by OpenAI" : ""
+  if (model && scored) {
+    return `${model} · ${scored}`
+  }
+  if (model) {
+    return model
+  }
+  return scored || raw
+}
+
+export function customerConfigLabel(
+  config?: EvalRunConfig | null,
+  harness?: string | null
+): string {
+  if (!config) {
+    return ""
+  }
+  const resolved = config.harness || harness
+  if (isLegacyRunCopy(config.label, resolved)) {
+    return OLDER_RUN_LABEL
+  }
+  const model = friendlyModelName(config.model)
+  const judge = config.judge
+  const fromJudge =
+    (judge?.provider || "").toLowerCase() === "openai" ||
+    /openai/i.test(judge?.display_name || "")
+  const fromLabel = /openai/i.test(config.label || "")
+  const scored = fromJudge || fromLabel ? "Scored by OpenAI" : ""
+  if (model && scored) {
+    return `${model} · ${scored}`
+  }
+  if (model) {
+    return model
+  }
+  if (config.label) {
+    return customerLabelFromRaw(config.label, resolved)
+  }
+  return scored
 }
 
 export function customerRanWith(config?: EvalRunConfig | null): string {

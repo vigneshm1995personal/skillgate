@@ -36,7 +36,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { api, ApiError } from "@/lib/api"
 import { useDashboard } from "@/lib/dashboard-provider"
 import { slotOn } from "@/lib/mode"
-import { configLabel, harnessDisplayName } from "@/lib/eval-config"
+import { customerConfigLabel, harnessDisplayName } from "@/lib/eval-config"
 import { skillDetailStatus } from "@/lib/skill-detail-state"
 import { isTryoutRun } from "@/lib/skill-run-state"
 import { absoluteTime, relativeTime } from "@/lib/time"
@@ -379,7 +379,10 @@ export function SkillDetailPage({ name }: { name: string }) {
                       <TableCell>
                         <div className="flex flex-col gap-1">
                           <span className="truncate">
-                            {configLabel(run.config) || run.harness || "—"}
+                            {customerConfigLabel(run.config, run.harness) ||
+                              run.config_label ||
+                              run.harness ||
+                              "—"}
                           </span>
                           {run.config_changed ? (
                             <Badge variant="warning">

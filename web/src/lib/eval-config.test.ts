@@ -4,6 +4,7 @@ import {
   MODEL_CUSTOM_VALUE,
   MODEL_DEFAULT_VALUE,
   configLabel,
+  customerConfigLabel,
   customerRanWith,
   friendlyModelName,
   stampRunConfig,
@@ -191,6 +192,24 @@ describe("configLabel", () => {
       applied: { via_gateway: true },
     })
     expect(customer).not.toMatch(/via gateway|openai\//)
+  })
+
+  it("shows GPT-4o mini · Scored by OpenAI on the skill Runs table", () => {
+    expect(
+      customerConfigLabel({
+        harness: "llm",
+        model: "openai/gpt-4o-mini",
+        timeout_effective: 300,
+        applied: { via_gateway: true },
+        label:
+          "LLM · openai/gpt-4o-mini via gateway · 300s · OpenAI Decisions via Vercel AI Gateway (your key)",
+        judge: {
+          provider: "openai",
+          display_name:
+            "OpenAI Decisions via Vercel AI Gateway (your key)",
+        },
+      })
+    ).toBe("GPT-4o mini · Scored by OpenAI")
   })
 
   it("prefers the stamped report config over an Auto request", () => {

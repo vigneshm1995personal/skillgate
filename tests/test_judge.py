@@ -207,6 +207,25 @@ def test_live_verdict_no_trigger_det_owns() -> None:
     assert stamped["passed"] is False
 
 
+def test_live_verdict_no_trigger_ignores_judge_error_and_missing_output() -> None:
+    judge = {
+        "status": "error",
+        "passed": False,
+        "reasons": ["OpenAI scoring returned an unusable answer."],
+        "warnings": [],
+    }
+    passed, failures, stamped = _live_verdict(
+        judge,
+        None,
+        det_passed=True,
+        det_failures=[],
+        mismatch=REASON_MISSING_OUTPUT,
+    )
+    assert passed is True
+    assert failures == []
+    assert stamped is not None
+
+
 def test_live_verdict_low_confidence_keeps_pass() -> None:
     judge = {
         "status": "completed",

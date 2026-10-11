@@ -851,4 +851,14 @@ describe("customer What happened titles", () => {
     expect(blob).not.toMatch(/skip catalog discovery/)
     expect(steps.some((step) => step.title === "Select skill")).toBe(true)
   })
+
+  it("does not show a raw router JSON line when no skill was picked", () => {
+    const steps = parseTranscriptSteps(
+      ['router: {"skill": null}', "selected: none"].join("\n")
+    )
+    const blob = JSON.stringify(steps)
+    expect(blob).not.toMatch(/router:/)
+    expect(blob).not.toMatch(/\{"skill":/)
+    expect(blob).toMatch(/No skill was picked, as expected/)
+  })
 })

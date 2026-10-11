@@ -459,10 +459,13 @@ class LLMHarness:
             router_text = router.text
             usage = router.usage or Usage()
             selected = _parse_skill_json(router_text, skills)
-            transcript = [f"router: {router_text}", f"selected: {selected or 'none'}"]
         else:
             selected = pre  # type: ignore[assignment]
-            transcript = [f"selected: {selected or 'none'}"]
+        transcript = (
+            [f"selected: {selected}"]
+            if selected
+            else ["No skill was picked, as expected"]
+        )
         stdout = ""
         stderr = ""
         returncode = 0

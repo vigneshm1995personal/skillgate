@@ -40,6 +40,18 @@ describe("happenedLine", () => {
     expect(happenedLine(passTask)).toBe("Output matched what was expected.")
   })
 
+  it("says no skill was picked on a passing no-trigger check", () => {
+    expect(
+      happenedLine({
+        id: "no-trigger-unrelated",
+        passed: true,
+        status: "done",
+        expect_skill: null,
+        selected_skill: null,
+      })
+    ).toBe("No skill was picked, as expected.")
+  })
+
   it("prefers a stamped happened line", () => {
     expect(happenedLine({ ...passTask, happened: "Custom pass line." })).toBe(
       "Custom pass line."
@@ -429,6 +441,33 @@ describe("openedCheckAnswers / low confidence", () => {
       "Not checked",
     ])
     expect(pathOpenedLine(neverRan)).toBe("Not checked")
+  })
+
+  it("says Correctly skipped on a passing no-trigger check", () => {
+    const skipped: TaskResult = {
+      id: "no-trigger-unrelated",
+      passed: true,
+      status: "done",
+      expect_skill: null,
+      selected_skill: null,
+      judge: {
+        status: "skip",
+        answers: {
+          task_completion: { choice: "Correctly skipped" },
+          correctness: { choice: "Correctly skipped" },
+          instruction_adherence: { choice: "Correctly skipped" },
+          evidence_action_validity: { choice: "Correctly skipped" },
+          result_quality: { choice: "Correctly skipped" },
+        },
+      },
+    }
+    expect(openedCheckAnswers(skipped).map((row) => row.answer)).toEqual([
+      "Correctly skipped",
+      "Correctly skipped",
+      "Correctly skipped",
+      "Correctly skipped",
+      "Correctly skipped",
+    ])
   })
 })
 

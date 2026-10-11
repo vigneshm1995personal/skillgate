@@ -330,7 +330,11 @@ def _task_happened(task: TaskReport) -> str:
     """Plain What happened line. Never blank."""
     if task.passed:
         warnings = _task_warnings(task)
-        return warnings[0] if warnings else "Output matched what was expected."
+        if warnings:
+            return warnings[0]
+        if task.expect_skill is None:
+            return "No skill was picked, as expected."
+        return "Output matched what was expected."
     return _task_fail_line(task)
 
 

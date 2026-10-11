@@ -723,7 +723,7 @@ def test_why_skipped_on_no_trigger_without_mismatch() -> None:
     assert post.calls[0]["url"].endswith("/v1/decisions")
 
 
-def test_why_fires_on_no_trigger_when_output_missing() -> None:
+def test_why_skipped_on_no_trigger_when_output_missing() -> None:
     post = FakePost(
         [
             FakeResponse(200, decisions_payload()),
@@ -733,14 +733,15 @@ def test_why_fires_on_no_trigger_when_output_missing() -> None:
     passed, failures, judged = _gated(
         _judge(post),
         expect_skill=None,
+        selected_skill=None,
         golden={"path": "out.json", "kind": "json", "output_path": "out.json"},
         actual_output={"path": "out.json", "present": False, "body": None},
     )
-    assert passed is False
-    assert judged["passed"] is True
-    assert REASON_MISSING_OUTPUT in failures
-    assert judged["why"] == "The expected file was missing."
-    assert len(post.calls) == 2
+    assert passed is True
+    assert failures == []
+    assert judged["why"] is None
+    assert len(post.calls) == 1
+    assert post.calls[0]["url"].endswith("/v1/decisions")
 
 
 def test_http_error_with_missing_output_names_both() -> None:

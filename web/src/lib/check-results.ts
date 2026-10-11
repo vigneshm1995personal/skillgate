@@ -202,6 +202,9 @@ export function happenedLine(task: TaskResult): string {
     if (stampedPass && !isGenericFail(stampedPass) && !isChecksDump(stampedPass)) {
       return scorerCodeToPlain(stampedPass, hint)
     }
+    if (task.expect_skill === null && !task.selected_skill) {
+      return "No skill was picked, as expected."
+    }
     return "Output matched what was expected."
   }
   const stamped = trimText(task.happened)

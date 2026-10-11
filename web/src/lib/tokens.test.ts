@@ -69,8 +69,20 @@ describe("design tokens", () => {
 
   it("gives placeholders and muted copy a dedicated AA color", () => {
     expect(css).toMatch(/--placeholder:/)
-    expect(root.get("placeholder")).toMatch(/oklch\(0\.[34]/)
+    expect(root.get("placeholder")).toMatch(/oklch\(0\.[23]/)
     expect(dark.get("placeholder")).toMatch(/oklch\(0\.[789]/)
+    const muted = parseOklch(root.get("muted-foreground") ?? "")
+    expect(muted?.l).toBeLessThanOrEqual(0.35)
+    expect(muted?.c).toBe(0)
+  })
+
+  it("does not use low-contrast 60% ink for inactive tabs", () => {
+    const tabs = readFileSync(
+      join(dir, "../components/ui/tabs.tsx"),
+      "utf8"
+    )
+    expect(tabs).not.toMatch(/text-foreground\/60/)
+    expect(tabs).toMatch(/text-muted-foreground/)
   })
 
   it("is white on near-black in light and black on white in dark", () => {

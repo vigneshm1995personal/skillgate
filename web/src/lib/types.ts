@@ -440,6 +440,8 @@ export type RunRecord = {
   task_count?: number
   current_task_id?: string | null
   config?: EvalRunConfig | null
+  config_label?: string
+  config_label_raw?: string
   config_fingerprint?: string | null
   model?: string | null
   timeout_sec?: number | null
