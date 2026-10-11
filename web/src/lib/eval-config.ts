@@ -302,24 +302,14 @@ export function friendlyModelName(model?: string | null): string {
     .join(" ")
 }
 
-function looksOpenAIScorer(text?: string | null): boolean {
-  return /\bopenai\b(?!\/)/i.test(text || "")
+export const JUDGE_SCORED = "Scored by the judge"
+
+export function isJudgeScorerCopy(text?: string | null): boolean {
+  return /\bopenai\b(?!\/)/i.test(text || "") || /scored by the judge/i.test(text || "")
 }
 
-function customerLabelFromRaw(raw: string, harness?: string | null): string {
-  if (isLegacyRunCopy(raw, harness)) {
-    return OLDER_RUN_LABEL
-  }
-  const modelHit = raw.match(/gpt-[\w.-]+/i)
-  const model = modelHit ? friendlyModelName(modelHit[0]) : ""
-  const scored = looksOpenAIScorer(raw) ? "Scored by OpenAI Decisions" : ""
-  if (model && scored) {
-    return `${model} · ${scored}`
-  }
-  if (model) {
-    return model
-  }
-  return scored || raw
+export function userPickedModel(config?: EvalRunConfig | null): boolean {
+  return Boolean(config?.applied?.model)
 }
 
 export function customerConfigLabel(
@@ -333,40 +323,41 @@ export function customerConfigLabel(
   if (isLegacyRunCopy(config.label, resolved)) {
     return OLDER_RUN_LABEL
   }
-  const model = friendlyModelName(config.model)
   const judge = config.judge
-  const fromJudge =
+  if (
     (judge?.provider || "").toLowerCase() === "openai" ||
-    looksOpenAIScorer(judge?.display_name)
-  const fromLabel = looksOpenAIScorer(config.label)
-  const scored = fromJudge || fromLabel ? "Scored by OpenAI Decisions" : ""
-  if (model && scored) {
-    return `${model} · ${scored}`
-  }
-  if (model) {
-    return model
-  }
-  if (config.label) {
-    return customerLabelFromRaw(config.label, resolved)
-  }
-  return scored
-}
-
-export function customerRanWith(config?: EvalRunConfig | null): string {
-  if (!config || isLegacyRunCopy(config.label, config.harness)) {
-    return ""
-  }
-  const model = friendlyModelName(config.model)
-  if (model) {
-    return `Ran with ${model}`
-  }
-  const resolved = (config.harness || config.harness_pref || "").trim()
-  const harness = harnessDisplayName(resolved, config.harness)
-  const cleaned = harness.replace(/^Auto · /, "").trim()
-  if (cleaned && cleaned !== "Auto") {
-    return `Ran with ${cleaned}`
+    isJudgeScorerCopy(judge?.display_name) ||
+    isJudgeScorerCopy(config.label)
+  ) {
+    return JUDGE_SCORED
   }
   return ""
+}
+
+export function customerRunDetails(config?: EvalRunConfig | null): string {
+  if (!config) {
+    return ""
+  }
+  if (isLegacyRunCopy(config.label, config.harness)) {
+    return OLDER_RUN_LABEL
+  }
+  const resolved = (config.harness || config.harness_pref || "").trim()
+  const parts: string[] = []
+  const harness = harnessDisplayName(resolved, config.harness)
+  if (harness) {
+    parts.push(harness)
+  }
+  if (userPickedModel(config)) {
+    const model = friendlyModelName(config.model)
+    if (model) {
+      parts.push(model)
+    }
+  }
+  const timeout = config.timeout_effective ?? config.timeout_sec
+  if (timeout) {
+    parts.push(`${timeout}s`)
+  }
+  return parts.join(" · ")
 }
 
 export function configLabel(config?: EvalRunConfig | null): string {

@@ -27,6 +27,10 @@ const CUSTOMER_DENY = [
   "Install still follows",
   "doesn't change Install",
   "OpenAI was unsure",
+  "Scored by OpenAI",
+  "OpenAI Decisions",
+  "via Vercel AI Gateway",
+  "gpt-6-luna",
   "Gate pre-selected skill",
   "skip catalog discovery",
 ] as const

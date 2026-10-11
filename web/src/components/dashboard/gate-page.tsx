@@ -34,11 +34,11 @@ import { api } from "@/lib/api"
 import { useDashboard } from "@/lib/dashboard-provider"
 import { slotOn } from "@/lib/mode"
 import {
-  configLabel,
-  customerRanWith,
+  customerRunDetails,
   friendlyModelName,
   harnessDisplayName,
   stampRunConfig,
+  userPickedModel,
 } from "@/lib/eval-config"
 import {
   customerGateCopy,
@@ -138,10 +138,11 @@ export function GatePage({ embedded = false }: { embedded?: boolean }) {
   const runConfig =
     stampRunConfig(scopedResult?.config, report?.config) || null
   const stampLine =
-    configLabel(runConfig) || (harnessName !== "—" ? harnessName : "")
-  const ranWith = customerRanWith(runConfig)
+    customerRunDetails(runConfig) || (harnessName !== "—" ? harnessName : "")
   const modelRaw = runConfig?.model || scopedResult?.model || ""
-  const modelValue = friendlyModelName(modelRaw) || modelRaw || "—"
+  const modelValue = userPickedModel(runConfig)
+    ? friendlyModelName(modelRaw) || modelRaw || "—"
+    : "—"
   const timeoutValue =
     runConfig?.timeout_effective ??
     runConfig?.timeout_sec ??
@@ -324,7 +325,6 @@ export function GatePage({ embedded = false }: { embedded?: boolean }) {
                         }
                         hint={customerGateCopy(scopedResult?.error?.hint || "")}
                         stampLine={stampLine}
-                        ranWith={ranWith}
                       />
                     ) : kind === "pass" || kind === "fail" ? (
                       <EvalPassFailPanel
@@ -361,7 +361,6 @@ export function GatePage({ embedded = false }: { embedded?: boolean }) {
                           ) : null
                         }
                         stampLine={stampLine}
-                        ranWith={ranWith}
                         stampMetrics={stampMetrics || null}
                         configDiff={configDiff}
                       />
@@ -405,7 +404,7 @@ export function GatePage({ embedded = false }: { embedded?: boolean }) {
               usage={report?.usage}
               metrics={report?.metrics}
               tasks={report?.tasks}
-              runLine={ranWith || harnessName}
+              runLine={harnessName}
             />
           ) : null}
         </div>

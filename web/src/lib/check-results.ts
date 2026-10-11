@@ -1,4 +1,4 @@
-import { isLegacyRunCopy, OLDER_RUN_LABEL } from "@/lib/eval-config"
+import { isJudgeScorerCopy, isLegacyRunCopy, JUDGE_SCORED, OLDER_RUN_LABEL } from "@/lib/eval-config"
 import { pathOpenedCaption } from "@/lib/metrics-label"
 import type { JudgeAnswer, JudgeResult, Report, TaskResult } from "@/lib/types"
 
@@ -270,11 +270,11 @@ export function customerScoredBy(line: string): string {
   if (isLegacyRunCopy(text)) {
     return OLDER_RUN_LABEL
   }
-  if (/openai/i.test(text) && /couldn['’]t score/i.test(text)) {
-    return text
+  if (/couldn['’]t score/i.test(text)) {
+    return text.replace(/^OpenAI couldn't score this run/i, "The judge couldn't score this run")
   }
-  if (/openai/i.test(text) || /via (?:vercel )?ai gateway/i.test(text)) {
-    return "Scored by OpenAI Decisions"
+  if (isJudgeScorerCopy(text) || /via (?:vercel )?ai gateway/i.test(text)) {
+    return JUDGE_SCORED
   }
   if (/checks scored/i.test(text)) {
     return "Scored by Checks"
@@ -285,7 +285,10 @@ export function customerScoredBy(line: string): string {
       .replace(/\s*\(your key\)/gi, "")
       .replace(/\s+via\s+.+$/i, "")
       .trim()
-    return name ? `Scored by ${name}` : text
+    if (!name || isJudgeScorerCopy(name)) {
+      return JUDGE_SCORED
+    }
+    return `Scored by ${name}`
   }
   return text
 }
@@ -295,7 +298,7 @@ export function scoredByFromJudge(judge: JudgeResult | null | undefined): string
     return ""
   }
   if (isOpenAIJudge(judge)) {
-    return "Scored by OpenAI Decisions"
+    return JUDGE_SCORED
   }
   const provider = trimText(judge.provider).toLowerCase()
   const model = trimText(judge.model).toLowerCase()
