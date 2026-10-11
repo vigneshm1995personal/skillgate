@@ -117,6 +117,7 @@ def test_sync_install_launchd_plist(monkeypatch: pytest.MonkeyPatch, tmp_path: P
 
     launch_dir = tmp_path / "LaunchAgents"
     monkeypatch.setattr(sync_mod, "launch_agents_dir", lambda: launch_dir)
+    monkeypatch.setattr(sync_mod.sys, "platform", "darwin")
     dest = install_launchd_plist(
         "https://github.com/acme/skills.git", targets=["cursor"], interval=60
     )
