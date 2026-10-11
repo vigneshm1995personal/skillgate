@@ -167,7 +167,7 @@ def test_check_answers_from_openai_cells() -> None:
                                 "choice": "Fully completed",
                             },
                             "path_efficiency": {
-                                "label": "Path",
+                                "label": "How it ran",
                                 "choice": None,
                                 "reason": "Not available. No recorded path.",
                             },
@@ -181,7 +181,7 @@ def test_check_answers_from_openai_cells() -> None:
     assert row["check_kind"] == "openai"
     answers = {item["label"]: item["answer"] for item in row["check_answers"]}
     assert answers["Got the job done?"] == "Fully completed"
-    assert answers["Path"] == "Not available"
+    assert answers["How it ran"] == "Not available"
 
 
 def test_check_answers_from_builtin_scores() -> None:

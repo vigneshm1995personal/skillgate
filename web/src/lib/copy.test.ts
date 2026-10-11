@@ -27,6 +27,8 @@ const CUSTOMER_DENY = [
   "Install still follows",
   "doesn't change Install",
   "OpenAI was unsure",
+  "Gate pre-selected skill",
+  "skip catalog discovery",
 ] as const
 
 const componentsRoot = join(dirname(fileURLToPath(import.meta.url)), "../components")

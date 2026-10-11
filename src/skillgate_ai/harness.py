@@ -199,8 +199,12 @@ class CursorAgentHarness:
                 ),
             )
         pinned = _read_selection(sandbox.workspace)
-        pinned_skill = None if pinned is _MISSING else pinned  # type: ignore[assignment]
-        agent_prompt = _cursor_prompt(prompt, skills, pinned_skill=pinned_skill)
+        if pinned is _MISSING:
+            agent_prompt = _cursor_discover_prompt(prompt, skills)
+        else:
+            agent_prompt = _cursor_prompt(
+                prompt, skills, pinned_skill=pinned  # type: ignore[arg-type]
+            )
         command = [
             binary,
             "-p",
@@ -373,8 +377,12 @@ class CodexCliHarness:
                 ),
             )
         pinned = _read_selection(sandbox.workspace)
-        pinned_skill = None if pinned is _MISSING else pinned  # type: ignore[assignment]
-        agent_prompt = _cursor_prompt(prompt, skills, pinned_skill=pinned_skill)
+        if pinned is _MISSING:
+            agent_prompt = _cursor_discover_prompt(prompt, skills)
+        else:
+            agent_prompt = _cursor_prompt(
+                prompt, skills, pinned_skill=pinned  # type: ignore[arg-type]
+            )
         command = _codex_exec_command(
             binary,
             sandbox.workspace,
@@ -454,10 +462,7 @@ class LLMHarness:
             transcript = [f"router: {router_text}", f"selected: {selected or 'none'}"]
         else:
             selected = pre  # type: ignore[assignment]
-            transcript = [
-                "Gate pre-selected skill (skip catalog discovery)",
-                f"selected: {selected or 'none'}",
-            ]
+            transcript = [f"selected: {selected or 'none'}"]
         stdout = ""
         stderr = ""
         returncode = 0
@@ -693,16 +698,31 @@ def _pinned_has_agent_entry(skills: list[Skill], pinned_skill: str) -> bool:
     return False
 
 
+def _cursor_discover_prompt(task: str, skills: list[Skill]) -> str:
+    """No-trigger / unpinned: the agent must choose from the catalog."""
+    catalog = "\n".join(f"- {s.name}: {s.description}" for s in skills)
+    return (
+        "You are running inside Skill Gate.\n"
+        "No skill is pre-selected. Read `.skillgate/catalog.md` if it exists, "
+        "or use the skill names and descriptions below, and pick at most one "
+        "skill for the user task. If none fits, complete the task without using "
+        "a skill and write {\"skill\": null} to `.skillgate/selected.json`.\n"
+        "If you pick a skill, write {\"skill\": \"<name>\"} to "
+        "`.skillgate/selected.json`, then read that skill's SKILL.md and follow it.\n\n"
+        f"Skills:\n{catalog}\n\nTask:\n{task}"
+    )
+
+
 def _cursor_prompt(
     task: str,
     skills: list[Skill],
     *,
     pinned_skill: str | None = None,
 ) -> str:
-    """Build the agent prompt. Gate always pre-selects; never catalog-discover.
+    """Build the agent prompt when Gate has already pinned a skill (or none).
 
-    ``pinned_skill`` is the Gate skill (or ``None`` for negative/no-skill checks).
-    ``.skillgate/selected.json`` is written by the engine before the harness runs.
+    ``pinned_skill`` is the Gate skill (or ``None`` for an explicit null pin).
+    Unpinned no-trigger checks use ``_cursor_discover_prompt`` instead.
     When pinned, the agent's first action must be a Read of that skill's SKILL.md.
     When that skill also ships ``scripts/agent_entry.py``, the second action must
     be a Shell that runs it — SKILL.md text alone is not enough to stop live

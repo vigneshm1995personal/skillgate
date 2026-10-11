@@ -309,7 +309,7 @@ function OpenedDetails({
       ) : null}
       {path ? (
         <div>
-          <p className="font-medium">Path</p>
+          <p className="font-medium">How it ran</p>
           <p className="text-muted-foreground">{path}</p>
         </div>
       ) : null}

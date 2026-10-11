@@ -25,6 +25,7 @@ type Segment = {
 
 function customerVisibleText(text: string): string {
   return text
+    .replace(/Gate pre-selected skill \(skip catalog discovery\)\s*/gi, "")
     .replace(/\bSKILLGATE_TASK(?:=[^\s]*)?/g, "the task")
     .replace(/\bevals\/(?:goldens|fixtures)\/([^\s]+)/g, "$1")
 }
@@ -95,15 +96,23 @@ function classify(
   const skill = skillFromPath(`${narration}\n${command ?? ""}`)
 
   // Only real selection acts — not closing summaries like "Selected the pdf skill and…"
+  const selectedLine = narration.match(/^\s*selected:\s*(\S+)/im)?.[1]
   const selectHit =
     blob.includes("selected.json") ||
     blob.includes("catalog.md") ||
+    blob.includes("pre-selected") ||
+    blob.includes("skip catalog") ||
+    Boolean(selectedLine) ||
     /\bskill selection\b/.test(blob) ||
     (/\$\s*(?:edit|write|changed)\b/.test(blob) && blob.includes("selected.json"))
   if (selectHit) {
+    const picked =
+      selectedLine && selectedLine.toLowerCase() !== "none"
+        ? selectedLine
+        : skill
     return {
       title: "Select skill",
-      subtitle: skill,
+      subtitle: picked,
     }
   }
   if (blob.includes("skill.md") || /read .*\.md/.test(blob)) {

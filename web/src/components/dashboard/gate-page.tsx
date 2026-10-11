@@ -719,7 +719,7 @@ function GateMetricsCard({
             {path.recorded ? (
             <Metric
               id="metric-path"
-              label="Path"
+              label="Steps"
               value={path.value}
               hint={path.hint || undefined}
             />

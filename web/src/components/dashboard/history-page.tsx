@@ -162,9 +162,17 @@ export function HistoryList() {
                 </TableCell>
                 <TableCell
                   className="text-muted-foreground"
-                  title={meta.fingerprint || undefined}
+                  title={meta.configRaw || meta.fingerprint || undefined}
                 >
                   <span className="tabular-nums">{meta.config}</span>
+                  {meta.configRaw && meta.configRaw !== meta.config ? (
+                    <details className="mt-0.5">
+                      <summary className="cursor-pointer text-xs">Details</summary>
+                      <p className="mt-1 text-xs break-words whitespace-normal">
+                        {meta.configRaw}
+                      </p>
+                    </details>
+                  ) : null}
                 </TableCell>
                 <TableCell>
                   <div className="flex items-center justify-end gap-2">

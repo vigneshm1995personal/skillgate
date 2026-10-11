@@ -11,6 +11,7 @@ import { canPinCheck, expectedFieldValue, isPinnedCheck } from "@/lib/case-pack"
 import { useDashboard } from "@/lib/dashboard-provider"
 import { checkHeadline, scorerCodeToPlain } from "@/lib/check-results"
 import { harnessDisplayName } from "@/lib/eval-config"
+import { checkUsageLine } from "@/lib/metrics-label"
 import { runForCheck } from "@/lib/skill-run-state"
 import {
   skillOutputPath,
@@ -323,7 +324,7 @@ function CheckMetrics({
         id={`check-metrics-${index}`}
         className="text-sm text-muted-foreground tabular-nums"
       >
-        {metricsLine(usage, metrics)}
+        {checkUsageLine(usage, metrics)}
         {deltas.length ? ` · ${deltas.join(" · ")}` : ""}
       </p>
       {over && reason ? (
@@ -353,55 +354,6 @@ function patchBudget(
     return null
   }
   return next
-}
-
-function metricsLine(usage?: Usage | null, metrics?: TaskMetrics | null) {
-  const tokenPart = tokenMetricsLabel(usage)
-  const steps = metrics?.path?.steps
-  const stepPart =
-    typeof steps === "number" && steps > 0 ? `${steps} steps` : "— steps"
-  return `${tokenPart} · ${stepPart}`
-}
-
-function tokenMetricsLabel(usage?: Usage | null) {
-  const total = formatTokens(usage?.tokens_total)
-  if (!total) {
-    return "Tokens —"
-  }
-  const parts = [
-    formatTokens(usage?.tokens_in) ? `${formatTokens(usage?.tokens_in)} in` : null,
-    formatTokens(usage?.tokens_out) ? `${formatTokens(usage?.tokens_out)} out` : null,
-    `${total} total`,
-    formatCost(usage?.cost_usd),
-  ].filter(Boolean)
-  return parts.join(" · ")
-}
-
-function trimZero(value: number) {
-  return value.toFixed(1).replace(/\.0$/, "")
-}
-
-function formatTokens(value?: number | null) {
-  if (value == null) {
-    return null
-  }
-  if (value < 1000) {
-    return String(value)
-  }
-  if (value < 1_000_000) {
-    return `${trimZero(value / 1000)}k`
-  }
-  return `${trimZero(value / 1_000_000)}M`
-}
-
-function formatCost(value?: number | null) {
-  if (value == null) {
-    return null
-  }
-  if (value > 0 && value < 0.01) {
-    return "<$0.01"
-  }
-  return `$${value.toFixed(2)}`
 }
 
 function baselineDeltaFragments(vs?: VsBaseline | null): string[] {

@@ -342,7 +342,7 @@ def _cell_answer(cell: dict) -> str:
     if reason.lower().startswith("not available"):
         return "Not available"
     label = str(cell.get("label") or "").strip()
-    if label.lower() == "path":
+    if label.lower() in {"path", "how it ran"}:
         return "Not available"
     return reason or "Not available"
 

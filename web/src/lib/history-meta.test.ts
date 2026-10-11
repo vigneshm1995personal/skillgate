@@ -23,6 +23,19 @@ describe("historyMeta", () => {
     ).toBe("Install to Cursor")
   })
 
+  it("shows a plain model · scorer line, not gateway plumbing", () => {
+    const meta = historyMeta({
+      kind: "run",
+      skill: "pdf",
+      harness: "llm",
+      config_label:
+        "LLM · openai/gpt-4o-mini via gateway · 300s · OpenAI Decisions via Vercel AI Gateway (your key)",
+    })
+    expect(meta.config).toBe("GPT-4o mini · Scored by OpenAI")
+    expect(meta.configRaw).toContain("openai/gpt-4o-mini")
+    expect(meta.configRaw).toContain("via gateway")
+  })
+
   it("renders leftover skip-judge rows as an older run", () => {
     expect(
       historyMeta({

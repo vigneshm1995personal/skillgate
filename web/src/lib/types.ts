@@ -466,6 +466,7 @@ export type TimelineItem = {
   status?: string
   gate?: string
   config_label?: string
+  config_label_raw?: string
   config_fingerprint?: string | null
   config_changed?: boolean
   is_baseline?: boolean

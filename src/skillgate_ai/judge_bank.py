@@ -26,7 +26,7 @@ CHECK_CELL_LABELS: dict[str, str] = {
 SOFT_CELL_ORDER: tuple[str, ...] = ("path_efficiency",)
 
 SOFT_CELL_LABELS: dict[str, str] = {
-    "path_efficiency": "Path",
+    "path_efficiency": "How it ran",
 }
 
 PATH_NOT_AVAILABLE = "Not available. No recorded path."

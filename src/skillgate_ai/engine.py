@@ -459,6 +459,40 @@ def _live_verdict(
     return passed, failures, stamped
 
 
+def _seed_skill_selection(workspace: Path, expect_skill: str | None) -> None:
+    """Pin a skill for trigger checks. Leave the catalog open for no-trigger."""
+    if expect_skill is None:
+        target = workspace / ".skillgate" / "selected.json"
+        if target.is_file():
+            target.unlink()
+        return
+    _write_selection(workspace, expect_skill)
+
+
+def _why_expected_output(
+    task: TaskSpec,
+    golden_payload: dict[str, Any] | None,
+    *,
+    skill_name: str | None = None,
+) -> Any:
+    """This check's own expectation for the Fail why-call. Never a sibling golden."""
+    if task.expect_skill is None:
+        if skill_name:
+            label = skill_name.upper() if len(skill_name) <= 4 else skill_name
+            return f"No {label} skill triggered"
+        return "No skill triggered"
+    if isinstance(golden_payload, dict):
+        return golden_payload
+    for spec in task.scorers:
+        for item in spec.files:
+            if item.contains:
+                return item.contains
+        for check in spec.checks:
+            if check.contains:
+                return check.contains
+    return None
+
+
 def _maybe_explain_fail(
     judge: Judge | None,
     passed: bool,
@@ -546,7 +580,7 @@ def _run_task(
                 copies.append((src, item.dest))
             staged = skills if task.expect_skill is not None else []
             prepare_workspace(sandbox.workspace, staged, copies)
-            _write_selection(sandbox.workspace, task.expect_skill)
+            _seed_skill_selection(sandbox.workspace, task.expect_skill)
             with span("eval.harness", harness.name):
                 try:
                     result: HarnessResult = harness.run(sandbox, task.prompt, skills, timeout)
@@ -609,7 +643,11 @@ def _run_task(
                     judged,
                     check=task.prompt,
                     transcript_tail=result.transcript,
-                    expected_output=golden_payload,
+                    expected_output=_why_expected_output(
+                        task,
+                        golden_payload,
+                        skill_name=skills[0].name if skills else None,
+                    ),
                     actual_output=actual_payload,
                 )
             else:

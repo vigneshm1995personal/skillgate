@@ -46,8 +46,17 @@ describe("design tokens", () => {
       "utf8"
     )
     expect(button).not.toMatch(/disabled:opacity-50/)
-    expect(button).toMatch(/disabled:text-foreground\/90/)
-    expect(button).toMatch(/disabled:bg-foreground\/20/)
+    expect(button).toMatch(/disabled:text-foreground/)
+    expect(button).not.toMatch(/disabled:text-foreground\/90/)
+    expect(button).not.toMatch(/disabled:bg-foreground\/20/)
     expect(button).toMatch(/ghost:[\s\S]*disabled:bg-transparent/)
+  })
+
+  it("does not wash sidebar skill-card copy with low-contrast /70", () => {
+    const sidebar = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), "../components/dashboard/app-sidebar.tsx"),
+      "utf8"
+    )
+    expect(sidebar).not.toMatch(/sidebar-foreground\/70/)
   })
 })

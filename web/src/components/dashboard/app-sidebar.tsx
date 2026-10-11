@@ -72,7 +72,7 @@ export function AppSidebar({
           <p className="truncate font-display text-[1.05rem] font-medium tracking-tight">
             Skill Gate
           </p>
-          <p className="truncate text-[11px] tracking-[0.08em] text-sidebar-foreground/70 uppercase">
+          <p className="truncate text-[11px] tracking-[0.08em] text-sidebar-accent-foreground uppercase">
             Eval · Gate · Deploy
           </p>
         </div>
@@ -153,7 +153,7 @@ export function AppSidebar({
         {skill ? (
           <div className="rounded-sm border border-sidebar-border bg-sidebar-accent/60 p-3">
             <p className="text-sm font-medium">{skill.name}</p>
-            <p className="mt-1 text-xs text-sidebar-foreground/70">
+            <p className="mt-1 text-xs text-sidebar-accent-foreground">
               {gateRunning || liveGateResult?.status === "running"
                 ? `Evaluating — ${liveGateResult?.completed_count ?? 0}/${liveGateResult?.task_count ?? liveGateResult?.report?.task_count ?? "?"} done`
                 : "Deploy follows this skill’s last gate."}

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from dataclasses import dataclass, field, replace
 from typing import Any
 
@@ -332,14 +333,55 @@ def is_legacy_run_config(
     return "checker" in blob or provider.lower() == "skip"
 
 
+def friendly_model_name(model: str | None) -> str:
+    raw = (model or "").strip()
+    if not raw:
+        return ""
+    slug = raw.rsplit("/", 1)[-1]
+    match = re.match(r"^gpt-(.+)$", slug, flags=re.IGNORECASE)
+    if match:
+        ver, *tail = match.group(1).split("-")
+        extras: list[str] = []
+        for part in tail:
+            lower = part.lower()
+            extras.append(lower if lower in {"mini", "nano", "preview"} else part)
+        return " ".join([f"GPT-{ver}", *extras]).strip()
+    parts = re.split(r"[-_]", slug)
+    titled: list[str] = []
+    for part in parts:
+        if not part:
+            continue
+        if re.fullmatch(r"\d+(\.\d+)*", part):
+            titled.append(part)
+        else:
+            titled.append(part[:1].upper() + part[1:])
+    return " ".join(titled)
+
+
 def customer_config_label(
     run: EvalRunConfig | dict[str, Any] | None, harness: str | None = None
 ) -> str:
     if is_legacy_run_config(run, harness):
         return OLDER_RUN_LABEL
-    if run is None and harness:
+    cfg = coerce_eval_config(run)
+    if cfg is None and harness:
         return harness_display_name(harness)
-    return config_label(run)
+    if cfg is None:
+        return ""
+    parts: list[str] = []
+    model = friendly_model_name(cfg.model)
+    if model:
+        parts.append(model)
+    judge = cfg.judge or {}
+    display = str(judge.get("display_name") or "")
+    provider = str(judge.get("provider") or "")
+    if provider.lower() == "openai" or "openai" in display.lower():
+        parts.append("Scored by OpenAI")
+    if parts:
+        return " · ".join(parts)
+    if harness:
+        return harness_display_name(harness)
+    return config_label(cfg)
 
 
 def config_label(run: EvalRunConfig | dict[str, Any] | None) -> str:

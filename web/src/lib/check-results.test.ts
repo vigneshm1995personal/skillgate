@@ -239,7 +239,7 @@ describe("pathOpenedLine", () => {
           soft_answers: { path_efficiency: { choice: "Efficient" } },
         },
       })
-    ).toBe("Efficient")
+    ).toBe("Direct")
   })
 
   it("omits Path when there is no ordinal and no steps — never Not available", () => {
