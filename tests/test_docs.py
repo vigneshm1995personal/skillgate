@@ -44,21 +44,21 @@ def test_readme_points_at_docs() -> None:
 def test_release_yml_example_tag_is_current() -> None:
     text = RELEASE.read_text(encoding="utf-8")
     assert "v0.3.0" not in text
-    assert "v0.4.2" in text or "v0.5.0" in text
+    assert "v0.4.2" in text or "v0.5.0" in text or "v0.5.1" in text
 
 
-def test_package_and_docs_pin_050() -> None:
+def test_package_and_docs_pin_051() -> None:
     pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
     init = (ROOT / "src" / "skillgate_ai" / "__init__.py").read_text(encoding="utf-8")
     readme = README.read_text(encoding="utf-8")
     quickstart = QUICKSTART.read_text(encoding="utf-8")
     judge = (ROOT / "docs" / "openai-judge.md").read_text(encoding="utf-8")
-    assert 'version = "0.5.0"' in pyproject
-    assert '__version__ = "0.5.0"' in init
-    assert "skillgate-ai==0.5.0" in readme
-    assert "skillgate-ai==0.5.0" in quickstart
-    assert "skillgate-ai==0.5.0" in judge
-    assert "0.5.0" in readme
+    assert 'version = "0.5.1"' in pyproject
+    assert '__version__ = "0.5.1"' in init
+    assert "skillgate-ai==0.5.1" in readme
+    assert "skillgate-ai==0.5.1" in quickstart
+    assert "skillgate-ai==0.5.1" in judge
+    assert "0.5.1" in readme
     assert "# 10-minute" in quickstart
 
 

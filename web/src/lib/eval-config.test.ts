@@ -5,7 +5,7 @@ import {
   MODEL_DEFAULT_VALUE,
   configLabel,
   customerConfigLabel,
-  customerRanWith,
+  customerRunDetails,
   friendlyModelName,
   stampRunConfig,
   emptyCatalogHint,
@@ -174,27 +174,18 @@ describe("configLabel", () => {
     ).toBe("LLM · openai/gpt-4o-mini via gateway")
   })
 
-  it("shows Ran with a friendly model name, not gateway plumbing", () => {
-    expect(
-      customerRanWith({
-        harness: "llm",
-        harness_pref: "auto",
-        model: "openai/gpt-4o-mini",
-        applied: { via_gateway: true },
-        label: "LLM · openai/gpt-4o-mini via gateway",
-      })
-    ).toBe("Ran with GPT-4o mini")
+  it("hides the default task model unless the user picked it", () => {
     expect(friendlyModelName("openai/gpt-4o-mini")).toBe("GPT-4o mini")
     expect(friendlyModelName("gpt-4o-mini")).toBe("GPT-4o mini")
-    const customer = customerRanWith({
-      harness: "llm",
-      model: "openai/gpt-4o-mini",
-      applied: { via_gateway: true },
-    })
-    expect(customer).not.toMatch(/via gateway|openai\//)
+    expect(
+      customerConfigLabel({
+        label: "Scored by the judge",
+        harness: "llm",
+      })
+    ).toBe("Scored by the judge")
   })
 
-  it("shows GPT-4o mini · Scored by OpenAI Decisions on the skill Runs table", () => {
+  it("shows Scored by the judge on History and skill Runs, not the provider", () => {
     expect(
       customerConfigLabel({
         harness: "llm",
@@ -209,17 +200,45 @@ describe("configLabel", () => {
             "OpenAI Decisions via Vercel AI Gateway (your key)",
         },
       })
-    ).toBe("GPT-4o mini · Scored by OpenAI Decisions")
+    ).toBe("Scored by the judge")
     expect(
       customerConfigLabel({
         harness: "llm",
         model: "gpt-4o-mini",
+        applied: { model: true },
         judge: {
           provider: "openai",
           display_name: "OpenAI (your key)",
         },
       })
-    ).toBe("GPT-4o mini · Scored by OpenAI Decisions")
+    ).toBe("Scored by the judge")
+  })
+
+  it("puts a user-picked model in Run details only", () => {
+    expect(
+      customerRunDetails({
+        harness: "llm",
+        model: "openai/gpt-4o-mini",
+        timeout_effective: 300,
+        applied: { via_gateway: true },
+        judge: {
+          provider: "openai",
+          display_name: "OpenAI Decisions via Vercel AI Gateway (your key)",
+        },
+      })
+    ).toBe("LLM · 300s")
+    expect(
+      customerRunDetails({
+        harness: "llm",
+        model: "gpt-4.1",
+        timeout_effective: 300,
+        applied: { model: true },
+        judge: {
+          provider: "openai",
+          display_name: "OpenAI (your key)",
+        },
+      })
+    ).toBe("LLM · GPT-4.1 · 300s")
   })
 
   it("does not treat an openai/ model id as the scorer", () => {
@@ -231,7 +250,7 @@ describe("configLabel", () => {
         label: "LLM · openai/gpt-4o-mini via gateway · 300s",
         judge: { provider: "skip", display_name: "Checks" },
       })
-    ).toBe("GPT-4o mini")
+    ).toBe("")
   })
 
   it("prefers the stamped report config over an Auto request", () => {

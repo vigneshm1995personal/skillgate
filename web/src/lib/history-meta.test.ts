@@ -23,7 +23,7 @@ describe("historyMeta", () => {
     ).toBe("Install to Cursor")
   })
 
-  it("shows a plain model · scorer line, not gateway plumbing", () => {
+  it("shows Scored by the judge, not gateway plumbing or the task model", () => {
     const meta = historyMeta({
       kind: "run",
       skill: "pdf",
@@ -31,9 +31,25 @@ describe("historyMeta", () => {
       config_label:
         "LLM · openai/gpt-4o-mini via gateway · 300s · OpenAI Decisions via Vercel AI Gateway (your key)",
     })
-    expect(meta.config).toBe("GPT-4o mini · Scored by OpenAI Decisions")
+    expect(meta.config).toBe("Scored by the judge")
+    expect(meta.config).not.toMatch(/GPT-4o|OpenAI|Vercel|gpt-6-luna/)
     expect(meta.configRaw).toContain("openai/gpt-4o-mini")
     expect(meta.configRaw).toContain("via gateway")
+    expect(
+      historyMeta({
+        kind: "run",
+        skill: "pdf",
+        harness: "llm",
+        config_label: "GPT-4o mini · Scored by OpenAI Decisions",
+      }).config
+    ).toBe("Scored by the judge")
+    const skipped = historyMeta({
+      kind: "run",
+      skill: "pdf",
+      harness: "llm",
+      config_label: "LLM · openai/gpt-4o-mini via gateway · 300s",
+    })
+    expect(skipped.config).not.toMatch(/via gateway|openai\/|GPT-4o/)
   })
 
   it("renders leftover skip-judge rows as an older run", () => {

@@ -118,12 +118,10 @@ export function EvalErrorPanel({
   message,
   hint,
   stampLine,
-  ranWith,
 }: {
   message: string
   hint?: string | null
   stampLine: string
-  ranWith?: string
 }) {
   const { setStage } = useDashboard()
   const showSettings = /settings/i.test(`${message} ${hint || ""}`)
@@ -145,11 +143,6 @@ export function EvalErrorPanel({
             </Button>
           </p>
         ) : null}
-        {ranWith ? (
-          <p className="mt-2" id="run-config">
-            {ranWith}
-          </p>
-        ) : null}
         <RunDetails stampLine={stampLine} />
         <p className="mt-2">Get a passing run to unlock Deploy.</p>
       </AlertDescription>
@@ -169,7 +162,6 @@ export function EvalPassFailPanel({
   errorNote,
   baseline,
   stampLine,
-  ranWith,
   stampMetrics,
   configDiff,
 }: {
@@ -184,7 +176,6 @@ export function EvalPassFailPanel({
   errorNote?: string | null
   baseline: ReactNode
   stampLine: string
-  ranWith?: string
   stampMetrics: string | null
   configDiff: ConfigDiffEntry[]
 }) {
@@ -207,11 +198,6 @@ export function EvalPassFailPanel({
         </p>
         {scoredBy ? (
           <p className="text-sm text-muted-foreground">{scoredBy}</p>
-        ) : null}
-        {ranWith ? (
-          <p className="text-sm text-muted-foreground" id="run-config">
-            {ranWith}
-          </p>
         ) : null}
         <GateBadge {...stampBadgeProps(kind)} />
       </div>
@@ -258,7 +244,7 @@ function RunDetails({
         </AccordionTrigger>
         <AccordionContent>
           {stampLine ? (
-            <p className="text-sm" id="run-config-details">
+            <p className="text-sm" id="run-config">
               {stampLine}
             </p>
           ) : null}

@@ -50,12 +50,14 @@ def test_scored_by_openai_error_not_claimed_as_scored() -> None:
         ],
     )
     line = scored_by_line(report)
-    assert line.startswith("OpenAI couldn't score this run.")
+    assert line.startswith("The judge couldn't score this run.")
     assert "out of credits" in line
     assert "scored this run" not in line
+    assert "OpenAI couldn't" not in line
     text = format_cli(report)
     assert "OpenAI (your key) scored this run." not in text
-    assert "couldn't score this run" in text
+    assert "OpenAI couldn't score this run." not in text
+    assert "The judge couldn't score this run." in text
 
 
 def test_scored_by_skip_on_live_does_not_deny_live_model() -> None:
@@ -105,10 +107,12 @@ def test_scored_by_openai_with_answers() -> None:
             )
         ],
     )
-    assert scored_by_line(report) == "Scored by OpenAI Decisions"
+    assert scored_by_line(report) == "Scored by the judge"
     text = format_cli(report)
-    assert "Scored by OpenAI Decisions" in text
-    assert "OpenAI (your key) scored this run." not in text
+    assert "Scored by the judge" in text
+    assert "Scored by OpenAI" not in text
+    assert "OpenAI (your key)" not in text
+    assert "OpenAI Decisions" not in text
     gateway = _report(
         harness="llm",
         config={
@@ -128,9 +132,13 @@ def test_scored_by_openai_with_answers() -> None:
             )
         ],
     )
-    assert scored_by_line(gateway) == "Scored by OpenAI Decisions"
-    assert "Scored by OpenAI Decisions" in format_cli(gateway)
+    assert scored_by_line(gateway) == "Scored by the judge"
+    cli = format_cli(gateway)
+    assert "Scored by the judge" in cli
     assert "via Vercel" not in scored_by_line(gateway)
+    assert "via Vercel" not in cli
+    assert "OpenAI Decisions" not in cli
+    assert "gpt-6-luna" not in cli
 
 
 def test_happened_never_blank_on_pass() -> None:

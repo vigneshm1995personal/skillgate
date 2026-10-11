@@ -238,7 +238,7 @@ def stamp_resolved(run: EvalRunConfig, harness_name: str, cfg: LLMConfig) -> Eva
         effort = None
     else:
         effort = None
-    applied = applied_knobs(name, model=model)
+    applied = applied_knobs(name, model=run.model)
     if name == "llm":
         applied = {
             **applied,
@@ -358,30 +358,61 @@ def friendly_model_name(model: str | None) -> str:
     return " ".join(titled)
 
 
+_OPENAI_SCORER = re.compile(r"\bopenai\b(?!/)", re.IGNORECASE)
+
+
+def is_openai_scorer_text(*parts: str) -> bool:
+    blob = " ".join(parts)
+    return bool(_OPENAI_SCORER.search(blob)) or "scored by the judge" in blob.lower()
+
+
+def _is_openai_scorer(cfg: EvalRunConfig, extra: str = "") -> bool:
+    judge = cfg.judge or {}
+    display = str(judge.get("display_name") or "")
+    provider = str(judge.get("provider") or "")
+    if provider.lower() == "openai":
+        return True
+    return is_openai_scorer_text(display, extra)
+
+
 def customer_config_label(
     run: EvalRunConfig | dict[str, Any] | None, harness: str | None = None
 ) -> str:
     if is_legacy_run_config(run, harness):
         return OLDER_RUN_LABEL
+    raw_label = str(run.get("label") or "") if isinstance(run, dict) else ""
     cfg = coerce_eval_config(run)
     if cfg is None and harness:
         return harness_display_name(harness)
     if cfg is None:
         return ""
-    parts: list[str] = []
-    model = friendly_model_name(cfg.model)
-    if model:
-        parts.append(model)
-    judge = cfg.judge or {}
-    display = str(judge.get("display_name") or "")
-    provider = str(judge.get("provider") or "")
-    if provider.lower() == "openai" or "openai" in display.lower():
-        parts.append("Scored by OpenAI Decisions")
-    if parts:
-        return " · ".join(parts)
+    if _is_openai_scorer(cfg, raw_label):
+        return "Scored by the judge"
     if harness:
         return harness_display_name(harness)
-    return config_label(cfg)
+    return ""
+
+
+def customer_run_details(
+    run: EvalRunConfig | dict[str, Any] | None, harness: str | None = None
+) -> str:
+    if is_legacy_run_config(run, harness):
+        return OLDER_RUN_LABEL
+    cfg = coerce_eval_config(run)
+    if cfg is None:
+        return harness_display_name(harness) if harness else ""
+    parts: list[str] = []
+    name = harness_display_name(cfg.harness or harness, cfg.harness)
+    if name:
+        parts.append(name)
+    if (cfg.applied or {}).get("model"):
+        model = friendly_model_name(cfg.model)
+        if model:
+            parts.append(model)
+    timeout = cfg.timeout_effective if cfg.timeout_effective is not None else cfg.timeout_sec
+    if timeout:
+        parts.append(f"{timeout}s")
+    return " · ".join(parts)
 
 
 def config_label(run: EvalRunConfig | dict[str, Any] | None) -> str:

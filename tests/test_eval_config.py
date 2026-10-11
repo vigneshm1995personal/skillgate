@@ -12,6 +12,7 @@ from skillgate_ai.eval_config import (
     config_fingerprint,
     config_label,
     customer_config_label,
+    customer_run_details,
     diff_eval_config,
     harness_display_name,
     parse_temperature,
@@ -329,7 +330,29 @@ def test_config_label_names_openai_scorer_not_model_id() -> None:
     assert "gpt-6-luna" not in label
 
 
-def test_customer_config_label_is_plain_model_and_scorer() -> None:
+def test_stamp_resolved_default_llm_model_is_not_user_picked() -> None:
+    cfg = _llm_config(gateway_api_key="gw-test")
+    defaulted = stamp_resolved(
+        resolve_eval_config(harness_pref="auto", incoming={}, cfg=cfg, source="ui"),
+        "llm",
+        cfg,
+    )
+    assert defaulted.model == "openai/gpt-4o-mini"
+    assert defaulted.applied["model"] is False
+    picked = stamp_resolved(
+        resolve_eval_config(
+            harness_pref="llm",
+            incoming={"model": "openai/gpt-4o-mini"},
+            cfg=cfg,
+            source="ui",
+        ),
+        "llm",
+        cfg,
+    )
+    assert picked.applied["model"] is True
+
+
+def test_customer_config_label_is_neutral_judge_copy() -> None:
     run = EvalRunConfig(
         harness="llm",
         model="openai/gpt-4o-mini",
@@ -345,15 +368,21 @@ def test_customer_config_label_is_plain_model_and_scorer() -> None:
     raw = config_label(run)
     assert "openai/gpt-4o-mini" in raw
     assert "via gateway" in raw
+    assert "OpenAI Decisions via Vercel AI Gateway (your key)" in raw
     customer = customer_config_label(run)
-    assert customer == "GPT-4o mini · Scored by OpenAI Decisions"
+    assert customer == "Scored by the judge"
+    assert "GPT-4o" not in customer
     assert "via gateway" not in customer
     assert "openai/" not in customer
     assert "300s" not in customer
+    assert "OpenAI" not in customer
+    assert "Vercel" not in customer
+    assert "gpt-6-luna" not in customer
     direct = customer_config_label(
         EvalRunConfig(
             harness="llm",
             model="gpt-4o-mini",
+            applied={"model": True},
             judge={
                 "provider": "openai",
                 "backend": "decisions",
@@ -362,7 +391,28 @@ def test_customer_config_label_is_plain_model_and_scorer() -> None:
             },
         )
     )
-    assert direct == "GPT-4o mini · Scored by OpenAI Decisions"
+    assert direct == "Scored by the judge"
+    details = customer_run_details(
+        EvalRunConfig(
+            harness="llm",
+            model="gpt-4.1",
+            timeout_effective=300,
+            applied={"model": True},
+            judge={
+                "provider": "openai",
+                "display_name": "OpenAI (your key)",
+                "model": "gpt-6-luna",
+            },
+        )
+    )
+    assert "GPT-4.1" in details
+    assert "OpenAI" not in details
+    assert "via gateway" not in details
+    assert "gpt-6-luna" not in details
+    hidden = customer_run_details(run)
+    assert "GPT-4o" not in hidden
+    assert "openai/" not in hidden
+    assert "OpenAI" not in hidden
 
 
 def test_from_dict_drops_judge_api_key() -> None:

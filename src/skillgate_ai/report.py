@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from skillgate_ai.eval_config import config_label
 from skillgate_ai.engine import EvalProgress, SuiteReport, TaskProgress, TaskReport
+from skillgate_ai.eval_config import customer_run_details, is_openai_scorer_text
 from skillgate_ai.harness import is_live_harness
 from skillgate_ai.metrics import suite_metrics_summary
 
@@ -17,7 +17,7 @@ def format_cli(report: SuiteReport) -> str:
     who = scored_by_line(report)
     if who:
         lines.append(who)
-    label = config_label(report.config)
+    label = customer_run_details(report.config)
     if label:
         lines.append(f"config  {label}")
     lines.append("")
@@ -56,7 +56,7 @@ def format_github(report: SuiteReport) -> str:
         f"**{report.title}** — skill `{report.skill}` · "
         f"{report.passed_count}/{len(report.tasks)} tasks passed",
     ]
-    label = config_label(report.config)
+    label = customer_run_details(report.config)
     if label:
         lines += ["", f"Config: `{label}`"]
     who = scored_by_line(report)
@@ -294,10 +294,10 @@ def scored_by_line(report: SuiteReport) -> str:
         if status == "skip" or provider == "skip":
             saw_skip = True
     if openai_scored:
-        return "Scored by OpenAI Decisions"
+        return "Scored by the judge"
     if openai_failed:
-        extra = openai_reason or "OpenAI scoring failed."
-        return f"OpenAI couldn't score this run. {extra}"
+        extra = openai_reason or "Scoring failed."
+        return f"The judge couldn't score this run. {extra}"
     stamp = _judge_stamp(report)
     skip = (
         saw_skip
@@ -311,6 +311,8 @@ def scored_by_line(report: SuiteReport) -> str:
         return "Checks scored this run."
     name = str(stamp.get("display_name") or "").strip()
     if name:
+        if is_openai_scorer_text(name):
+            return "Scored by the judge"
         return f"{name} scored this run."
     return ""
 

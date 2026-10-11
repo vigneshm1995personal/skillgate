@@ -1,4 +1,3 @@
-import { customerScoredBy } from "@/lib/check-results"
 import { deployLabel } from "@/lib/dashboard-helpers"
 import {
   customerConfigLabel,
@@ -35,19 +34,9 @@ export function historyMeta(
   const rawConfig = item.config_label_raw || stamped
   const config = isLegacyRunCopy(stamped, item.harness)
     ? OLDER_RUN_LABEL
-    : looksCustomerConfig(stamped)
-      ? stamped
-      : customerConfigLabel({ label: rawConfig, harness: item.harness }, item.harness) ||
-        customerScoredBy(rawConfig) ||
-        rawConfig
+    : customerConfigLabel({ label: rawConfig, harness: item.harness }, item.harness) ||
+      harnessDisplayName(item.harness || "") ||
+      "—"
   const fingerprint = item.config_fingerprint || item.hash || ""
   return { skill, version, config, configRaw: rawConfig === "—" ? "" : rawConfig, fingerprint }
-}
-
-function looksCustomerConfig(text: string): boolean {
-  return (
-    /scored by /i.test(text) &&
-    !/via gateway/i.test(text) &&
-    !/openai\//i.test(text)
-  )
 }

@@ -171,7 +171,25 @@ describe("scoredByLine", () => {
         task_count: 1,
         tasks: [passTask],
       })
-    ).toBe("Scored by OpenAI Decisions")
+    ).toBe("Scored by the judge")
+    expect(
+      scoredByLine({
+        scored_by: "Scored by OpenAI Decisions",
+        skill: "pdf",
+        passed_count: 1,
+        task_count: 1,
+        tasks: [passTask],
+      })
+    ).toBe("Scored by the judge")
+    expect(
+      scoredByLine({
+        scored_by: "OpenAI couldn't score this run. Your OpenAI account is out of credits.",
+        skill: "pdf",
+        passed_count: 0,
+        task_count: 1,
+        tasks: [passTask],
+      })
+    ).toMatch(/^The judge couldn't score this run\./)
   })
 
   it("hides leftover skip-judge copy from older JSONL rows", () => {
@@ -205,7 +223,7 @@ describe("scoredByLine", () => {
         status: "completed",
         answers: passTask.judge?.answers,
       })
-    ).toBe("Scored by OpenAI Decisions")
+    ).toBe("Scored by the judge")
     expect(
       scoredByFromJudge({
         provider: "openai",
@@ -215,7 +233,7 @@ describe("scoredByLine", () => {
         status: "completed",
         answers: passTask.judge?.answers,
       })
-    ).toBe("Scored by OpenAI Decisions")
+    ).toBe("Scored by the judge")
   })
 
   it("does not show gateway plumbing or raw model ids", () => {
@@ -227,8 +245,8 @@ describe("scoredByLine", () => {
       status: "completed",
       answers: passTask.judge?.answers,
     })
-    expect(line).toBe("Scored by OpenAI Decisions")
-    expect(line).not.toMatch(/gateway|openai\/|your key/i)
+    expect(line).toBe("Scored by the judge")
+    expect(line).not.toMatch(/gateway|openai\/|your key|OpenAI|Vercel|gpt-6-luna/i)
     expect(
       scoredByLine({
         scored_by: "The skill ran live. Checks scored this run.",

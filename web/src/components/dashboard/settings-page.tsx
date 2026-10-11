@@ -56,7 +56,7 @@ const KEY_ROWS: Array<{
   {
     name: "AI_GATEWAY_API_KEY",
     label: "OpenAI-compatible",
-    hint: "Runs live checks. Also scores them through the same OpenAI scoring API.",
+    hint: "Runs live checks. Also scores them.",
     slug: "gateway",
   },
   {
