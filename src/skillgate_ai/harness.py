@@ -26,7 +26,7 @@ from skillgate_ai.errors import (
     harness_http_error,
 )
 from skillgate_ai.harness_llm_run import command_allowed, llm_run_spans, parse_run_lines
-from skillgate_ai.ingest import Skill
+from skillgate_ai.ingest import Skill, canonical_skill_name
 from skillgate_ai.sandbox import Sandbox
 from skillgate_ai.scorers import TriggerEvidence
 from skillgate_ai.spans import spans_from_jsonl
@@ -460,7 +460,7 @@ class LLMHarness:
             usage = router.usage or Usage()
             selected = _parse_skill_json(router_text, skills)
         else:
-            selected = pre  # type: ignore[assignment]
+            selected = canonical_skill_name(pre, skills)
         transcript = (
             [f"selected: {selected}"]
             if selected
@@ -472,7 +472,8 @@ class LLMHarness:
         read_paths: list[str] = []
         ran: list[tuple[list[str], int]] = []
         if selected:
-            skill = next(s for s in skills if s.name == selected)
+            skill = _skill_for_selection(selected, skills)
+            selected = skill.name
             read_paths.append(f".skillgate/skills/{selected}/SKILL.md")
             body = skill.body[:8000]
             scripts = list(
@@ -808,7 +809,7 @@ def _parse_selected(workspace: Path, transcript: str, skills: list[Skill]) -> st
     if selected_path.is_file():
         try:
             data = json.loads(selected_path.read_text(encoding="utf-8"))
-            return _canonical_skill(data.get("skill"), skills)
+            return canonical_skill_name(data.get("skill"), skills)
         except json.JSONDecodeError:
             pass
     return _parse_skill_json(transcript, skills)
@@ -822,19 +823,18 @@ def _parse_skill_json(text: str, skills: list[Skill]) -> str | None:
         data = json.loads(match.group(0))
     except json.JSONDecodeError:
         return None
-    return _canonical_skill(data.get("skill"), skills)
+    return canonical_skill_name(data.get("skill"), skills)
 
 
-def _canonical_skill(value: object, skills: list[Skill]) -> str | None:
-    if value is None:
-        return None
-    name = str(value).strip()
-    if name.lower() in {"", "none", "null"}:
-        return None
+def _skill_for_selection(selected: str, skills: list[Skill]) -> Skill:
+    name = canonical_skill_name(selected, skills) or selected
     for skill in skills:
         if skill.name == name:
-            return skill.name
-    return name
+            return skill
+    raise HarnessError(
+        f"Couldn't find skill {selected}.",
+        hint="The folder name can be `pack` when the skill name differs.",
+    )
 
 
 def _parse_read_paths(transcript: str) -> list[str]:

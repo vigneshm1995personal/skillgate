@@ -59,6 +59,9 @@ def test_chosen_provider_is_named() -> None:
     assert customer_scorer_name({"provider": "jev"}) == "Jev"
     assert customer_scorer_name({"provider": "aws", "chosen": "true"}) == "AWS"
     assert customer_scorer_name({"provider": "compatible", "chosen": "true"}) == "Other"
+    assert customer_scorer_name({"display_name": "Other"}) == "Other"
+    assert customer_scorer_name({"display_name": "Jev", "chosen": True}) == "Jev"
+    assert customer_scorer_name({"display_name": "OpenAI", "chosen": True}) == "OpenAI"
     report = _report(
         config={"judge": {"provider": "jev", "display_name": "Jev", "chosen": "true"}},
         tasks=[

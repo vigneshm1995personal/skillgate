@@ -161,6 +161,7 @@ def _progress_task_to_dict(task: TaskProgress) -> dict:
             "prompt": task.prompt,
             "status": task.status,
             "passed": None,
+            "expect_skill": task.expect_skill,
         }
         # Mid-check live flush (Sandbox JSONL polls) may already have spans.
         if task.transcript:
@@ -173,10 +174,10 @@ def _progress_task_to_dict(task: TaskProgress) -> dict:
         TaskReport(
             task_id=task.task_id,
             prompt=task.prompt,
-            expect_skill=None,
+            expect_skill=task.expect_skill,
             passed=bool(task.passed),
             scores=list(task.scores),
-            selected_skill=None,
+            selected_skill=task.selected_skill,
             failures=list(task.failures),
             transcript=task.transcript,
             judge=task.judge,

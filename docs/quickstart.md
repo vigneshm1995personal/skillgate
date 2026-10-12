@@ -19,7 +19,7 @@ Skill scripts run with that same Python — install the skill’s own packages t
 
 ## Keys, then the pdf example
 
-Skill Gate does not read `OPENAI_API_KEY` from the shell unless you pass `--key-env`. Set a key explicitly:
+Skill Gate does not read `OPENAI_API_KEY` from the shell unless you pass `--key-env`. Set a key explicitly (vault, Settings, or the `SKILLGATE_*` CI/Docker prefix):
 
 ```bash
 skillgate keys set OPENAI_API_KEY
@@ -49,7 +49,7 @@ Live scoring is optional — pick OpenAI, Jev, AWS, or Other in Settings. See [j
 
 ## Deploy (after a green check)
 
-`skillgate deploy` copies **only the skill files** (not `evals/`) into Cursor, Claude, or Codex. It refuses unless this pack already has a passing check. It does not run check for you.
+`skillgate deploy` copies **only the skill files** (not `evals/`) into Cursor, Claude, or Codex. It refuses unless this pack already has a passing check **and a model key is set** (vault, Settings, or `SKILLGATE_*`). It does not run check for you. Without a key, Deploy stays blocked even after a green check; the pointer is Settings / `skillgate keys set`.
 
 ```bash
 skillgate check pdf
@@ -94,4 +94,4 @@ jobs:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
 ```
 
-Or set `SKILLGATE_OPENAI_API_KEY` instead of `--key-env`.
+Or set `SKILLGATE_OPENAI_API_KEY` instead of `--key-env`. The `SKILLGATE_*` key names are the documented CI/Docker path and are always read.

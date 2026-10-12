@@ -169,6 +169,28 @@ describe("deployAllowedForLiveGate", () => {
       })
     ).toBe(true)
   })
+
+  it("stays blocked with no key even after a green check", () => {
+    expect(
+      deployAllowedForLiveGate({
+        skill: { name: "pdf" },
+        liveGate: greenGate,
+        gateRunning: false,
+        hasKey: false,
+      })
+    ).toBe(false)
+  })
+
+  it("unlocks a green live run when a key is set", () => {
+    expect(
+      deployAllowedForLiveGate({
+        skill: { name: "pdf" },
+        liveGate: greenGate,
+        gateRunning: false,
+        hasKey: true,
+      })
+    ).toBe(true)
+  })
 })
 
 describe("runForCheck", () => {

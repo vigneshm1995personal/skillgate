@@ -450,10 +450,9 @@ def test_skill_write_generate_does_not_write_fixture_skill_md(
         app, ["skill", "write", str(dest), "--path", "SKILL.md", "--generate"]
     )
     out = plain_text(result.stdout + result.stderr)
-    assert result.exit_code == 0, out
+    assert result.exit_code != 0, out
     assert not (dest / "evals" / "fixtures" / "SKILL.md").exists()
-    written = (dest / "SKILL.md").read_text(encoding="utf-8")
-    assert written != original or "Sample input" in written
+    assert (dest / "SKILL.md").read_text(encoding="utf-8") == original
 
 
 def test_keys_clear_unset_does_not_claim_cleared(

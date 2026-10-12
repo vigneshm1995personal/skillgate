@@ -69,11 +69,12 @@ class JudgeQuestion:
         if self.type == "predicate":
             return {"type": "predicate", "name": self.id, "instructions": self.ask}
         if self.type == "score":
+            labels = list(self.levels) or ["1", "2", "3", "4", "5"]
             return {
                 "type": "score",
                 "name": self.id,
                 "instructions": self.ask,
-                "levels": list(self.levels) or ["1", "2", "3", "4", "5"],
+                "levels": [{"label": label} for label in labels],
             }
         choices = []
         for row in self.choices:

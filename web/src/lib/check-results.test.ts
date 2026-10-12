@@ -52,6 +52,35 @@ describe("happenedLine", () => {
     ).toBe("No skill was picked, as expected.")
   })
 
+  it("does not flash no-skill-picked on queued or should-trigger rows", () => {
+    expect(
+      happenedLine({
+        id: "extract-hello",
+        status: "queued",
+        passed: null,
+        expect_skill: null,
+        selected_skill: null,
+      })
+    ).not.toBe("No skill was picked, as expected.")
+    expect(
+      happenedLine({
+        id: "extract-hello",
+        status: "running",
+        passed: null,
+        prompt: "Extract the text from hello.pdf",
+      })
+    ).not.toBe("No skill was picked, as expected.")
+    expect(
+      happenedLine({
+        id: "extract-hello",
+        status: "done",
+        passed: true,
+        expect_skill: "pdf",
+        selected_skill: "pdf",
+      })
+    ).toBe("Output matched what was expected.")
+  })
+
   it("prefers a stamped happened line", () => {
     expect(happenedLine({ ...passTask, happened: "Custom pass line." })).toBe(
       "Custom pass line."

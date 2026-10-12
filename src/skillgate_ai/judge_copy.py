@@ -31,12 +31,15 @@ def customer_scorer_name(stamp: Mapping[str, Any] | None) -> str:
     if not isinstance(stamp, Mapping):
         return DEFAULT_NAME
     provider = str(stamp.get("provider") or "").strip().lower()
-    if provider in {"skip", ""}:
-        if not provider:
-            return DEFAULT_NAME
-        return SKIP_NAME
     if provider in {"jev", "aws", "compatible"}:
         return CHOSEN_LABELS[provider]
+    if provider == "skip":
+        return SKIP_NAME
+    display = str(stamp.get("display_name") or "").strip()
+    if display in CHOSEN_LABELS.values():
+        return display
+    if display == SKIP_NAME:
+        return SKIP_NAME
     if stamp_is_chosen(stamp):
         return CHOSEN_LABELS.get(provider, DEFAULT_NAME)
     return DEFAULT_NAME

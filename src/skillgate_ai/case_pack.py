@@ -598,7 +598,7 @@ def expand_from_pack(skill_path: str | Path) -> SuiteSpec:
     if pack is None:
         raise SuiteError(
             "This skill has no checks yet.",
-            hint="Add a check, then press Run.",
+            hint="Add a check first.",
         )
     return suite_from_pack(pack, str(root))
 

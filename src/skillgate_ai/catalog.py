@@ -95,9 +95,11 @@ def catalog_entries(root: Path) -> list[dict[str, Any]]:
 
     if is_skill_pack(root) or (root / "SKILL.md").is_file():
         add(root, "workspace")
-    for child in _iter_skill_dirs(root):
-        add(child, "workspace")
-    for child in _iter_skill_dirs(workspace_skills_root(root)):
+    skills_root = workspace_skills_root(root)
+    if not skills_root.is_dir():
+        for child in _iter_skill_dirs(root):
+            add(child, "workspace")
+    for child in _iter_skill_dirs(skills_root):
         add(child, "workspace")
     return entries
 

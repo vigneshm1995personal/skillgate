@@ -31,6 +31,22 @@ export type JudgeBlock = {
   removed_extra_ids?: string[]
 }
 
+export function duplicateExtraIds(extras: ExtraQuestion[] | undefined): string[] {
+  const seen = new Set<string>()
+  const dupes: string[] = []
+  for (const extra of extras ?? []) {
+    const id = (extra.id || "").trim()
+    if (!id) {
+      continue
+    }
+    if (seen.has(id)) {
+      dupes.push(id)
+    }
+    seen.add(id)
+  }
+  return dupes
+}
+
 export function totalQuestionCount(pack?: JudgeBlock | null, check?: JudgeBlock | null): number {
   const extras =
     (pack?.extra_questions?.length ?? 0) + (check?.extra_questions?.length ?? 0)

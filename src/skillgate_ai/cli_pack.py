@@ -48,9 +48,14 @@ def register_pack_commands(app: typer.Typer, case_app: typer.Typer, judge_app: t
             message = str(exc) if not isinstance(exc, SkillGateError) else exc.render()
             console.print(message)
             raise typer.Exit(getattr(exc, "exit_code", 1) or 1) from None
-        for row in result.get("imported") or []:
+        imported = result.get("imported") or []
+        skipped = result.get("skipped") or []
+        if not imported and not skipped:
+            console.print("No skills found to import.")
+            raise typer.Exit(1)
+        for row in imported:
             console.print(f"imported  {row.get('slug') or row.get('name')}")
-        for row in result.get("skipped") or []:
+        for row in skipped:
             console.print(f"skipped   {row.get('name')}: {row.get('reason')}")
 
     @skill_app.command("write")
@@ -141,7 +146,13 @@ def register_pack_commands(app: typer.Typer, case_app: typer.Typer, judge_app: t
                     customer_scorer_name(stamp if isinstance(stamp, dict) else None)
                 )
             gate = "pass" if row.get("passed") else "fail"
-            console.print(f"{row.get('run_id')}  {gate}  {who}")
+            passed = report.get("passed_count")
+            total = report.get("task_count")
+            counts = f"  {passed}/{total}" if passed is not None and total is not None else ""
+            ts = str(row.get("ts") or "")
+            date = ts[:10] if ts else ""
+            date_bit = f"  {date}" if date else ""
+            console.print(f"{row.get('run_id')}  {gate}{counts}{date_bit}  {who}")
 
     @history_app.callback(invoke_without_command=True)
     def history_cmd(

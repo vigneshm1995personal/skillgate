@@ -421,6 +421,14 @@ def test_customer_config_label_is_neutral_judge_copy() -> None:
         )
     )
     assert chosen == "Scored by Jev"
+    scrubbed_openai = customer_config_label(
+        {
+            "harness": "llm",
+            "label": "Scored by OpenAI",
+            "judge": {"display_name": "OpenAI", "chosen": "True"},
+        }
+    )
+    assert scrubbed_openai == "Scored by OpenAI"
 
 
 def test_from_dict_drops_judge_api_key() -> None:

@@ -44,9 +44,24 @@ def _boot() -> Path:
     return root
 
 
+def _version_callback(value: bool) -> None:
+    if value:
+        console.print(__version__)
+        raise typer.Exit()
+
+
 @app.callback()
-def _main() -> None:
+def _main(
+    version: bool = typer.Option(
+        False,
+        "--version",
+        callback=_version_callback,
+        is_eager=True,
+        help="Print the CLI version.",
+    ),
+) -> None:
     """Skill Gate."""
+    del version
 
 
 @app.command()
@@ -312,20 +327,33 @@ def deploy(
 ) -> None:
     """Copy a skill pack into a local agent skills directory.
 
-    Refuses unless this pack already has a passing check. Does not run check.
-    Copies skill files only (not evals/). --force only overrides a red latest check.
+    Refuses unless this pack already has a passing check and a model key is set
+    (vault, Settings, or SKILLGATE_*). Does not run check. Copies skill files
+    only (not evals/). --force only overrides a red latest check; it does not
+    skip a missing key.
     """
+    from skillgate_ai.config import get_llm_config, missing_key_error
     from skillgate_ai.deploy import get_adapter
+    from skillgate_ai.history import append_deploy
 
     root = _boot()
     path = resolve_user_path(pack, root)
     selected = _parse_targets(target, targets, default="cursor")
     try:
         adapters = [get_adapter(name) for name in selected]
+        if not get_llm_config(root).has_any_key:
+            raise missing_key_error()
         loaded = ingest_skill(path)
         for adapter in adapters:
             result = adapter.install(skill=loaded, source=path, force=force)
             console.print(result["message"])
+            append_deploy(
+                path,
+                target=adapter.id,
+                status=result.get("status") or "installed",
+                file_count=result.get("file_count"),
+                mode="local",
+            )
     except SkillGateError as exc:
         console.print(exc.render())
         raise typer.Exit(exc.exit_code) from None
@@ -564,7 +592,8 @@ def example_cmd(
     """Copy a packaged example skill into this folder."""
     from skillgate_ai.examples import copy_example
 
-    target = (dest or Path.cwd() / name).expanduser().resolve()
+    root = _boot()
+    target = (dest or (root / "skills" / name)).expanduser().resolve()
     try:
         written = copy_example(name, target)
     except SkillGateError as exc:
@@ -590,13 +619,25 @@ judge_app.add_typer(judge_provider_app, name="provider")
 def _resolve_pack_arg(pack: Path | None) -> Path:
     root = _boot()
     if pack is not None:
-        return resolve_user_path(pack, root)
-    if is_skill_pack(root):
-        return root
-    pdf = root / "skills" / "pdf"
-    if is_skill_pack(pdf):
-        return pdf
-    raise SkillGateError("Pass a skill pack (folder with SKILL.md and evals/).", exit_code=2)
+        dest = resolve_user_path(pack, root)
+    elif is_skill_pack(root):
+        dest = root
+    else:
+        pdf = root / "skills" / "pdf"
+        if is_skill_pack(pdf):
+            dest = pdf
+        else:
+            raise SkillGateError(
+                "Pass a skill pack (folder with SKILL.md and evals/).",
+                exit_code=2,
+            )
+    if not (dest / "SKILL.md").is_file():
+        raise SkillGateError(
+            f"Not a skill pack: {dest}",
+            hint="Pass a skill folder with SKILL.md and evals/.",
+            exit_code=2,
+        )
+    return dest
 
 
 @judge_app.command("show")
@@ -614,11 +655,20 @@ def judge_show(
         dest = _resolve_pack_arg(pack)
         loaded = load_case_pack(dest)
         case_block = None
-        if loaded is not None and case_id:
-            for case in loaded.cases:
-                if case.id == case_id and case.judge is not None:
-                    case_block = case.judge.to_sparse_dict()
-                    break
+        if case_id:
+            from skillgate_ai.pack_schema import case_id_slug
+
+            wanted = case_id_slug(case_id)
+            found = False
+            if loaded is not None:
+                for case in loaded.cases:
+                    if case.id == wanted:
+                        found = True
+                        if case.judge is not None:
+                            case_block = case.judge.to_sparse_dict()
+                        break
+            if not found:
+                raise SkillGateError(f"No check named {case_id}.")
         spec = resolve_judge_spec(
             project=load_project_judge(_boot()),
             pack=pack_judge_dict(loaded),
@@ -746,7 +796,11 @@ def case_add_cmd(
     except ValueError as exc:
         console.print(str(exc))
         raise typer.Exit(1) from None
-    added = pack_out.cases[-1].id if pack_out.cases else case_id or prompt
+    from skillgate_ai.pack_schema import case_id_slug
+
+    added = case_id_slug(case_id) if str(case_id or "").strip() else (
+        pack_out.cases[-1].id if pack_out.cases else prompt
+    )
     console.print(f"Added check {added}.")
     if warning:
         console.print(warning)

@@ -122,6 +122,7 @@ export function useEvalSession(opts: EvalSessionOpts) {
     liveGate: liveGateResult,
     gateRunning,
     mode: status?.mode,
+    hasKey: Boolean(status?.has_key),
   })
 
   const resumePoll = useCallback(

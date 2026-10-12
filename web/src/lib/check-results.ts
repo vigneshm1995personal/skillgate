@@ -181,6 +181,12 @@ export function checkHeadline(task: {
 
 export function happenedLine(task: TaskResult): string {
   const hint = `${task.prompt || ""} ${task.id || ""}`
+  if (task.status === "queued") {
+    return "Queued"
+  }
+  if (task.status === "running") {
+    return "In progress"
+  }
   if (task.skipped) {
     for (const item of task.failures ?? []) {
       const text = plainFailReason(item, hint)

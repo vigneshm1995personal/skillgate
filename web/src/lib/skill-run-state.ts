@@ -113,8 +113,12 @@ export function deployAllowedForLiveGate(opts: {
   liveGate: RunRecord | null | undefined
   gateRunning: boolean
   mode?: "local" | "cloud" | null
+  hasKey?: boolean
 }): boolean {
-  const { skill, liveGate, gateRunning, mode } = opts
+  const { skill, liveGate, gateRunning, mode, hasKey } = opts
+  if (hasKey === false) {
+    return false
+  }
   if (gateRunning || !skill || !liveGate) {
     return false
   }

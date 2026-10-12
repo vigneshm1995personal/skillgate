@@ -384,13 +384,18 @@ def customer_config_label(
     if cfg is None:
         return ""
     judge = cfg.judge or {}
-    from skillgate_ai.judge_copy import customer_scorer_name, scored_by_phrase
+    from skillgate_ai.judge_copy import CHOSEN_LABELS, customer_scorer_name, scored_by_phrase
 
     provider = str(judge.get("provider") or "").lower()
     if provider and provider != "skip":
         return scored_by_phrase(customer_scorer_name(judge))
+    name = customer_scorer_name(judge)
+    if name in CHOSEN_LABELS.values():
+        return scored_by_phrase(name)
     if _is_openai_scorer(cfg, raw_label):
         return "Scored by the judge"
+    if raw_label.startswith("Scored by "):
+        return raw_label
     if harness:
         return harness_display_name(harness)
     return ""

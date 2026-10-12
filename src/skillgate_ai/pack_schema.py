@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 import yaml
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from skillgate_ai.errors import SuiteError, friendly_validation_error
 
@@ -72,6 +72,15 @@ class JudgeBlock(BaseModel):
     on_fail: dict[str, Literal["block", "warn"]] | None = None
     extra_questions: list[ExtraQuestion] = Field(default_factory=list)
     score_no_trigger: bool = False
+
+    @model_validator(mode="after")
+    def _unique_extra_ids(self) -> JudgeBlock:
+        seen: set[str] = set()
+        for question in self.extra_questions:
+            if question.id in seen:
+                raise ValueError(f"`{question.id}` is already a scoring question. Pick a new id.")
+            seen.add(question.id)
+        return self
 
     @field_validator("on_fail", mode="before")
     @classmethod

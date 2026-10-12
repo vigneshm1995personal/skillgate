@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui/button"
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
 import {
   Select,
   SelectContent,
@@ -13,6 +14,7 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import {
   BUILTIN_QUESTIONS,
   MAX_SCORING_QUESTIONS,
+  duplicateExtraIds,
   totalQuestionCount,
   type ExtraQuestion,
   type JudgeBlock,
@@ -83,6 +85,11 @@ export function ScoringQuestions({
             </Field>
           )
         })}
+        {duplicateExtraIds(extras).length ? (
+          <FieldDescription>
+            Two questions share an id. Pick a new id before saving.
+          </FieldDescription>
+        ) : null}
         {extras.map((extra, extraIndex) => (
           <ExtraQuestionFields
             key={`${extra.id}-${extraIndex}`}
@@ -253,7 +260,14 @@ function ExtraQuestionFields({
           disabled={disabled}
           onValueChange={(next) => {
             if (next === "predicate" || next === "choice" || next === "score") {
-              onChange({ ...extra, type: next })
+              const nextExtra: ExtraQuestion = { ...extra, type: next }
+              if (next === "choice" && (!extra.choices || extra.choices.length < 2)) {
+                nextExtra.choices = [
+                  { value: "yes", pass: true },
+                  { value: "no", pass: false },
+                ]
+              }
+              onChange(nextExtra)
             }
           }}
         >
@@ -285,6 +299,31 @@ function ExtraQuestionFields({
         <ToggleGroupItem value="block">Fail the check</ToggleGroupItem>
         <ToggleGroupItem value="warn">Warn only</ToggleGroupItem>
       </ToggleGroup>
+      {extra.type === "choice" ? (
+        <Field data-disabled={disabled || undefined}>
+          <FieldLabel htmlFor={`extra-choices-${index}-${extraIndex}`}>
+            Choices (one per line)
+          </FieldLabel>
+          <Textarea
+            id={`extra-choices-${index}-${extraIndex}`}
+            disabled={disabled}
+            value={(extra.choices ?? []).map((row) => row.value).join("\n")}
+            onChange={(event) => {
+              const values = event.target.value
+                .split("\n")
+                .map((item) => item.trim())
+                .filter(Boolean)
+              onChange({
+                ...extra,
+                choices: values.map((value, choiceIndex) => ({
+                  value,
+                  pass: choiceIndex === 0,
+                })),
+              })
+            }}
+          />
+        </Field>
+      ) : null}
       <div className="flex justify-end">
         <Button variant="ghost" size="xs" disabled={disabled} onClick={onRemove}>
           Remove

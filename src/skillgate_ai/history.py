@@ -109,11 +109,17 @@ def load_history(pack_root: str | Path, *, limit: int = 50) -> list[dict[str, An
         for item in _read_jsonl(path):
             if item.get("kind") == "deploy" or not item.get("run_id"):
                 continue
-            rows.append(item)
+            rows.append(_scrub_history_row(item))
     rows.sort(key=_row_ts)
     if limit > 0:
         return rows[-limit:]
     return rows
+
+
+def _scrub_history_row(row: dict[str, Any]) -> dict[str, Any]:
+    from skillgate_ai.api_payloads import scrub_browser_payload
+
+    return scrub_browser_payload(row)
 
 
 def append_deploy(

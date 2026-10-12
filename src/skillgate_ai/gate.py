@@ -6,13 +6,14 @@ evals, persists history, and computes the process exit code (0 / 1 / 2).
 
 from __future__ import annotations
 
+import os
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from skillgate_ai.config import get_llm_config, load_env
+from skillgate_ai.config import LLMConfig, get_llm_config, load_env
 from skillgate_ai.demo_files import ensure_demo_pdfs
 from skillgate_ai.engine import EvalProgress, SuiteReport, run_eval
 from skillgate_ai.errors import MissingLLMKeyError, SkillGateError
@@ -64,14 +65,16 @@ def persist_eval(
 ) -> None:
     if pack_root is None or not pack_root.is_dir():
         return
+    from skillgate_ai.api_payloads import scrub_browser_payload
+
     cfg = config.to_dict() if isinstance(config, EvalRunConfig) else config
     append_eval(
         pack_root,
         run_id=run_id,
         passed=passed,
-        report=report,
+        report=scrub_browser_payload(report) if report else None,
         error=error,
-        config=cfg,
+        config=scrub_browser_payload(cfg) if cfg else None,
     )
 
 
@@ -118,11 +121,15 @@ def run_check(
 ) -> CheckResult:
     """Run pack-local evals. Exit 0 green, 1 red, 2 live-without-key."""
     project = root if root is not None else project_root()
+    suite_path = resolve_user_path(target, project)
+    if root is None and not os.environ.get("SKILLGATE_ROOT") and suite_path.is_dir():
+        from skillgate_ai.paths import config_root_for
+
+        project = config_root_for(suite_path)
     load_env(project)
     cfg = get_llm_config(project)
     sandbox_kind = sandbox or cfg.sandbox_pref
     spec = None
-    suite_path = resolve_user_path(target, project)
     pack_root: Path | None = None
     skill_path = skill
     try:
@@ -149,6 +156,64 @@ def run_check(
             error={"message": exc.message, "hint": exc.hint},
         )
 
+    from skillgate_ai.run_lock import project_run_lock
+
+    lock = project_run_lock(project)
+    try:
+        lock.__enter__()
+    except SkillGateError as exc:
+        return CheckResult(
+            report=None,
+            exit_code=exc.exit_code,
+            error={"message": exc.message, "hint": exc.hint},
+        )
+
+    try:
+        return _execute_check(
+            project=project,
+            suite_path=suite_path,
+            pack_root=pack_root,
+            skill_path=skill_path,
+            spec=spec,
+            cfg=cfg,
+            sandbox_kind=sandbox_kind,
+            harness=harness,
+            expect_fail=expect_fail,
+            model=model,
+            timeout=timeout,
+            temperature=temperature,
+            reasoning_effort=reasoning_effort,
+            on_progress=on_progress,
+            control=control,
+            run_id=run_id,
+            source=source,
+            tryout=tryout,
+        )
+    finally:
+        lock.__exit__(None, None, None)
+
+
+def _execute_check(
+    *,
+    project: Path,
+    suite_path: Path,
+    pack_root: Path | None,
+    skill_path: Path | None,
+    spec: Any,
+    cfg: LLMConfig,
+    sandbox_kind: str,
+    harness: str,
+    expect_fail: bool,
+    model: str | None,
+    timeout: int | None,
+    temperature: float | None,
+    reasoning_effort: str | None,
+    on_progress: Callable[[EvalProgress], None] | None,
+    control: RunControl | None,
+    run_id: str | None,
+    source: str,
+    tryout: bool,
+) -> CheckResult:
     rid = run_id or uuid.uuid4().hex[:12]
     skill_label = skill_path.name if skill_path else suite_path.stem
     run_cfg: EvalRunConfig | None = None

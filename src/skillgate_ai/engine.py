@@ -63,6 +63,8 @@ class TaskProgress:
     spans: list[dict[str, Any]] | None = None
     metrics: dict[str, Any] | None = None
     usage: dict[str, Any] | None = None
+    expect_skill: str | None = None
+    selected_skill: str | None = None
 
 
 @dataclass
@@ -907,6 +909,8 @@ def _eval_progress(
                     judge=done.judge,
                     metrics=getattr(done, "metrics", None),
                     usage=getattr(done, "usage", None),
+                    expect_skill=done.expect_skill,
+                    selected_skill=done.selected_skill,
                 )
             )
             continue
@@ -923,10 +927,18 @@ def _eval_progress(
                     status="running",
                     transcript=running_transcript if task.id == force_running_id else "",
                     spans=running_spans if task.id == force_running_id else None,
+                    expect_skill=task.expect_skill,
                 )
             )
         else:
-            tasks.append(TaskProgress(task_id=task.id, prompt=task.prompt, status="queued"))
+            tasks.append(
+                TaskProgress(
+                    task_id=task.id,
+                    prompt=task.prompt,
+                    status="queued",
+                    expect_skill=task.expect_skill,
+                )
+            )
     return EvalProgress(
         suite=spec.suite,
         title=spec.title or spec.suite,

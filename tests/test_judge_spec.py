@@ -239,6 +239,7 @@ def test_score_extra_decisions_payload_includes_levels() -> None:
     assert extra["type"] == "score"
     assert isinstance(extra.get("levels"), list)
     assert len(extra["levels"]) >= 2
+    assert all(isinstance(item, dict) and str(item.get("label") or "").strip() for item in extra["levels"])
 
 
 def test_numeric_score_extra_passes_after_coerce() -> None:

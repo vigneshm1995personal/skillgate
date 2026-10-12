@@ -10,6 +10,8 @@ services:
     volumes:
       - ${PACK:-./skills/pdf}:/pack
     # CLI exits; no ports. Default ENTRYPOINT/CMD → skillgate check /pack
+    # Key: -e SKILLGATE_OPENAI_API_KEY (documented CI/Docker path; always read).
+    # Ambient OPENAI_API_KEY is ignored unless you also pass --key-env.
 
   skillgate-dev:
     build:

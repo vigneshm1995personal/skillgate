@@ -275,6 +275,7 @@ def test_fake_home_import_list_open_run_deploy(tmp_path: Path, monkeypatch) -> N
 
     append_eval(dest, run_id="green-pdf", passed=True)
     append_eval(idea, run_id="green-idea", passed=True)
+    monkeypatch.setenv("SKILLGATE_OPENAI_API_KEY", "sk-test")
 
     history = client.get("/api/history", params={"skill": "pdf"})
     assert history.status_code == 200

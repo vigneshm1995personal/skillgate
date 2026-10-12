@@ -78,6 +78,17 @@ def test_quickstart_uses_example_and_keys() -> None:
     assert "skillgate example pdf" in text
     assert "skillgate keys set" in text
     assert "--key-env" in text
+    assert "SKILLGATE_OPENAI_API_KEY" in text
+    assert "CI/Docker" in text or "CI and Docker" in README.read_text(encoding="utf-8")
+    blob = README.read_text(encoding="utf-8") + "\n" + text
+    assert "even after a green check" in blob
+    assert "SKILLGATE_*" in blob
+    assert "always read" in blob
+    assert "documented CI/Docker path" in blob or "documented job path" in blob
+    ui = (ROOT / "docs" / "ui.md").read_text(encoding="utf-8")
+    assert "even after a passing check" in ui
+    assert "SKILLGATE_*" in ui
+    assert "skillgate keys set" in ui
 
 
 def test_docs_keys_set_never_puts_value_on_the_command_line() -> None:

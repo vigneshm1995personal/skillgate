@@ -19,7 +19,7 @@ Add extra scoring questions on top of Skill Gate’s six (`skillgate judge add-q
 skillgate keys set OPENAI_API_KEY
 ```
 
-Or paste the key in `skillgate ui` (Settings). Other keys run live checks. An OpenAI key scores them when the scoring provider is Auto or OpenAI. Jev, AWS, and Other need their own key — they never reuse OpenAI.
+Or paste the key in `skillgate ui` (Settings). **CI and Docker:** set `SKILLGATE_OPENAI_API_KEY` / `SKILLGATE_AI_GATEWAY_API_KEY` (and the other `SKILLGATE_*` key names). That prefix is the documented job path and is always read. Ambient `OPENAI_API_KEY` is ignored unless you pass `--key-env`. Other keys run live checks. An OpenAI key scores them when the scoring provider is Auto or OpenAI. Jev, AWS, and Other need their own key — they never reuse OpenAI.
 
 Pick a scoring provider in Settings or:
 

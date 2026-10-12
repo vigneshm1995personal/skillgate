@@ -184,6 +184,7 @@ def test_deploy_copies_into_agent_folder(tmp_path: Path, monkeypatch) -> None:
     append_eval(pack, run_id="green", passed=True)
     cursor_root = tmp_path / "cursor-skills"
     monkeypatch.setenv("SKILLGATE_CURSOR_SKILLS", str(cursor_root))
+    monkeypatch.setenv("SKILLGATE_OPENAI_API_KEY", "sk-test")
     client = _client(tmp_path, monkeypatch)
     res = client.post("/api/deploy", json={"target": "cursor", "skill": "pdf", "mode": "local"})
     assert res.status_code == 200
@@ -191,6 +192,19 @@ def test_deploy_copies_into_agent_folder(tmp_path: Path, monkeypatch) -> None:
     assert (cursor_root / "pdf" / "SKILL.md").is_file()
     assert not (cursor_root / "pdf" / "evals").exists()
     assert pack.is_dir()
+
+
+def test_deploy_without_key_is_409_even_after_green(tmp_path: Path, monkeypatch) -> None:
+    pack = _copy_pack(tmp_path)
+    append_eval(pack, run_id="green", passed=True)
+    client = _client(tmp_path, monkeypatch)
+    res = client.post("/api/deploy", json={"target": "cursor", "skill": "pdf", "mode": "local"})
+    assert res.status_code == 409, res.text
+    detail = res.json()["detail"]
+    blob = json.dumps(detail).lower()
+    assert "no model key" in blob or "key" in blob
+    assert "keys set" in blob or "settings" in blob
+    assert not (tmp_path / "cursor-skills" / "pdf").exists()
 
 
 def test_git_deploy_hidden_not_present(tmp_path: Path, monkeypatch) -> None:

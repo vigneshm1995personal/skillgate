@@ -273,9 +273,12 @@ def write_sample_fixture(
         raise CannotSynthesizeFixture()
     name = dest or implied_fixture_name(f"{prompt} {description}")
     cleaned = name.replace("\\", "/").lstrip("/")
-    if cleaned == "SKILL.md" or cleaned.endswith("/SKILL.md"):
-        relative = safe_relpath("SKILL.md")
-    elif "/" in name:
+    if Path(cleaned).name.lower() == "skill.md":
+        raise SkillGateError(
+            "SKILL.md is the skill, not a fixture.",
+            hint="Pass a path under evals/fixtures/.",
+        )
+    if "/" in name:
         relative = safe_relpath(name)
     else:
         relative = safe_relpath(f"{FIXTURE_DIR}/{name}")

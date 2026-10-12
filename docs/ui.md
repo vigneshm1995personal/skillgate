@@ -22,7 +22,7 @@ This is a **local process**, not hosted `serve`. Default bind is `127.0.0.1:8765
 
 **Skills list first.** Import from `~/.cursor/skills`, `~/.codex/skills`, and `~/.claude/skills`, or use packs under `skills/`. Open a skill to read `SKILL.md`, edit checks, then **press Run**. Nothing evaluates until you press it. Run is disabled until a key is in Settings. Results use the same drawn mark, Result | Check | What happened, and five answers.
 
-**Deploy** copies a green-gated skill (skill files only, not `evals/`) into those same agent folders. Keys stay in this project’s `.skillgate/keys` (Settings). `skillgate check` still exits 0, 1, or 2 with no account.
+**Deploy** copies a green-gated skill (skill files only, not `evals/`) into those same agent folders. Install stays disabled without a model key (Settings / `skillgate keys set`), even after a passing check. Keys live in this project’s `.skillgate/keys`, or CI/Docker can set `SKILLGATE_*` (always read). `skillgate check` still exits 0, 1, or 2 with no account.
 
 The result panel names who scored the run in plain words (`Scored by the judge`, or `Scored by OpenAI` / `Jev` / `AWS` / `Other` if you picked a provider in Settings, or `Checks scored this run.`). Checking → slide → drawn Passed/Failed is unchanged.
 
