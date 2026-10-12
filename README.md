@@ -22,7 +22,10 @@ skillgate check pdf
 
 From a clone of this repo, `pip install -e .` works the same once the virtualenv is on Python 3.11+.
 
-Optional local UI (same engine, no account): `skillgate ui` → http://127.0.0.1:8765. See [`docs/ui.md`](docs/ui.md). Docker still runs `skillgate check /pack` (exit 2 until a key is mounted).
+Optional local UI (same engine, no account): `skillgate ui` → http://127.0.0.1:8765. See [`docs/ui.md`](docs/ui.md). Docker still runs `skillgate check /pack` (exit 2 until a key is mounted). Everything the UI can do has a CLI command.
+
+- **Bring your own judge** — pick OpenAI, Jev, AWS, or Other in Settings (`skillgate judge provider set`). Skill Gate does not ship a scorer account. See [`docs/judge.md`](docs/judge.md).
+- **Custom scoring questions** — add extras on top of Skill Gate’s six (`skillgate judge add-question`). Built-ins stay.
 
 `--expect-fail` inverts the exit code (CI for a skill that should fail):
 
@@ -31,7 +34,7 @@ skillgate example pdf-sabotaged
 skillgate check pdf-sabotaged --expect-fail   # exit 0 after a live red run
 ```
 
-`skillgate deploy pdf` copies **only the skill files** (not `evals/`) into Cursor, Claude, or Codex **only if** this pack already has a passing check. It does not run check for you.
+`skillgate deploy pdf` copies **only the skill files** (not `evals/`) into Cursor, Claude, or Codex **only if** this pack already has a passing check **and a model key is set**. It does not run check for you. Without a key, Deploy/Install stay blocked (CLI, API, and UI) even after a green check.
 
 ```bash
 skillgate check pdf
@@ -58,7 +61,7 @@ Public image tag:
 ```bash
 docker run --rm -v "$PWD/pdf:/pack:ro" \
   -e SKILLGATE_OPENAI_API_KEY \
-  ghcr.io/vigneshm1995personal/skillgate:v0.5.1
+  ghcr.io/vigneshm1995personal/skillgate:v0.6.0
 ```
 
 A `:ro` mount skips writing `evals/history/*.jsonl` (not writable). Compose mounts the pack read-write so history can append.
@@ -70,7 +73,7 @@ Working directory is the skill pack. Exit 1 fails the job. No account. Needs Pyt
 ```yaml
 - uses: actions/setup-python@v5
   with: { python-version: "3.12" }
-- run: pip install skillgate-ai==0.5.1
+- run: pip install skillgate-ai==0.6.0
 - run: skillgate check . --key-env OPENAI_API_KEY
   env:
     OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
@@ -78,16 +81,22 @@ Working directory is the skill pack. Exit 1 fails the job. No account. Needs Pyt
 
 Or set `SKILLGATE_OPENAI_API_KEY` in the job env instead of `--key-env`.
 
+## Compare
+
+- **Compare models** — run the same Dataset on multiple harness setups side by side (CLI: `skillgate compare models`, UI: **Compare** tab).
+- **Compare versions** — diff two history runs (or git refs when the pack lives in a git tree) on one Dataset (`skillgate compare versions`).
+
 ## Docs
 
 - [`docs/quickstart.md`](docs/quickstart.md) — keys, example pdf, live check
+- [`docs/plans/compare.md`](docs/plans/compare.md) — compare design
 - [`docs/pack.md`](docs/pack.md) — `evals/cases.yaml` schema 1, fixtures, goldens, history
 - [`docs/plans/0.5-decisions.md`](docs/plans/0.5-decisions.md) — 0.5 live-only / explicit keys
-- [Score live checks with your OpenAI key](docs/openai-judge.md) — optional; OpenAI key scores live checks
+- [`docs/judge.md`](docs/judge.md) — bring your own judge; custom scoring questions
 - [`docs/ui.md`](docs/ui.md) — local React UI (`skillgate ui`), red path, Docker stays `check /pack`
 - [`docs/proof/PUBLISH.md`](docs/proof/PUBLISH.md) — secret scan, tag, PyPI Trusted Publishing, GHCR
 
-Keys live in `{project}/.skillgate/keys` (gitignored, mode 0600). Ambient `OPENAI_API_KEY` / `AI_GATEWAY_API_KEY` are ignored unless you pass `--key-env`. See `.env.example` for non-secret config.
+Keys live in `{project}/.skillgate/keys` (gitignored, mode 0600). Ambient `OPENAI_API_KEY` / `AI_GATEWAY_API_KEY` / `AWS_*` are ignored unless you pass `--key-env`. **CI and Docker:** set `SKILLGATE_OPENAI_API_KEY` / `SKILLGATE_AI_GATEWAY_API_KEY` (and the other `SKILLGATE_*` key names). That prefix is the documented job path and is always read. See `.env.example` for non-secret config. Pick who scores in Settings (`skillgate judge provider set`). Default results say **Scored by the judge** unless you picked a provider.
 
 ## Layout
 

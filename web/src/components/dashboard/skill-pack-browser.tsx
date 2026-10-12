@@ -227,7 +227,7 @@ export function SkillPackBrowser({
             </Table>
             <div id="skill-pack-preview" className="flex min-h-48 flex-col gap-2 rounded-xl border p-3">
               {previewError ? (
-                <Alert variant="destructive">
+                <Alert>
                   <AlertTitle>Could not preview</AlertTitle>
                   <AlertDescription>{previewError}</AlertDescription>
                 </Alert>

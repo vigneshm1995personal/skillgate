@@ -3,6 +3,9 @@ import type { Check } from "@/lib/types"
 export const NO_TRIGGER_OUTPUT_WARNING =
   "Expected output on a no-trigger check is ignored."
 
+export const EXPECTED_WITHOUT_TARGET_WARNING =
+  "This check has expected text, but no output file to compare it with."
+
 export function isPinnedCheck(check: Check): boolean {
   return check.bank_status === "pinned"
 }
@@ -49,6 +52,25 @@ export function noTriggerOutputWarning(
       String(check.golden_path || "").trim()
   )
   return leftover ? NO_TRIGGER_OUTPUT_WARNING : null
+}
+
+export function expectedWithoutTargetWarning(
+  check: Pick<Check, "should_trigger" | "output_path" | "contains" | "golden_path">
+): string | null {
+  const leftover = noTriggerOutputWarning(check)
+  if (leftover) {
+    return leftover
+  }
+  if (!String(check.contains || "").trim()) {
+    return null
+  }
+  if (
+    String(check.output_path || "").trim() ||
+    String(check.golden_path || "").trim()
+  ) {
+    return null
+  }
+  return EXPECTED_WITHOUT_TARGET_WARNING
 }
 
 export function expectedFieldValue(

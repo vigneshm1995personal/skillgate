@@ -22,6 +22,7 @@ import type {
   CatalogError,
 } from "@/lib/types"
 
+import type { ComparePayload } from "@/lib/compare"
 import type { EvalRunConfig } from "@/lib/eval-config"
 
 export class ApiError extends Error {
@@ -172,6 +173,41 @@ export const api = {
     request<SettingsKeysPayload>(`/api/settings/keys/${encodeURIComponent(name)}`, {
       method: "DELETE",
     }),
+  settingsJudge: () =>
+    request<{
+      judge: {
+        provider: string
+        chosen: boolean
+        region: string | null
+        model: string | null
+        base_url: string | null
+      }
+    }>("/api/settings/judge"),
+  setSettingsJudge: (body: {
+    provider: string
+    region?: string | null
+    model?: string | null
+    base_url?: string | null
+  }) =>
+    request<{
+      judge: {
+        provider: string
+        chosen: boolean
+        region: string | null
+        model: string | null
+        base_url: string | null
+      }
+    }>("/api/settings/judge", {
+      method: "PUT",
+      headers: jsonHeaders,
+      body: JSON.stringify(body),
+    }),
+  pingJudge: () =>
+    request<{ ok: boolean; message: string }>("/api/judge/ping", {
+      method: "POST",
+      headers: jsonHeaders,
+      body: "{}",
+    }),
   me: () => request<AuthMePayload>("/api/auth/me"),
   signOut: () =>
     request<Record<string, never>>("/api/auth/signout", {
@@ -298,6 +334,7 @@ export const api = {
     skill: string
     checks?: Check[]
     case_ids?: string[]
+    pack_judge?: Check["judge"]
   }) =>
     request<{
       pack: unknown
@@ -305,6 +342,7 @@ export const api = {
       checks: Check[]
       yaml: string
       skill?: SkillPayload
+      pack_judge?: Check["judge"]
     }>("/api/evals/pin", {
       method: "POST",
       headers: jsonHeaders,
@@ -432,6 +470,48 @@ export const api = {
         headers: jsonHeaders,
         body: JSON.stringify({ target, skill, mode }),
       }
+    ),
+  startCompareModels: (payload: {
+    skill: string
+    arms: Array<{
+      label: string
+      harness_pref: string
+      model?: string | null
+      timeout_sec?: number | null
+      temperature?: number | null
+      reasoning_effort?: string | null
+    }>
+    max_spend_usd?: number
+    case_ids?: string[]
+  }) =>
+    request<{ compare_id: string; status: string }>("/api/compare/models", {
+      method: "POST",
+      headers: jsonHeaders,
+      body: JSON.stringify(payload),
+    }),
+  startCompareVersions: (payload: {
+    skill: string
+    run_ids?: string[]
+    git_refs?: string[]
+    rerun?: boolean
+  }) =>
+    request<{ compare_id: string; status: string }>("/api/compare/versions", {
+      method: "POST",
+      headers: jsonHeaders,
+      body: JSON.stringify(payload),
+    }),
+  getCompare: (compareId: string, skill?: string) =>
+    request<ComparePayload>(
+      `/api/compare/${encodeURIComponent(compareId)}?skill=${encodeURIComponent(skill || "")}`
+    ),
+  listCompares: (skill: string) =>
+    request<{ skill: string; compares: ComparePayload[] }>(
+      `/api/compare?skill=${encodeURIComponent(skill)}`
+    ),
+  cancelCompare: (compareId: string) =>
+    request<{ ok: boolean; compare_id: string; status: string }>(
+      `/api/compare/${encodeURIComponent(compareId)}/cancel`,
+      { method: "POST", headers: jsonHeaders, body: "{}" }
     ),
 }
 

@@ -91,6 +91,9 @@ export function DeployPage() {
   let title = deployAllowed ? "Ready" : "Blocked"
   if (!skill) {
     note = "Pick a skill on Evaluate. Get a passing run to unlock Deploy."
+  } else if (!status?.has_key) {
+    note = "Add a key in Settings or run `skillgate keys set`."
+    title = "Blocked"
   } else if (deployAllowed && lastDeploy?.mode === "git" && (lastDeploy.url || lastDeploy.dest_label || lastDeploy.dest_path)) {
     note = lastDeploy.url
       ? `Published ${skillName} to git.`
@@ -151,7 +154,7 @@ export function DeployPage() {
         }
       />
 
-      <Alert id="deploy-note" variant={deployAllowed ? "default" : "destructive"}>
+      <Alert id="deploy-note">
         <AlertTitle>{title}</AlertTitle>
         <AlertDescription>{note}</AlertDescription>
       </Alert>

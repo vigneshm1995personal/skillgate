@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import base64
 import json
 from pathlib import Path
 from typing import Any, Mapping, Protocol
@@ -18,16 +17,21 @@ from skillgate_ai.judge_bank import (
     all_questions,
     canonical_choice,
     criteria_text,
-    decisions_questions,
     extract_choice,
     extract_confidence,
     extract_probabilities,
-    low_confidence_warnings,
-    outcome_verdict,
-    structured_output_schema,
     unusable_answers,
 )
-from skillgate_ai.case_pack import sniff_output_bytes
+from skillgate_ai.judge_images import IMAGE_MAX_BYTES, IMAGE_MAX_COUNT, collect_images
+from skillgate_ai.judge_spec import (
+    JudgeSpec,
+    builtin_spec,
+    coerce_extra_answer,
+    extra_block_failures,
+    spec_decisions_questions,
+    spec_structured_schema,
+    spec_verdict,
+)
 from skillgate_ai.openai_http import (
     DEFAULT_BASE_URL,
     OUT_OF_CREDITS,
@@ -44,11 +48,9 @@ WHY_TIMEOUT_SEC = 10.0
 WHY_MAX_OUTPUT_TOKENS = 128
 WHY_OUTPUT_CHARS = 1500
 TRANSCRIPT_TAIL_CHARS = 4000
-IMAGE_MAX_BYTES = 4 * 1024 * 1024
-IMAGE_MAX_COUNT = 3
-INLINE_MAGICS = {"jpeg": "image/jpeg", "png": "image/png"}
-DISPLAY_NAME = "OpenAI (your key)"
-GATEWAY_DISPLAY_NAME = "OpenAI Decisions via Vercel AI Gateway (your key)"
+DISPLAY_NAME = "the judge"
+GATEWAY_DISPLAY_NAME = "the judge"
+CHOSEN_DISPLAY_NAME = "OpenAI"
 
 
 def _decisions_model(model: str) -> str:
@@ -87,6 +89,7 @@ class JudgeBackend(Protocol):
         state: Mapping[str, Any],
         images: list[dict[str, str]],
         timeout_sec: float,
+        spec: JudgeSpec | None = None,
     ) -> dict[str, Any]:
         """Return status/model/answers. Never logs secrets."""
         ...
@@ -113,11 +116,13 @@ class _OpenAIPosted:
         base_url: str = DEFAULT_BASE_URL,
         model: str = DEFAULT_MODEL,
         post: PostFn | None = None,
+        who: str = DISPLAY_NAME,
     ) -> None:
         self.api_key = api_key
         self.base_url = base_url.rstrip("/")
         self.model = model
         self._post = post
+        self.who = who or DISPLAY_NAME
 
     def post_json(
         self,
@@ -136,6 +141,7 @@ class _OpenAIPosted:
             model=self.model,
             post=self._post,
             retries=retries,
+            who=self.who,
         )
 
 
@@ -156,95 +162,6 @@ def _cell_entry(key: str, answer: Any, labels: Mapping[str, str]) -> dict[str, A
     if confidence is not None:
         cell["confidence"] = confidence
     return cell
-
-
-def _resolved_under(path: Path, root: Path) -> Path | None:
-    """Return path if it resolves inside root. Blocks `..` and absolute escapes."""
-    try:
-        resolved = path.resolve()
-        root_resolved = root.resolve()
-        resolved.relative_to(root_resolved)
-    except (OSError, ValueError):
-        return None
-    return resolved
-
-
-def collect_images(
-    *,
-    artifacts: list[dict[str, Any]],
-    golden: Mapping[str, Any] | None,
-    actual: Mapping[str, Any] | None,
-    workspace: Path | None,
-    skill_root: Path | None,
-) -> tuple[list[dict[str, str]], list[dict[str, Any]]]:
-    """JPEG/PNG data URLs only. Caps: 4 MiB each, 3 images. Never logs bytes."""
-    candidates: list[tuple[Path, str]] = []
-    seen: set[Path] = set()
-
-    def consider(path: Path, label: str, root: Path | None) -> None:
-        if root is None:
-            return
-        resolved = _resolved_under(path, root)
-        if resolved is None or resolved in seen or not resolved.is_file():
-            return
-        seen.add(resolved)
-        candidates.append((resolved, label))
-
-    if workspace is not None:
-        for row in artifacts:
-            if not isinstance(row, Mapping) or not row.get("present"):
-                continue
-            magic = str(row.get("magic") or "")
-            if magic not in INLINE_MAGICS:
-                continue
-            rel = str(row.get("path") or "").strip()
-            if rel:
-                consider(workspace / rel, rel, workspace)
-        if actual and actual.get("present") and str(actual.get("magic") or "") in INLINE_MAGICS:
-            rel = str(actual.get("path") or "").strip()
-            if rel:
-                consider(workspace / rel, rel, workspace)
-    if golden and skill_root is not None:
-        rel = str(golden.get("path") or "").strip()
-        magic = str(golden.get("magic") or "")
-        if rel and (not magic or magic in INLINE_MAGICS):
-            consider(skill_root / rel, rel, skill_root)
-
-    images: list[dict[str, str]] = []
-    omitted: list[dict[str, Any]] = []
-    for path, label in candidates:
-        try:
-            size = path.stat().st_size
-        except OSError:
-            omitted.append({"path": label, "reason": "unreadable"})
-            continue
-        if size > IMAGE_MAX_BYTES:
-            omitted.append({"path": label, "size": size, "reason": "too large"})
-            continue
-        if len(images) >= IMAGE_MAX_COUNT:
-            omitted.append({"path": label, "size": size, "reason": "over cap"})
-            continue
-        try:
-            with path.open("rb") as handle:
-                header = handle.read(16)
-                magic = sniff_output_bytes(header).get("magic")
-                if magic not in INLINE_MAGICS:
-                    continue
-                data = header + handle.read()
-        except OSError:
-            omitted.append({"path": label, "reason": "unreadable"})
-            continue
-        if len(data) > IMAGE_MAX_BYTES:
-            omitted.append({"path": label, "size": len(data), "reason": "too large"})
-            continue
-        b64 = base64.b64encode(data).decode("ascii")
-        images.append(
-            {
-                "type": "input_image",
-                "image_url": f"data:{INLINE_MAGICS[magic]};base64,{b64}",
-            }
-        )
-    return images, omitted
 
 
 def _user_content(text: str, images: list[dict[str, str]]) -> str | list[dict[str, Any]]:
@@ -384,14 +301,21 @@ def _normalize_answers(
     raw: Mapping[str, Any],
     *,
     include_path: bool = True,
-) -> dict[str, dict[str, Any]]:
-    answers: dict[str, dict[str, Any]] = {}
+    spec: JudgeSpec | None = None,
+) -> dict[str, Any]:
+    answers: dict[str, Any] = {}
     for key in CHECK_CELL_ORDER:
         answers[key] = _answer_row(key, raw.get(key))
     if include_path:
         for key in SOFT_CELL_ORDER:
             if key in raw:
                 answers[key] = _answer_row(key, raw.get(key))
+    if spec is not None:
+        for question in spec.extras:
+            if question.id in raw:
+                answers[question.id] = coerce_extra_answer(
+                    raw.get(question.id), kind=question.type
+                )
     return answers
 
 
@@ -452,13 +376,18 @@ class DecisionsBackend(_OpenAIPosted):
         base_url: str = DEFAULT_BASE_URL,
         model: str = DEFAULT_MODEL,
         post: PostFn | None = None,
+        who: str = DISPLAY_NAME,
+        decisions_path: str = "/decisions",
     ) -> None:
         super().__init__(
             api_key=api_key,
             base_url=base_url,
             model=_decisions_model(model),
             post=post,
+            who=who,
         )
+        path = (decisions_path or "/decisions").strip() or "/decisions"
+        self.decisions_path = path if path.startswith("/") else f"/{path}"
 
     def evaluate(
         self,
@@ -466,6 +395,7 @@ class DecisionsBackend(_OpenAIPosted):
         state: Mapping[str, Any],
         images: list[dict[str, str]],
         timeout_sec: float,
+        spec: JudgeSpec | None = None,
     ) -> dict[str, Any]:
         text = _state_text(state)
         content = _user_content(text, images)
@@ -475,12 +405,13 @@ class DecisionsBackend(_OpenAIPosted):
         else:
             payload_input = text
         include_path = _path_is_recorded(state.get("path"))
+        resolved = spec or builtin_spec()
         result = self.post_json(
-            "/decisions",
+            self.decisions_path,
             {
                 "model": self.model,
                 "input": payload_input,
-                "questions": decisions_questions(include_path=include_path),
+                "questions": spec_decisions_questions(resolved, include_path=include_path),
             },
             timeout_sec=timeout_sec,
         )
@@ -492,6 +423,7 @@ class DecisionsBackend(_OpenAIPosted):
             _normalize_answers(
                 _answers_from_decisions_list(data),
                 include_path=include_path,
+                spec=resolved,
             ),
             model=str(data.get("model") or self.model),
             usage=usage,
@@ -509,8 +441,11 @@ class StructuredOutputsBackend(_OpenAIPosted):
         model: str = DEFAULT_MODEL,
         reasoning_effort: str = "low",
         post: PostFn | None = None,
+        who: str = DISPLAY_NAME,
     ) -> None:
-        super().__init__(api_key=api_key, base_url=base_url, model=model, post=post)
+        super().__init__(
+            api_key=api_key, base_url=base_url, model=model, post=post, who=who
+        )
         self.reasoning_effort = reasoning_effort
 
     def evaluate(
@@ -519,10 +454,12 @@ class StructuredOutputsBackend(_OpenAIPosted):
         state: Mapping[str, Any],
         images: list[dict[str, str]],
         timeout_sec: float,
+        spec: JudgeSpec | None = None,
     ) -> dict[str, Any]:
         text = _state_text(state)
         user_content = _user_content(text, images)
         include_path = _path_is_recorded(state.get("path"))
+        resolved = spec or builtin_spec()
         result = self.post_json(
             "/responses",
             {
@@ -543,7 +480,7 @@ class StructuredOutputsBackend(_OpenAIPosted):
                         "type": "json_schema",
                         "name": "skill_gate_check",
                         "strict": True,
-                        "schema": structured_output_schema(include_path=include_path),
+                        "schema": spec_structured_schema(resolved, include_path=include_path),
                     }
                 },
             },
@@ -556,7 +493,7 @@ class StructuredOutputsBackend(_OpenAIPosted):
         if refused:
             return {
                 "status": "error",
-                "reason": "OpenAI declined to score this check.",
+                "reason": "The judge declined to score this check.",
                 "model": str(data.get("model") or self.model),
             }
         if not text_out:
@@ -569,7 +506,7 @@ class StructuredOutputsBackend(_OpenAIPosted):
             return {"status": "error", "reason": UNUSABLE_ANSWER, "model": self.model}
         usage = data.get("usage") if isinstance(data.get("usage"), dict) else None
         return _finished_answers(
-            _normalize_answers(parsed, include_path=include_path),
+            _normalize_answers(parsed, include_path=include_path, spec=resolved),
             model=str(data.get("model") or self.model),
             usage=usage,
         )
@@ -589,6 +526,10 @@ class OutcomeJudge:
         reasoning_effort: str = "low",
         timeout_sec: float = DEFAULT_TIMEOUT_SEC,
         display_name: str = DISPLAY_NAME,
+        provider: str = "openai",
+        chosen: bool = False,
+        supports_why: bool | None = None,
+        supports_confidence: bool | None = None,
     ) -> None:
         self.backend = backend
         self.min_confidence = min_confidence
@@ -596,6 +537,11 @@ class OutcomeJudge:
         self.reasoning_effort = reasoning_effort
         self.timeout_sec = timeout_sec
         self.display_name = display_name
+        self.name = provider
+        self.chosen = chosen
+        self.supports_why = True if supports_why is None else supports_why
+        default_conf = getattr(backend, "name", "") == "decisions"
+        self.supports_confidence = default_conf if supports_confidence is None else supports_confidence
 
     @property
     def model(self) -> str:
@@ -637,14 +583,21 @@ class OutcomeJudge:
             "transcript_tail": _tail(transcript_tail),
             "omitted_images": omitted,
         }
-        evaluated = self.backend.evaluate(
-            state=state, images=images, timeout_sec=self.timeout_sec
-        )
+        spec = kwargs.get("spec")
+        resolved = spec if isinstance(spec, JudgeSpec) else builtin_spec()
+        evaluate = self.backend.evaluate
+        try:
+            evaluated = evaluate(
+                state=state, images=images, timeout_sec=self.timeout_sec, spec=resolved
+            )
+        except TypeError:
+            evaluated = evaluate(state=state, images=images, timeout_sec=self.timeout_sec)
         return self._stamp(
             evaluated,
             artifacts=artifacts,
             omitted=omitted,
             include_path=_path_is_recorded(path),
+            spec=resolved,
         )
 
     def _payload(
@@ -666,9 +619,12 @@ class OutcomeJudge:
     ) -> dict[str, Any]:
         return {
             "status": status,
-            "provider": "openai",
+            "provider": self.name,
             "backend": self.backend.name,
             "display_name": self.display_name,
+            "chosen": self.chosen,
+            "score_no_trigger": False,
+            "extra_failures": [],
             "model": model,
             "passed": passed,
             "reasons": reasons,
@@ -682,6 +638,7 @@ class OutcomeJudge:
             "usage": usage,
             "warnings": warnings,
             "min_confidence": self.min_confidence,
+            "supports_confidence": self.supports_confidence,
         }
 
     def _stamp(
@@ -691,38 +648,58 @@ class OutcomeJudge:
         artifacts: list[dict[str, Any]],
         omitted: list[dict[str, Any]],
         include_path: bool,
+        spec: JudgeSpec | None = None,
     ) -> dict[str, Any]:
+        resolved = spec or builtin_spec()
         model = str(evaluated.get("model") or self.backend.model)
         citations = {"artifacts": list(artifacts), "omitted_images": omitted}
         soft_questions = {k: all_questions()[k] for k in SOFT_CELL_ORDER}
+        extra_warnings = [
+            str(item)
+            for item in (evaluated.get("warnings") or [])
+            if str(item).strip()
+        ]
         if evaluated.get("status") != "completed":
-            reason = str(evaluated.get("reason") or "OpenAI scoring failed.")
-            return self._payload(
-                status="error",
-                model=model,
-                passed=False,
-                reasons=[reason],
-                why=None,
-                answers=evaluated.get("answers") or {},
-                soft_answers={},
-                cells={},
-                citations=citations,
-                usage=evaluated.get("usage"),
-                warnings=[],
-                questions=all_questions(),
-                soft_questions=soft_questions,
+            reason = str(evaluated.get("reason") or "The judge couldn't score this check.")
+            return self._finish_payload(
+                self._payload(
+                    status="error",
+                    model=model,
+                    passed=False,
+                    reasons=[reason],
+                    why=None,
+                    answers=evaluated.get("answers") or {},
+                    soft_answers={},
+                    cells={},
+                    citations=citations,
+                    usage=evaluated.get("usage"),
+                    warnings=extra_warnings,
+                    questions=all_questions(),
+                    soft_questions=soft_questions,
+                ),
+                spec=resolved,
+                confidence=bool(
+                    getattr(self.backend, "supports_confidence", self.supports_confidence)
+                ),
             )
         answers = evaluated.get("answers") if isinstance(evaluated.get("answers"), dict) else {}
         if not include_path:
             answers = {key: value for key, value in answers.items() if key not in SOFT_CELL_ORDER}
-        passed, reasons = outcome_verdict(answers)
-        warnings = low_confidence_warnings(
-            answers,
-            min_confidence=self.min_confidence,
-            expect_confidence=self.backend.name == "decisions",
+        confidence = bool(
+            getattr(self.backend, "supports_confidence", self.supports_confidence)
         )
+        skipped = [str(i) for i in (evaluated.get("skipped") or []) if str(i).strip()]
+        passed, reasons, warnings = spec_verdict(
+            resolved,
+            answers,
+            supports_confidence=confidence,
+            include_path=include_path,
+            skipped=skipped,
+        )
+        warnings = extra_warnings + warnings
         pass_answers = {key: answers[key] for key in CHECK_CELL_ORDER if key in answers}
         soft_answers = {key: answers[key] for key in SOFT_CELL_ORDER if key in answers}
+        extra_answers = {q.id: answers[q.id] for q in resolved.extras if q.id in answers}
         cells: dict[str, dict[str, Any]] = {}
         for key in CHECK_CELL_ORDER:
             cells[key] = _cell_entry(key, pass_answers.get(key), CHECK_CELL_LABELS)
@@ -731,21 +708,54 @@ class OutcomeJudge:
                 cells[key] = _cell_entry(key, soft_answers.get(key), SOFT_CELL_LABELS)
             else:
                 cells[key] = _path_not_available_cell()
-        return self._payload(
-            status="completed",
-            model=model,
-            passed=passed,
-            reasons=reasons,
-            why=None,
-            answers=pass_answers,
-            soft_answers=soft_answers,
-            cells=cells,
-            citations=citations,
-            usage=evaluated.get("usage"),
-            warnings=warnings,
-            questions={k: all_questions()[k] for k in CHECK_CELL_ORDER},
-            soft_questions=soft_questions,
+        for question in resolved.extras:
+            raw = extra_answers.get(question.id)
+            cell: dict[str, Any] = {
+                "label": question.ask,
+                "choice": extract_choice(raw),
+                "reason": None,
+            }
+            if isinstance(raw, Mapping) and raw.get("probability") is not None:
+                cell["probability"] = raw.get("probability")
+            elif isinstance(raw, (int, float)) and not isinstance(raw, bool):
+                cell["probability"] = float(raw)
+            cells[question.id] = cell
+        merged_answers = {**pass_answers, **extra_answers}
+        extra_questions = {q.id: {"instructions": q.ask, "type": q.type} for q in resolved.extras}
+        extra_failures = extra_block_failures(resolved, answers, skipped=skipped)
+        return self._finish_payload(
+            self._payload(
+                status="completed",
+                model=model,
+                passed=passed,
+                reasons=reasons,
+                why=None,
+                answers=merged_answers,
+                soft_answers=soft_answers,
+                cells=cells,
+                citations=citations,
+                usage=evaluated.get("usage"),
+                warnings=warnings,
+                questions={**{k: all_questions()[k] for k in CHECK_CELL_ORDER}, **extra_questions},
+                soft_questions=soft_questions,
+            ),
+            spec=resolved,
+            confidence=confidence,
+            extra_failures=extra_failures,
         )
+
+    def _finish_payload(
+        self,
+        payload: dict[str, Any],
+        *,
+        spec: JudgeSpec,
+        confidence: bool,
+        extra_failures: list[str] | None = None,
+    ) -> dict[str, Any]:
+        payload["supports_confidence"] = confidence
+        payload["score_no_trigger"] = spec.score_no_trigger
+        payload["extra_failures"] = list(extra_failures or [])
+        return payload
 
     def explain_fail(
         self,
@@ -758,13 +768,28 @@ class OutcomeJudge:
         actual_output: Any = None,
     ) -> str | None:
         """One Fail sentence after the engine has the gate verdict."""
-        if not self.why_enabled:
+        if not self.why_enabled or not self.supports_why:
             return None
         blob = judged or {}
         if blob.get("status") == "error":
             cell_reasons = [str(item) for item in (blob.get("reasons") or [])]
             if UNUSABLE_ANSWER not in cell_reasons:
                 return None
+        if hasattr(self.backend, "explain_fail_payload"):
+            user_blob = self._why_user_blob(
+                check,
+                reasons,
+                transcript_tail,
+                expected_output=expected_output,
+                actual_output=actual_output,
+            )
+            try:
+                why = self.backend.explain_fail_payload(user_blob, timeout_sec=WHY_TIMEOUT_SEC)
+            except Exception:
+                return None
+            return why.strip() if isinstance(why, str) and why.strip() else None
+        if not hasattr(self.backend, "post_json"):
+            return None
         return self._why_call(
             check,
             reasons,
@@ -773,7 +798,7 @@ class OutcomeJudge:
             actual_output=actual_output,
         )
 
-    def _why_call(
+    def _why_user_blob(
         self,
         check: str,
         reasons: list[str],
@@ -781,7 +806,7 @@ class OutcomeJudge:
         *,
         expected_output: Any = None,
         actual_output: Any = None,
-    ) -> str | None:
+    ) -> dict[str, Any]:
         secret = self.backend.api_key
         user_blob: dict[str, Any] = {
             "check": check,
@@ -794,6 +819,24 @@ class OutcomeJudge:
             user_blob["expected_output"] = expected
         if actual is not None:
             user_blob["actual_output"] = actual
+        return user_blob
+
+    def _why_call(
+        self,
+        check: str,
+        reasons: list[str],
+        transcript_tail: str,
+        *,
+        expected_output: Any = None,
+        actual_output: Any = None,
+    ) -> str | None:
+        user_blob = self._why_user_blob(
+            check,
+            reasons,
+            transcript_tail,
+            expected_output=expected_output,
+            actual_output=actual_output,
+        )
         why_model = _responses_model(self.backend.model)
         payload = {
             "model": why_model,
@@ -863,6 +906,28 @@ def _as_path(value: Any) -> Path | None:
     return None
 
 
+def ping_openai_backend(backend: JudgeBackend, *, display_name: str = DISPLAY_NAME) -> dict[str, Any]:
+    result = backend.post_json(
+        "/decisions",
+        {
+            "model": backend.model,
+            "input": "ping",
+            "questions": [
+                {
+                    "type": "predicate",
+                    "name": "connection_test",
+                    "instructions": "Is this a connection test?",
+                }
+            ],
+        },
+        timeout_sec=DEFAULT_TIMEOUT_SEC,
+        retries=False,
+    )
+    if result.get("status") == "ok":
+        return {"ok": True, "message": f"Connected to {display_name}."}
+    return {"ok": False, "message": str(result.get("reason") or "Could not connect.")}
+
+
 def make_openai_judge(
     *,
     api_key: str,
@@ -875,6 +940,7 @@ def make_openai_judge(
     base_url: str = DEFAULT_BASE_URL,
     post: PostFn | None = None,
     display_name: str = DISPLAY_NAME,
+    chosen: bool = False,
 ) -> OutcomeJudge:
     name = (backend or "decisions").strip().lower()
     if name in {"structured", "responses"}:
@@ -884,6 +950,7 @@ def make_openai_judge(
             model=model,
             reasoning_effort=reasoning_effort,
             post=post,
+            who=display_name,
         )
     else:
         impl = DecisionsBackend(
@@ -891,6 +958,7 @@ def make_openai_judge(
             base_url=base_url,
             model=model,
             post=post,
+            who=display_name,
         )
     return OutcomeJudge(
         impl,
@@ -899,6 +967,10 @@ def make_openai_judge(
         reasoning_effort=reasoning_effort,
         timeout_sec=timeout_sec,
         display_name=display_name,
+        provider="openai",
+        chosen=chosen,
+        supports_why=True,
+        supports_confidence=impl.name == "decisions",
     )
 
 

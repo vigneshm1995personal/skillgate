@@ -10,7 +10,7 @@ Requires **Python 3.11+**.
 python3 -m venv .venv
 source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install skillgate-ai
-skillgate version           # 0.5.1
+skillgate version           # 0.6.0
 ```
 
 (`pip install skillgate` is a different product.) From a clone of this repo you can use `pip install -e .` instead.
@@ -19,7 +19,7 @@ Skill scripts run with that same Python — install the skill’s own packages t
 
 ## Keys, then the pdf example
 
-Skill Gate does not read `OPENAI_API_KEY` from the shell unless you pass `--key-env`. Set a key explicitly:
+Skill Gate does not read `OPENAI_API_KEY` from the shell unless you pass `--key-env`. Set a key explicitly (vault, Settings, or the `SKILLGATE_*` CI/Docker prefix):
 
 ```bash
 skillgate keys set OPENAI_API_KEY
@@ -45,11 +45,11 @@ skillgate check pdf-sabotaged --expect-fail
 echo $?    # 0
 ```
 
-Live scoring with your OpenAI key is optional — see [openai-judge.md](https://github.com/vigneshm1995personal/skillgate/blob/main/docs/openai-judge.md). Every check is a live model run; without a key, `skillgate check` exits 2.
+Live scoring is optional — pick OpenAI, Jev, AWS, or Other in Settings. See [judge.md](https://github.com/vigneshm1995personal/skillgate/blob/main/docs/judge.md). Every check is a live model run; without a key, `skillgate check` exits 2. Default results say “Scored by the judge” unless you picked a provider.
 
 ## Deploy (after a green check)
 
-`skillgate deploy` copies **only the skill files** (not `evals/`) into Cursor, Claude, or Codex. It refuses unless this pack already has a passing check. It does not run check for you.
+`skillgate deploy` copies **only the skill files** (not `evals/`) into Cursor, Claude, or Codex. It refuses unless this pack already has a passing check **and a model key is set** (vault, Settings, or `SKILLGATE_*`). It does not run check for you. Without a key, Deploy stays blocked even after a green check; the pointer is Settings / `skillgate keys set`.
 
 ```bash
 skillgate check pdf
@@ -88,10 +88,10 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: { python-version: "3.12" }
-      - run: pip install skillgate-ai==0.5.1
+      - run: pip install skillgate-ai==0.6.0
       - run: skillgate check . --key-env OPENAI_API_KEY
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
 ```
 
-Or set `SKILLGATE_OPENAI_API_KEY` instead of `--key-env`.
+Or set `SKILLGATE_OPENAI_API_KEY` instead of `--key-env`. The `SKILLGATE_*` key names are the documented CI/Docker path and are always read.

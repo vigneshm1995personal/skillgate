@@ -9,6 +9,7 @@ import {
   friendlyModelName,
   stampRunConfig,
   emptyCatalogHint,
+  unsupportedModelHint,
   draftConfigSummary,
   harnessDisplayName,
   knownModelsForHarness,
@@ -88,6 +89,20 @@ describe("modelSelectValue", () => {
     expect(modelSelectValue("", options)).toBe(MODEL_DEFAULT_VALUE)
     expect(modelSelectValue("gpt-5.6-luna", options)).toBe("gpt-5.6-luna")
     expect(modelSelectValue("openai/gpt-4o-mini", options)).toBe(MODEL_CUSTOM_VALUE)
+  })
+})
+
+describe("unsupportedModelHint", () => {
+  it("uses plain words instead of gateway model ids", () => {
+    const short = unsupportedModelHint("codex", "codex", [])
+    const listed = unsupportedModelHint("codex", "codex", ["gpt-5.6-luna"])
+    expect(short).toMatch(/Codex model/)
+    expect(short).not.toMatch(/gateway ids/i)
+    expect(short).not.toMatch(/openai\/gpt-4o-mini/)
+    expect(listed).toContain("gpt-5.6-luna")
+    expect(listed).not.toMatch(/openai\/gpt-4o-mini/)
+    expect(listed).not.toMatch(/gateway model id/i)
+    expect(listed).toMatch(/not a Codex model/i)
   })
 })
 
@@ -239,6 +254,15 @@ describe("configLabel", () => {
         },
       })
     ).toBe("LLM · GPT-4.1 · 300s")
+  })
+
+  it("names a chosen scoring provider on History", () => {
+    expect(
+      customerConfigLabel({
+        harness: "llm",
+        judge: { provider: "jev", chosen: true, display_name: "Jev" },
+      })
+    ).toBe("Scored by Jev")
   })
 
   it("does not treat an openai/ model id as the scorer", () => {

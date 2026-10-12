@@ -121,7 +121,7 @@ SOFT_OUTCOME_QUESTIONS: dict[str, dict[str, Any]] = {
     },
 }
 
-UNUSABLE_ANSWER = "OpenAI scoring returned an unusable answer."
+UNUSABLE_ANSWER = "The judge returned an unusable answer."
 LOW_CONFIDENCE_WARNING = "The judge wasn't very sure about this one."
 DEFAULT_MIN_CONFIDENCE = 0.5
 

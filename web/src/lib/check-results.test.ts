@@ -52,6 +52,35 @@ describe("happenedLine", () => {
     ).toBe("No skill was picked, as expected.")
   })
 
+  it("does not flash no-skill-picked on queued or should-trigger rows", () => {
+    expect(
+      happenedLine({
+        id: "extract-hello",
+        status: "queued",
+        passed: null,
+        expect_skill: null,
+        selected_skill: null,
+      })
+    ).not.toBe("No skill was picked, as expected.")
+    expect(
+      happenedLine({
+        id: "extract-hello",
+        status: "running",
+        passed: null,
+        prompt: "Extract the text from hello.pdf",
+      })
+    ).not.toBe("No skill was picked, as expected.")
+    expect(
+      happenedLine({
+        id: "extract-hello",
+        status: "done",
+        passed: true,
+        expect_skill: "pdf",
+        selected_skill: "pdf",
+      })
+    ).toBe("Output matched what was expected.")
+  })
+
   it("prefers a stamped happened line", () => {
     expect(happenedLine({ ...passTask, happened: "Custom pass line." })).toBe(
       "Custom pass line."
@@ -214,7 +243,7 @@ describe("scoredByLine", () => {
   })
 
   it("maps skip scoring without hard-coding the UI to one scorer", () => {
-    expect(scoredByFromJudge(passTask.judge)).toBe("Scored by Checks")
+    expect(scoredByFromJudge(passTask.judge)).toBe("Scored by the judge")
     expect(
       scoredByFromJudge({
         provider: "openai",
@@ -328,6 +357,65 @@ describe("openedCheckAnswers / low confidence", () => {
       "Delivered a good result?",
     ])
     expect(rows[1].answer).toBe("Correct")
+  })
+
+  it("appends extra scoring answers after the built-in five", () => {
+    const rows = openedCheckAnswers({
+      ...passTask,
+      judge: {
+        ...passTask.judge,
+        answers: {
+          ...passTask.judge!.answers!,
+          numbers_match: { probability: 0.9 },
+        },
+        questions: {
+          numbers_match: { instructions: "Do the totals match?" },
+        },
+      },
+    })
+    expect(rows.map((row) => row.label)).toEqual([
+      "Got the job done?",
+      "Got it right?",
+      "Followed the rules?",
+      "Used the right evidence/actions?",
+      "Delivered a good result?",
+      "Do the totals match?",
+    ])
+    expect(
+      openedCheckAnswers({
+        ...passTask,
+        judge: {
+          ...passTask.judge,
+          cells: {
+            ...passTask.judge!.cells,
+            totals_ok: { label: "Are the totals OK?", probability: 0.91 },
+          },
+        },
+      }).at(-1)
+    ).toEqual({
+      id: "totals_ok",
+      label: "Are the totals OK?",
+      answer: "0.91",
+    })
+  })
+
+  it("names a chosen scoring provider and not Auto OpenAI", () => {
+    expect(
+      scoredByFromJudge({
+        provider: "jev",
+        chosen: true,
+        status: "completed",
+        answers: passTask.judge?.answers,
+      })
+    ).toBe("Scored by Jev")
+    expect(
+      scoredByFromJudge({
+        provider: "openai",
+        chosen: false,
+        status: "completed",
+        answers: passTask.judge?.answers,
+      })
+    ).toBe("Scored by the judge")
   })
 
   it("warns on low confidence for an otherwise-Pass OpenAI cell and not for Jev", () => {

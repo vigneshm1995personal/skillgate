@@ -1,5 +1,6 @@
 import { cn } from "cn"
 import {
+  Columns2Icon,
   FlaskConicalIcon,
   FolderIcon,
   GitBranchIcon,
@@ -115,6 +116,15 @@ export function AppSidebar({
             label="Deploy"
             onClick={() => go("deploy")}
           />
+          {isLocalMode(status) ? (
+            <NavRow
+              id="tab-compare"
+              active={stage === "compare"}
+              icon={Columns2Icon}
+              label="Compare"
+              onClick={() => go("compare")}
+            />
+          ) : null}
           {slotOn(status, "sharedHistory") || isLocalMode(status) ? (
             <NavRow
               id="tab-history"

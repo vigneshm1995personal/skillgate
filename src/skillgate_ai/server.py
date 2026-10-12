@@ -85,11 +85,53 @@ def attach_static(app: FastAPI, dist: Path | None = None) -> None:
             return HTMLResponse(_MISSING_UI, status_code=503)
 
 
-def _ensure_port_free(host: str, port: int) -> None:
-    family = socket.AF_INET6 if host in {"::1", "::"} or ":" in host and "." not in host else socket.AF_INET
+def _socket_family(host: str) -> int:
+    if host in {"::1", "::"} or (":" in host and "." not in host):
+        return socket.AF_INET6
+    return socket.AF_INET
+
+
+def _port_has_listener(host: str, port: int, *, timeout: float = 0.25) -> bool:
+    """True when something accepts TCP connections on host:port."""
+    try:
+        with socket.create_connection((host, port), timeout=timeout):
+            return True
+    except ConnectionRefusedError:
+        return False
+    except OSError:
+        return False
+
+
+def _probe_bind(host: str, port: int, *, reuseaddr: bool) -> None:
+    family = _socket_family(host)
     sock = socket.socket(family, socket.SOCK_STREAM)
     try:
+        if reuseaddr:
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         sock.bind((host, port))
+    finally:
+        sock.close()
+
+
+def _ensure_port_free(host: str, port: int) -> None:
+    if _port_has_listener(host, port):
+        raise SkillGateError(
+            f"Port {port} is already in use.",
+            hint="Stop the other process, or pass --port with a free port.",
+        )
+    try:
+        _probe_bind(host, port, reuseaddr=False)
+        return
+    except OSError as exc:
+        if exc.errno not in {errno.EADDRINUSE} and getattr(exc, "winerror", None) != 10048:
+            raise SkillGateError(
+                f"Could not bind {host}:{port}.",
+                hint="Try another --host or --port.",
+            ) from None
+    # No listener, but bind failed: often TIME_WAIT from a recent server on this port.
+    try:
+        _probe_bind(host, port, reuseaddr=True)
+        return
     except OSError as exc:
         if exc.errno == errno.EADDRINUSE or getattr(exc, "winerror", None) == 10048:
             raise SkillGateError(
@@ -100,8 +142,6 @@ def _ensure_port_free(host: str, port: int) -> None:
             f"Could not bind {host}:{port}.",
             hint="Try another --host or --port.",
         ) from None
-    finally:
-        sock.close()
 
 
 def serve_ui(

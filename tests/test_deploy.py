@@ -18,6 +18,11 @@ runner = CliRunner()
 ROOT = Path(__file__).resolve().parents[1]
 
 
+@pytest.fixture(autouse=True)
+def _grant_model_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("SKILLGATE_OPENAI_API_KEY", "sk-test")
+
+
 def _wipe_history(pack: Path) -> None:
     hist = pack / "evals" / "history"
     if hist.is_dir():

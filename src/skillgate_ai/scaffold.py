@@ -23,7 +23,7 @@ def create_pack(
 ) -> Path:
     """mkdir ``parent/name`` and write a stub SKILL.md. Name equals folder basename."""
     slug = (name or "").strip()
-    if not NAME_RE.match(slug):
+    if not NAME_RE.match(slug) or not (1 <= len(slug) <= 64):
         raise IngestError(
             f"name {slug!r} is invalid",
             hint="Use lowercase letters, numbers, and single hyphens; no leading/trailing/double hyphens.",
@@ -35,13 +35,17 @@ def create_pack(
             hint="Pick a new name or open the existing pack.",
         )
     dest.mkdir(parents=True)
-    (dest / "evals" / "fixtures").mkdir(parents=True, exist_ok=True)
-    write_skill_md(
-        dest,
-        name=slug,
-        description=(description or default_description(slug)).strip(),
-        body=default_body(slug),
-    )
+    try:
+        (dest / "evals" / "fixtures").mkdir(parents=True, exist_ok=True)
+        write_skill_md(
+            dest,
+            name=slug,
+            description=(description or default_description(slug)).strip(),
+            body=default_body(slug),
+        )
+    except Exception:
+        shutil.rmtree(dest, ignore_errors=True)
+        raise
     return dest
 
 

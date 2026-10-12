@@ -27,8 +27,9 @@ def test_check_without_key_exits_2(project_root: Path) -> None:
     result = runner.invoke(app, ["check", str(project_root / "skills" / "pdf")])
     out = plain_text(result.stdout + result.stderr)
     assert result.exit_code == 2, out
-    assert "Settings" in out
-    assert "skillgate keys set" in out
+    assert "Add a model key in Settings or run `skillgate keys set`" in out
+    assert "SKILLGATE_OPENAI_API_KEY" not in out
+    assert "--key-env" not in out
     assert "built-in checker" not in out.lower()
     assert "not a live model" not in out.lower()
 
@@ -63,7 +64,13 @@ def test_live_missing_key_is_not_recorded_as_failed_check(
     assert result.exit_code == 2
     assert "No model key" in result.stdout
     assert latest_check_passed(pack) is None
-    assert not hist.exists() or not any(hist.glob("*.jsonl"))
+    rows = list(hist.glob("*.jsonl")) if hist.exists() else []
+    if rows:
+        from skillgate_ai.history import load_history
+
+        for row in load_history(pack, limit=0):
+            assert row.get("gate_moved") is False
+            assert row.get("gate") is None
 
 
 def test_unknown_harness_is_not_recorded_and_does_not_block_deploy(

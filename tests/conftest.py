@@ -25,6 +25,14 @@ os.environ["SKILLGATE_AI_GATEWAY_API_KEY"] = ""
 os.environ["SKILLGATE_CURSOR_API_KEY"] = ""
 os.environ["SKILLGATE_CODEX_API_KEY"] = ""
 os.environ["SKILLGATE_ANTHROPIC_API_KEY"] = ""
+os.environ["SKILLGATE_JEV_API_KEY"] = ""
+os.environ["SKILLGATE_AWS_ACCESS_KEY_ID"] = ""
+os.environ["SKILLGATE_AWS_SECRET_ACCESS_KEY"] = ""
+os.environ["SKILLGATE_AWS_SESSION_TOKEN"] = ""
+os.environ["JEV_API_KEY"] = ""
+os.environ["AWS_ACCESS_KEY_ID"] = ""
+os.environ["AWS_SECRET_ACCESS_KEY"] = ""
+os.environ["AWS_SESSION_TOKEN"] = ""
 
 
 @pytest.fixture(autouse=True)
@@ -43,6 +51,14 @@ def _no_live_keys(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("SKILLGATE_CURSOR_API_KEY", "")
     monkeypatch.setenv("SKILLGATE_CODEX_API_KEY", "")
     monkeypatch.setenv("SKILLGATE_ANTHROPIC_API_KEY", "")
+    monkeypatch.setenv("SKILLGATE_JEV_API_KEY", "")
+    monkeypatch.setenv("SKILLGATE_AWS_ACCESS_KEY_ID", "")
+    monkeypatch.setenv("SKILLGATE_AWS_SECRET_ACCESS_KEY", "")
+    monkeypatch.setenv("SKILLGATE_AWS_SESSION_TOKEN", "")
+    monkeypatch.setenv("JEV_API_KEY", "")
+    monkeypatch.setenv("AWS_ACCESS_KEY_ID", "")
+    monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "")
+    monkeypatch.setenv("AWS_SESSION_TOKEN", "")
     monkeypatch.setenv("SKILLGATE_MODE", "local")
     monkeypatch.delenv("SKILLGATE_JUDGE", raising=False)
     monkeypatch.delenv("SKILLGATE_JUDGE_BACKEND", raising=False)

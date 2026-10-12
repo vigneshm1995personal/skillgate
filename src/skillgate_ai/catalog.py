@@ -95,9 +95,11 @@ def catalog_entries(root: Path) -> list[dict[str, Any]]:
 
     if is_skill_pack(root) or (root / "SKILL.md").is_file():
         add(root, "workspace")
-    for child in _iter_skill_dirs(root):
-        add(child, "workspace")
-    for child in _iter_skill_dirs(workspace_skills_root(root)):
+    skills_root = workspace_skills_root(root)
+    if not skills_root.is_dir():
+        for child in _iter_skill_dirs(root):
+            add(child, "workspace")
+    for child in _iter_skill_dirs(skills_root):
         add(child, "workspace")
     return entries
 
@@ -157,7 +159,7 @@ def find_skill(root: Path, name: str) -> Path:
 
 
 def import_from_agent_folders(
-    root: Path, *, sources: list[str] | None = None
+    root: Path, *, sources: list[str] | None = None, only: list[str] | None = None
 ) -> dict[str, Any]:
     """Copy chosen agent skill folders into ``<root>/skills/``. Skip names that already exist."""
     wanted = [item.strip().lower() for item in (sources or []) if item]
@@ -166,6 +168,7 @@ def import_from_agent_folders(
             "Choose Cursor, Codex, or Claude first.",
             hint="Pick an agent, then import.",
         )
+    slugs = {item.strip() for item in (only or []) if str(item).strip()}
     dest_parent = workspace_skills_root(root)
     dest_parent.mkdir(parents=True, exist_ok=True)
     imported: list[dict[str, str]] = []
@@ -176,6 +179,8 @@ def import_from_agent_folders(
         parent = source_dir(source, root=root)
         for skill_dir in _iter_skill_dirs(parent):
             slug = folder_slug(skill_dir)
+            if slugs and slug not in slugs and skill_dir.name not in slugs:
+                continue
             dest = dest_parent / slug
             if dest.exists():
                 skipped.append(

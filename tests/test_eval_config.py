@@ -300,7 +300,7 @@ def test_config_label_shows_llm_model_via_gateway() -> None:
     assert "via gateway" in label
 
 
-def test_fingerprint_changes_on_judge_backend() -> None:
+def test_fingerprint_ignores_scoring_provider() -> None:
     base = EvalRunConfig(harness="llm", timeout_effective=300)
     decisions = replace(
         base,
@@ -308,10 +308,10 @@ def test_fingerprint_changes_on_judge_backend() -> None:
     )
     responses = replace(
         base,
-        judge={"provider": "openai", "backend": "responses", "model": "gpt-6-luna"},
+        judge={"provider": "aws", "backend": "converse", "model": "amazon.nova-lite"},
     )
-    assert config_fingerprint(base) != config_fingerprint(decisions)
-    assert config_fingerprint(decisions) != config_fingerprint(responses)
+    assert config_fingerprint(base) == config_fingerprint(decisions)
+    assert config_fingerprint(decisions) == config_fingerprint(responses)
 
 
 def test_config_label_names_openai_scorer_not_model_id() -> None:
@@ -328,6 +328,7 @@ def test_config_label_names_openai_scorer_not_model_id() -> None:
     label = config_label(run)
     assert "OpenAI (your key)" in label
     assert "gpt-6-luna" not in label
+    assert customer_config_label(run) == "Scored by the judge"
 
 
 def test_stamp_resolved_default_llm_model_is_not_user_picked() -> None:
@@ -413,6 +414,21 @@ def test_customer_config_label_is_neutral_judge_copy() -> None:
     assert "GPT-4o" not in hidden
     assert "openai/" not in hidden
     assert "OpenAI" not in hidden
+    chosen = customer_config_label(
+        EvalRunConfig(
+            harness="llm",
+            judge={"provider": "jev", "chosen": True, "display_name": "Jev"},
+        )
+    )
+    assert chosen == "Scored by Jev"
+    scrubbed_openai = customer_config_label(
+        {
+            "harness": "llm",
+            "label": "Scored by OpenAI",
+            "judge": {"display_name": "OpenAI", "chosen": "True"},
+        }
+    )
+    assert scrubbed_openai == "Scored by OpenAI"
 
 
 def test_from_dict_drops_judge_api_key() -> None:

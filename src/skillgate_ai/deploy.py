@@ -7,7 +7,10 @@ from pathlib import Path
 from typing import NotRequired, Protocol, TypedDict
 
 from skillgate_ai.errors import DeployError, IngestError, friendly_os_error
-from skillgate_ai.history import latest_eval
+from skillgate_ai.deploy_gate import deploy_allowed, newest_gate_moving_row
+from skillgate_ai.history import load_history
+
+__all__ = ["deploy_allowed"]
 from skillgate_ai.ingest import NAME_RE, Skill, folder_slug, ingest_skill
 from skillgate_ai.pack import copy_skill_pack
 
@@ -180,19 +183,20 @@ def get_adapter(target: str) -> DeployAdapter:
 
 
 def latest_check_passed(pack: Path) -> bool | None:
-    """True/False from the newest local check, or None if this pack has no history."""
-    row = latest_eval(pack)
+    """True/False from the newest gate-moving check, or None if none yet."""
+    row = newest_gate_moving_row(load_history(pack, limit=0))
     if row is None:
+        return None
+    if row.get("passed") is None:
         return None
     return bool(row.get("passed"))
 
 
 def require_passing_check(pack: Path, *, name: str, force: bool = False) -> None:
-    """Refuse never-checked always; `--force` only overrides a red latest check."""
-    latest = latest_check_passed(pack)
-    if latest is None:
+    """Refuse never-checked always; `--force` only overrides a red gate-moving check."""
+    if newest_gate_moving_row(load_history(pack, limit=0)) is None:
         raise refuse_ungated_install(name, never_checked=True)
-    if latest is not True and not force:
+    if not deploy_allowed(pack) and not force:
         raise refuse_ungated_install(name, never_checked=False)
 
 

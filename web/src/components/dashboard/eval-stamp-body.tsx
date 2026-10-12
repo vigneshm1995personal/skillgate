@@ -126,7 +126,7 @@ export function EvalErrorPanel({
   const { setStage } = useDashboard()
   const showSettings = /settings/i.test(`${message} ${hint || ""}`)
   return (
-    <Alert variant="destructive">
+    <Alert>
       <AlertTitle>Couldn’t finish this run</AlertTitle>
       <AlertDescription>
         {message}
@@ -202,7 +202,7 @@ export function EvalPassFailPanel({
         <GateBadge {...stampBadgeProps(kind)} />
       </div>
       {errorNote ? (
-        <Alert variant="destructive">
+        <Alert>
           <AlertTitle>Stopped</AlertTitle>
           <AlertDescription>{errorNote}</AlertDescription>
         </Alert>

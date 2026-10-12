@@ -45,6 +45,10 @@ cases:
 
 Paths in `files[].src` and `golden.path` are **relative to the skill folder**.
 
+Optional `judge:` on the pack or a case adds extra scoring questions **on top of** Skill Gate’s six. Built-in ids cannot be reused; they can only change Fail vs warn (`on_fail`). Seed packs keep their original case ids.
+
+Pick who scores in Settings or `skillgate judge provider set`. Keys stay in `.skillgate/keys` — never ambient `OPENAI_API_KEY` / `AWS_*` unless `--key-env`.
+
 `skillgate check <pack>` expands pinned cases into scorers:
 
 - `skill_trigger` — description-only match (progressive disclosure)

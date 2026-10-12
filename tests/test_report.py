@@ -113,6 +113,7 @@ def test_scored_by_openai_with_answers() -> None:
     assert "Scored by OpenAI" not in text
     assert "OpenAI (your key)" not in text
     assert "OpenAI Decisions" not in text
+    assert "OpenAI (your key) scored this run." not in text
     gateway = _report(
         harness="llm",
         config={

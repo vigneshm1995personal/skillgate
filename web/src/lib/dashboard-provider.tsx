@@ -20,6 +20,7 @@ import {
   shouldSeedChecks,
   uniqueCheckId,
 } from "@/lib/dashboard-helpers"
+import { expectedWithoutTargetWarning } from "@/lib/case-pack"
 import { authenticFixtureDefaults, startBlockedMessage } from "@/lib/check-guards"
 import { type DashboardContextValue } from "@/lib/dashboard-context"
 import { slotOn } from "@/lib/mode"
@@ -64,6 +65,7 @@ export function DashboardProvider({
   const [skill, setSkill] = useState<SkillPayload | null>(null)
   const [skills, setSkills] = useState<SkillPayload[]>([])
   const [checks, setChecks] = useState<Check[]>([])
+  const [packJudge, setPackJudge] = useState<Check["judge"]>(null)
   const [yaml, setYaml] = useState("")
   const [seeding, setSeeding] = useState(false)
   const [seedingAssist, setSeedingAssist] = useState(false)
@@ -284,6 +286,7 @@ export function DashboardProvider({
           fixture_defaults: data.fixture_defaults ?? data.skill.fixture_defaults,
         })
         setChecks(data.checks)
+        setPackJudge(data.pack_judge ?? null)
         setYaml(data.yaml || "")
         setChecksSeeded(data.checks.length > 0)
         setChecksSource(data.source ?? null)
@@ -419,7 +422,9 @@ export function DashboardProvider({
   }, [])
 
   const removeCheck = useCallback((index: number) => {
-    setChecks((current) => current.filter((_, i) => i !== index))
+    setChecks((current) =>
+      current.filter((check, i) => i !== index || Boolean(check.locked))
+    )
   }, [])
 
   const importYaml = useCallback(
@@ -438,6 +443,7 @@ export function DashboardProvider({
       try {
         const data = await api.generate(skillId, yamlText)
         setChecks(data.checks)
+        setPackJudge(data.pack_judge ?? null)
         setYaml(data.yaml || yamlText)
         setChecksSeeded(false)
         setChecksSource("yaml")
@@ -460,9 +466,16 @@ export function DashboardProvider({
         return false
       }
       try {
-        const data = await api.pinChecks({ skill: skillId, checks: toPin })
+        const data = await api.pinChecks({
+          skill: skillId,
+          checks: toPin,
+          pack_judge: packJudge ?? null,
+        })
         if (isSameSkill(skill, skillId, data.skill)) {
           setChecks(data.checks)
+          if ("pack_judge" in data) {
+            setPackJudge(data.pack_judge ?? null)
+          }
           setYaml(data.yaml || "")
           setChecksSource("pack")
           setChecksNote(
@@ -474,6 +487,20 @@ export function DashboardProvider({
           }
         }
         toast.add({ title: "Saved to Dataset", type: "success" })
+        const seen = new Set<string>()
+        for (const check of toPin) {
+          const warning = expectedWithoutTargetWarning(check)
+          if (warning && !seen.has(warning)) {
+            seen.add(warning)
+            toast.add({ title: warning, type: "warning" })
+          }
+        }
+        for (const warning of (data as { warnings?: string[] }).warnings ?? []) {
+          if (warning && !seen.has(warning)) {
+            seen.add(warning)
+            toast.add({ title: warning, type: "warning" })
+          }
+        }
         return true
       } catch (err) {
         const error = asApiError(err)
@@ -481,7 +508,7 @@ export function DashboardProvider({
         return false
       }
     },
-    [skill]
+    [packJudge, skill]
   )
 
   const pinShownChecks = useCallback(async () => {
@@ -792,6 +819,8 @@ export function DashboardProvider({
       addCheck,
       updateCheck,
       removeCheck,
+      packJudge,
+      setPackJudge,
       applySkill,
       importYaml,
       pinShownChecks,
@@ -886,6 +915,8 @@ export function DashboardProvider({
       uploadZip,
       yaml,
       removeCheck,
+      packJudge,
+      setPackJudge,
       viewingPinnedHistory,
       gateRunning,
       tryoutRunning,

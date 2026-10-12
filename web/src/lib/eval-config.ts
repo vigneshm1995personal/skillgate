@@ -18,6 +18,7 @@ export type EvalRunConfig = {
     display_name?: string
     backend?: string
     model?: string
+    chosen?: boolean | string
   } | null
 }
 
@@ -192,9 +193,9 @@ export function unsupportedModelHint(
 ): string {
   if (resolveModelHarness(pref, resolvedHarness) === "codex") {
     if (known.length === 0 || known.length > 8) {
-      return "Not on this agent's list. Codex + ChatGPT login needs a Codex model — not gateway ids like openai/gpt-4o-mini."
+      return "Not on this agent's list. Codex + ChatGPT login needs a Codex model."
     }
-    return `Not on this agent's list. Codex + ChatGPT login needs a Codex model (${known.join(", ")}) — not gateway ids like openai/gpt-4o-mini.`
+    return `Not on this agent's list. That's not a Codex model (${known.join(", ")}).`
   }
   if (known.length === 0 || known.length > 8) {
     return "Not on this agent's list. Pick from the list for this agent or leave Agent default."
@@ -312,6 +313,43 @@ export function userPickedModel(config?: EvalRunConfig | null): boolean {
   return Boolean(config?.applied?.model)
 }
 
+function stampIsChosen(judge?: EvalRunConfig["judge"]): boolean {
+  const raw = judge?.chosen
+  return raw === true || raw === "true" || raw === "1"
+}
+
+function scoredByFromStamp(judge?: EvalRunConfig["judge"]): string {
+  if (!judge) {
+    return ""
+  }
+  const provider = (judge.provider || "").toLowerCase()
+  const name = (judge.display_name || "").trim()
+  if (name === "Checks" || provider === "skip") {
+    return ""
+  }
+  if (name === "OpenAI" || name === "Jev" || name === "AWS" || name === "Other") {
+    return `Scored by ${name}`
+  }
+  if (stampIsChosen(judge)) {
+    if (provider === "openai") {
+      return "Scored by OpenAI"
+    }
+    if (provider === "jev") {
+      return "Scored by Jev"
+    }
+    if (provider === "aws") {
+      return "Scored by AWS"
+    }
+    if (provider === "compatible") {
+      return "Scored by Other"
+    }
+  }
+  if (!provider || provider === "skip") {
+    return ""
+  }
+  return JUDGE_SCORED
+}
+
 export function customerConfigLabel(
   config?: EvalRunConfig | null,
   harness?: string | null
@@ -323,12 +361,11 @@ export function customerConfigLabel(
   if (isLegacyRunCopy(config.label, resolved)) {
     return OLDER_RUN_LABEL
   }
-  const judge = config.judge
-  if (
-    (judge?.provider || "").toLowerCase() === "openai" ||
-    isJudgeScorerCopy(judge?.display_name) ||
-    isJudgeScorerCopy(config.label)
-  ) {
+  const fromStamp = scoredByFromStamp(config.judge)
+  if (fromStamp) {
+    return fromStamp
+  }
+  if (isJudgeScorerCopy(config.judge?.display_name) || isJudgeScorerCopy(config.label)) {
     return JUDGE_SCORED
   }
   return ""

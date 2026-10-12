@@ -33,8 +33,7 @@ describe("historyMeta", () => {
     })
     expect(meta.config).toBe("Scored by the judge")
     expect(meta.config).not.toMatch(/GPT-4o|OpenAI|Vercel|gpt-6-luna/)
-    expect(meta.configRaw).toContain("openai/gpt-4o-mini")
-    expect(meta.configRaw).toContain("via gateway")
+    expect(meta.configRaw).toBe("")
     expect(
       historyMeta({
         kind: "run",

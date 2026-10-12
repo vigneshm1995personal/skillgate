@@ -27,21 +27,37 @@ from skillgate_ai.pack import (
     safe_relpath,
     write_pack_file,
 )
+from skillgate_ai.pack_files import (
+    GOLDEN_TAIL_CHARS as GOLDEN_TAIL_CHARS,
+    golden_kind,
+    read_capped_text,
+    resolve_golden_src,
+    sniff_output_bytes,
+)
+from skillgate_ai.pack_schema import (
+    ExtraQuestion as ExtraQuestion,
+    JudgeBlock,
+    SEED_CASE_IDS,
+    SEED_LOCK_HINT,
+    SEED_LOCK_MESSAGE,
+    case_id_slug,
+    case_is_locked,
+    keep_locked_case,
+    merge_judge_block,
+    parse_judge_block,
+    parse_judge_patch,
+    reject_missing_seed_cases,
+)
 from skillgate_ai.suite import DEFAULT_TASK_TIMEOUT_SEC, SuiteSpec, _normalize_suite
 
 CASES_REL = "evals/cases.yaml"
 PIN_NEEDS_EXPECTED = "Add expected output for this check, then save."
 PIN_NEEDS_EXPECTED_HINT = "Open Dataset and fill Expected output."
 NO_TRIGGER_OUTPUT_WARNING = "Expected output on a no-trigger check is ignored."
-GOLDEN_TAIL_CHARS = 8000
-_OUTPUT_MAGICS = (
-    (b"\xff\xd8\xff", "jpeg", "image/jpeg"),
-    (b"\x89PNG\r\n\x1a\n", "png", "image/png"),
-    (b"%PDF", "pdf", "application/pdf"),
-    (b"GIF87a", "gif", "image/gif"),
-    (b"GIF89a", "gif", "image/gif"),
+EXPECTED_WITHOUT_TARGET = (
+    "This check has expected text, but no output file to compare it with."
 )
-PACK_FINGERPRINT_FIELDS = ("id", "prompt", "should_trigger", "input", "golden", "budgets")
+PACK_FINGERPRINT_FIELDS = ("id", "prompt", "should_trigger", "input", "golden", "budgets", "judge")
 _CASE_ID_RE = re.compile(r"^[a-z0-9-]+$")
 _JSONISH_RE = re.compile(r"^\s*[\{\[]")
 
@@ -82,6 +98,7 @@ class PackCase(BaseModel):
     contains: list[str] = Field(default_factory=list)
     min_pages: int | None = None
     budgets: CaseBudgets | None = None
+    judge: JudgeBlock | None = None
 
     @field_validator("id")
     @classmethod
@@ -110,6 +127,7 @@ class CasePack(BaseModel):
     skill: str
     cases: list[PackCase]
     budgets: CaseBudgets | None = None
+    judge: JudgeBlock | None = None
 
     @model_validator(mode="after")
     def _unique_ids(self) -> CasePack:
@@ -128,6 +146,71 @@ class TrustSuite:
     suite: SuiteSpec
 
 
+def _reject_missing_seed_cases(pack: CasePack) -> None:
+    reject_missing_seed_cases(pack.skill, {case.id for case in pack.cases})
+
+
+def _reject_removed_seed_cases(previous: CasePack | None, pack: CasePack) -> None:
+    locked = SEED_CASE_IDS.get(pack.skill)
+    if not locked or previous is None:
+        return
+    prev_ids = {case.id for case in previous.cases}
+    present = {case.id for case in pack.cases}
+    missing = sorted((locked & prev_ids) - present)
+    if missing:
+        raise SuiteError(SEED_LOCK_MESSAGE, hint=SEED_LOCK_HINT, exit_code=2)
+
+
+def pack_judge_dict(pack: CasePack | None) -> dict[str, Any] | None:
+    if pack is None or pack.judge is None or pack.judge.is_empty():
+        return None
+    return pack.judge.to_sparse_dict()
+
+
+def save_pack_judge(skill_path: str | Path, raw: dict[str, Any] | None) -> CasePack:
+    root = Path(skill_path).expanduser().resolve()
+    pack = load_case_pack(root)
+    if pack is None:
+        raise SuiteError("This skill has no case pack yet.")
+    incoming, removed = parse_judge_patch(raw)
+    merged = merge_judge_block(pack.judge, incoming, removed_ids=removed)
+    updated = pack.model_copy(update={"judge": merged})
+    save_case_pack(root, updated)
+    return updated
+
+
+def reset_pack_judge(skill_path: str | Path) -> CasePack:
+    root = Path(skill_path).expanduser().resolve()
+    pack = load_case_pack(root)
+    if pack is None:
+        raise SuiteError("This skill has no case pack yet.")
+    cases = [case.model_copy(update={"judge": None}) for case in pack.cases]
+    updated = pack.model_copy(update={"judge": None, "cases": cases})
+    save_case_pack(root, updated)
+    return updated
+
+
+def expected_without_target_warning(
+    *,
+    contains: str | None,
+    output_path: str | None,
+    golden_path: str | None,
+    should_trigger: bool = True,
+) -> str | None:
+    if not should_trigger:
+        leftover = bool(
+            str(contains or "").strip()
+            or str(output_path or "").strip()
+            or str(golden_path or "").strip()
+        )
+        return NO_TRIGGER_OUTPUT_WARNING if leftover else None
+    if not str(contains or "").strip():
+        return None
+    if str(output_path or "").strip() or str(golden_path or "").strip():
+        return None
+    return EXPECTED_WITHOUT_TARGET
+
+
 def cases_path(skill_path: str | Path) -> Path:
     return Path(skill_path).expanduser().resolve() / CASES_REL
 
@@ -141,9 +224,15 @@ def load_case_pack(skill_path: str | Path) -> CasePack | None:
     try:
         raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     except yaml.YAMLError:
-        raise SuiteError("Case pack is not valid YAML.") from None
+        raise SuiteError(
+            "Couldn't load these checks.",
+            hint="evals/cases.yaml must be valid YAML.",
+        ) from None
     if not isinstance(raw, dict):
-        raise SuiteError("Case pack must be a YAML mapping.")
+        raise SuiteError(
+            "Couldn't load these checks.",
+            hint="evals/cases.yaml must be a YAML mapping.",
+        )
     schema = raw.get("schema")
     if schema is not None and schema != 1:
         raise SuiteError(
@@ -162,6 +251,7 @@ def load_case_pack(skill_path: str | Path) -> CasePack | None:
             hint="Set `skill:` in evals/cases.yaml to the folder name.",
         )
     _validate_pack_on_disk(root, pack)
+    _reject_missing_seed_cases(pack)
     return pack
 
 
@@ -171,8 +261,18 @@ def save_case_pack(skill_path: str | Path, pack: CasePack) -> Path:
         CasePack.model_validate(pack.model_dump())
     except Exception as exc:
         raise SuiteError(friendly_validation_error(exc, kind="Case pack")) from None
-    _validate_pack_on_disk(root, pack)
     dest = cases_path(root)
+    previous = None
+    if dest.is_file():
+        try:
+            raw = yaml.safe_load(dest.read_text(encoding="utf-8")) or {}
+            if isinstance(raw, dict):
+                previous = CasePack.model_validate(raw)
+        except Exception:
+            previous = None
+    _reject_removed_seed_cases(previous, pack)
+    _reject_missing_seed_cases(pack)
+    _validate_pack_on_disk(root, pack)
     dest.parent.mkdir(parents=True, exist_ok=True)
     dest.write_text(_dump_pack(pack), encoding="utf-8")
     return dest
@@ -183,12 +283,17 @@ def pack_fingerprint(pack: CasePack) -> str:
     for case in pack.cases:
         if case.status != "pinned":
             continue
-        dump = case.model_dump(include=set(PACK_FINGERPRINT_FIELDS) - {"budgets"})
+        dump = case.model_dump(include=set(PACK_FINGERPRINT_FIELDS) - {"budgets", "judge"})
         effective = merge_budgets(pack.budgets, case.budgets)
         if effective is not None:
             dump["budgets"] = effective.to_sparse_dict()
+        if case.judge is not None and not case.judge.is_empty():
+            dump["judge"] = case.judge.to_sparse_dict()
         pinned.append(dump)
-    blob = json.dumps(pinned, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    payload: dict[str, Any] = {"cases": pinned}
+    if pack.judge is not None and not pack.judge.is_empty():
+        payload["pack_judge"] = pack.judge.to_sparse_dict()
+    blob = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
     return hashlib.sha256(blob.encode("utf-8")).hexdigest()[:16]
 
 
@@ -215,7 +320,7 @@ def suite_fingerprint(spec: SuiteSpec) -> str:
 def suite_from_pack(pack: CasePack, skill_rel: str) -> SuiteSpec:
     pinned = [case for case in pack.cases if case.status == "pinned"]
     if not pinned:
-        raise SuiteError("Case pack has no pinned cases to run.")
+        raise SuiteError("This Dataset has no saved checks to run.")
     raw_tasks: list[dict[str, Any]] = []
     for case in pinned:
         scorers: list[dict[str, Any]] = [{"type": "skill_trigger"}]
@@ -259,7 +364,7 @@ def suite_from_pack(pack: CasePack, skill_rel: str) -> SuiteSpec:
         {
             "suite": f"{pack.skill}-pack",
             "skill": skill_rel,
-            "title": f"{pack.skill} Dataset",
+            "title": "Dataset",
             "description": "This skill's Dataset.",
             "timeout_sec": DEFAULT_TASK_TIMEOUT_SEC,
             "tasks": raw_tasks,
@@ -268,7 +373,7 @@ def suite_from_pack(pack: CasePack, skill_rel: str) -> SuiteSpec:
     try:
         return SuiteSpec.model_validate(raw)
     except Exception as exc:
-        raise SuiteError(f"Case pack could not become a suite: {exc}") from exc
+        raise SuiteError(f"Couldn't turn these checks into a run: {exc}") from exc
 
 
 def checks_from_pack(pack: CasePack, *, include_drafts: bool = False) -> list[dict[str, Any]]:
@@ -289,8 +394,13 @@ def checks_from_pack(pack: CasePack, *, include_drafts: bool = False) -> list[di
             "golden_path": case.golden.path if case.golden else None,
             "golden_kind": case.golden.kind if case.golden else None,
             "bank_status": case.status,
+            "locked": case_is_locked(pack.skill, case.id),
         }
+        if case.judge is not None and not case.judge.is_empty():
+            check["judge"] = case.judge.to_sparse_dict()
         warning = no_trigger_output_warning(case)
+        if warning is None and case.contains and case.golden is None:
+            warning = EXPECTED_WITHOUT_TARGET
         if warning:
             check["warning"] = warning
         effective = merge_budgets(pack.budgets, case.budgets)
@@ -377,6 +487,8 @@ def pin_checks(skill_path: str | Path, checks: list[dict[str, Any]]) -> CasePack
     if not checks:
         raise ValueError("Pin needs at least one check.")
     for raw in checks:
+        if keep_locked_case(skill_name, by_id, raw) is not None:
+            continue
         case = _case_from_check(root, raw, skill_name)
         by_id[case.id] = case
     pack = CasePack(
@@ -384,7 +496,9 @@ def pin_checks(skill_path: str | Path, checks: list[dict[str, Any]]) -> CasePack
         skill=skill_name,
         cases=list(by_id.values()),
         budgets=existing.budgets if existing else None,
+        judge=existing.judge if existing else None,
     )
+    _reject_missing_seed_cases(pack)
     save_case_pack(root, pack)
     return pack
 
@@ -421,6 +535,7 @@ def pin_case_ids(skill_path: str | Path, case_ids: list[str]) -> CasePack:
         skill=pack.skill,
         cases=updated,
         budgets=pack.budgets,
+        judge=pack.judge,
     )
     save_case_pack(root, out)
     return out
@@ -444,18 +559,36 @@ def trust_suite_for_skill(skill_path: str | Path) -> TrustSuite | None:
     return _template_trust(root)
 
 
-def suite_from_checks(skill_path: str | Path, checks: list[dict[str, Any]]) -> SuiteSpec:
+def suite_from_checks(
+    skill_path: str | Path, checks: list[dict[str, Any]], *, tryout: bool = False
+) -> SuiteSpec:
     """Build a suite from the Checks tab without writing evals/cases.yaml."""
     root = Path(skill_path).expanduser().resolve()
     skill_name = _skill_name(root)
     if not checks:
         raise SuiteError("Need at least one check to run.")
+    existing = load_case_pack(root) if cases_path(root).is_file() else None
+    held = {case.id: case for case in (existing.cases if existing else [])}
     try:
-        cases = [_case_from_check(root, dict(raw), skill_name) for raw in checks]
+        cases = []
+        for raw in checks:
+            row = dict(raw)
+            seed = keep_locked_case(skill_name, held, row)
+            cases.append(seed if seed is not None else _case_from_check(root, row, skill_name))
     except ValueError as exc:
         hint = PIN_NEEDS_EXPECTED_HINT if PIN_NEEDS_EXPECTED in str(exc) else None
         raise SuiteError(str(exc), hint=hint) from exc
-    pack = CasePack(schema_version=1, skill=skill_name, cases=cases)
+    if not tryout and existing is not None:
+        present = {case.id for case in cases}
+        cases.extend(
+            c for c in existing.cases if case_is_locked(existing.skill, c.id) and c.id not in present
+        )
+    pack = CasePack(
+        schema_version=1,
+        skill=skill_name,
+        cases=cases,
+        judge=existing.judge if existing else None,
+    )
     return suite_from_pack(pack, str(root))
 
 
@@ -465,7 +598,7 @@ def expand_from_pack(skill_path: str | Path) -> SuiteSpec:
     if pack is None:
         raise SuiteError(
             "This skill has no checks yet.",
-            hint="Add a check, then press Run.",
+            hint="Add a check first.",
         )
     return suite_from_pack(pack, str(root))
 
@@ -474,7 +607,7 @@ def checks_fingerprint(checks: list[dict[str, Any]], *, skill: str) -> str:
     """Fingerprint an ad-hoc Checks tab the same way as a pinned pack."""
     cases: list[PackCase] = []
     for raw in checks:
-        case_id = _slug_id(str(raw.get("id") or f"check-{len(cases) + 1}"))
+        case_id = case_id_slug(str(raw.get("id") or f"check-{len(cases) + 1}"))
         files = _file_copies(raw.get("files"))
         golden = None
         golden_path = str(raw.get("golden_path") or "").strip() or None
@@ -505,32 +638,6 @@ def checks_fingerprint(checks: list[dict[str, Any]], *, skill: str) -> str:
             )
         )
     return pack_fingerprint(CasePack(schema_version=1, skill=skill, cases=cases))
-
-
-def sniff_output_bytes(data: bytes) -> dict[str, Any]:
-    """Classify produced bytes: text vs image/pdf/NUL. Never invents a body."""
-    size = len(data)
-    for magic, name, mime in _OUTPUT_MAGICS:
-        if data.startswith(magic):
-            return {"kind": "bytes", "magic": name, "mime": mime, "size": size}
-    if b"\0" in data[:1024]:
-        return {"kind": "bytes", "magic": "nul", "mime": None, "size": size}
-    return {"kind": "text", "magic": None, "mime": None, "size": size}
-
-
-def read_capped_text(path: str | Path | None, *, limit: int = GOLDEN_TAIL_CHARS) -> str | None:
-    if path is None:
-        return None
-    file_path = Path(path)
-    if not file_path.is_file():
-        return None
-    data = file_path.read_bytes()
-    if b"\0" in data[:1024]:
-        return None
-    text = data.decode("utf-8", errors="replace")
-    if limit <= 0:
-        return ""
-    return text[-limit:]
 
 
 def golden_state(golden: CaseGolden | None, skill_root: Path) -> dict[str, Any] | None:
@@ -602,6 +709,10 @@ def _dump_pack(pack: CasePack) -> str:
         payload.pop("budgets", None)
     else:
         payload["budgets"] = pack.budgets.to_sparse_dict()
+    if pack.judge is None or pack.judge.is_empty():
+        payload.pop("judge", None)
+    else:
+        payload["judge"] = pack.judge.to_sparse_dict()
     dumped_cases = payload.get("cases") or []
     for item, case in zip(dumped_cases, pack.cases):
         if not isinstance(item, dict):
@@ -610,6 +721,10 @@ def _dump_pack(pack: CasePack) -> str:
             item.pop("budgets", None)
         else:
             item["budgets"] = case.budgets.to_sparse_dict()
+        if case.judge is None or case.judge.is_empty():
+            item.pop("judge", None)
+        else:
+            item["judge"] = case.judge.to_sparse_dict()
     return yaml.safe_dump(payload, sort_keys=False, allow_unicode=True)
 
 
@@ -663,11 +778,6 @@ def _skill_name(root: Path) -> str:
     return root.name
 
 
-def _slug_id(value: str) -> str:
-    slug = re.sub(r"[^a-z0-9]+", "-", value.strip().lower()).strip("-")
-    return slug or "case"
-
-
 def _file_copies(raw: object) -> list[CaseFileCopy]:
     if not isinstance(raw, list):
         return []
@@ -692,8 +802,9 @@ def _inline_input_text(raw: dict[str, Any]) -> str | None:
 
 def _case_from_check(root: Path, raw: dict[str, Any], skill_name: str) -> PackCase:
     del skill_name
-    case_id = _slug_id(str(raw.get("id") or "example"))
+    case_id = case_id_slug(str(raw.get("id") or "example"))
     should = bool(raw.get("should_trigger", True))
+    judge = parse_judge_block(raw.get("judge"))
     file_items = raw.get("files") if isinstance(raw.get("files"), list) else []
     inline = _inline_input_text(raw)
     if inline is not None:
@@ -713,12 +824,13 @@ def _case_from_check(root: Path, raw: dict[str, Any], skill_name: str) -> PackCa
     elif isinstance(contains, list):
         contains_list = [str(item).strip() for item in contains if str(item).strip()]
     golden: CaseGolden | None = None
-    if should and (output_path or contains_list or raw.get("golden_path")):
+    golden_path = str(raw.get("golden_path") or "").strip() or None
+    if should and (output_path or golden_path):
         golden = _persist_golden(
             root,
             case_id=case_id,
             output_path=output_path,
-            golden_path=str(raw.get("golden_path") or "").strip() or None,
+            golden_path=golden_path,
             contains_list=contains_list,
         )
     return PackCase(
@@ -731,6 +843,7 @@ def _case_from_check(root: Path, raw: dict[str, Any], skill_name: str) -> PackCa
         contains=contains_list,
         min_pages=raw.get("min_pages"),
         budgets=parse_budgets(raw.get("budgets")),
+        judge=judge,
     )
 
 
@@ -784,57 +897,10 @@ def _persist_input_files(root: Path, files: object, *, case_id: str) -> list[Cas
     return out
 
 
-_BINARY_GOLDEN = {".pdf", ".png", ".jpg", ".jpeg", ".gif", ".webp"}
-
-
-def _golden_kind(path: str | Path) -> Literal["json", "text", "bytes"]:
-    suffix = Path(path).suffix.lower()
-    if suffix == ".json":
-        return "json"
-    if suffix in _BINARY_GOLDEN:
-        return "bytes"
-    return "text"
-
-
-def _file_inside_skill(root: Path, path: Path) -> Path | None:
-    try:
-        resolved = path.expanduser().resolve()
-        resolved.relative_to(root.resolve())
-    except (OSError, ValueError):
-        return None
-    return resolved if resolved.is_file() else None
-
-
-def _resolve_golden_src(
-    root: Path, case_id: str, golden_path: str | None
-) -> Path | None:
-    root = root.resolve()
-    folder = root / GOLDEN_DIR
-    if golden_path:
-        rel = golden_path.replace("\\", "/").lstrip("/")
-        parts = Path(rel).parts
-        if ".." not in parts:
-            packed = _file_inside_skill(root, root / rel)
-            if packed is not None:
-                return packed
-        named = _file_inside_skill(root, folder / Path(rel).name)
-        if named is not None:
-            return named
-    if folder.is_dir():
-        matches = sorted(
-            path
-            for path in folder.iterdir()
-            if path.is_file() and path.stem == case_id
-        )
-        if matches:
-            return matches[0]
-    return None
-
-
 def _disk_golden(
     root: Path, case_id: str, output_path: str | None
 ) -> CaseGolden | None:
-    found = _resolve_golden_src(root, case_id, None)
+    found = resolve_golden_src(root, case_id, None)
     if found is None:
         return None
     try:
@@ -844,7 +910,7 @@ def _disk_golden(
     return CaseGolden(
         output_path=output_path or "output/result.txt",
         path=rel,
-        kind=_golden_kind(found),
+        kind=golden_kind(found),
     )
 
 
@@ -857,7 +923,7 @@ def _persist_golden(
     contains_list: list[str],
 ) -> CaseGolden:
     dest_output = output_path or "output/result.txt"
-    found = _resolve_golden_src(root, case_id, golden_path)
+    found = resolve_golden_src(root, case_id, golden_path)
     if found is not None:
         try:
             rel = found.resolve().relative_to(root.resolve()).as_posix()
@@ -866,13 +932,13 @@ def _persist_golden(
         else:
             if rel.startswith(f"{GOLDEN_DIR}/"):
                 return CaseGolden(
-                    output_path=dest_output, path=rel, kind=_golden_kind(found)
+                    output_path=dest_output, path=rel, kind=golden_kind(found)
                 )
             suffix = found.suffix or ".txt"
             rel = f"{GOLDEN_DIR}/{case_id}{suffix}"
             write_pack_file(root, rel=rel, content=found.read_bytes())
             return CaseGolden(
-                output_path=dest_output, path=rel, kind=_golden_kind(found)
+                output_path=dest_output, path=rel, kind=golden_kind(found)
             )
     if not contains_list:
         raise ValueError(PIN_NEEDS_EXPECTED)
@@ -911,7 +977,6 @@ def _bundled_suite_trust(skill_path: Path) -> TrustSuite | None:
             continue
         raw = yaml.safe_load(candidate.read_text(encoding="utf-8")) or {}
         if isinstance(raw, dict) and raw.get("from_pack"):
-            # Pointer to a missing/unpinned pack is not a trust suite.
             continue
         spec, _ = load_suite(candidate)
         return TrustSuite(
@@ -923,6 +988,5 @@ def _bundled_suite_trust(skill_path: Path) -> TrustSuite | None:
     return None
 
 
-def _template_trust(skill_path: Path) -> TrustSuite | None:
-    del skill_path
+def _template_trust(_skill_path: Path) -> TrustSuite | None:
     return None

@@ -12,6 +12,7 @@ import typer
 from rich.console import Console
 
 from skillgate_ai import __version__
+from skillgate_ai.api_payloads import scrub_browser_payload
 from skillgate_ai.config import load_env
 from skillgate_ai.errors import SkillGateError
 from skillgate_ai.gate import run_check
@@ -43,9 +44,24 @@ def _boot() -> Path:
     return root
 
 
+def _version_callback(value: bool) -> None:
+    if value:
+        console.print(__version__)
+        raise typer.Exit()
+
+
 @app.callback()
-def _main() -> None:
+def _main(
+    version: bool = typer.Option(
+        False,
+        "--version",
+        callback=_version_callback,
+        is_eager=True,
+        help="Print the CLI version.",
+    ),
+) -> None:
     """Skill Gate."""
+    del version
 
 
 @app.command()
@@ -124,8 +140,30 @@ def _run_gate(
     temperature: float | None,
     reasoning_effort: str | None,
     key_env: list[str] | None = None,
+    case_id: str | None = None,
 ) -> None:
     _bind_key_env(key_env)
+    checks = None
+    tryout = False
+    if case_id:
+        from skillgate_ai.pack_edit import tryout_checks
+
+        dest = resolve_user_path(target, project_root())
+        try:
+            checks = tryout_checks(dest, case_id)
+            tryout = True
+        except SkillGateError as exc:
+            if json_out or summary == "json":
+                _emit_json(
+                    {
+                        "error": exc.message,
+                        "hint": exc.hint,
+                        "exit_code": exc.exit_code,
+                    }
+                )
+            else:
+                console.print(exc.render())
+            raise typer.Exit(exc.exit_code) from None
     result = run_check(
         target,
         skill=skill,
@@ -137,6 +175,8 @@ def _run_gate(
         temperature=temperature,
         reasoning_effort=reasoning_effort,
         source="cli",
+        checks=checks,
+        tryout=tryout,
     )
     machine = json_out or summary == "json"
     if not machine and summary != "github":
@@ -165,7 +205,7 @@ def _run_gate(
     if report is None:
         raise typer.Exit(result.exit_code)
     if machine:
-        _emit_json(report_to_dict(report))
+        _emit_json(scrub_browser_payload(report_to_dict(report)))
     else:
         text = format_github(report)
         console.print(text)
@@ -184,7 +224,10 @@ def _run_gate(
 
 _HARNESS_HELP = "auto | cursor-agent | codex | llm"
 _SANDBOX_HELP = "local | docker"
-_KEY_ENV_HELP = "Use this process env name as a Skill Gate key (repeatable). Example: --key-env OPENAI_API_KEY"
+_KEY_ENV_HELP = (
+    "Use this process env name as a Skill Gate key (repeatable). "
+    "CI: set SKILLGATE_OPENAI_API_KEY, or pass --key-env OPENAI_API_KEY."
+)
 
 
 @app.command("check")
@@ -206,6 +249,7 @@ def check_pack(
         None, "--reasoning-effort", help="Codex reasoning: low | medium | high | ultra"
     ),
     key_env: list[str] | None = typer.Option(None, "--key-env", help=_KEY_ENV_HELP),
+    case_id: str | None = typer.Option(None, "--case", help="Run this check only (try-out)"),
 ) -> None:
     """Run pack-local evals/cases.yaml. Exit 0 if green, 1 if red, 2 if no key."""
     _run_gate(
@@ -221,6 +265,7 @@ def check_pack(
         temperature=temperature,
         reasoning_effort=reasoning_effort,
         key_env=key_env,
+        case_id=case_id,
     )
 
 
@@ -282,20 +327,33 @@ def deploy(
 ) -> None:
     """Copy a skill pack into a local agent skills directory.
 
-    Refuses unless this pack already has a passing check. Does not run check.
-    Copies skill files only (not evals/). --force only overrides a red latest check.
+    Refuses unless this pack already has a passing check and a model key is set
+    (vault, Settings, or SKILLGATE_*). Does not run check. Copies skill files
+    only (not evals/). --force only overrides a red latest check; it does not
+    skip a missing key.
     """
+    from skillgate_ai.config import get_llm_config, missing_key_error
     from skillgate_ai.deploy import get_adapter
+    from skillgate_ai.history import append_deploy
 
     root = _boot()
     path = resolve_user_path(pack, root)
     selected = _parse_targets(target, targets, default="cursor")
     try:
         adapters = [get_adapter(name) for name in selected]
+        if not get_llm_config(root).has_any_key:
+            raise missing_key_error()
         loaded = ingest_skill(path)
         for adapter in adapters:
             result = adapter.install(skill=loaded, source=path, force=force)
             console.print(result["message"])
+            append_deploy(
+                path,
+                target=adapter.id,
+                status=result.get("status") or "installed",
+                file_count=result.get("file_count"),
+                mode="local",
+            )
     except SkillGateError as exc:
         console.print(exc.render())
         raise typer.Exit(exc.exit_code) from None
@@ -423,14 +481,16 @@ app.add_typer(keys_app, name="keys")
 
 @keys_app.command("set")
 def keys_set(
-    name: str = typer.Argument(..., help="CURSOR_API_KEY | CODEX_API_KEY | OPENAI_API_KEY | …"),
+    name: str = typer.Argument(
+        ..., help="CURSOR_API_KEY | CODEX_API_KEY | OPENAI_API_KEY | Other | …"
+    ),
     value: str | None = typer.Argument(
         None,
         help="The secret. Omit to paste hidden (TTY) or read stdin.",
     ),
 ) -> None:
     """Write a key into `.skillgate/keys` (mode 0600)."""
-    from skillgate_ai.keys import set_vault_key
+    from skillgate_ai.keys import public_key_name, set_vault_key
 
     root = _boot()
     secret = value
@@ -444,7 +504,7 @@ def keys_set(
     except SkillGateError as exc:
         console.print(exc.render())
         raise typer.Exit(exc.exit_code) from None
-    console.print(f"Saved {name} in Settings (`.skillgate/keys`).")
+    console.print(f"Saved {public_key_name(name)} in Settings (`.skillgate/keys`).")
 
 
 @keys_app.command("clear")
@@ -452,15 +512,19 @@ def keys_clear(
     name: str = typer.Argument(..., help="Key name to remove"),
 ) -> None:
     """Remove a key from `.skillgate/keys`."""
-    from skillgate_ai.keys import clear_vault_key
+    from skillgate_ai.keys import clear_vault_key, internal_key_name, public_key_name, read_vault
 
     root = _boot()
     try:
+        key = internal_key_name(name)
+        if key not in read_vault(root):
+            console.print(f"No {public_key_name(name)} in Settings.")
+            raise typer.Exit(1)
         clear_vault_key(root, name)
     except SkillGateError as exc:
         console.print(exc.render())
         raise typer.Exit(exc.exit_code) from None
-    console.print(f"Cleared {name}.")
+    console.print(f"Cleared {public_key_name(name)}.")
 
 
 @keys_app.command("list")
@@ -471,12 +535,14 @@ def keys_list() -> None:
     root = _boot()
     presence = key_presence(root)
     found = False
+    from skillgate_ai.keys import public_key_name
+
     for name, meta in presence.items():
         if not meta["set"]:
             continue
         found = True
         source = "Settings" if meta["from_vault"] else "SKILLGATE_* / --key-env"
-        console.print(f"{name}  ({source})")
+        console.print(f"{public_key_name(name)}  ({source})")
     if not found:
         console.print("No keys set. Use `skillgate keys set` or Settings in `skillgate ui`.")
 
@@ -494,6 +560,11 @@ def init_cmd(
     except SkillGateError as exc:
         console.print(exc.render())
         raise typer.Exit(exc.exit_code) from None
+    except OSError as exc:
+        console.print("Couldn't create that folder.")
+        if exc.strerror:
+            console.print(exc.strerror)
+        raise typer.Exit(1) from None
     console.print(f"Workspace ready at {root}")
 
 
@@ -521,13 +592,283 @@ def example_cmd(
     """Copy a packaged example skill into this folder."""
     from skillgate_ai.examples import copy_example
 
-    target = (dest or Path.cwd() / name).expanduser().resolve()
+    root = _boot()
+    target = (dest or (root / "skills" / name)).expanduser().resolve()
     try:
         written = copy_example(name, target)
     except SkillGateError as exc:
         console.print(exc.render())
         raise typer.Exit(exc.exit_code) from None
     console.print(f"Wrote {written}")
+
+
+judge_app = typer.Typer(
+    add_completion=False,
+    no_args_is_help=True,
+    help="Show extra scoring questions and pick who scores live checks.",
+)
+judge_provider_app = typer.Typer(
+    add_completion=False,
+    no_args_is_help=True,
+    help="Scoring provider (OpenAI, Jev, AWS, Other).",
+)
+app.add_typer(judge_app, name="judge")
+judge_app.add_typer(judge_provider_app, name="provider")
+
+
+def _resolve_pack_arg(pack: Path | None) -> Path:
+    root = _boot()
+    if pack is not None:
+        dest = resolve_user_path(pack, root)
+    elif is_skill_pack(root):
+        dest = root
+    else:
+        pdf = root / "skills" / "pdf"
+        if is_skill_pack(pdf):
+            dest = pdf
+        else:
+            raise SkillGateError(
+                "Pass a skill pack (folder with SKILL.md and evals/).",
+                exit_code=2,
+            )
+    if not (dest / "SKILL.md").is_file():
+        raise SkillGateError(
+            f"Not a skill pack: {dest}",
+            hint="Pass a skill folder with SKILL.md and evals/.",
+            exit_code=2,
+        )
+    return dest
+
+
+@judge_app.command("show")
+def judge_show(
+    pack: Path | None = typer.Argument(None, help="Skill pack (default: this folder or skills/pdf)"),
+    case_id: str | None = typer.Option(None, "--case", help="Case id"),
+    json_out: bool = typer.Option(False, "--json", help="Resolved spec JSON"),
+) -> None:
+    """Print built-in questions, then extras."""
+    from skillgate_ai.case_pack import load_case_pack, pack_judge_dict
+    from skillgate_ai.judge_spec import resolve_judge_spec
+    from skillgate_ai.project_config import load_project_judge
+
+    try:
+        dest = _resolve_pack_arg(pack)
+        loaded = load_case_pack(dest)
+        case_block = None
+        if case_id:
+            from skillgate_ai.pack_schema import case_id_slug
+
+            wanted = case_id_slug(case_id)
+            found = False
+            if loaded is not None:
+                for case in loaded.cases:
+                    if case.id == wanted:
+                        found = True
+                        if case.judge is not None:
+                            case_block = case.judge.to_sparse_dict()
+                        break
+            if not found:
+                raise SkillGateError(f"No check named {case_id}.")
+        spec = resolve_judge_spec(
+            project=load_project_judge(_boot()),
+            pack=pack_judge_dict(loaded),
+            case=case_block,
+        )
+    except SkillGateError as exc:
+        console.print(exc.render())
+        raise typer.Exit(exc.exit_code) from None
+    if json_out:
+        _emit_json(
+            {
+                "questions": [
+                    {
+                        "id": q.id,
+                        "type": q.type,
+                        "ask": q.ask,
+                        "on_fail": q.on_fail,
+                        "builtin": q.builtin,
+                    }
+                    for q in spec.questions
+                ]
+            }
+        )
+        return
+    console.print("Skill Gate questions (always asked)")
+    for question in spec.builtins:
+        severity = "Warn only" if question.on_fail == "warn" else "Fail the check"
+        console.print(f"  {question.label}  {severity}")
+    extras = spec.extras
+    if extras:
+        console.print("Your questions")
+        for question in extras:
+            kind = {"predicate": "Yes/No", "choice": "Pick one", "score": "Score"}[question.type]
+            severity = "Warn only" if question.on_fail == "warn" else "Fail the check"
+            console.print(f"  {question.label}  {kind}  {severity}")
+    else:
+        console.print("No extra questions.")
+
+
+@judge_app.command("reset")
+def judge_reset(
+    pack: Path | None = typer.Argument(None, help="Skill pack"),
+) -> None:
+    """Drop extras and Fail vs warn overrides. Built-ins stay."""
+    from skillgate_ai.case_pack import reset_pack_judge
+
+    try:
+        dest = _resolve_pack_arg(pack)
+        reset_pack_judge(dest)
+    except SkillGateError as exc:
+        console.print(exc.render())
+        raise typer.Exit(exc.exit_code) from None
+    console.print("Extra scoring questions removed. Skill Gate’s six stay.")
+
+
+@judge_app.command("add-question")
+def judge_add_question_cmd(
+    pack: Path | None = typer.Argument(None, help="Skill pack"),
+    ask: str = typer.Option(..., "--ask", help="Question text"),
+    kind: str = typer.Option("Yes/No", "--type", help="Yes/No | pick one | score"),
+    question_id: str | None = typer.Option(None, "--id", help="Optional question id"),
+    warn_only: bool = typer.Option(False, "--warn-only", help="Warn instead of failing the check"),
+    choices: list[str] | None = typer.Option(
+        None, "--choices", help="Pick-one options (repeatable)"
+    ),
+) -> None:
+    """Add an extra scoring question to this skill."""
+    from skillgate_ai.pack_edit import add_judge_question
+
+    try:
+        dest = _resolve_pack_arg(pack)
+        add_judge_question(
+            dest,
+            ask=ask,
+            kind=kind,
+            question_id=question_id,
+            on_fail="warn" if warn_only else "block",
+            choices=choices,
+        )
+    except SkillGateError as exc:
+        console.print(exc.render())
+        raise typer.Exit(exc.exit_code) from None
+    console.print(ask)
+
+
+case_app = typer.Typer(
+    add_completion=False,
+    no_args_is_help=True,
+    help="Add checks to evals/cases.yaml.",
+)
+app.add_typer(case_app, name="case")
+
+
+@case_app.command("add")
+def case_add_cmd(
+    pack: Path | None = typer.Argument(None, help="Skill pack"),
+    prompt: str = typer.Option(..., "--prompt", help="What the agent should do"),
+    case_id: str | None = typer.Option(None, "--id", help="Optional check id"),
+    expected: str | None = typer.Option(None, "--expected", help="Expected text in the output"),
+    output_path: str | None = typer.Option(None, "--output", help="Output file to compare"),
+    inputs: list[Path] | None = typer.Option(
+        None, "--input", "--fixture", help="Input/fixture file to copy into this skill"
+    ),
+    no_trigger: bool = typer.Option(False, "--no-trigger", help="This check should not run the skill"),
+    force: bool = typer.Option(False, "--force", help="Replace a check that already uses this id"),
+) -> None:
+    """Add a check to this skill's Dataset."""
+    from skillgate_ai.pack_edit import add_pack_case
+
+    try:
+        dest = _resolve_pack_arg(pack)
+        pack_out, warning = add_pack_case(
+            dest,
+            prompt=prompt,
+            case_id=case_id,
+            expected=expected,
+            output_path=output_path,
+            should_trigger=not no_trigger,
+            inputs=[str(path) for path in inputs] if inputs else None,
+            force=force,
+        )
+    except SkillGateError as exc:
+        console.print(exc.render())
+        raise typer.Exit(exc.exit_code) from None
+    except ValueError as exc:
+        console.print(str(exc))
+        raise typer.Exit(1) from None
+    from skillgate_ai.pack_schema import case_id_slug
+
+    added = case_id_slug(case_id) if str(case_id or "").strip() else (
+        pack_out.cases[-1].id if pack_out.cases else prompt
+    )
+    console.print(f"Added check {added}.")
+    if warning:
+        console.print(warning)
+
+
+@judge_provider_app.command("show")
+def judge_provider_show() -> None:
+    """Who scores live checks."""
+    from skillgate_ai.config import get_llm_config
+    from skillgate_ai.judge_copy import CHOSEN_LABELS, DEFAULT_NAME
+
+    root = _boot()
+    cfg = get_llm_config(root)
+    if cfg.judge_chosen and cfg.judge_provider in CHOSEN_LABELS:
+        console.print(f"Scoring with {CHOSEN_LABELS[cfg.judge_provider]} (your key)")
+        return
+    if cfg.openai_api_key or cfg.gateway_api_key:
+        console.print(f"Scoring with {DEFAULT_NAME}")
+        return
+    console.print("No scoring provider — file checks only.")
+
+
+@judge_provider_app.command("set")
+def judge_provider_set(
+    provider: str = typer.Argument(..., help="auto | openai | jev | aws | Other"),
+    base_url: str | None = typer.Option(None, "--base-url"),
+    region: str | None = typer.Option(None, "--region"),
+    model: str | None = typer.Option(None, "--model"),
+    decisions_path: str | None = typer.Option(None, "--decisions-path", hidden=True),
+) -> None:
+    """Write `.skillgate/judge`. Does not print keys."""
+    from skillgate_ai.judge_settings import save_judge_settings
+
+    root = _boot()
+    try:
+        settings = save_judge_settings(
+            root,
+            provider=provider,
+            region=region,
+            model=model,
+            base_url=base_url,
+            decisions_path=decisions_path,
+        )
+    except SkillGateError as exc:
+        console.print(exc.render())
+        raise typer.Exit(exc.exit_code) from None
+    if settings.chosen:
+        from skillgate_ai.judge_copy import CHOSEN_LABELS
+
+        console.print(f"Scoring provider: {CHOSEN_LABELS.get(settings.provider, settings.provider)}")
+    else:
+        console.print("Scoring provider: Auto")
+
+
+@judge_provider_app.command("test")
+def judge_provider_test() -> None:
+    """Test the scoring connection. Never prints the key."""
+    from skillgate_ai.config import get_llm_config
+    from skillgate_ai.judge import ping_judge
+
+    root = _boot()
+    try:
+        result = ping_judge(get_llm_config(root))
+    except SkillGateError as exc:
+        console.print(exc.render())
+        raise typer.Exit(exc.exit_code) from None
+    console.print(str(result.get("message") or ""))
+    raise typer.Exit(0 if result.get("ok") else 1)
 
 
 @app.command("ui")
@@ -567,6 +908,13 @@ def ui_cmd(
     except OSError as exc:
         console.print(f"Could not bind {host}:{port}: {exc}")
         raise typer.Exit(1) from exc
+
+
+from skillgate_ai.cli_compare import register_compare_commands
+from skillgate_ai.cli_pack import register_pack_commands
+
+register_pack_commands(app, case_app, judge_app)
+register_compare_commands(app, key_env_help=_KEY_ENV_HELP)
 
 
 if __name__ == "__main__":

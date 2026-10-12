@@ -157,7 +157,7 @@ def friendly_validation_error(
         except Exception:  # noqa: BLE001 - fall through to a generic line
             items = []
     if not items:
-        return f"{kind} is invalid."
+        return _invalid_kind(kind)
     parts: list[str] = []
     for item in items:
         if not isinstance(item, dict):
@@ -171,10 +171,18 @@ def friendly_validation_error(
         elif msg:
             parts.append(msg)
     if not parts:
+        return _invalid_kind(kind)
+    detail = parts[0] if len(parts) == 1 else "; ".join(parts)
+    return _invalid_kind(kind, detail)
+
+
+def _invalid_kind(kind: str, detail: str | None = None) -> str:
+    if kind == "Case pack":
+        base = "Couldn't load these checks."
+        return f"{base} {detail}" if detail else base
+    if not detail:
         return f"{kind} is invalid."
-    if len(parts) == 1:
-        return f"{kind} is invalid: {parts[0]}"
-    return f"{kind} is invalid: " + "; ".join(parts)
+    return f"{kind} is invalid: {detail}"
 
 
 def _plain_pydantic_msg(msg: object) -> str:
@@ -183,6 +191,9 @@ def _plain_pydantic_msg(msg: object) -> str:
         text = text.removeprefix(prefix)
     if "should be 1" in text.lower() or text.lower() == "input should be 1":
         return "Skill Gate supports schema 1"
+    lower = text.lower()
+    if "input should be" in lower and "block" in lower and "warn" in lower:
+        return "on_fail must be Fail the check or Warn only"
     return text.rstrip(".")
 
 

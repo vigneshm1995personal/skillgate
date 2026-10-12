@@ -52,7 +52,7 @@ export function SkillUpdateChecklist() {
   )
   const runId = lastResult?.id
   const payload = runId ? suggestByRunId[runId] ?? null : null
-  const hasGatewayKey = Boolean(status?.has_gateway_key)
+  const hasKey = Boolean(status?.has_key)
   const items = payload?.items ?? []
 
   if (!canSuggest) {
@@ -69,7 +69,7 @@ export function SkillUpdateChecklist() {
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
         {suggestError ? (
-          <Alert variant="destructive">
+          <Alert>
             <AlertTitle>{suggestError.message}</AlertTitle>
             {suggestError.hint ? (
               <AlertDescription>{suggestError.hint}</AlertDescription>
@@ -133,11 +133,11 @@ export function SkillUpdateChecklist() {
           id="btn-suggest-skill-updates"
           variant="outline"
           size="lg"
-          disabled={!hasGatewayKey || suggestBusy}
+          disabled={!hasKey || suggestBusy}
           title={
-            hasGatewayKey
+            hasKey
               ? undefined
-              : "Add AI_GATEWAY_API_KEY to suggest skill updates."
+              : "Add a model key in Settings to suggest skill updates."
           }
           onClick={() => void requestSkillUpdates({ force: Boolean(payload) })}
         >

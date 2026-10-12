@@ -20,12 +20,12 @@ from skillgate_ai.api_payloads import (
     keys_payload,
     state_of,
 )
+from skillgate_ai.api_compare import register_compare_routes
 from skillgate_ai.api_runs import register_run_routes
 from skillgate_ai.api_shims import register_hosted_shims
 from skillgate_ai.api_skills import register_skill_routes
 from skillgate_ai.catalog import catalog_entries
 from skillgate_ai.config import (
-    ROOT_ENV_NAMES,
     UI_NO_KEY_HINT,
     get_llm_config,
     load_env,
@@ -97,6 +97,7 @@ def create_app(*, root: Path | None = None, pack: Path | None = None) -> FastAPI
     register_skill_routes(app)
     register_eval_routes(app)
     register_run_routes(app)
+    register_compare_routes(app)
     register_hosted_shims(app)
     return app
 
@@ -116,8 +117,6 @@ def _register_core_routes(app: FastAPI) -> None:
             "mode": mode,
             "slots": slots_for(mode),
             "has_key": cfg.has_any_key,
-            "has_gateway_key": bool(cfg.gateway_api_key or cfg.openai_api_key),
-            "live_backends": cfg.live_backends,
             "available_harnesses": cfg.available_harnesses,
             "default_harness": cfg.default_harness,
             "missing_key_message": None if cfg.has_any_key else missing.message,
@@ -132,7 +131,6 @@ def _register_core_routes(app: FastAPI) -> None:
                 "has_cursor_api_key": bool(cfg.cursor_api_key),
                 "has_codex_api_key": bool(cfg.codex_api_key),
                 "has_anthropic_api_key": bool(cfg.anthropic_api_key),
-                "has_gateway_api_key": bool(cfg.gateway_api_key or cfg.openai_api_key),
                 "selected_provider": cfg.default_harness,
             },
             "skills_dir_exists": (state.root / "skills").is_dir(),
@@ -147,7 +145,10 @@ def _register_core_routes(app: FastAPI) -> None:
     @app.put("/api/settings/keys/{name}")
     async def set_key(name: str, request: Request) -> dict[str, Any]:
         state = state_of(request)
-        if name not in SETTINGS_KEYS or name not in ROOT_ENV_NAMES:
+        from skillgate_ai.keys import internal_key_name
+
+        vault_name = internal_key_name(name)
+        if vault_name not in SETTINGS_KEYS:
             fail(400, "Unknown key name.")
         body = await request.json()
         value = str((body or {}).get("value") or "").strip()
@@ -155,13 +156,54 @@ def _register_core_routes(app: FastAPI) -> None:
             fail(400, "Paste a key before saving.")
         if any(ch in value for ch in "\r\n"):
             fail(400, "API keys cannot contain line breaks.")
-        set_vault_key(state.root, name, value)
+        set_vault_key(state.root, vault_name, value)
         return {"keys": keys_payload(state)}
 
     @app.delete("/api/settings/keys/{name}")
     def clear_key(name: str, request: Request) -> dict[str, Any]:
         state = state_of(request)
-        if name not in SETTINGS_KEYS:
+        from skillgate_ai.keys import internal_key_name
+
+        vault_name = internal_key_name(name)
+        if vault_name not in SETTINGS_KEYS:
             fail(400, "Unknown key name.")
-        clear_vault_key(state.root, name)
+        clear_vault_key(state.root, vault_name)
         return {"keys": keys_payload(state)}
+
+    @app.get("/api/settings/judge")
+    def get_judge_settings(request: Request) -> dict[str, Any]:
+        from skillgate_ai.judge_settings import load_judge_settings
+
+        state = state_of(request)
+        settings = load_judge_settings(state.root)
+        return {"judge": settings.to_public_dict()}
+
+    @app.put("/api/settings/judge")
+    async def put_judge_settings(request: Request) -> dict[str, Any]:
+        from skillgate_ai.judge_settings import save_judge_settings
+
+        state = state_of(request)
+        body = await request.json() or {}
+        try:
+            settings = save_judge_settings(
+                state.root,
+                provider=str(body.get("provider") or "auto"),
+                region=body.get("region"),
+                model=body.get("model"),
+                base_url=body.get("base_url"),
+                decisions_path=body.get("decisions_path"),
+            )
+        except SkillGateError as exc:
+            fail(400, exc.message, hint=exc.hint)
+        return {"judge": settings.to_public_dict()}
+
+    @app.post("/api/judge/ping")
+    def ping_scoring(request: Request) -> dict[str, Any]:
+        from skillgate_ai.judge import ping_judge
+
+        state = state_of(request)
+        try:
+            result = ping_judge(get_llm_config(state.root))
+        except SkillGateError as exc:
+            fail(400, exc.message, hint=exc.hint)
+        return result

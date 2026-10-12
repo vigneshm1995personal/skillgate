@@ -132,6 +132,7 @@ class DockerSandbox:
                 hint="Install Docker, or run with `--sandbox local` (the default).",
             )
         self.image = image
+        _ensure_docker_image(image)
         self._local = LocalSandbox(workspace)
         self.output_sink: OutputSink | None = None
 
@@ -266,6 +267,39 @@ def _pump(
                 pass
     finally:
         stream.close()
+
+
+def _ensure_docker_image(image: str) -> None:
+    try:
+        inspect = subprocess.run(
+            ["docker", "image", "inspect", image],
+            capture_output=True,
+            text=True,
+            timeout=20,
+            check=False,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise SandboxError(
+            "Couldn't reach Docker.",
+            hint="Start Docker, or run with `--sandbox local` (the default).",
+        ) from exc
+    except OSError as exc:
+        raise SandboxError(
+            "Couldn't reach Docker.",
+            hint="Start Docker, or run with `--sandbox local` (the default).",
+        ) from exc
+    if inspect.returncode == 0:
+        return
+    err = f"{inspect.stderr or ''} {inspect.stdout or ''}".lower()
+    if "cannot connect" in err or "daemon" in err:
+        raise SandboxError(
+            "Couldn't reach Docker.",
+            hint="Start Docker, or run with `--sandbox local` (the default).",
+        )
+    raise SandboxError(
+        f"Docker image {image} is not installed.",
+        hint="Build or pull that image, or run with `--sandbox local` (the default).",
+    )
 
 
 def open_sandbox(kind: str, docker_image: str) -> Sandbox:

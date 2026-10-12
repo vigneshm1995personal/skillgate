@@ -77,6 +77,19 @@ def test_resolve_judge_openai_without_key() -> None:
     assert "OpenAI API key" in caught.value.message
 
 
+def test_missing_provider_key_uses_add_your() -> None:
+    from skillgate_ai.judge import missing_provider_key
+
+    aws = missing_provider_key("aws")
+    assert aws.message.startswith("Add your AWS key")
+    assert "Add a AWS" not in aws.message
+    other = missing_provider_key("compatible")
+    assert other.message.startswith("Add your Other key")
+    assert "Add a Other" not in other.message
+    assert "AI_GATEWAY_API_KEY" not in other.message
+    assert "gateway" not in other.message.lower()
+
+
 def test_resolve_judge_openai_pref_uses_gateway_decisions() -> None:
     judge = resolve_judge(
         _cfg(
@@ -157,7 +170,7 @@ def test_judge_stamp_has_no_secret() -> None:
     assert "sk-secret" not in blob
     assert stamp["provider"] == "openai"
     assert stamp["backend"] == "decisions"
-    assert stamp["display_name"] == "OpenAI (your key)"
+    assert stamp["display_name"] == "the judge"
     assert stamp["model"] == "gpt-6-luna"
 
 
@@ -173,7 +186,7 @@ def test_gateway_judge_stamp_names_decisions_via_gateway() -> None:
     )
     assert stamp["provider"] == "openai"
     assert stamp["backend"] == "decisions"
-    assert stamp["display_name"] == "OpenAI Decisions via Vercel AI Gateway (your key)"
+    assert stamp["display_name"] == "the judge"
     assert stamp["model"] == "openai/gpt-6-luna-decisions"
     assert "gw-test" not in str(stamp)
 
@@ -219,6 +232,25 @@ def test_live_verdict_error_without_passed_fails_closed() -> None:
     assert failures == ["OpenAI scoring timed out."]
     assert stamped is not None
     assert stamped.get("reasons") == ["OpenAI scoring timed out."]
+
+
+def test_live_verdict_score_no_trigger_extras_can_fail() -> None:
+    judge = {
+        "status": "completed",
+        "passed": False,
+        "reasons": ["Do the totals match? No"],
+        "extra_failures": ["Do the totals match? No"],
+        "score_no_trigger": True,
+        "warnings": [],
+    }
+    passed, failures, _ = _live_verdict(
+        judge,
+        None,
+        det_passed=True,
+        det_failures=[],
+    )
+    assert passed is False
+    assert failures == ["Do the totals match? No"]
 
 
 def test_live_verdict_no_trigger_det_owns() -> None:

@@ -13,10 +13,10 @@ from skillgate_ai.case_pack import (
     checks_from_pack,
     dataset_view,
     load_case_pack,
-    pin_case_ids,
-    pin_checks,
+    pack_judge_dict,
 )
 from skillgate_ai.catalog import find_skill
+from skillgate_ai.errors import SuiteError
 from skillgate_ai.fixture_bind import apply_inherit, expand_from_folder
 
 
@@ -56,6 +56,7 @@ def register_eval_routes(app: FastAPI) -> None:
             "source": source,
             "warning": None,
             "fixture_defaults": skill.get("fixture_defaults") or [],
+            "pack_judge": pack_judge_dict(pack),
         }
 
     @app.post("/api/evals/pin")
@@ -65,15 +66,21 @@ def register_eval_routes(app: FastAPI) -> None:
         skill_path = find_skill(state.root, str(body.get("skill") or ""))
         checks = body.get("checks")
         case_ids = body.get("case_ids")
+        warnings: list[str] = []
         try:
-            if isinstance(checks, list) and checks:
-                pack = pin_checks(skill_path, [dict(item) for item in checks])
-            elif isinstance(case_ids, list) and case_ids:
-                pack = pin_case_ids(skill_path, [str(item) for item in case_ids])
-            else:
-                fail(400, "Pin needs checks or case ids.")
+            from skillgate_ai.pack_edit import apply_pin
+
+            pack, warnings = apply_pin(
+                skill_path,
+                checks=checks if isinstance(checks, list) else None,
+                case_ids=case_ids if isinstance(case_ids, list) else None,
+                pack_judge=body.get("pack_judge") if isinstance(body.get("pack_judge"), dict) else None,
+                has_pack_judge="pack_judge" in body,
+            )
         except ValueError as exc:
             fail(400, str(exc), hint=PIN_NEEDS_EXPECTED_HINT)
+        except SuiteError as exc:
+            fail(400, exc.message, hint=exc.hint)
         yaml_out = (
             (skill_path / CASES_REL).read_text(encoding="utf-8")
             if (skill_path / CASES_REL).is_file()
@@ -85,6 +92,8 @@ def register_eval_routes(app: FastAPI) -> None:
             "checks": checks_from_pack(pack, include_drafts=True),
             "yaml": yaml_out,
             "skill": skill_payload(state, skill_path),
+            "pack_judge": pack_judge_dict(pack),
+            "warnings": warnings,
         }
 
     @app.get("/api/evals/dataset")

@@ -23,6 +23,21 @@ def folder_matches_skill(folder: str, name: str) -> bool:
     return name == folder or folder in GENERIC_MOUNT_NAMES
 
 
+def canonical_skill_name(value: object, skills: list[Skill]) -> str | None:
+    """Map a router/folder pick onto the SKILL.md name (Docker `/pack` included)."""
+    if value is None:
+        return None
+    name = str(value).strip()
+    if name.lower() in {"", "none", "null"}:
+        return None
+    for skill in skills:
+        if skill.name == name or skill.path.name == name:
+            return skill.name
+    if name in GENERIC_MOUNT_NAMES and len(skills) == 1:
+        return skills[0].name
+    return name
+
+
 OPTIONAL_STRING_FIELDS = ("license", "compatibility", "allowed-tools")
 KNOWN_FIELDS = {
     "name",
@@ -214,6 +229,11 @@ def _ingest_lenient(folder: Path) -> Skill:
         )
     raw_name = parsed.get("name")
     display = raw_name.strip() if isinstance(raw_name, str) and raw_name.strip() else folder.name
+    name = slug
+    if folder.name in GENERIC_MOUNT_NAMES and isinstance(raw_name, str):
+        declared = raw_name.strip()
+        if NAME_RE.match(declared):
+            name = declared
     description = ""
     warning = None
     raw_desc = parsed.get("description")
@@ -233,7 +253,7 @@ def _ingest_lenient(folder: Path) -> Skill:
         warning = warning or "Couldn't read this skill’s details."
     return Skill(
         path=folder,
-        name=slug,
+        name=name,
         display_name=display,
         description=description,
         body=body,

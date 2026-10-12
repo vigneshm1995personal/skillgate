@@ -168,7 +168,10 @@ def safe_relpath(rel: str, *, default_dir: str = FIXTURE_DIR) -> str:
     if not parts:
         raise ValueError("A file path is required.")
     if len(parts) == 1:
-        return f"{default_dir}/{_safe_filename(parts[0])}"
+        name = _safe_filename(parts[0])
+        if name.lower() == "skill.md":
+            return "SKILL.md"
+        return f"{default_dir}/{name}"
     parts[-1] = _safe_filename(parts[-1])
     return "/".join(parts)
 
@@ -194,6 +197,9 @@ def write_pack_file(
         ) from exc
     dest_path.parent.mkdir(parents=True, exist_ok=True)
     data = content.encode("utf-8") if isinstance(content, str) else content
+    from skillgate_ai.pack_schema import guard_cases_yaml_write
+
+    guard_cases_yaml_write(root, relative, data)
     dest_path.write_bytes(data)
     return {"src": relative, "dest": Path(relative).name, "path": relative}
 
@@ -266,6 +272,12 @@ def write_sample_fixture(
     if cannot_synthesize_sample(dest=dest or "", prompt=prompt, description=description):
         raise CannotSynthesizeFixture()
     name = dest or implied_fixture_name(f"{prompt} {description}")
+    cleaned = name.replace("\\", "/").lstrip("/")
+    if Path(cleaned).name.lower() == "skill.md":
+        raise SkillGateError(
+            "SKILL.md is the skill, not a fixture.",
+            hint="Pass a path under evals/fixtures/.",
+        )
     if "/" in name:
         relative = safe_relpath(name)
     else:

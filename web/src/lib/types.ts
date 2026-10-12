@@ -2,7 +2,14 @@ import type { ConfigDiffEntry, EvalRunConfig, SupportedModelsMeta } from "@/lib/
 
 export type { ConfigDiffEntry, EvalRunConfig }
 
-export type Stage = "home" | "eval" | "deploy" | "repository" | "history" | "settings"
+export type Stage =
+  | "home"
+  | "eval"
+  | "deploy"
+  | "repository"
+  | "history"
+  | "compare"
+  | "settings"
 
 export type EvalTab = "skill" | "checks" | "gate"
 
@@ -67,6 +74,21 @@ export type Check = {
   golden_kind?: "json" | "text" | "bytes" | null
   bank_status?: "pinned" | "draft" | null
   budgets?: CaseBudgets | null
+  locked?: boolean
+  judge?: {
+    min_confidence?: number | null
+    on_fail?: Record<string, "block" | "warn">
+    extra_questions?: Array<{
+      id: string
+      type: "predicate" | "choice" | "score"
+      ask: string
+      on_fail?: "block" | "warn"
+      choices?: Array<{ value: string; description?: string; pass?: boolean }>
+      levels?: string[]
+      pass_if?: { gte?: number }
+    }>
+    score_no_trigger?: boolean
+  } | null
 }
 
 export type TaskMetrics = {
@@ -210,6 +232,8 @@ export type JudgeResult = {
   provider?: string
   backend?: string
   display_name?: string
+  chosen?: boolean | string
+  supports_confidence?: boolean
   answers?: Record<string, JudgeAnswer>
   questions?: Record<string, JudgeQuestion>
   soft_answers?: Record<string, JudgeAnswer>
@@ -220,7 +244,15 @@ export type JudgeResult = {
   blocks_deploy?: boolean
   require_artifacts?: boolean
   skipped_questions?: string[]
-  cells?: Record<string, { label?: string; choice?: string | null; reason?: string | null }>
+  cells?: Record<
+    string,
+    {
+      label?: string
+      choice?: string | null
+      reason?: string | null
+      probability?: number
+    }
+  >
   citations?: { artifacts?: JudgeCitationArtifact[] }
 }
 
@@ -615,8 +647,7 @@ export type StatusPayload = {
   mode?: ProductMode
   slots?: FeatureSlots
   has_key: boolean
-  has_gateway_key?: boolean
-  live_backends: string[]
+  live_backends?: string[]
   available_harnesses?: LiveHarnessId[]
   default_harness?: ResolvedHarnessId
   missing_key_message?: string
@@ -660,7 +691,6 @@ export type StatusPayload = {
     has_cursor_api_key?: boolean
     has_codex_api_key?: boolean
     has_anthropic_api_key?: boolean
-    has_gateway_api_key?: boolean
     selected_provider?: string
   }
   skills_dir_exists?: boolean
@@ -672,8 +702,12 @@ export type SettingsKeyId =
   | "CURSOR_API_KEY"
   | "CODEX_API_KEY"
   | "OPENAI_API_KEY"
-  | "AI_GATEWAY_API_KEY"
+  | "Other"
   | "ANTHROPIC_API_KEY"
+  | "JEV_API_KEY"
+  | "AWS_ACCESS_KEY_ID"
+  | "AWS_SECRET_ACCESS_KEY"
+  | "AWS_SESSION_TOKEN"
 
 export type SettingsKeyPresence = {
   set: boolean
@@ -694,6 +728,7 @@ export type GenerateResponse = {
   warning?: string | null
   fixture_notice?: string | null
   fixture_defaults?: Array<{ src: string; dest: string; bytes?: number }>
+  pack_judge?: Check["judge"]
 }
 
 export type FixtureBindResponse = {

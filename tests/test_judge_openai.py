@@ -308,11 +308,11 @@ def test_missing_answer_name_fails_closed() -> None:
 
 def test_http_errors_fail_and_never_log_key(caplog: pytest.LogCaptureFixture) -> None:
     cases = {
-        401: "OpenAI did not accept this API key.",
-        403: "OpenAI scoring is not enabled for this key.",
-        404: "OpenAI has no scoring endpoint for this key.",
-        400: "OpenAI rejected this scoring request.",
-        429: "OpenAI rate limit or quota. Wait and retry, or check billing.",
+        401: "The judge did not accept this API key.",
+        403: "The judge scoring is not enabled for this key.",
+        404: "The judge has no scoring endpoint for this key.",
+        400: "The judge rejected this scoring request.",
+        429: "The judge rate-limited this request. Wait and retry, or check billing.",
     }
     for status, message in cases.items():
         copies = 3 if status == 429 else 1
@@ -378,10 +378,10 @@ def test_quota_429_is_not_retried() -> None:
     assert passed is False
     assert judged["passed"] is False
     assert failures == [
-        "Your OpenAI account is out of credits. Add credits at platform.openai.com "
-        "billing, then try again."
+        "The judge is out of credits. Add credits, then try again."
     ]
     assert "rate limit" not in failures[0].lower()
+    assert "OpenAI" not in failures[0]
     assert judged["why"] is None
     assert len(post.calls) == 1
     assert all(not str(item["url"]).endswith("/v1/responses") for item in post.calls)
@@ -400,9 +400,9 @@ def test_credit_balance_exhausted_429_is_not_retried() -> None:
     passed, failures, judged = _gated(_judge(post))
     assert passed is False
     assert failures == [
-        "Your OpenAI account is out of credits. Add credits at platform.openai.com "
-        "billing, then try again."
+        "The judge is out of credits. Add credits, then try again."
     ]
+    assert "OpenAI" not in failures[0]
     assert judged["why"] is None
     assert len(post.calls) == 1
 
@@ -635,7 +635,7 @@ def test_images_inline_jpeg_png_only(tmp_path: Path) -> None:
 
 
 def test_oversize_image_is_omitted(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("skillgate_ai.judge_openai.IMAGE_MAX_BYTES", 16)
+    monkeypatch.setattr("skillgate_ai.judge_images.IMAGE_MAX_BYTES", 16)
     workspace = tmp_path / "ws"
     workspace.mkdir()
     big = workspace / "big.png"
@@ -794,7 +794,7 @@ def test_http_error_with_missing_output_names_both() -> None:
     assert passed is False
     assert judged["passed"] is False
     assert REASON_MISSING_OUTPUT in failures
-    assert "OpenAI did not accept this API key." in failures
+    assert "The judge did not accept this API key." in failures
     assert judged["why"] is None
     assert len(post.calls) == 1
 

@@ -17,6 +17,10 @@ ROOT_ENV_NAMES = (
     "OPENAI_API_KEY",
     "AI_GATEWAY_API_KEY",
     "ANTHROPIC_API_KEY",
+    "JEV_API_KEY",
+    "AWS_ACCESS_KEY_ID",
+    "AWS_SECRET_ACCESS_KEY",
+    "AWS_SESSION_TOKEN",
 )
 
 DEFAULT_OPENAI_BASE_URL = "https://api.openai.com/v1"
@@ -101,6 +105,16 @@ class LLMConfig:
     judge_min_confidence: float = DEFAULT_JUDGE_MIN_CONFIDENCE
     judge_why: bool = True
     judge_reasoning_effort: str = DEFAULT_JUDGE_REASONING_EFFORT
+    jev_api_key: str | None = None
+    aws_access_key_id: str | None = None
+    aws_secret_access_key: str | None = None
+    aws_session_token: str | None = None
+    judge_provider: str = "auto"
+    judge_chosen: bool = False
+    judge_region: str | None = None
+    judge_endpoint: str | None = None
+    judge_provider_model: str | None = None
+    judge_decisions_path: str | None = None
 
     @property
     def has_any_key(self) -> bool:
@@ -147,6 +161,9 @@ def get_llm_config(root: Path | None = None) -> LLMConfig:
 
     keys = resolve_provider_keys(root if root is not None else project_root())
     openai_key = keys.get("OPENAI_API_KEY")
+    from skillgate_ai.judge_settings import load_judge_settings
+
+    settings = load_judge_settings(root if root is not None else project_root())
     return LLMConfig(
         cursor_api_key=keys.get("CURSOR_API_KEY"),
         gateway_api_key=keys.get("AI_GATEWAY_API_KEY"),
@@ -177,6 +194,16 @@ def get_llm_config(root: Path | None = None) -> LLMConfig:
         judge_why=_env_bool("SKILLGATE_JUDGE_WHY", True),
         judge_reasoning_effort=_opt("SKILLGATE_JUDGE_REASONING_EFFORT")
         or DEFAULT_JUDGE_REASONING_EFFORT,
+        jev_api_key=keys.get("JEV_API_KEY"),
+        aws_access_key_id=keys.get("AWS_ACCESS_KEY_ID"),
+        aws_secret_access_key=keys.get("AWS_SECRET_ACCESS_KEY"),
+        aws_session_token=keys.get("AWS_SESSION_TOKEN"),
+        judge_provider=settings.provider,
+        judge_chosen=settings.chosen,
+        judge_region=settings.region,
+        judge_endpoint=settings.base_url,
+        judge_provider_model=settings.model,
+        judge_decisions_path=settings.decisions_path,
     )
 
 
@@ -231,10 +258,7 @@ def _env_temperature() -> float:
 
 
 NO_KEY_MESSAGE = "No model key found."
-NO_KEY_HINT = (
-    "Add a key in Settings (`skillgate ui`) or run `skillgate keys set`.\n"
-    "CI: set SKILLGATE_OPENAI_API_KEY, or pass --key-env OPENAI_API_KEY."
-)
+NO_KEY_HINT = "Add a model key in Settings or run `skillgate keys set`"
 UI_NO_KEY_HINT = "Add a key in Settings, then press Run."
 
 
@@ -242,9 +266,8 @@ def missing_key_error(*, live: bool = True, for_codex: bool = False) -> MissingL
     del live
     if for_codex:
         hint = (
-            "Codex CLI needs a key in Settings (`skillgate keys set CODEX_API_KEY`) "
-            "or a ChatGPT login (`codex login`).\n"
-            "CI: set SKILLGATE_CODEX_API_KEY or pass --key-env CODEX_API_KEY."
+            "Codex CLI needs a key in Settings (`skillgate keys set`) "
+            "or a ChatGPT login (`codex login`)."
         )
     else:
         hint = NO_KEY_HINT

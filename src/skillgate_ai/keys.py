@@ -13,7 +13,17 @@ PROVIDER_KEY_NAMES = (
     "OPENAI_API_KEY",
     "AI_GATEWAY_API_KEY",
     "ANTHROPIC_API_KEY",
+    "JEV_API_KEY",
+    "AWS_ACCESS_KEY_ID",
+    "AWS_SECRET_ACCESS_KEY",
+    "AWS_SESSION_TOKEN",
 )
+
+PUBLIC_KEY_LABELS = {"AI_GATEWAY_API_KEY": "Other"}
+_PUBLIC_TO_INTERNAL = {
+    "Other": "AI_GATEWAY_API_KEY",
+    "other": "AI_GATEWAY_API_KEY",
+}
 
 SKILLGATE_KEY_ENV = {
     "CURSOR_API_KEY": "SKILLGATE_CURSOR_API_KEY",
@@ -21,6 +31,10 @@ SKILLGATE_KEY_ENV = {
     "OPENAI_API_KEY": "SKILLGATE_OPENAI_API_KEY",
     "AI_GATEWAY_API_KEY": "SKILLGATE_AI_GATEWAY_API_KEY",
     "ANTHROPIC_API_KEY": "SKILLGATE_ANTHROPIC_API_KEY",
+    "JEV_API_KEY": "SKILLGATE_JEV_API_KEY",
+    "AWS_ACCESS_KEY_ID": "SKILLGATE_AWS_ACCESS_KEY_ID",
+    "AWS_SECRET_ACCESS_KEY": "SKILLGATE_AWS_SECRET_ACCESS_KEY",
+    "AWS_SESSION_TOKEN": "SKILLGATE_AWS_SESSION_TOKEN",
 }
 
 KEYS_DIRNAME = ".skillgate"
@@ -133,6 +147,19 @@ def resolve_provider_keys(root: str | Path) -> dict[str, str]:
     return found
 
 
+def internal_key_name(name: str) -> str:
+    key = (name or "").strip()
+    return _PUBLIC_TO_INTERNAL.get(key) or _PUBLIC_TO_INTERNAL.get(key.lower()) or key
+
+
+def public_key_name(name: str) -> str:
+    return PUBLIC_KEY_LABELS.get(name, name)
+
+
+def public_key_presence(root: str | Path) -> dict[str, dict[str, bool]]:
+    return {public_key_name(name): meta for name, meta in key_presence(root).items()}
+
+
 def key_presence(root: str | Path) -> dict[str, dict[str, bool]]:
     vault = read_vault(root)
     resolved = resolve_provider_keys(root)
@@ -153,11 +180,12 @@ def list_key_names(root: str | Path) -> list[str]:
 
 
 def _require_name(name: str) -> str:
-    key = (name or "").strip()
+    key = internal_key_name(name)
     if key not in PROVIDER_KEY_NAMES:
         raise SkillGateError(
             "Unknown key name.",
             hint="Use CURSOR_API_KEY, CODEX_API_KEY, OPENAI_API_KEY, "
-            "AI_GATEWAY_API_KEY, or ANTHROPIC_API_KEY.",
+            "Other, ANTHROPIC_API_KEY, JEV_API_KEY, "
+            "AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, or AWS_SESSION_TOKEN.",
         )
     return key

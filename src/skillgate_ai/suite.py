@@ -100,7 +100,7 @@ def load_suite(path: str | Path) -> tuple[SuiteSpec, Path]:
         raise SuiteError("Eval suite must be a YAML mapping")
     if "cases" in raw and "tasks" not in raw:
         raise SuiteError(
-            "That YAML is a case pack, not a suite. Pass the skill folder instead, "
+            "That YAML is a checks file, not a suite. Pass the skill folder instead, "
             "for example: skillgate check <folder>.",
         )
     from_pack = str(raw.get("from_pack") or "").strip()

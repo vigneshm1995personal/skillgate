@@ -63,6 +63,8 @@ class TaskProgress:
     spans: list[dict[str, Any]] | None = None
     metrics: dict[str, Any] | None = None
     usage: dict[str, Any] | None = None
+    expect_skill: str | None = None
+    selected_skill: str | None = None
 
 
 @dataclass
@@ -341,6 +343,20 @@ def _outcome_judge_outputs(task: TaskSpec, artifacts: RunArtifacts) -> list[dict
     return outputs
 
 
+def _resolve_task_spec(skill_root: Path, pack: Any, case: Any):
+    from skillgate_ai.case_pack import pack_judge_dict
+    from skillgate_ai.judge_spec import resolve_judge_spec
+    from skillgate_ai.paths import project_root
+    from skillgate_ai.project_config import load_project_judge
+
+    project = load_project_judge(project_root())
+    pack_block = pack_judge_dict(pack) if pack is not None else None
+    case_block = None
+    if case is not None and getattr(case, "judge", None) is not None:
+        case_block = case.judge.to_sparse_dict()
+    return resolve_judge_spec(project=project, pack=pack_block, case=case_block)
+
+
 def _score_rows(scores: list[Score]) -> list[dict[str, Any]]:
     return [
         {
@@ -374,6 +390,7 @@ def _run_outcome_judge(
     outcome = judge if judge is not None else SkipJudge()
     golden_payload = None
     actual_payload = None
+    spec = None
     if skill_root is not None:
         from skillgate_ai.case_pack import (
             actual_output_state,
@@ -384,6 +401,7 @@ def _run_outcome_judge(
 
         pack = load_case_pack(skill_root)
         case = case_for_task(pack, task.id)
+        spec = _resolve_task_spec(skill_root, pack, case)
         if case is not None and case.golden is not None:
             golden_payload = golden_state(case.golden, skill_root)
             actual_payload = actual_output_state(
@@ -402,6 +420,7 @@ def _run_outcome_judge(
         path=path,
         workspace=artifacts.workspace,
         skill_root=skill_root,
+        spec=spec,
     )
     mismatch = expected_output_mismatch_reason(
         golden=golden_payload if isinstance(golden_payload, dict) else None,
@@ -474,11 +493,18 @@ def _live_verdict(
     ]
     stamped = {**judge, "warnings": warnings}
     if expect_skill is None:
+        extra = [
+            str(item).strip()
+            for item in (judge.get("extra_failures") or [])
+            if str(item).strip()
+        ]
+        if judge.get("score_no_trigger") and extra:
+            return False, extra, stamped
         return det_passed, det_failures, stamped
     if judge.get("status") == "error":
         failures = [str(item) for item in (judge.get("reasons") or []) if str(item).strip()]
         if not failures:
-            failures = ["OpenAI scoring failed."]
+            failures = ["The judge couldn't score this check."]
         passed, failures = _apply_mismatch(False, failures, mismatch)
         return passed, failures, stamped
     if judge.get("status") == "skip" or judge.get("passed") is None:
@@ -486,7 +512,7 @@ def _live_verdict(
     passed = bool(judge.get("passed"))
     failures = [str(item) for item in (judge.get("reasons") or []) if str(item).strip()]
     if not passed and not failures:
-        failures = list(det_failures) or ["OpenAI scoring failed this check."]
+        failures = list(det_failures) or ["The judge couldn't score this check."]
     passed, failures = _apply_mismatch(passed, failures, mismatch)
     return passed, failures, stamped
 
@@ -883,6 +909,8 @@ def _eval_progress(
                     judge=done.judge,
                     metrics=getattr(done, "metrics", None),
                     usage=getattr(done, "usage", None),
+                    expect_skill=done.expect_skill,
+                    selected_skill=done.selected_skill,
                 )
             )
             continue
@@ -899,10 +927,18 @@ def _eval_progress(
                     status="running",
                     transcript=running_transcript if task.id == force_running_id else "",
                     spans=running_spans if task.id == force_running_id else None,
+                    expect_skill=task.expect_skill,
                 )
             )
         else:
-            tasks.append(TaskProgress(task_id=task.id, prompt=task.prompt, status="queued"))
+            tasks.append(
+                TaskProgress(
+                    task_id=task.id,
+                    prompt=task.prompt,
+                    status="queued",
+                    expect_skill=task.expect_skill,
+                )
+            )
     return EvalProgress(
         suite=spec.suite,
         title=spec.title or spec.suite,

@@ -1,4 +1,8 @@
 import { CheckInputControls } from "@/components/dashboard/check-input"
+import {
+  PackScoringExtras,
+  ScoringQuestions,
+} from "@/components/dashboard/scoring-questions"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -11,6 +15,7 @@ import {
   canPinCheck,
   expectedFieldValue,
   isPinnedCheck,
+  expectedWithoutTargetWarning,
   noTriggerOutputWarning,
   showsExpectedOutputFields,
 } from "@/lib/case-pack"
@@ -47,6 +52,8 @@ export function CheckList({
   onSkill,
   onPin,
   onRunCheck,
+  packJudge,
+  onPackJudge,
 }: {
   checks: Check[]
   running: boolean
@@ -60,11 +67,22 @@ export function CheckList({
   onSkill?: (skill: SkillPayload) => void
   onPin?: (index: number) => void
   onRunCheck?: (check: Check) => void
+  packJudge?: Check["judge"]
+  onPackJudge?: (next: Check["judge"]) => void
 }) {
   const hasKey = Boolean(useDashboard().status?.has_key)
   const skillName = skill?.name
   return (
     <div id="check-list" className="flex flex-col gap-3">
+      {onPackJudge ? (
+        <div className="flex flex-col gap-3 rounded-xl border p-4">
+          <PackScoringExtras
+            packJudge={packJudge}
+            disabled={running}
+            onPackJudge={onPackJudge}
+          />
+        </div>
+      ) : null}
       {checks.map((check, index) => {
         const checkRun = runForCheck(check, lastResult, tryoutResult)
         const status = statusForCheck(check, index, checkRun, skillName)
@@ -72,6 +90,7 @@ export function CheckList({
         const task = matchTask(check, index, checkRun, skillName)
         const overBudget = task?.metrics?.status === "fail"
         const ignoredOutput = noTriggerOutputWarning(check)
+        const expectedOrphan = expectedWithoutTargetWarning(check)
         return (
           <div
             key={check.id ?? index}
@@ -118,6 +137,7 @@ export function CheckList({
                     Run this check
                   </Button>
                 ) : null}
+              {check.locked ? null : (
               <Button
                 variant="ghost"
                 size="xs"
@@ -126,6 +146,7 @@ export function CheckList({
               >
                 Remove
               </Button>
+              )}
               </div>
             </div>
             <CheckLiveProgress
@@ -151,7 +172,7 @@ export function CheckList({
                 <Textarea
                   id={`check-prompt-${index}`}
                   value={check.prompt}
-                  disabled={running}
+                  disabled={running || Boolean(check.locked)}
                   onChange={(event) =>
                     updateCheck(index, { prompt: event.target.value })
                   }
@@ -165,7 +186,7 @@ export function CheckList({
                 <Checkbox
                   id={`check-trigger-${index}`}
                   checked={check.should_trigger !== false}
-                  disabled={running}
+                  disabled={running || Boolean(check.locked)}
                   onCheckedChange={(checked) =>
                     updateCheck(index, {
                       should_trigger: checked === true,
@@ -186,7 +207,7 @@ export function CheckList({
                       id={`check-expected-${index}`}
                       value={expectedFieldValue(check)}
                       placeholder="Hello Skill Gate"
-                      disabled={running}
+                      disabled={running || Boolean(check.locked)}
                       onChange={(event) => {
                         const contains = event.target.value
                         updateCheck(index, {
@@ -206,7 +227,7 @@ export function CheckList({
                       id={`check-output-${index}`}
                       value={check.output_path ?? ""}
                       placeholder={skillOutputPath(skill)}
-                      disabled={running}
+                      disabled={running || Boolean(check.locked)}
                       onChange={(event) =>
                         updateCheck(index, {
                           output_path: event.target.value,
@@ -214,6 +235,9 @@ export function CheckList({
                       }
                     />
                   </Field>
+                  {expectedOrphan ? (
+                    <p className="text-sm text-muted-foreground">{expectedOrphan}</p>
+                  ) : null}
                 </>
               ) : ignoredOutput ? (
                 <p className="text-sm text-muted-foreground">{ignoredOutput}</p>
@@ -233,6 +257,13 @@ export function CheckList({
                 check={check}
                 disabled={running}
                 onUpdate={(patch) => updateCheck(index, patch)}
+              />
+              <ScoringQuestions
+                index={index}
+                packJudge={packJudge}
+                checkJudge={check.judge}
+                disabled={running}
+                onCheckJudge={(next) => updateCheck(index, { judge: next })}
               />
               {onPin && check.bank_status !== "pinned" ? (
                 <div className="flex justify-end">
