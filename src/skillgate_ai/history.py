@@ -111,11 +111,21 @@ def load_history(pack_root: str | Path, *, limit: int = 50) -> list[dict[str, An
                 continue
             if not item.get("run_id"):
                 continue
-            rows.append(item)
+            rows.append(_scrub_history_row(item))
     rows.sort(key=_row_ts)
     if limit > 0:
         return rows[-limit:]
     return rows
+
+
+def _scrub_compare_row(row: dict[str, Any]) -> dict[str, Any]:
+    from skillgate_ai.compare import scrub_customer_compare_payload
+
+    cleaned = scrub_customer_compare_payload(row)
+    if row.get("ts"):
+        cleaned["ts"] = row["ts"]
+    cleaned.setdefault("kind", "compare")
+    return cleaned
 
 
 def append_compare(pack_root: str | Path, *, row: dict[str, Any]) -> Path | None:
@@ -125,7 +135,7 @@ def append_compare(pack_root: str | Path, *, row: dict[str, Any]) -> Path | None
     payload = dict(row)
     payload.setdefault("ts", now.isoformat())
     payload.setdefault("kind", "compare")
-    return _append_jsonl(dest, payload)
+    return _append_jsonl(dest, _scrub_compare_row(payload))
 
 
 def load_compares(pack_root: str | Path, *, limit: int = 50) -> list[dict[str, Any]]:
@@ -138,7 +148,7 @@ def load_compares(pack_root: str | Path, *, limit: int = 50) -> list[dict[str, A
         for item in _read_jsonl(path):
             if item.get("kind") != "compare" or not item.get("compare_id"):
                 continue
-            rows.append(_scrub_history_row(item))
+            rows.append(_scrub_compare_row(item))
     rows.sort(key=_row_ts)
     if limit > 0:
         return rows[-limit:]

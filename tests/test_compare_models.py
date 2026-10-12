@@ -228,6 +228,40 @@ def test_scrub_customer_compare_payload_fills_missing_label() -> None:
     assert scrubbed["arms"][0]["label"]
 
 
+def test_append_compare_scrubs_leaks_on_disk(tmp_path: Path) -> None:
+    pack = tmp_path / "pdf"
+    pack.mkdir()
+    leaky = {
+        "compare_id": "abc123456789",
+        "mode": "models",
+        "skill": "pdf",
+        "status": "done",
+        "arms": [
+            {
+                "label": "Arm A",
+                "config": {
+                    "harness": "llm",
+                    "model": "openai/gpt-secret",
+                    "judge": {
+                        "provider": "openai",
+                        "model": "openai/gpt-6-luna-decisions",
+                    },
+                },
+            }
+        ],
+        "cases": [],
+    }
+    append_compare(pack, row=leaky)
+    files = list((pack / "evals" / "history").glob("*.jsonl"))
+    assert files
+    disk = files[0].read_text(encoding="utf-8").lower()
+    assert "gpt-6-luna" not in disk
+    assert "gpt-secret" not in disk
+    assert "openai/gpt" not in disk
+    loaded = load_compares(pack)[0]
+    assert loaded["arms"][0]["label"] == "Arm A"
+
+
 def test_spend_cap_stops_without_exit_1(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
