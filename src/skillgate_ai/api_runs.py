@@ -45,12 +45,9 @@ def start_run(state: AppState, body: dict[str, Any]) -> dict[str, Any]:
             hint=NO_KEY_HINT,
         )
     config = body.get("config") if isinstance(body.get("config"), dict) else {}
+    if state.gate_busy():
+        fail(409, "A check or compare is already running.")
     with state.lock:
-        busy = [item for item in state.runs.values() if item.get("status") == "running"]
-        if busy:
-            fail(409, "A check is already running.")
-        if any(item.get("status") == "running" for item in state.compares.values()):
-            fail(409, "A compare is already running.")
         run_id = uuid.uuid4().hex[:12]
         seed = {
             "id": run_id,

@@ -23,6 +23,7 @@ from skillgate_ai.compare import (
     run_models_compare,
     run_versions_compare,
     scrub_compare_payload,
+    scrub_customer_compare_payload,
 )
 from skillgate_ai.compare_control import request_cancel_compare
 from skillgate_ai.config import get_llm_config, load_env
@@ -34,7 +35,7 @@ def _finish_compare_job(
     compare_id: str,
     result: Any,
 ) -> None:
-    payload = scrub_compare_payload(result.payload)
+    payload = scrub_customer_compare_payload(result.payload)
     payload["status"] = str(result.payload.get("status") or "done")
     with state.lock:
         state.compares[compare_id] = payload
@@ -55,13 +56,6 @@ def _fail_compare_job(
         }
 
 
-def _busy(state: AppState) -> bool:
-    with state.lock:
-        if any(item.get("status") == "running" for item in state.runs.values()):
-            return True
-        return any(item.get("status") == "running" for item in state.compares.values())
-
-
 def register_compare_routes(app: FastAPI) -> None:
     @app.get("/api/compare")
     def get_compares(request: Request, skill: str) -> dict[str, Any]:
@@ -70,7 +64,7 @@ def register_compare_routes(app: FastAPI) -> None:
         rows = list_compares(path, limit=20)
         return {
             "skill": path.name,
-            "compares": [scrub_compare_payload(row) for row in reversed(rows)],
+            "compares": [scrub_customer_compare_payload(row) for row in reversed(rows)],
         }
 
     @app.get("/api/compare/{compare_id}")
@@ -88,9 +82,9 @@ def register_compare_routes(app: FastAPI) -> None:
             with state.lock:
                 live = state.compares.get(compare_id)
             if live:
-                return scrub_compare_payload(live)
+                return scrub_customer_compare_payload(live)
             fail(404, f"Unknown compare {compare_id}")
-        return scrub_compare_payload(row)
+        return scrub_customer_compare_payload(row)
 
     @app.post("/api/compare/models")
     async def post_compare_models(request: Request) -> dict[str, Any]:
@@ -125,7 +119,7 @@ def _start_models_compare(state: AppState, body: dict[str, Any]) -> dict[str, An
             "No model key found.",
             hint="Add a key in Settings (`skillgate ui`) or run `skillgate keys set`.",
         )
-    if _busy(state):
+    if state.gate_busy():
         fail(409, "A check or compare is already running.")
     path = find_skill(state.root, skill_raw)
     raw_arms = body.get("arms")
@@ -187,7 +181,7 @@ def _start_versions_compare(state: AppState, body: dict[str, Any]) -> dict[str, 
     run_ids = body.get("run_ids")
     git_refs = body.get("git_refs")
     compare_id = uuid.uuid4().hex[:12]
-    if _busy(state):
+    if state.gate_busy():
         fail(409, "A check or compare is already running.")
 
     def worker() -> None:

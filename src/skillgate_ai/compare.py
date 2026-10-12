@@ -309,7 +309,7 @@ def _build_cases(arms: list[dict[str, Any]], case_ids: list[str]) -> list[dict[s
 
 
 def scrub_compare_payload(payload: dict[str, Any]) -> dict[str, Any]:
-    """Customer-facing compare JSON (API / CLI --json)."""
+    """Strip compare-specific secrets (model/judge on arms) before customer JSON."""
     data = copy.deepcopy(payload)
     for arm in data.get("arms") or []:
         if not isinstance(arm, dict):
@@ -324,6 +324,22 @@ def scrub_compare_payload(payload: dict[str, Any]) -> dict[str, Any]:
         arm.pop("task_by_id", None)
         for key in ("provider", "backend", "via_gateway"):
             arm.pop(key, None)
+    return data
+
+
+def scrub_customer_compare_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    """Compare JSON for CLI --json and browser/API (compare scrub + global browser scrub)."""
+    from skillgate_ai.api_payloads import scrub_browser_payload
+    from skillgate_ai.eval_config import customer_config_label
+
+    data = scrub_browser_payload(scrub_compare_payload(payload))
+    for arm in data.get("arms") or []:
+        if not isinstance(arm, dict):
+            continue
+        cfg = arm.get("config") if isinstance(arm.get("config"), dict) else {}
+        harness = str(cfg.get("harness") or cfg.get("harness_pref") or "llm")
+        arm["subtitle"] = harness_display_name(harness, harness)
+        arm["label"] = customer_config_label(cfg, harness) if cfg else harness_display_name(harness, harness)
     return data
 
 

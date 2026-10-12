@@ -80,4 +80,9 @@ Everything the local UI can do has a CLI command. New API writes must update thi
 | Skip / stop a run | `POST /api/runs/{run_id}/skip`, `POST /api/runs/{run_id}/kill` | `skillgate check` (Ctrl+C) |
 | History | `GET /api/history` | `skillgate history` |
 | One run | `GET /api/runs/{run_id}` | `skillgate history show` |
+| Compare list | `GET /api/compare` | `skillgate compare list` |
+| Compare detail | `GET /api/compare/{compare_id}` | `skillgate compare show` |
+| Compare models | `POST /api/compare/models` | `skillgate compare models` |
+| Compare versions | `POST /api/compare/versions` | `skillgate compare versions` |
+| Cancel compare | `POST /api/compare/{compare_id}/cancel` | `skillgate compare cancel` |
 | Deploy | `POST /api/deploy` | `skillgate deploy` |

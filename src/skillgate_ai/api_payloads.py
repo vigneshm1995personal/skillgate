@@ -38,6 +38,12 @@ class AppState:
     runs: dict[str, dict[str, Any]] = field(default_factory=dict)
     compares: dict[str, dict[str, Any]] = field(default_factory=dict)
 
+    def gate_busy(self) -> bool:
+        with self.lock:
+            if any(item.get("status") == "running" for item in self.runs.values()):
+                return True
+            return any(item.get("status") == "running" for item in self.compares.values())
+
 
 def state_of(request: Request) -> AppState:
     return request.app.state.ui
