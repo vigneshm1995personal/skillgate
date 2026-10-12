@@ -89,6 +89,7 @@ def _ensure_port_free(host: str, port: int) -> None:
     family = socket.AF_INET6 if host in {"::1", "::"} or ":" in host and "." not in host else socket.AF_INET
     sock = socket.socket(family, socket.SOCK_STREAM)
     try:
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         sock.bind((host, port))
     except OSError as exc:
         if exc.errno == errno.EADDRINUSE or getattr(exc, "winerror", None) == 10048:

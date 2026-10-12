@@ -16,6 +16,13 @@ from skillgate_ai.eval_config import customer_config_label
 from skillgate_ai.history import load_deploys, load_history
 from skillgate_ai.ingest import ingest_skill
 from skillgate_ai.judge_copy import customer_scorer_name
+from skillgate_ai.deploy_gate import (
+    local_gate,
+    newest_gate_moving_row,
+    pack_gate_decision,
+    row_is_tryout,
+    run_gate_decision,
+)
 from skillgate_ai.pack import browser_files, relevant_eval_fixtures
 
 SETTINGS_KEYS = (
@@ -69,18 +76,6 @@ def is_relative(path: Path, root: Path) -> bool:
         return True
     except ValueError:
         return False
-
-
-def local_gate(passed: bool | None, *, status: str, tryout: bool) -> tuple[str, str]:
-    if tryout:
-        return "pending", "Single-check runs do not unlock Deploy."
-    if status == "error" or not passed:
-        return "blocked", "Get a passing run to unlock Deploy."
-    return "cleared", "Checks passed — Deploy is unlocked."
-
-
-def _row_is_tryout(row: dict[str, Any], report: dict[str, Any] | None) -> bool:
-    return bool(row.get("tryout") or (report or {}).get("tryout"))
 
 
 _BROWSER_DROP = frozenset(
@@ -175,8 +170,8 @@ def history_row_to_run(row: dict[str, Any], skill_path: Path) -> dict[str, Any]:
     passed = row.get("passed")
     error = row.get("error") if isinstance(row.get("error"), dict) else None
     harness = (report or {}).get("harness")
-    tryout = _row_is_tryout(row, report)
-    decision, reason = local_gate(passed, status="error" if error else "done", tryout=tryout)
+    tryout = row_is_tryout(row, report)
+    decision, reason = run_gate_decision(row)
     cfg = row.get("config") if isinstance(row.get("config"), dict) else None
     label = customer_config_label(cfg, str(harness or ""))
     return scrub_browser_payload(
@@ -184,7 +179,9 @@ def history_row_to_run(row: dict[str, Any], skill_path: Path) -> dict[str, Any]:
             "id": row.get("run_id"),
             "status": "error" if error else "done",
             "passed": passed,
-            "gate": row.get("gate") or ("green" if passed else "red"),
+            "gate": row.get("gate")
+            if row.get("gate") is not None
+            else (("green" if passed else "red") if passed is not None else None),
             "gate_decision": decision,
             "gate_reason": reason,
             "error": error,
@@ -202,9 +199,13 @@ def history_row_to_run(row: dict[str, Any], skill_path: Path) -> dict[str, Any]:
     )
 
 
-def _newest_full_run(runs: list[dict[str, Any]]) -> dict[str, Any] | None:
+def _gate_source_run(runs: list[dict[str, Any]], hist: list[dict[str, Any]]) -> dict[str, Any] | None:
+    row = newest_gate_moving_row(hist)
+    if row is None:
+        return None
+    run_id = str(row.get("run_id") or "")
     for item in runs:
-        if not item.get("tryout"):
+        if str(item.get("id") or "") == run_id:
             return item
     return None
 
@@ -229,11 +230,11 @@ def skill_payload(state: AppState, path: Path) -> dict[str, Any]:
     files = browser_files(path)
     hist = load_history(path, limit=50)
     runs = [history_row_to_run(row, path) for row in reversed(hist)]
-    last_run = _newest_full_run(runs)
+    last_run = _gate_source_run(runs, hist)
     last = hist[-1] if hist else None
     deploys = [_deploy_payload(row, index=i) for i, row in enumerate(load_deploys(path))]
     last_deploy = deploys[-1] if deploys else None
-    gate = (last_run or {}).get("gate_decision") or "pending"
+    gate, _gate_reason = pack_gate_decision(path)
     slug = loaded.name or path.name
     display = loaded.display_name or path.name
     rel = path.name
@@ -272,8 +273,8 @@ def history_payload(state: AppState, skill_path: Path) -> dict[str, Any]:
     del state
     rows = load_history(skill_path, limit=50)
     runs = [history_row_to_run(row, skill_path) for row in reversed(rows)]
-    last_run = _newest_full_run(runs)
-    gate = last_run.get("gate_decision") if last_run else "pending"
+    last_run = _gate_source_run(runs, rows)
+    gate, _gate_reason = pack_gate_decision(skill_path)
     deploys = [
         _deploy_payload(row, index=i) for i, row in enumerate(load_deploys(skill_path))
     ]

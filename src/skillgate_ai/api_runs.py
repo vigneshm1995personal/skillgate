@@ -131,12 +131,16 @@ def start_run(state: AppState, body: dict[str, Any]) -> dict[str, Any]:
             attach_stamped_config(record, report)
         except Exception as exc:  # noqa: BLE001 — surface to the poller
             message = exc.message if isinstance(exc, SkillGateError) else str(exc)
+            decision, reason = local_gate(
+                None, status="error", tryout=tryout, gate_moved=False
+            )
             record.update(
                 {
                     "status": "error",
-                    "passed": False,
-                    "gate": "red",
-                    "gate_decision": "blocked",
+                    "passed": None,
+                    "gate": None,
+                    "gate_decision": decision,
+                    "gate_reason": reason,
                     "error": {"message": message, "hint": getattr(exc, "hint", None)},
                     "tryout": tryout,
                 }

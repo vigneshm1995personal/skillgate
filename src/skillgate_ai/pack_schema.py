@@ -43,7 +43,7 @@ CASES_RELS = frozenset({"evals/cases.yaml", "evals/cases.yml"})
 SEED_LOCK_MESSAGE = "This pack's original checks stay. Add a new check instead of deleting them."
 SEED_LOCK_HINT = "Add a new check instead of deleting the original ones."
 SEED_EDIT_MESSAGE = "This pack's original checks stay. Add a new check instead of editing them."
-SEED_EDIT_HINT = "Add a new check instead of editing the original ones."
+SEED_EDIT_HINT = "Use `skillgate case add` to add your own check."
 
 
 class ExtraQuestion(BaseModel):

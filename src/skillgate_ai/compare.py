@@ -536,6 +536,11 @@ def run_versions_compare(
             root=root,
             run_check_fn=run_check_fn,
         )
+    if run_ids and len(run_ids) == 2 and run_ids[0] == run_ids[1]:
+        raise CompareError(
+            "Pick two different history runs.",
+            hint="Use two distinct run ids from `skillgate history`.",
+        )
     if not run_ids or len(run_ids) != 2:
         recent = [
             str(row.get("run_id") or "")
@@ -583,9 +588,10 @@ def run_versions_compare(
     reports = [_history_report(pack, rid) for rid in run_ids]
     fps = [str(r.get("pack_fingerprint") or "") for r in reports]
     if fps[0] != fps[1]:
+        right = f"{fps[1][:12]}…" if fps[1] else "unknown"
         raise CompareError(
             "These runs used different Datasets.",
-            hint=f"{fps[0][:12]}… vs {fps[1][:12]}…",
+            hint=f"{fps[0][:12]}… vs {right}",
         )
     case_ids = list(reports[0].get("pack_case_ids") or [])
     arm_rows: list[dict[str, Any]] = []

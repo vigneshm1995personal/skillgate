@@ -58,16 +58,19 @@ def persist_eval(
     *,
     pack_root: Path | None,
     run_id: str,
-    passed: bool,
+    passed: bool | None,
     report: dict | None = None,
     error: dict | None = None,
     config: EvalRunConfig | dict | None = None,
+    tryout: bool = False,
+    gate_moved: bool | None = None,
 ) -> None:
     if pack_root is None or not pack_root.is_dir():
         return
     from skillgate_ai.api_payloads import scrub_browser_payload
 
     cfg = config.to_dict() if isinstance(config, EvalRunConfig) else config
+    is_tryout = tryout or bool((report or {}).get("tryout"))
     append_eval(
         pack_root,
         run_id=run_id,
@@ -75,6 +78,8 @@ def persist_eval(
         report=scrub_browser_payload(report) if report else None,
         error=error,
         config=scrub_browser_payload(cfg) if cfg else None,
+        tryout=is_tryout,
+        gate_moved=gate_moved,
     )
 
 
@@ -281,24 +286,34 @@ def _execute_check(
                 passed=report.passed,
                 report=payload,
                 config=run_cfg,
+                tryout=tryout,
             )
     except SkillGateError as exc:
         capture_run_failure(exc)
         persist_root = skill_path or pack_root
         err = {"message": exc.message, "hint": exc.hint}
-        if (
-            started
-            and run_cfg is not None
-            and not isinstance(exc, (EvalConfigError, MissingLLMKeyError))
-            and persist_root
-        ):
-            persist_eval(
-                pack_root=persist_root,
-                run_id=rid,
-                passed=False,
-                error=err,
-                config=run_cfg,
-            )
+        if persist_root and run_cfg is not None:
+            if isinstance(exc, (EvalConfigError, MissingLLMKeyError)):
+                if tryout or started:
+                    persist_eval(
+                        pack_root=persist_root,
+                        run_id=rid,
+                        passed=None,
+                        error=err,
+                        config=run_cfg,
+                        tryout=tryout,
+                        gate_moved=False,
+                    )
+            elif started:
+                persist_eval(
+                    pack_root=persist_root,
+                    run_id=rid,
+                    passed=False,
+                    error=err,
+                    config=run_cfg,
+                    tryout=tryout,
+                    gate_moved=True,
+                )
         return CheckResult(
             report=None,
             exit_code=exc.exit_code,

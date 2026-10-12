@@ -64,7 +64,13 @@ def test_live_missing_key_is_not_recorded_as_failed_check(
     assert result.exit_code == 2
     assert "No model key" in result.stdout
     assert latest_check_passed(pack) is None
-    assert not hist.exists() or not any(hist.glob("*.jsonl"))
+    rows = list(hist.glob("*.jsonl")) if hist.exists() else []
+    if rows:
+        from skillgate_ai.history import load_history
+
+        for row in load_history(pack, limit=0):
+            assert row.get("gate_moved") is False
+            assert row.get("gate") is None
 
 
 def test_unknown_harness_is_not_recorded_and_does_not_block_deploy(

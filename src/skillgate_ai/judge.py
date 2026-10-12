@@ -274,11 +274,11 @@ def judge_stamp(judge: Judge | None) -> dict[str, str]:
             "provider": "skip",
             "backend": "skip",
             "display_name": "Checks",
-            "chosen": "false",
+            "chosen": False,
         }
     from skillgate_ai.judge_openai import OutcomeJudge
 
-    chosen = "true" if bool(getattr(judge, "chosen", False)) else "false"
+    chosen = bool(getattr(judge, "chosen", False))
     if isinstance(judge, OutcomeJudge):
         return {
             "provider": str(judge.name or "openai"),

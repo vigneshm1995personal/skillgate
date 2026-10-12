@@ -45,6 +45,47 @@ def test_compare_models_cli_nocolon_arm(tmp_path: Path, monkeypatch) -> None:
     assert "Traceback" not in (result.stdout + result.stderr)
 
 
+def test_compare_models_dry_run_checks_row_not_none_slash(tmp_path: Path, monkeypatch) -> None:
+    pack = _pack(tmp_path)
+    monkeypatch.setenv("SKILLGATE_ROOT", str(tmp_path))
+    result = runner.invoke(
+        app,
+        [
+            "compare",
+            "models",
+            str(pack),
+            "--arm",
+            "A:codex",
+            "--arm",
+            "B:llm",
+            "--dry-run",
+        ],
+    )
+    assert result.exit_code == 0
+    assert "None/" not in result.stdout
+
+
+def test_compare_models_negative_cap_does_not_print_started(tmp_path: Path, monkeypatch) -> None:
+    pack = _pack(tmp_path)
+    monkeypatch.setenv("SKILLGATE_ROOT", str(tmp_path))
+    result = runner.invoke(
+        app,
+        [
+            "compare",
+            "models",
+            str(pack),
+            "--arm",
+            "A:codex",
+            "--arm",
+            "B:llm",
+            "--max-spend-usd",
+            "-1",
+        ],
+    )
+    assert result.exit_code == 1
+    assert "started" not in result.stdout
+
+
 def test_compare_models_dry_run_shows_arms_and_case_count(tmp_path: Path, monkeypatch) -> None:
     pack = _pack(tmp_path)
     monkeypatch.setenv("SKILLGATE_ROOT", str(tmp_path))

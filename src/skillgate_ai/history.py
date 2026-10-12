@@ -61,14 +61,34 @@ def append_eval(
     pack_root: str | Path,
     *,
     run_id: str,
-    passed: bool,
+    passed: bool | None,
     report: dict[str, Any] | None = None,
     error: dict[str, Any] | None = None,
     config: dict[str, Any] | None = None,
+    tryout: bool = False,
+    gate_moved: bool | None = None,
 ) -> Path | None:
     """Append one JSONL row. Returns the file path, or None on EACCES/EROFS."""
     now = _local_now()
     dest = history_dir(pack_root) / f"{now.strftime('%Y%m%d')}.jsonl"
+    from skillgate_ai.deploy_gate import infer_gate_moved
+
+    is_tryout = tryout or bool((report or {}).get("tryout"))
+    moved = infer_gate_moved(
+        tryout=is_tryout,
+        error=error if isinstance(error, dict) else None,
+        passed=passed,
+        explicit=gate_moved,
+    )
+    gate: str | None
+    if not moved:
+        gate = None
+    elif passed is True:
+        gate = "green"
+    elif passed is False:
+        gate = "red"
+    else:
+        gate = None
     return _append_jsonl(
         dest,
         {
@@ -76,11 +96,12 @@ def append_eval(
             "kind": "run",
             "run_id": run_id,
             "passed": passed,
-            "gate": "green" if passed else "red",
+            "gate": gate,
             "report": report,
             "error": error,
             "config": config,
-            "tryout": bool((report or {}).get("tryout")),
+            "tryout": is_tryout,
+            "gate_moved": moved,
         },
     )
 

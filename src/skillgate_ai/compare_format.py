@@ -27,7 +27,11 @@ def format_compare_cli(payload: dict[str, Any]) -> str:
         row = [label]
         for arm in arms:
             if label == "Checks":
-                row.append(f"{arm.get('passed_count')}/{arm.get('task_count')} Pass")
+                pc, tc = arm.get("passed_count"), arm.get("task_count")
+                if pc is None or tc is None:
+                    row.append("—")
+                else:
+                    row.append(f"{pc}/{tc} Pass")
             elif label == "Tokens":
                 usage = arm.get("usage") or {}
                 total = usage.get("tokens_total")

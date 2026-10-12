@@ -43,6 +43,7 @@ def register_compare_commands(app: typer.Typer, *, key_env_help: str) -> None:
             run_models_compare,
             scrub_compare_payload,
             scrub_customer_compare_payload,
+            validate_compare_plan,
         )
         from skillgate_ai.compare_format import format_compare_cli
 
@@ -64,6 +65,11 @@ def register_compare_commands(app: typer.Typer, *, key_env_help: str) -> None:
             console.print("Add at least two --arm or --arm-file values.")
             raise typer.Exit(2)
         case_ids = [part.strip() for part in (cases or "").split(",") if part.strip()] or None
+        try:
+            validate_compare_plan(specs, max_spend_usd=max_spend_usd)
+        except CompareError as exc:
+            console.print(exc.render())
+            raise typer.Exit(exc.exit_code) from None
         compare_id = uuid.uuid4().hex[:12]
         if not dry_run:
             line = f"Compare {compare_id} started.\n"
@@ -185,7 +191,8 @@ def register_compare_commands(app: typer.Typer, *, key_env_help: str) -> None:
 
     @compare_app.command("list")
     def compare_list_cmd(
-        pack: Path = typer.Argument(..., help="Skill pack directory"),
+        pack: Path | None = typer.Argument(None, help="Skill pack directory"),
+        skill: Path | None = typer.Option(None, "--skill", help="Skill pack (same as positional)"),
         json_out: bool = typer.Option(False, "--json", help="Machine JSON (scrubbed)"),
     ) -> None:
         """List recent compare jobs for a pack."""
@@ -196,7 +203,11 @@ def register_compare_commands(app: typer.Typer, *, key_env_help: str) -> None:
             strip_compare_list_meta,
         )
 
-        path = _resolve_pack_arg(pack)
+        target = skill or pack
+        if target is None:
+            console.print("Pass a skill pack path or --skill.")
+            raise typer.Exit(2)
+        path = _resolve_pack_arg(target)
         root = project_root()
         raw_rows = list_compares_merged(root, path)
         if not raw_rows:

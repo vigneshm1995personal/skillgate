@@ -19,6 +19,10 @@ ROOT = Path(__file__).resolve().parents[1]
 def _skill(tmp_path: Path) -> Path:
     dest = tmp_path / "skills" / "pdf"
     shutil.copytree(ROOT / "skills" / "pdf", dest)
+    hist = dest / "evals" / "history"
+    if hist.is_dir():
+        for path in hist.glob("*.jsonl"):
+            path.unlink()
     return dest
 
 

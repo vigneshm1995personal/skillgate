@@ -381,7 +381,7 @@ def low_confidence_for_spec(
     for question in spec.questions:
         if question.on_fail != "block":
             continue
-        if question.type == "predicate":
+        if question.type in {"predicate", "score"}:
             continue
         if question.builtin and question.id in CHECK_CELL_ORDER:
             canonical = canonical_choice(question.id, extract_choice(answers.get(question.id)))
