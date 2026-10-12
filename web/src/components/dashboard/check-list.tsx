@@ -172,7 +172,7 @@ export function CheckList({
                 <Textarea
                   id={`check-prompt-${index}`}
                   value={check.prompt}
-                  disabled={running}
+                  disabled={running || Boolean(check.locked)}
                   onChange={(event) =>
                     updateCheck(index, { prompt: event.target.value })
                   }
@@ -186,7 +186,7 @@ export function CheckList({
                 <Checkbox
                   id={`check-trigger-${index}`}
                   checked={check.should_trigger !== false}
-                  disabled={running}
+                  disabled={running || Boolean(check.locked)}
                   onCheckedChange={(checked) =>
                     updateCheck(index, {
                       should_trigger: checked === true,
@@ -207,7 +207,7 @@ export function CheckList({
                       id={`check-expected-${index}`}
                       value={expectedFieldValue(check)}
                       placeholder="Hello Skill Gate"
-                      disabled={running}
+                      disabled={running || Boolean(check.locked)}
                       onChange={(event) => {
                         const contains = event.target.value
                         updateCheck(index, {
@@ -227,7 +227,7 @@ export function CheckList({
                       id={`check-output-${index}`}
                       value={check.output_path ?? ""}
                       placeholder={skillOutputPath(skill)}
-                      disabled={running}
+                      disabled={running || Boolean(check.locked)}
                       onChange={(event) =>
                         updateCheck(index, {
                           output_path: event.target.value,

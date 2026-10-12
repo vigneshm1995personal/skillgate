@@ -40,7 +40,9 @@ from skillgate_ai.pack_schema import (
     SEED_CASE_IDS,
     SEED_LOCK_HINT,
     SEED_LOCK_MESSAGE,
+    case_id_slug,
     case_is_locked,
+    keep_locked_case,
     merge_judge_block,
     parse_judge_block,
     parse_judge_patch,
@@ -485,6 +487,8 @@ def pin_checks(skill_path: str | Path, checks: list[dict[str, Any]]) -> CasePack
     if not checks:
         raise ValueError("Pin needs at least one check.")
     for raw in checks:
+        if keep_locked_case(skill_name, by_id, raw) is not None:
+            continue
         case = _case_from_check(root, raw, skill_name)
         by_id[case.id] = case
     pack = CasePack(
@@ -555,23 +559,30 @@ def trust_suite_for_skill(skill_path: str | Path) -> TrustSuite | None:
     return _template_trust(root)
 
 
-def suite_from_checks(skill_path: str | Path, checks: list[dict[str, Any]]) -> SuiteSpec:
+def suite_from_checks(
+    skill_path: str | Path, checks: list[dict[str, Any]], *, tryout: bool = False
+) -> SuiteSpec:
     """Build a suite from the Checks tab without writing evals/cases.yaml."""
     root = Path(skill_path).expanduser().resolve()
     skill_name = _skill_name(root)
     if not checks:
         raise SuiteError("Need at least one check to run.")
+    existing = load_case_pack(root) if cases_path(root).is_file() else None
+    held = {case.id: case for case in (existing.cases if existing else [])}
     try:
-        cases = [_case_from_check(root, dict(raw), skill_name) for raw in checks]
+        cases = []
+        for raw in checks:
+            row = dict(raw)
+            seed = keep_locked_case(skill_name, held, row)
+            cases.append(seed if seed is not None else _case_from_check(root, row, skill_name))
     except ValueError as exc:
         hint = PIN_NEEDS_EXPECTED_HINT if PIN_NEEDS_EXPECTED in str(exc) else None
         raise SuiteError(str(exc), hint=hint) from exc
-    existing = load_case_pack(root) if cases_path(root).is_file() else None
-    if existing is not None:
+    if not tryout and existing is not None:
         present = {case.id for case in cases}
-        for case in existing.cases:
-            if case_is_locked(existing.skill, case.id) and case.id not in present:
-                cases.append(case)
+        cases.extend(
+            c for c in existing.cases if case_is_locked(existing.skill, c.id) and c.id not in present
+        )
     pack = CasePack(
         schema_version=1,
         skill=skill_name,
@@ -596,7 +607,7 @@ def checks_fingerprint(checks: list[dict[str, Any]], *, skill: str) -> str:
     """Fingerprint an ad-hoc Checks tab the same way as a pinned pack."""
     cases: list[PackCase] = []
     for raw in checks:
-        case_id = _slug_id(str(raw.get("id") or f"check-{len(cases) + 1}"))
+        case_id = case_id_slug(str(raw.get("id") or f"check-{len(cases) + 1}"))
         files = _file_copies(raw.get("files"))
         golden = None
         golden_path = str(raw.get("golden_path") or "").strip() or None
@@ -767,11 +778,6 @@ def _skill_name(root: Path) -> str:
     return root.name
 
 
-def _slug_id(value: str) -> str:
-    slug = re.sub(r"[^a-z0-9]+", "-", value.strip().lower()).strip("-")
-    return slug or "case"
-
-
 def _file_copies(raw: object) -> list[CaseFileCopy]:
     if not isinstance(raw, list):
         return []
@@ -796,7 +802,7 @@ def _inline_input_text(raw: dict[str, Any]) -> str | None:
 
 def _case_from_check(root: Path, raw: dict[str, Any], skill_name: str) -> PackCase:
     del skill_name
-    case_id = _slug_id(str(raw.get("id") or "example"))
+    case_id = case_id_slug(str(raw.get("id") or "example"))
     should = bool(raw.get("should_trigger", True))
     judge = parse_judge_block(raw.get("judge"))
     file_items = raw.get("files") if isinstance(raw.get("files"), list) else []
@@ -971,7 +977,6 @@ def _bundled_suite_trust(skill_path: Path) -> TrustSuite | None:
             continue
         raw = yaml.safe_load(candidate.read_text(encoding="utf-8")) or {}
         if isinstance(raw, dict) and raw.get("from_pack"):
-            # Pointer to a missing/unpinned pack is not a trust suite.
             continue
         spec, _ = load_suite(candidate)
         return TrustSuite(
@@ -983,6 +988,5 @@ def _bundled_suite_trust(skill_path: Path) -> TrustSuite | None:
     return None
 
 
-def _template_trust(skill_path: Path) -> TrustSuite | None:
-    del skill_path
+def _template_trust(_skill_path: Path) -> TrustSuite | None:
     return None

@@ -36,6 +36,7 @@ WRITE_ROUTE_CLI: dict[tuple[str, str], str] = {
 
 READ_ROUTE_CLI: dict[tuple[str, str], str] = {
     ("GET", "/api/history"): "history",
+    ("GET", "/api/runs/{run_id}"): "history show",
     ("GET", "/api/evals/dataset"): "case list",
     ("GET", "/api/skills"): "list",
     ("GET", "/api/settings/keys"): "keys list",

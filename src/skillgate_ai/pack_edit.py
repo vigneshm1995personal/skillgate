@@ -15,10 +15,19 @@ from skillgate_ai.case_pack import (
     save_pack_judge,
 )
 from skillgate_ai.errors import SuiteError
-from skillgate_ai.judge_spec import RESERVED_IDS, _on_fail_value, parse_extra_question, resolve_judge_spec
+from skillgate_ai.judge_spec import (
+    RESERVED_IDS,
+    _on_fail_value,
+    parse_extra_question,
+    resolve_judge_spec,
+)
 from skillgate_ai.pack_schema import (
+    SEED_EDIT_HINT,
+    SEED_EDIT_MESSAGE,
     ExtraQuestion,
     JudgeBlock,
+    case_id_slug,
+    case_is_locked,
     merge_judge_block,
     parse_judge_block,
     parse_judge_patch,
@@ -88,13 +97,11 @@ def apply_pin(
 
 
 def remove_pack_case(skill_path: str | Path, case_id: str):
-    from skillgate_ai.pack_schema import case_is_locked
-
     root = Path(skill_path).expanduser().resolve()
     pack = load_case_pack(root)
     if pack is None:
         raise SuiteError("This skill has no case pack yet.")
-    wanted = case_id.strip()
+    wanted = case_id_slug(case_id)
     if case_is_locked(pack.skill, wanted):
         raise SuiteError(
             "This pack's original checks stay. Add a new check instead of deleting them."
@@ -119,6 +126,9 @@ def edit_pack_case(
     pack = load_case_pack(root)
     if pack is None:
         raise SuiteError("This skill has no case pack yet.")
+    case_id = case_id_slug(case_id)
+    if case_is_locked(pack.skill, case_id):
+        raise SuiteError(SEED_EDIT_MESSAGE, hint=SEED_EDIT_HINT)
     found = False
     cases = []
     for case in pack.cases:
@@ -170,21 +180,23 @@ def add_judge_question(
     kind: str = "predicate",
     question_id: str | None = None,
     on_fail: str = "block",
+    choices: list[str] | None = None,
 ):
     root = Path(skill_path).expanduser().resolve()
     pack = load_case_pack(root)
     if pack is None:
         raise SuiteError("This skill has no case pack yet.")
     qid = (question_id or "").strip() or _question_id(ask)
-    parsed = parse_extra_question(
-        {
-            "id": qid,
-            "type": kind,
-            "ask": ask,
-            "on_fail": on_fail,
-            "pass_if": {"gte": 0.8} if kind.lower() in {"predicate", "yes/no"} else None,
-        }
-    )
+    raw: dict[str, Any] = {
+        "id": qid,
+        "type": kind,
+        "ask": ask,
+        "on_fail": on_fail,
+        "pass_if": {"gte": 0.8} if kind.lower() in {"predicate", "yes/no"} else None,
+    }
+    if choices:
+        raw["choices"] = list(choices)
+    parsed = parse_extra_question(raw)
     extra = ExtraQuestion(
         id=parsed.id,
         type=parsed.type,  # type: ignore[arg-type]
@@ -230,7 +242,14 @@ def set_question_on_fail(skill_path: str | Path, question_id: str, on_fail: str)
 
 
 def remove_judge_question(skill_path: str | Path, question_id: str):
-    return save_pack_judge(skill_path, {"removed_extra_ids": [question_id]})
+    qid = question_id.strip()
+    if qid in RESERVED_IDS:
+        raise SuiteError("Skill Gate’s questions stay. Remove an extra question instead.")
+    pack = load_case_pack(skill_path)
+    extras = list(pack.judge.extra_questions) if pack and pack.judge else []
+    if qid not in {item.id for item in extras}:
+        raise SuiteError(f"No question named {qid}.")
+    return save_pack_judge(skill_path, {"removed_extra_ids": [qid]})
 
 
 def add_pack_case(
@@ -243,7 +262,10 @@ def add_pack_case(
     should_trigger: bool = True,
     files: list[dict[str, Any]] | None = None,
     inputs: list[str] | None = None,
+    force: bool = False,
 ):
+    if not str(prompt or "").strip():
+        raise SuiteError("Add a prompt for this check.")
     file_rows = list(files or [])
     for raw in inputs or []:
         src = str(raw).strip()
@@ -251,8 +273,13 @@ def add_pack_case(
             file_rows.append({"src": src})
     loaded = load_case_pack(skill_path)
     taken = {case.id for case in (loaded.cases if loaded else [])}
+    wanted = case_id_slug(case_id) if str(case_id or "").strip() else ""
+    if wanted and loaded and case_is_locked(loaded.skill, wanted):
+        raise SuiteError(SEED_EDIT_MESSAGE, hint=SEED_EDIT_HINT)
+    if wanted and wanted in taken and not force:
+        raise SuiteError(f"Check {wanted} already exists. Pass --force to replace it.")
     check: dict[str, Any] = {
-        "id": (case_id or "").strip() or _short_case_id(prompt, taken),
+        "id": wanted or _short_case_id(prompt, taken),
         "prompt": prompt,
         "should_trigger": should_trigger,
         "files": file_rows,
@@ -282,6 +309,19 @@ def _short_case_id(prompt: str, taken: set[str]) -> str:
     while f"{base}-{n}" in taken:
         n += 1
     return f"{base}-{n}"
+
+
+def tryout_checks(skill_path: str | Path, case_id: str) -> list[dict[str, Any]]:
+    from skillgate_ai.case_pack import checks_from_pack
+
+    pack = load_case_pack(skill_path)
+    if pack is None:
+        raise SuiteError("This skill has no checks yet.")
+    wanted = case_id_slug(case_id)
+    rows = [row for row in checks_from_pack(pack, include_drafts=True) if row.get("id") == wanted]
+    if not rows:
+        raise SuiteError(f"No check named {wanted}.")
+    return rows
 
 
 def _question_id(ask: str) -> str:

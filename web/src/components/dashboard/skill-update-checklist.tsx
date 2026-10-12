@@ -69,7 +69,7 @@ export function SkillUpdateChecklist() {
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
         {suggestError ? (
-          <Alert variant="destructive">
+          <Alert>
             <AlertTitle>{suggestError.message}</AlertTitle>
             {suggestError.hint ? (
               <AlertDescription>{suggestError.hint}</AlertDescription>

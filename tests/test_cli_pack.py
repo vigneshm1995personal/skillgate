@@ -48,11 +48,11 @@ def test_skill_write_and_history(tmp_path: Path, monkeypatch) -> None:
     )
     assert overwritten.exit_code == 0, overwritten.stdout
     assert (dest / "SKILL.md").read_text(encoding="utf-8") == skill_md
-    empty = runner.invoke(app, ["history", str(dest)])
+    empty = runner.invoke(app, ["history", "--pack", str(dest)])
     assert empty.exit_code == 0
     assert "No runs yet." in plain_text(empty.stdout)
     append_eval(dest, run_id="run-cli", passed=True, report={"skill": "pdf", "passed": True})
-    listed = runner.invoke(app, ["history", str(dest)])
+    listed = runner.invoke(app, ["history", "--pack", str(dest)])
     assert listed.exit_code == 0
     assert "run-cli" in plain_text(listed.stdout)
 

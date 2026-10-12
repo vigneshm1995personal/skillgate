@@ -133,7 +133,7 @@ def run_check(
             if checks:
                 from skillgate_ai.case_pack import suite_from_checks
 
-                spec = suite_from_checks(suite_path, checks)
+                spec = suite_from_checks(suite_path, checks, tryout=tryout)
             else:
                 from skillgate_ai.case_pack import expand_from_pack
 

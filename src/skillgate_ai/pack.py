@@ -272,7 +272,10 @@ def write_sample_fixture(
     if cannot_synthesize_sample(dest=dest or "", prompt=prompt, description=description):
         raise CannotSynthesizeFixture()
     name = dest or implied_fixture_name(f"{prompt} {description}")
-    if "/" in name:
+    cleaned = name.replace("\\", "/").lstrip("/")
+    if cleaned == "SKILL.md" or cleaned.endswith("/SKILL.md"):
+        relative = safe_relpath("SKILL.md")
+    elif "/" in name:
         relative = safe_relpath(name)
     else:
         relative = safe_relpath(f"{FIXTURE_DIR}/{name}")

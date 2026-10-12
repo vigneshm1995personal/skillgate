@@ -298,7 +298,7 @@ function DeployRow({ deploy }: { deploy: AnalyticsDeploy }) {
 
 function ResultBadge({ run }: { run: AnalyticsRun }) {
   if (run.status === "error") {
-    return <Badge variant="destructive">Error</Badge>
+    return <Badge variant="outline">Error</Badge>
   }
   if (run.passed) {
     return (

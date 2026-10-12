@@ -554,6 +554,32 @@ def test_settings_keys_use_other_not_gateway_name(tmp_path: Path, monkeypatch) -
     assert "decisions_path" not in judge
 
 
+def test_pin_refuses_seed_prompt_rewrite(tmp_path: Path, monkeypatch) -> None:
+    pack = _copy_pack(tmp_path)
+    before = (pack / "evals" / "cases.yaml").read_text(encoding="utf-8")
+    client = _client(tmp_path, monkeypatch)
+    res = client.post(
+        "/api/evals/pin",
+        json={
+            "skill": "pdf",
+            "checks": [
+                {
+                    "id": "extract-hello",
+                    "prompt": "HACKED via API",
+                    "should_trigger": True,
+                }
+            ],
+        },
+    )
+    assert res.status_code == 400, res.text
+    detail = res.json()["detail"]
+    message = detail.get("message") if isinstance(detail, dict) else str(detail)
+    assert "original checks stay" in message.lower()
+    after = (pack / "evals" / "cases.yaml").read_text(encoding="utf-8")
+    assert after == before
+    assert "HACKED via API" not in after
+
+
 def test_pin_validates_judge_before_writing_cases(tmp_path: Path, monkeypatch) -> None:
     pack = _copy_pack(tmp_path)
     before = (pack / "evals" / "cases.yaml").read_text(encoding="utf-8")
@@ -618,7 +644,7 @@ def test_pin_merges_pack_judge_extras(tmp_path: Path, monkeypatch) -> None:
             "checks": [
                 {
                     "id": "extract-hello",
-                    "prompt": "Extract hello",
+                    "prompt": "Extract the text from hello.pdf and save it to output/extracted.txt",
                     "should_trigger": True,
                 }
             ],
@@ -648,7 +674,7 @@ def test_pin_merges_pack_judge_extras(tmp_path: Path, monkeypatch) -> None:
             "checks": [
                 {
                     "id": "extract-hello",
-                    "prompt": "Extract hello",
+                    "prompt": "Extract the text from hello.pdf and save it to output/extracted.txt",
                     "should_trigger": True,
                 }
             ],

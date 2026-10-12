@@ -26,6 +26,9 @@ def register_pack_commands(app: typer.Typer, case_app: typer.Typer, judge_app: t
         ),
         zip_path: Path | None = typer.Option(None, "--zip", help="Zip of a skill folder"),
         markdown: Path | None = typer.Option(None, "--md", help="A SKILL.md file"),
+        only: list[str] | None = typer.Option(
+            None, "--only", help="Import only these skill slugs (repeatable)"
+        ),
     ) -> None:
         """Copy skills from an agent folder, a zip, or a SKILL.md file."""
         root = _boot()
@@ -40,7 +43,7 @@ def register_pack_commands(app: typer.Typer, case_app: typer.Typer, judge_app: t
                 return
             from skillgate_ai.catalog import import_from_agent_folders
 
-            result = import_from_agent_folders(root, sources=source)
+            result = import_from_agent_folders(root, sources=source, only=only)
         except (SkillGateError, OSError) as exc:
             message = str(exc) if not isinstance(exc, SkillGateError) else exc.render()
             console.print(message)
@@ -105,16 +108,51 @@ def register_pack_commands(app: typer.Typer, case_app: typer.Typer, judge_app: t
         except SkillGateError as exc:
             console.print(exc.render())
             raise typer.Exit(exc.exit_code) from None
+        except OSError as exc:
+            console.print("Couldn't read that file.")
+            if markdown_file is not None:
+                console.print(str(markdown_file))
+            if exc.strerror:
+                console.print(exc.strerror)
+            raise typer.Exit(1) from None
         console.print(f"Created {dest}")
 
-    @app.command("history")
+    history_app = typer.Typer(
+        add_completion=False,
+        invoke_without_command=True,
+        help="Show recent check runs for this skill.",
+    )
+    app.add_typer(history_app, name="history")
+
+    def _print_history_rows(rows: list) -> None:
+        from skillgate_ai.judge_copy import customer_scorer_name, scored_by_phrase
+
+        if not rows:
+            console.print("No runs yet.")
+            return
+        for row in reversed(rows):
+            report = row.get("report") if isinstance(row.get("report"), dict) else {}
+            who = report.get("scored_by") if isinstance(report.get("scored_by"), str) else ""
+            if not who or "openai decisions" in who.lower() or "vercel ai gateway" in who.lower():
+                stamp = None
+                if isinstance(report.get("config"), dict):
+                    stamp = report["config"].get("judge")
+                who = scored_by_phrase(
+                    customer_scorer_name(stamp if isinstance(stamp, dict) else None)
+                )
+            gate = "pass" if row.get("passed") else "fail"
+            console.print(f"{row.get('run_id')}  {gate}  {who}")
+
+    @history_app.callback(invoke_without_command=True)
     def history_cmd(
-        pack: Path | None = typer.Argument(None, help="Skill pack"),
+        ctx: typer.Context,
+        pack: Path | None = typer.Option(None, "--pack", help="Skill pack"),
         json_out: bool = typer.Option(False, "--json"),
     ) -> None:
         """Show recent check runs for this skill."""
+        if ctx.invoked_subcommand:
+            return
         from skillgate_ai.history import load_history
-        from skillgate_ai.judge_copy import scored_by_phrase, customer_scorer_name
 
         try:
             dest = _resolve_pack_arg(pack)
@@ -127,19 +165,62 @@ def register_pack_commands(app: typer.Typer, case_app: typer.Typer, judge_app: t
 
             _emit_json(rows)
             return
-        if not rows:
-            console.print("No runs yet.")
+        _print_history_rows(rows)
+
+    @history_app.command("show")
+    def history_show(
+        run_id: str = typer.Argument(..., help="Run id"),
+        pack: Path | None = typer.Option(None, "--pack", help="Skill pack"),
+        json_out: bool = typer.Option(False, "--json"),
+    ) -> None:
+        """Show one saved run."""
+        from skillgate_ai.catalog import catalog_entries
+        from skillgate_ai.history import load_history
+
+        try:
+            row = None
+            skill_path = None
+            if pack is not None:
+                dest = _resolve_pack_arg(pack)
+                skill_path = dest
+                for item in load_history(dest, limit=0):
+                    if str(item.get("run_id") or "") == run_id:
+                        row = item
+                        break
+            else:
+                for entry in catalog_entries(_boot()):
+                    path = Path(entry["absolute"])
+                    for item in load_history(path, limit=0):
+                        if str(item.get("run_id") or "") == run_id:
+                            row = item
+                            skill_path = path
+                            break
+                    if row is not None:
+                        break
+                if row is None:
+                    dest = _resolve_pack_arg(None)
+                    skill_path = dest
+                    for item in load_history(dest, limit=0):
+                        if str(item.get("run_id") or "") == run_id:
+                            row = item
+                            break
+            if row is None:
+                raise SkillGateError(f"No run named {run_id}.")
+        except SkillGateError as exc:
+            console.print(exc.render())
+            raise typer.Exit(exc.exit_code) from None
+        if json_out:
+            from skillgate_ai.api_payloads import history_row_to_run
+            from skillgate_ai.cli import _emit_json
+
+            _emit_json(history_row_to_run(row, skill_path or Path(".")))
             return
-        for row in reversed(rows):
-            report = row.get("report") if isinstance(row.get("report"), dict) else {}
-            who = report.get("scored_by") if isinstance(report.get("scored_by"), str) else ""
-            if not who or "openai decisions" in who.lower() or "vercel ai gateway" in who.lower():
-                stamp = None
-                if isinstance(report.get("config"), dict):
-                    stamp = report["config"].get("judge")
-                who = scored_by_phrase(customer_scorer_name(stamp if isinstance(stamp, dict) else None))
-            gate = "pass" if row.get("passed") else "fail"
-            console.print(f"{row.get('run_id')}  {gate}  {who}")
+        report = row.get("report") if isinstance(row.get("report"), dict) else {}
+        gate = "pass" if row.get("passed") else "fail"
+        passed = report.get("passed_count")
+        total = report.get("task_count")
+        counts = f"  {passed}/{total}" if passed is not None and total is not None else ""
+        console.print(f"{row.get('run_id')}  {gate}{counts}")
 
     @case_app.command("list")
     def case_list(pack: Path | None = typer.Argument(None, help="Skill pack")) -> None:

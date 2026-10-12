@@ -187,7 +187,7 @@ export function SkillDetailPage({ name }: { name: string }) {
       />
 
       {error ? (
-        <Alert variant="destructive">
+        <Alert>
           <AlertTitle>Could not load skill</AlertTitle>
           <AlertDescription>{error}</AlertDescription>
         </Alert>

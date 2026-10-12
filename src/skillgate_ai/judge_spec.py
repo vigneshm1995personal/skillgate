@@ -69,14 +69,12 @@ class JudgeQuestion:
         if self.type == "predicate":
             return {"type": "predicate", "name": self.id, "instructions": self.ask}
         if self.type == "score":
-            payload: dict[str, Any] = {
+            return {
                 "type": "score",
                 "name": self.id,
                 "instructions": self.ask,
+                "levels": list(self.levels) or ["1", "2", "3", "4", "5"],
             }
-            if self.levels:
-                payload["levels"] = list(self.levels)
-            return payload
         choices = []
         for row in self.choices:
             item = {"value": row.get("value")}

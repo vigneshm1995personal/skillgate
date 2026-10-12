@@ -61,7 +61,7 @@ Everything the local UI can do has a CLI command. New API writes must update thi
 | Pick who scores | `PUT /api/settings/judge` | `skillgate judge provider set` |
 | Test scoring | `POST /api/judge/ping` | `skillgate judge provider test` |
 | Show scoring provider | `GET /api/settings/judge` | `skillgate judge provider show` |
-| Import from agent folders / zip / SKILL.md | `POST /api/skills/import`, `POST /api/skills/upload` | `skillgate import` |
+| Import from agent folders / zip / SKILL.md | `POST /api/skills/import`, `POST /api/skills/upload` | `skillgate import --only` |
 | Create a skill | `POST /api/skills/paste` | `skillgate skill paste` / `skillgate new` |
 | Edit SKILL.md or pack files | `POST /api/skills/pack-file`, `POST /api/skills/pack-upload`, `POST /api/skills/apply-fix`, `POST /api/evals/generate` | `skillgate skill write` |
 | List skills | `GET /api/skills` | `skillgate list` |
@@ -70,10 +70,12 @@ Everything the local UI can do has a CLI command. New API writes must update thi
 | Remove a check | `POST /api/evals/pin` | `skillgate case remove` |
 | List checks | `GET /api/evals/dataset` | `skillgate case list` |
 | Bind fixtures | `POST /api/evals/fixture-bind` | `skillgate case bind` |
-| Add a scoring question | Checks editor → pin | `skillgate judge add-question` |
+| Add a scoring question | Checks editor → pin | `skillgate judge add-question` (`--choices` for pick one) |
 | Edit Fail vs warn | Checks editor → pin | `skillgate judge set-question` |
 | Remove an extra question | Checks editor → pin | `skillgate judge remove-question` |
 | Run | `POST /api/runs` | `skillgate check` |
+| Run one check / try-out | `POST /api/runs` (`checks`, `tryout`) | `skillgate check --case` |
 | Skip / stop a run | `POST /api/runs/{run_id}/skip`, `POST /api/runs/{run_id}/kill` | `skillgate check` (Ctrl+C) |
 | History | `GET /api/history` | `skillgate history` |
+| One run | `GET /api/runs/{run_id}` | `skillgate history show` |
 | Deploy | `POST /api/deploy` | `skillgate deploy` |

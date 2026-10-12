@@ -295,7 +295,7 @@ export function EvalPage() {
       />
 
       {status && !status.has_key && !keyBannerDismissed ? (
-        <Alert variant="destructive" id="missing-key">
+        <Alert id="missing-key">
           <AlertTitle className="truncate pr-8">
             {status.missing_key_message || "No model key found."}
           </AlertTitle>
@@ -534,7 +534,7 @@ export function EvalPage() {
                   />
                 </Field>
                 {intakeError ? (
-                  <Alert variant="destructive" id="intake-error">
+                  <Alert id="intake-error">
                     <AlertTitle>Could not use that skill</AlertTitle>
                     <AlertDescription>
                       <pre className="font-sans text-sm whitespace-pre-wrap">
@@ -725,7 +725,6 @@ export function EvalPage() {
               {startIssues.length > 0 && checks.length > 0 && !seeding ? (
                 <Alert
                   id="start-needs-file"
-                  variant="destructive"
                   tabIndex={-1}
                   aria-labelledby="start-needs-file-title"
                 >
@@ -790,7 +789,7 @@ export function EvalPage() {
                   </EmptyHeader>
                   <EmptyContent>
                     {skill && intakeError ? (
-                      <Alert variant="destructive" id="checks-intake-error">
+                      <Alert id="checks-intake-error">
                         <AlertTitle>Could not suggest checks</AlertTitle>
                         <AlertDescription>
                           <pre className="font-sans text-sm whitespace-pre-wrap">

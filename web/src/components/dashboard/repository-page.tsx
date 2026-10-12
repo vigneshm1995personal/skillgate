@@ -253,7 +253,7 @@ export function RepositoryPage() {
             </DialogDescription>
           </DialogHeader>
           {sourcesError ? (
-            <Alert variant="destructive">
+            <Alert>
               <AlertTitle>Could not find agent folders</AlertTitle>
               <AlertDescription>{sourcesError}</AlertDescription>
             </Alert>

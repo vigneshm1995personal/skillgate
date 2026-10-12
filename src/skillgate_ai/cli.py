@@ -12,6 +12,7 @@ import typer
 from rich.console import Console
 
 from skillgate_ai import __version__
+from skillgate_ai.api_payloads import scrub_browser_payload
 from skillgate_ai.config import load_env
 from skillgate_ai.errors import SkillGateError
 from skillgate_ai.gate import run_check
@@ -124,8 +125,30 @@ def _run_gate(
     temperature: float | None,
     reasoning_effort: str | None,
     key_env: list[str] | None = None,
+    case_id: str | None = None,
 ) -> None:
     _bind_key_env(key_env)
+    checks = None
+    tryout = False
+    if case_id:
+        from skillgate_ai.pack_edit import tryout_checks
+
+        dest = resolve_user_path(target, project_root())
+        try:
+            checks = tryout_checks(dest, case_id)
+            tryout = True
+        except SkillGateError as exc:
+            if json_out or summary == "json":
+                _emit_json(
+                    {
+                        "error": exc.message,
+                        "hint": exc.hint,
+                        "exit_code": exc.exit_code,
+                    }
+                )
+            else:
+                console.print(exc.render())
+            raise typer.Exit(exc.exit_code) from None
     result = run_check(
         target,
         skill=skill,
@@ -137,6 +160,8 @@ def _run_gate(
         temperature=temperature,
         reasoning_effort=reasoning_effort,
         source="cli",
+        checks=checks,
+        tryout=tryout,
     )
     machine = json_out or summary == "json"
     if not machine and summary != "github":
@@ -165,7 +190,7 @@ def _run_gate(
     if report is None:
         raise typer.Exit(result.exit_code)
     if machine:
-        _emit_json(report_to_dict(report))
+        _emit_json(scrub_browser_payload(report_to_dict(report)))
     else:
         text = format_github(report)
         console.print(text)
@@ -209,6 +234,7 @@ def check_pack(
         None, "--reasoning-effort", help="Codex reasoning: low | medium | high | ultra"
     ),
     key_env: list[str] | None = typer.Option(None, "--key-env", help=_KEY_ENV_HELP),
+    case_id: str | None = typer.Option(None, "--case", help="Run this check only (try-out)"),
 ) -> None:
     """Run pack-local evals/cases.yaml. Exit 0 if green, 1 if red, 2 if no key."""
     _run_gate(
@@ -224,6 +250,7 @@ def check_pack(
         temperature=temperature,
         reasoning_effort=reasoning_effort,
         key_env=key_env,
+        case_id=case_id,
     )
 
 
@@ -457,10 +484,14 @@ def keys_clear(
     name: str = typer.Argument(..., help="Key name to remove"),
 ) -> None:
     """Remove a key from `.skillgate/keys`."""
-    from skillgate_ai.keys import clear_vault_key, public_key_name
+    from skillgate_ai.keys import clear_vault_key, internal_key_name, public_key_name, read_vault
 
     root = _boot()
     try:
+        key = internal_key_name(name)
+        if key not in read_vault(root):
+            console.print(f"No {public_key_name(name)} in Settings.")
+            raise typer.Exit(1)
         clear_vault_key(root, name)
     except SkillGateError as exc:
         console.print(exc.render())
@@ -501,6 +532,11 @@ def init_cmd(
     except SkillGateError as exc:
         console.print(exc.render())
         raise typer.Exit(exc.exit_code) from None
+    except OSError as exc:
+        console.print("Couldn't create that folder.")
+        if exc.strerror:
+            console.print(exc.strerror)
+        raise typer.Exit(1) from None
     console.print(f"Workspace ready at {root}")
 
 
@@ -645,6 +681,9 @@ def judge_add_question_cmd(
     kind: str = typer.Option("Yes/No", "--type", help="Yes/No | pick one | score"),
     question_id: str | None = typer.Option(None, "--id", help="Optional question id"),
     warn_only: bool = typer.Option(False, "--warn-only", help="Warn instead of failing the check"),
+    choices: list[str] | None = typer.Option(
+        None, "--choices", help="Pick-one options (repeatable)"
+    ),
 ) -> None:
     """Add an extra scoring question to this skill."""
     from skillgate_ai.pack_edit import add_judge_question
@@ -657,6 +696,7 @@ def judge_add_question_cmd(
             kind=kind,
             question_id=question_id,
             on_fail="warn" if warn_only else "block",
+            choices=choices,
         )
     except SkillGateError as exc:
         console.print(exc.render())
@@ -683,6 +723,7 @@ def case_add_cmd(
         None, "--input", "--fixture", help="Input/fixture file to copy into this skill"
     ),
     no_trigger: bool = typer.Option(False, "--no-trigger", help="This check should not run the skill"),
+    force: bool = typer.Option(False, "--force", help="Replace a check that already uses this id"),
 ) -> None:
     """Add a check to this skill's Dataset."""
     from skillgate_ai.pack_edit import add_pack_case
@@ -697,6 +738,7 @@ def case_add_cmd(
             output_path=output_path,
             should_trigger=not no_trigger,
             inputs=[str(path) for path in inputs] if inputs else None,
+            force=force,
         )
     except SkillGateError as exc:
         console.print(exc.render())

@@ -151,7 +151,7 @@ export function DeployPage() {
         }
       />
 
-      <Alert id="deploy-note" variant={deployAllowed ? "default" : "destructive"}>
+      <Alert id="deploy-note">
         <AlertTitle>{title}</AlertTitle>
         <AlertDescription>{note}</AlertDescription>
       </Alert>

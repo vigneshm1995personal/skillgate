@@ -58,3 +58,7 @@ def test_parity_table_is_in_docs() -> None:
     assert "case list" in text
     assert "case remove" in text
     assert "judge remove-question" in text
+    assert "check --case" in text
+    assert "history show" in text
+    assert "import --only" in text
+    assert "--choices" in text

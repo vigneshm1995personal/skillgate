@@ -102,7 +102,7 @@ export function GateBadge({
     return <Badge variant="success">Ready</Badge>
   }
   if (tone === "red") {
-    return <Badge variant="destructive">Blocked</Badge>
+    return <Badge variant="outline">Blocked</Badge>
   }
   return <Badge variant="outline">Pending</Badge>
 }

@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+import re
+from collections.abc import Iterable, Mapping
 from pathlib import Path
 from typing import Any, Literal
 
@@ -41,6 +42,8 @@ SEED_CASE_IDS = {
 CASES_RELS = frozenset({"evals/cases.yaml", "evals/cases.yml"})
 SEED_LOCK_MESSAGE = "This pack's original checks stay. Add a new check instead of deleting them."
 SEED_LOCK_HINT = "Add a new check instead of deleting the original ones."
+SEED_EDIT_MESSAGE = "This pack's original checks stay. Add a new check instead of editing them."
+SEED_EDIT_HINT = "Add a new check instead of editing the original ones."
 
 
 class ExtraQuestion(BaseModel):
@@ -105,8 +108,28 @@ class JudgeBlock(BaseModel):
         return payload
 
 
+def case_id_slug(value: object) -> str:
+    slug = re.sub(r"[^a-z0-9]+", "-", str(value or "").strip().lower()).strip("-")
+    return slug or "case"
+
+
 def case_is_locked(skill: str, case_id: str) -> bool:
-    return case_id in SEED_CASE_IDS.get(skill, frozenset())
+    return case_id_slug(case_id) in SEED_CASE_IDS.get(skill, frozenset())
+
+
+def refuse_locked_prompt_change(skill: str, case_id: str, old_prompt: str, new_prompt: str) -> None:
+    if case_is_locked(skill, case_id) and old_prompt != new_prompt:
+        raise SuiteError(SEED_EDIT_MESSAGE, hint=SEED_EDIT_HINT)
+
+
+def keep_locked_case(skill: str, by_id: Mapping[str, Any], raw: Mapping[str, Any]) -> Any:
+    case_id = case_id_slug(raw.get("id") or "")
+    existing = by_id.get(case_id)
+    if existing is None or not case_is_locked(skill, case_id):
+        return None
+    if "prompt" in raw:
+        refuse_locked_prompt_change(skill, case_id, existing.prompt, str(raw.get("prompt") or ""))
+    return existing
 
 
 def reject_missing_seed_cases(skill: str, case_ids: Iterable[str]) -> None:

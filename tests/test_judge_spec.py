@@ -221,6 +221,26 @@ def test_skipped_extras_do_not_fail_the_check() -> None:
     assert reasons == []
 
 
+def test_score_extra_decisions_payload_includes_levels() -> None:
+    spec = resolve_judge_spec(
+        pack={
+            "extra_questions": [
+                {
+                    "id": "quality_score",
+                    "type": "score",
+                    "ask": "How complete is the result?",
+                    "on_fail": "block",
+                    "pass_if": {"gte": 0.7},
+                }
+            ]
+        }
+    )
+    extra = next(row for row in spec_decisions_questions(spec) if row["name"] == "quality_score")
+    assert extra["type"] == "score"
+    assert isinstance(extra.get("levels"), list)
+    assert len(extra["levels"]) >= 2
+
+
 def test_numeric_score_extra_passes_after_coerce() -> None:
     spec = resolve_judge_spec(
         pack={
