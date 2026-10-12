@@ -70,8 +70,14 @@ export function ComparePage() {
     { label: "Arm B", harness: "auto", config: { ...DEFAULT_EVAL_CONFIG_DRAFT } },
   ])
   const [maxSpend, setMaxSpend] = useState("5")
+  const [versionMode, setVersionMode] = useState<"runs" | "git">("runs")
   const [runA, setRunA] = useState("")
   const [runB, setRunB] = useState("")
+  const [gitRefA, setGitRefA] = useState("HEAD~1")
+  const [gitRefB, setGitRefB] = useState("HEAD")
+  const [historyRuns, setHistoryRuns] = useState<
+    Array<{ id: string; label: string }>
+  >([])
   const [caseIds, setCaseIds] = useState<string[] | null>(null)
   const [datasetChecks, setDatasetChecks] = useState<Array<{ id: string; prompt: string }>>([])
   const [result, setResult] = useState<ComparePayload | null>(null)
@@ -158,8 +164,16 @@ export function ComparePage() {
       setError("Pick a skill first.")
       return
     }
-    if (!runA.trim() || !runB.trim()) {
+    if (versionMode === "runs" && (!runA.trim() || !runB.trim())) {
       setError("Pick two history runs.")
+      return
+    }
+    if (versionMode === "git" && (!gitRefA.trim() || !gitRefB.trim())) {
+      setError("Pick two git refs.")
+      return
+    }
+    if (versionMode === "git" && !status?.has_key) {
+      setError("Add a model key in Settings first.")
       return
     }
     setError("")
@@ -168,7 +182,9 @@ export function ComparePage() {
     try {
       const started = await api.startCompareVersions({
         skill: activeSkill,
-        run_ids: [runA.trim(), runB.trim()],
+        ...(versionMode === "runs"
+          ? { run_ids: [runA.trim(), runB.trim()] }
+          : { git_refs: [gitRefA.trim(), gitRefB.trim()] }),
       })
       setActiveCompareId(started.compare_id)
       await pollCompare(started.compare_id)
@@ -187,6 +203,28 @@ export function ComparePage() {
       const latest = payload.compares?.[0]
       if (latest?.status === "done" || latest?.status === "cancelled") {
         setResult(latest)
+      }
+    })
+  }, [activeSkill])
+
+  useEffect(() => {
+    if (!activeSkill) {
+      setHistoryRuns([])
+      return
+    }
+    void api.history(activeSkill).then((payload) => {
+      const rows = (payload.runs ?? []).map((row) => {
+        const id = String(row.id ?? "")
+        const scored = row.passed === true ? "pass" : row.passed === false ? "fail" : "—"
+        return {
+          id,
+          label: `${id} · ${scored}${row.tryout ? " · tryout" : ""}`,
+        }
+      })
+      setHistoryRuns(rows)
+      if (rows.length >= 2) {
+        setRunA((prev) => prev || rows[1].id)
+        setRunB((prev) => prev || rows[0].id)
       }
     })
   }, [activeSkill])
@@ -372,7 +410,11 @@ export function ComparePage() {
               <Input value={maxSpend} onChange={(e) => setMaxSpend(e.target.value)} />
             </div>
             <div className="flex flex-wrap gap-2">
-              <Button id="btn-compare-models" disabled={running} onClick={() => void runModels()}>
+              <Button
+                id="btn-compare-models"
+                disabled={running || !status?.has_key}
+                onClick={() => void runModels()}
+              >
                 {running ? "Comparing…" : "Run compare"}
               </Button>
               {running && activeCompareId ? (
@@ -387,20 +429,102 @@ export function ComparePage() {
             </div>
           </TabsContent>
           <TabsContent value="versions" className="space-y-4 pt-4">
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div>
-                <Label>History run A</Label>
-                <Input value={runA} onChange={(e) => setRunA(e.target.value)} placeholder="run id" />
-              </div>
-              <div>
-                <Label>History run B</Label>
-                <Input value={runB} onChange={(e) => setRunB(e.target.value)} placeholder="run id" />
-              </div>
-            </div>
+            <Tabs
+              value={versionMode}
+              onValueChange={(v) => setVersionMode(v as "runs" | "git")}
+            >
+              <TabsList>
+                <TabsTrigger value="runs">History runs</TabsTrigger>
+                <TabsTrigger value="git">Git refs</TabsTrigger>
+              </TabsList>
+              <TabsContent value="runs" className="grid gap-3 pt-3 sm:grid-cols-2">
+                <div>
+                  <Label>History run A</Label>
+                  {historyRuns.length > 0 ? (
+                    <Select
+                      value={runA}
+                      onValueChange={(value) => value && setRunA(value)}
+                    >
+                      <SelectTrigger id="compare-run-a">
+                        <SelectValue placeholder="Pick a run" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {historyRuns.map((row) => (
+                          <SelectItem key={row.id} value={row.id}>
+                            {row.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <Input
+                      id="compare-run-a"
+                      value={runA}
+                      onChange={(e) => setRunA(e.target.value)}
+                      placeholder="run id"
+                    />
+                  )}
+                </div>
+                <div>
+                  <Label>History run B</Label>
+                  {historyRuns.length > 0 ? (
+                    <Select
+                      value={runB}
+                      onValueChange={(value) => value && setRunB(value)}
+                    >
+                      <SelectTrigger id="compare-run-b">
+                        <SelectValue placeholder="Pick a run" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {historyRuns.map((row) => (
+                          <SelectItem key={row.id} value={row.id}>
+                            {row.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <Input
+                      id="compare-run-b"
+                      value={runB}
+                      onChange={(e) => setRunB(e.target.value)}
+                      placeholder="run id"
+                    />
+                  )}
+                </div>
+              </TabsContent>
+              <TabsContent value="git" className="grid gap-3 pt-3 sm:grid-cols-2">
+                <div>
+                  <Label>Git ref A</Label>
+                  <Input
+                    id="compare-git-a"
+                    value={gitRefA}
+                    onChange={(e) => setGitRefA(e.target.value)}
+                    placeholder="HEAD~1"
+                  />
+                </div>
+                <div>
+                  <Label>Git ref B</Label>
+                  <Input
+                    id="compare-git-b"
+                    value={gitRefB}
+                    onChange={(e) => setGitRefB(e.target.value)}
+                    placeholder="HEAD"
+                  />
+                </div>
+                <p className="col-span-full text-sm text-muted-foreground">
+                  Same as <span className="font-mono text-xs">skillgate compare versions --git</span>.
+                  Re-runs the Dataset at each ref (needs a model key).
+                </p>
+              </TabsContent>
+            </Tabs>
             <div className="flex flex-wrap gap-2">
               <Button
                 id="btn-compare-versions"
-                disabled={running}
+                disabled={
+                  running ||
+                  (versionMode === "runs" ? false : !status?.has_key)
+                }
                 onClick={() => void runVersions()}
               >
                 {running ? "Comparing…" : "Compare versions"}

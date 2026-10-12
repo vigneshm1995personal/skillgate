@@ -198,13 +198,12 @@ def test_scrub_customer_compare_payload_applies_browser_scrub() -> None:
         "compare_id": "c1",
         "arms": [
             {
-                "label": "LLM · openai/gpt-4o-mini via gateway",
+                "label": "My custom arm",
                 "subtitle": "openai/gpt-4o-mini",
                 "config": {
                     "harness": "llm",
                     "harness_pref": "llm",
                     "model": "openai/gpt-4o-mini",
-                    "label": "LLM · openai/gpt-4o-mini via gateway",
                     "judge": {"provider": "openai", "model": "openai/gpt-6-luna-decisions"},
                 },
             }
@@ -216,6 +215,17 @@ def test_scrub_customer_compare_payload_applies_browser_scrub() -> None:
     assert "openai/gpt" not in blob
     assert "gpt-6-luna" not in blob
     assert "provider" not in blob
+    assert scrubbed["arms"][0]["label"] == "My custom arm"
+
+
+def test_scrub_customer_compare_payload_fills_missing_label() -> None:
+    raw = {
+        "compare_id": "c1",
+        "arms": [{"label": "", "config": {"harness": "codex", "harness_pref": "codex"}}],
+        "cases": [],
+    }
+    scrubbed = scrub_customer_compare_payload(raw)
+    assert scrubbed["arms"][0]["label"]
 
 
 def test_spend_cap_stops_without_exit_1(

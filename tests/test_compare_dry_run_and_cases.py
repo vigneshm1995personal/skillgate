@@ -26,6 +26,25 @@ def test_parse_arm_spec_requires_colon() -> None:
         parse_arm_spec("nocolon", arm_id="a", index=0)
 
 
+def test_compare_models_cli_nocolon_arm(tmp_path: Path, monkeypatch) -> None:
+    pack = _pack(tmp_path)
+    monkeypatch.setenv("SKILLGATE_ROOT", str(tmp_path))
+    result = runner.invoke(
+        app,
+        [
+            "compare",
+            "models",
+            str(pack),
+            "--arm",
+            "nocolon",
+            "--arm",
+            "B:codex",
+        ],
+    )
+    assert result.exit_code == 1
+    assert "Traceback" not in (result.stdout + result.stderr)
+
+
 def test_compare_models_dry_run_shows_arms_and_case_count(tmp_path: Path, monkeypatch) -> None:
     pack = _pack(tmp_path)
     monkeypatch.setenv("SKILLGATE_ROOT", str(tmp_path))

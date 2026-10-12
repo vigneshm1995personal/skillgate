@@ -166,10 +166,89 @@ def test_compare_list_and_show(tmp_path: Path, monkeypatch) -> None:
 
 def test_compare_cancel_cli_writes_flag(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("SKILLGATE_ROOT", str(tmp_path))
-    result = runner.invoke(app, ["compare", "cancel", "abc123"])
+    compare_id = "abc123def456"
+    result = runner.invoke(app, ["compare", "cancel", compare_id])
     assert result.exit_code == 0
-    flag = tmp_path / ".skillgate" / "cancel" / "abc123"
+    flag = tmp_path / ".skillgate" / "cancel" / compare_id
     assert flag.is_file()
+
+
+def test_compare_cancel_unknown_id(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("SKILLGATE_ROOT", str(tmp_path))
+    result = runner.invoke(app, ["compare", "cancel", "nope"])
+    assert result.exit_code == 1
+    assert "Unknown compare" in result.stdout
+
+
+def test_compare_list_empty(tmp_path: Path, monkeypatch) -> None:
+    pack = _pack(tmp_path)
+    monkeypatch.setenv("SKILLGATE_ROOT", str(tmp_path))
+    result = runner.invoke(app, ["compare", "list", str(pack)])
+    assert result.exit_code == 0
+    assert "No compares yet" in result.stdout
+
+
+def test_compare_models_arm_nocolon_no_traceback(tmp_path: Path, monkeypatch) -> None:
+    pack = _pack(tmp_path)
+    monkeypatch.setenv("SKILLGATE_ROOT", str(tmp_path))
+    result = runner.invoke(
+        app,
+        ["compare", "models", str(pack), "--arm", "nocolon", "--arm", "B:codex", "--dry-run"],
+    )
+    assert result.exit_code == 1
+    assert "Traceback" not in result.stdout
+    assert "Label:harness" in result.stdout
+
+
+def test_compare_models_prints_id_at_start(tmp_path: Path, monkeypatch) -> None:
+    pack = _pack(tmp_path)
+    monkeypatch.setenv("SKILLGATE_ROOT", str(tmp_path))
+    monkeypatch.setenv("SKILLGATE_OPENAI_API_KEY", "sk-test")
+
+    def fake_run_check(target, **kwargs):
+        from skillgate_ai.gate import CheckResult
+        from skillgate_ai.engine import SuiteReport, TaskReport
+
+        report = SuiteReport(
+            suite="pdf",
+            title="t",
+            skill="pdf",
+            skill_description="d",
+            harness="codex",
+            sandbox="local",
+            passed=True,
+            tasks=[
+                TaskReport(
+                    task_id="c1",
+                    prompt="p",
+                    expect_skill=True,
+                    passed=True,
+                    scores=[],
+                    selected_skill="pdf",
+                    failures=[],
+                )
+            ],
+            skill_path=str(pack),
+            pack_fingerprint="fp",
+            pack_case_ids=("c1",),
+        )
+        return CheckResult(report=report, exit_code=0, run_id=kwargs.get("run_id") or "r")
+
+    monkeypatch.setattr("skillgate_ai.compare.run_check", fake_run_check)
+    result = runner.invoke(
+        app,
+        [
+            "compare",
+            "models",
+            str(pack),
+            "--arm",
+            "A:codex",
+            "--arm",
+            "B:codex",
+        ],
+    )
+    assert result.exit_code == 0
+    assert "Compare " in result.stdout and "started" in result.stdout
 
 
 def test_compare_models_cancel_stops_next_arm(tmp_path: Path, monkeypatch) -> None:
@@ -218,7 +297,7 @@ def test_compare_models_cancel_stops_next_arm(tmp_path: Path, monkeypatch) -> No
     monkeypatch.setattr("skillgate_ai.compare.run_check", fake_run_check)
 
     def run():
-        compare_id_holder["id"] = "fixed1234567"
+        compare_id_holder["id"] = "abcd12345678"
         return run_models_compare(
             pack,
             arms=[
@@ -226,7 +305,7 @@ def test_compare_models_cancel_stops_next_arm(tmp_path: Path, monkeypatch) -> No
                 parse_arm_spec("B:cursor-agent", arm_id="b", index=1),
             ],
             root=tmp_path,
-            compare_id="fixed1234567",
+            compare_id="abcd12345678",
         )
 
     result = run()

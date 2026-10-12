@@ -13,7 +13,11 @@ from typing import Any, Callable
 from skillgate_ai.errors import SkillGateError
 from skillgate_ai.eval_config import harness_display_name
 from skillgate_ai.gate import run_check
-from skillgate_ai.compare_control import clear_compare_cancel, create_compare_control
+from skillgate_ai.compare_control import (
+    clear_compare_cancel,
+    create_compare_control,
+    list_inflight_compares,
+)
 from skillgate_ai.history import append_compare, load_compares, load_history
 from skillgate_ai.pack import skill_pack_hash
 from skillgate_ai.live import create_control, drop_control
@@ -339,7 +343,13 @@ def scrub_customer_compare_payload(payload: dict[str, Any]) -> dict[str, Any]:
         cfg = arm.get("config") if isinstance(arm.get("config"), dict) else {}
         harness = str(cfg.get("harness") or cfg.get("harness_pref") or "llm")
         arm["subtitle"] = harness_display_name(harness, harness)
-        arm["label"] = customer_config_label(cfg, harness) if cfg else harness_display_name(harness, harness)
+        # Keep user arm labels from compare specs; only fill when missing.
+        if not str(arm.get("label") or "").strip():
+            arm["label"] = (
+                customer_config_label(cfg, harness)
+                if cfg
+                else harness_display_name(harness, harness)
+            )
     return data
 
 
@@ -383,7 +393,9 @@ def run_models_compare(
     active_case_ids = resolved_case_ids
     stopped_reason: str | None = None
     exit_code = 0
-    job_control = create_compare_control(root, compare_id)
+    job_control = create_compare_control(
+        root, compare_id, skill=pack.name, mode="models"
+    )
 
     try:
         for spec in arms:
@@ -525,7 +537,17 @@ def run_versions_compare(
             run_check_fn=run_check_fn,
         )
     if not run_ids or len(run_ids) != 2:
-        raise CompareError("Pick two history runs or two git refs.")
+        recent = [
+            str(row.get("run_id") or "")
+            for row in load_history(pack, limit=8)
+            if row.get("run_id")
+        ]
+        hint = (
+            f"Recent runs: {', '.join(recent)}"
+            if recent
+            else "Use --run twice or --git twice."
+        )
+        raise CompareError("Pick two history runs or two git refs.", hint=hint)
     if rerun:
         configs = []
         for rid in run_ids:
@@ -624,3 +646,33 @@ def find_compare_anywhere(root: Path, compare_id: str) -> tuple[Path, dict[str, 
 
 def list_compares(pack: Path, *, limit: int = 20) -> list[dict[str, Any]]:
     return load_compares(pack, limit=limit)
+
+
+def list_compares_merged(
+    root: Path,
+    pack: Path,
+    *,
+    limit: int = 20,
+) -> list[dict[str, Any]]:
+    """In-flight compares first, then persisted rows (newest first), deduped by id."""
+    root = root.expanduser().resolve()
+    pack = pack.expanduser().resolve()
+    inflight = [
+        {**row, "list_source": "inflight"}
+        for row in list_inflight_compares(root)
+        if str(row.get("skill") or "") == pack.name
+    ]
+    seen = {str(row.get("compare_id") or "") for row in inflight}
+    on_disk = list(reversed(list_compares(pack, limit=limit)))
+    return inflight + [
+        {**row, "list_source": "disk"}
+        for row in on_disk
+        if str(row.get("compare_id") or "") not in seen
+    ]
+
+
+def strip_compare_list_meta(row: dict[str, Any]) -> dict[str, Any]:
+    """Remove list-only fields before scrub/JSON output."""
+    cleaned = dict(row)
+    cleaned.pop("list_source", None)
+    return cleaned

@@ -18,7 +18,8 @@ from skillgate_ai.compare import (
     arm_label_defaults,
     find_compare,
     find_compare_anywhere,
-    list_compares,
+    list_compares_merged,
+    strip_compare_list_meta,
     parse_arm_spec,
     run_models_compare,
     run_versions_compare,
@@ -61,10 +62,12 @@ def register_compare_routes(app: FastAPI) -> None:
     def get_compares(request: Request, skill: str) -> dict[str, Any]:
         state = state_of(request)
         path = find_skill(state.root, skill)
-        rows = list_compares(path, limit=20)
+        merged = list_compares_merged(state.root, path, limit=20)
         return {
             "skill": path.name,
-            "compares": [scrub_customer_compare_payload(row) for row in reversed(rows)],
+            "compares": [
+                scrub_customer_compare_payload(strip_compare_list_meta(row)) for row in merged
+            ],
         }
 
     @app.get("/api/compare/{compare_id}")
@@ -101,7 +104,8 @@ def register_compare_routes(app: FastAPI) -> None:
     @app.post("/api/compare/{compare_id}/cancel")
     def post_compare_cancel(compare_id: str, request: Request) -> dict[str, Any]:
         state = state_of(request)
-        request_cancel_compare(state.root, compare_id)
+        if not request_cancel_compare(state.root, compare_id):
+            fail(404, f"Unknown compare {compare_id}")
         with state.lock:
             live = state.compares.get(compare_id)
             if live and live.get("status") == "running":

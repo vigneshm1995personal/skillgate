@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import sys
+import uuid
 from pathlib import Path
 
 import typer
@@ -48,16 +50,27 @@ def register_compare_commands(app: typer.Typer, *, key_env_help: str) -> None:
         path = _resolve_pack_arg(pack)
         specs = []
         idx = 0
-        for raw in arm:
-            specs.append(parse_arm_spec(raw, arm_id=arm_id_for_index(idx), index=idx))
-            idx += 1
-        for file_path in arm_file:
-            specs.append(parse_arm_file(file_path, arm_id=arm_id_for_index(idx), index=idx))
-            idx += 1
+        try:
+            for raw in arm:
+                specs.append(parse_arm_spec(raw, arm_id=arm_id_for_index(idx), index=idx))
+                idx += 1
+            for file_path in arm_file:
+                specs.append(parse_arm_file(file_path, arm_id=arm_id_for_index(idx), index=idx))
+                idx += 1
+        except CompareError as exc:
+            console.print(exc.render())
+            raise typer.Exit(exc.exit_code) from None
         if len(specs) < 2 and not dry_run:
             console.print("Add at least two --arm or --arm-file values.")
             raise typer.Exit(2)
         case_ids = [part.strip() for part in (cases or "").split(",") if part.strip()] or None
+        compare_id = uuid.uuid4().hex[:12]
+        if not dry_run:
+            line = f"Compare {compare_id} started.\n"
+            if json_out:
+                sys.stderr.write(line)
+            else:
+                console.print(line.rstrip())
         try:
             result = run_models_compare(
                 path,
@@ -66,6 +79,7 @@ def register_compare_commands(app: typer.Typer, *, key_env_help: str) -> None:
                 max_spend_usd=max_spend_usd,
                 case_ids=case_ids,
                 dry_run=dry_run,
+                compare_id=compare_id,
             )
         except CompareError as exc:
             console.print(exc.render())
@@ -97,6 +111,14 @@ def register_compare_commands(app: typer.Typer, *, key_env_help: str) -> None:
 
         _bind_key_env(key_env)
         path = _resolve_pack_arg(pack)
+        versions_ready = len(run) >= 2 or len(git_ref) >= 2
+        compare_id = uuid.uuid4().hex[:12]
+        if versions_ready:
+            line = f"Compare {compare_id} started.\n"
+            if json_out:
+                sys.stderr.write(line)
+            else:
+                console.print(line.rstrip())
         try:
             result = run_versions_compare(
                 path,
@@ -104,6 +126,7 @@ def register_compare_commands(app: typer.Typer, *, key_env_help: str) -> None:
                 git_refs=git_ref if git_ref else None,
                 root=project_root(),
                 rerun=rerun,
+                compare_id=compare_id,
             )
         except CompareError as exc:
             console.print(exc.render())
@@ -154,7 +177,9 @@ def register_compare_commands(app: typer.Typer, *, key_env_help: str) -> None:
         from skillgate_ai.compare_control import request_cancel_compare
 
         root = _boot()
-        request_cancel_compare(root, compare_id)
+        if not request_cancel_compare(root, compare_id):
+            console.print(f"Unknown compare {compare_id}")
+            raise typer.Exit(1)
         console.print(f"Cancel requested for compare {compare_id}.")
         raise typer.Exit(0)
 
@@ -164,15 +189,37 @@ def register_compare_commands(app: typer.Typer, *, key_env_help: str) -> None:
         json_out: bool = typer.Option(False, "--json", help="Machine JSON (scrubbed)"),
     ) -> None:
         """List recent compare jobs for a pack."""
-        from skillgate_ai.compare import list_compares, scrub_compare_payload, scrub_customer_compare_payload
+        from skillgate_ai.compare import (
+            list_compares_merged,
+            scrub_compare_payload,
+            scrub_customer_compare_payload,
+            strip_compare_list_meta,
+        )
 
         path = _resolve_pack_arg(pack)
-        raw_rows = list(reversed(list_compares(path)))
+        root = project_root()
+        raw_rows = list_compares_merged(root, path)
+        if not raw_rows:
+            if json_out:
+                _emit_json({"compares": []})
+            else:
+                console.print("No compares yet.")
+            raise typer.Exit(0)
         if json_out:
-            _emit_json({"compares": [scrub_customer_compare_payload(row) for row in raw_rows]})
+            _emit_json(
+                {
+                    "compares": [
+                        scrub_customer_compare_payload(strip_compare_list_meta(row))
+                        for row in raw_rows
+                    ]
+                }
+            )
         else:
             for row in raw_rows:
-                payload = scrub_compare_payload(row)
+                base = strip_compare_list_meta(row)
+                payload = (
+                    scrub_compare_payload(base) if row.get("list_source") == "disk" else base
+                )
                 console.print(
                     f"{payload.get('compare_id')}  {payload.get('mode')}  "
                     f"{payload.get('status')}  {payload.get('skill')}"
