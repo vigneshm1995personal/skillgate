@@ -90,6 +90,7 @@ def test_ui_busy_port_is_friendly_before_url(tmp_path: Path, monkeypatch) -> Non
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     sock.bind(("127.0.0.1", 0))
+    sock.listen(5)
     port = sock.getsockname()[1]
     try:
         result = runner.invoke(
