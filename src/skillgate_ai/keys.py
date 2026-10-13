@@ -19,7 +19,6 @@ PROVIDER_KEY_NAMES = (
     "AWS_SESSION_TOKEN",
 )
 
-PUBLIC_KEY_LABELS = {"AI_GATEWAY_API_KEY": "Other"}
 _PUBLIC_TO_INTERNAL = {
     "Other": "AI_GATEWAY_API_KEY",
     "other": "AI_GATEWAY_API_KEY",
@@ -153,7 +152,8 @@ def internal_key_name(name: str) -> str:
 
 
 def public_key_name(name: str) -> str:
-    return PUBLIC_KEY_LABELS.get(name, name)
+    canonical = internal_key_name(name)
+    return canonical if canonical in PROVIDER_KEY_NAMES else name
 
 
 def public_key_presence(root: str | Path) -> dict[str, dict[str, bool]]:

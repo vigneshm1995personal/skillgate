@@ -84,12 +84,12 @@ def test_judge_provider_set_and_show(tmp_path: Path, monkeypatch) -> None:
     saved = runner.invoke(app, ["judge", "provider", "set", "jev", "--base-url", "https://jev.example"])
     out = plain_text(saved.stdout + saved.stderr)
     assert saved.exit_code == 0, out
-    assert "Jev" in out
+    assert "the judge" in out.lower()
     settings = load_judge_settings(tmp_path)
     assert settings.provider == "jev"
     assert settings.base_url == "https://jev.example"
     shown = runner.invoke(app, ["judge", "provider", "show"])
-    assert "Jev" in plain_text(shown.stdout)
+    assert "the judge" in plain_text(shown.stdout).lower()
 
 
 def test_judge_add_question_writes_extra(tmp_path: Path, monkeypatch) -> None:
@@ -124,7 +124,7 @@ def test_judge_provider_set_help_is_neutral(tmp_path: Path, monkeypatch) -> None
     assert result.exit_code == 0, out
     assert "--decisions-path" not in out
     assert "compatible" not in out.lower()
-    assert "Other" in out
+    assert "other" in out.lower()
     saved = runner.invoke(app, ["judge", "provider", "set", "other"])
     assert saved.exit_code == 0, saved.stdout
     settings = load_judge_settings(tmp_path)
@@ -231,7 +231,7 @@ def test_pin_does_not_truncate_existing_case_ids(tmp_path: Path) -> None:
     assert not any(case.id == long_id[:40].rstrip("-") and case.id != long_id for case in reloaded.cases)
 
 
-def test_keys_list_says_other(tmp_path: Path, monkeypatch) -> None:
+def test_keys_list_labels_ai_gateway_key(tmp_path: Path, monkeypatch) -> None:
     from skillgate_ai.keys import set_vault_key
 
     monkeypatch.setenv("SKILLGATE_ROOT", str(tmp_path))
@@ -240,9 +240,7 @@ def test_keys_list_says_other(tmp_path: Path, monkeypatch) -> None:
     result = runner.invoke(app, ["keys", "list"])
     out = plain_text(result.stdout + result.stderr)
     assert result.exit_code == 0, out
-    assert "Other" in out
-    assert "AI_GATEWAY_API_KEY" not in out
+    assert "AI_GATEWAY_API_KEY" in out
     saved = runner.invoke(app, ["keys", "set", "Other", "gw-from-cli"])
     assert saved.exit_code == 0, saved.stdout
-    assert "Other" in plain_text(saved.stdout)
-    assert "AI_GATEWAY_API_KEY" not in plain_text(saved.stdout)
+    assert "AI_GATEWAY_API_KEY" in plain_text(saved.stdout)

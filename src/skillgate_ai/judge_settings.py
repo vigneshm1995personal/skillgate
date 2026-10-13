@@ -80,7 +80,7 @@ def save_judge_settings(
         name = "compatible"
     if name not in PROVIDER_IDS:
         raise SkillGateError(
-            "Scoring provider must be auto, OpenAI, Jev, AWS, or Other.",
+            "Scoring provider must be auto or a supported judge id.",
             exit_code=2,
         )
     settings = JudgeProviderSettings(

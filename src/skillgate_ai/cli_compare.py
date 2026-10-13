@@ -109,6 +109,7 @@ def register_compare_commands(app: typer.Typer, *, key_env_help: str) -> None:
         """Compare two skill versions on the same Dataset."""
         from skillgate_ai.compare import (
             CompareError,
+            preflight_versions_compare,
             run_versions_compare,
             scrub_compare_payload,
             scrub_customer_compare_payload,
@@ -117,6 +118,15 @@ def register_compare_commands(app: typer.Typer, *, key_env_help: str) -> None:
 
         _bind_key_env(key_env)
         path = _resolve_pack_arg(pack)
+        try:
+            preflight_versions_compare(
+                path,
+                run_ids=run if run else None,
+                git_refs=git_ref if git_ref else None,
+            )
+        except CompareError as exc:
+            console.print(exc.render())
+            raise typer.Exit(exc.exit_code) from None
         versions_ready = len(run) >= 2 or len(git_ref) >= 2
         compare_id = uuid.uuid4().hex[:12]
         if versions_ready:
@@ -183,9 +193,13 @@ def register_compare_commands(app: typer.Typer, *, key_env_help: str) -> None:
         from skillgate_ai.compare_control import request_cancel_compare
 
         root = _boot()
-        if not request_cancel_compare(root, compare_id):
+        outcome = request_cancel_compare(root, compare_id)
+        if outcome == "unknown":
             console.print(f"Unknown compare {compare_id}")
             raise typer.Exit(1)
+        if outcome == "already_done":
+            console.print(f"Compare {compare_id} is already done.")
+            raise typer.Exit(0)
         console.print(f"Cancel requested for compare {compare_id}.")
         raise typer.Exit(0)
 

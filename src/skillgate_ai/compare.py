@@ -514,6 +514,41 @@ def _history_report(pack: Path, run_id: str) -> dict[str, Any]:
     raise CompareError(f"Unknown run {run_id}.")
 
 
+def preflight_versions_compare(
+    pack: Path,
+    *,
+    run_ids: list[str] | None = None,
+    git_refs: list[str] | None = None,
+) -> None:
+    """Validate versions compare inputs before printing started or spawning work."""
+    pack = pack.expanduser().resolve()
+    if git_refs and len(git_refs) >= 2:
+        if len(git_refs) != 2:
+            raise CompareError("Pick exactly two git refs.", hint="Use --git twice.")
+        return
+    ids = [str(item).strip() for item in (run_ids or []) if str(item).strip()]
+    if len(ids) >= 2:
+        if ids[0] == ids[1]:
+            raise CompareError(
+                "Pick two different history runs.",
+                hint="Use two distinct run ids from `skillgate history`.",
+            )
+        for rid in ids[:2]:
+            _history_report(pack, rid)
+        return
+    recent = [
+        str(row.get("run_id") or "")
+        for row in load_history(pack, limit=8)
+        if row.get("run_id")
+    ]
+    hint = (
+        f"Recent runs: {', '.join(recent)}"
+        if recent
+        else "Use --run twice or --git twice."
+    )
+    raise CompareError("Pick two history runs or two git refs.", hint=hint)
+
+
 def run_versions_compare(
     pack: Path,
     *,
@@ -526,6 +561,7 @@ def run_versions_compare(
 ) -> CompareResult:
     pack = pack.expanduser().resolve()
     compare_id = compare_id or uuid.uuid4().hex[:12]
+    preflight_versions_compare(pack, run_ids=run_ids, git_refs=git_refs)
     if git_refs and len(git_refs) == 2:
         from skillgate_ai.compare_git import run_git_versions_compare
 

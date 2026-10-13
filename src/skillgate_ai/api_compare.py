@@ -21,6 +21,7 @@ from skillgate_ai.compare import (
     list_compares_merged,
     strip_compare_list_meta,
     parse_arm_spec,
+    preflight_versions_compare,
     run_models_compare,
     run_versions_compare,
     scrub_compare_payload,
@@ -104,8 +105,11 @@ def register_compare_routes(app: FastAPI) -> None:
     @app.post("/api/compare/{compare_id}/cancel")
     def post_compare_cancel(compare_id: str, request: Request) -> dict[str, Any]:
         state = state_of(request)
-        if not request_cancel_compare(state.root, compare_id):
+        outcome = request_cancel_compare(state.root, compare_id)
+        if outcome == "unknown":
             fail(404, f"Unknown compare {compare_id}")
+        if outcome == "already_done":
+            return {"ok": True, "compare_id": compare_id, "status": "already_done"}
         with state.lock:
             live = state.compares.get(compare_id)
             if live and live.get("status") == "running":
@@ -184,6 +188,14 @@ def _start_versions_compare(state: AppState, body: dict[str, Any]) -> dict[str, 
     path = find_skill(state.root, skill_raw)
     run_ids = body.get("run_ids")
     git_refs = body.get("git_refs")
+    try:
+        preflight_versions_compare(
+            path,
+            run_ids=run_ids if isinstance(run_ids, list) else None,
+            git_refs=git_refs if isinstance(git_refs, list) else None,
+        )
+    except CompareError as exc:
+        fail(400, exc.message, hint=exc.hint)
     compare_id = uuid.uuid4().hex[:12]
     if state.gate_busy():
         fail(409, "A check or compare is already running.")

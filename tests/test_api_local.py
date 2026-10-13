@@ -553,15 +553,14 @@ def test_browser_api_keeps_couldnt_score_copy(tmp_path: Path, monkeypatch) -> No
     assert line.startswith("The judge couldn't score this run.")
 
 
-def test_settings_keys_use_other_not_gateway_name(tmp_path: Path, monkeypatch) -> None:
+def test_settings_keys_label_ai_gateway_api_key(tmp_path: Path, monkeypatch) -> None:
     client = _client(tmp_path, monkeypatch)
     listed = client.get("/api/settings/keys")
     blob = json.dumps(listed.json())
-    assert "AI_GATEWAY_API_KEY" not in blob
-    assert "Other" in listed.json()["keys"]
-    saved = client.put("/api/settings/keys/Other", json={"value": "gw-test-local"})
+    assert "AI_GATEWAY_API_KEY" in blob
+    saved = client.put("/api/settings/keys/AI_GATEWAY_API_KEY", json={"value": "gw-test-local"})
     assert saved.status_code == 200, saved.text
-    assert saved.json()["keys"]["Other"]["from_vault"] is True
+    assert saved.json()["keys"]["AI_GATEWAY_API_KEY"]["from_vault"] is True
     vault = (tmp_path / ".skillgate" / "keys").read_text(encoding="utf-8")
     assert "AI_GATEWAY_API_KEY=gw-test-local" in vault
     judge = client.get("/api/settings/judge").json()["judge"]

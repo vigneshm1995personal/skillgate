@@ -610,7 +610,7 @@ judge_app = typer.Typer(
 judge_provider_app = typer.Typer(
     add_completion=False,
     no_args_is_help=True,
-    help="Scoring provider (OpenAI, Jev, AWS, Other).",
+    help="Who scores live checks (auto or a configured judge).",
 )
 app.add_typer(judge_app, name="judge")
 judge_app.add_typer(judge_provider_app, name="provider")
@@ -810,14 +810,11 @@ def case_add_cmd(
 def judge_provider_show() -> None:
     """Who scores live checks."""
     from skillgate_ai.config import get_llm_config
-    from skillgate_ai.judge_copy import CHOSEN_LABELS, DEFAULT_NAME
+    from skillgate_ai.judge_copy import DEFAULT_NAME
 
     root = _boot()
     cfg = get_llm_config(root)
-    if cfg.judge_chosen and cfg.judge_provider in CHOSEN_LABELS:
-        console.print(f"Scoring with {CHOSEN_LABELS[cfg.judge_provider]} (your key)")
-        return
-    if cfg.openai_api_key or cfg.gateway_api_key:
+    if cfg.judge_chosen or cfg.openai_api_key or cfg.gateway_api_key:
         console.print(f"Scoring with {DEFAULT_NAME}")
         return
     console.print("No scoring provider — file checks only.")
@@ -825,7 +822,7 @@ def judge_provider_show() -> None:
 
 @judge_provider_app.command("set")
 def judge_provider_set(
-    provider: str = typer.Argument(..., help="auto | openai | jev | aws | Other"),
+    provider: str = typer.Argument(..., help="auto, openai, jev, aws, or other"),
     base_url: str | None = typer.Option(None, "--base-url"),
     region: str | None = typer.Option(None, "--region"),
     model: str | None = typer.Option(None, "--model"),
@@ -848,9 +845,7 @@ def judge_provider_set(
         console.print(exc.render())
         raise typer.Exit(exc.exit_code) from None
     if settings.chosen:
-        from skillgate_ai.judge_copy import CHOSEN_LABELS
-
-        console.print(f"Scoring provider: {CHOSEN_LABELS.get(settings.provider, settings.provider)}")
+        console.print("Scoring provider: the judge")
     else:
         console.print("Scoring provider: Auto")
 

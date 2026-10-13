@@ -31,7 +31,11 @@ def register_pack_commands(app: typer.Typer, case_app: typer.Typer, judge_app: t
         ),
     ) -> None:
         """Copy skills from an agent folder, a zip, or a SKILL.md file."""
-        root = _boot()
+        from pathlib import Path as _Path
+
+        from skillgate_ai.paths import config_root_for
+
+        root = config_root_for(_Path.cwd())
         try:
             if zip_path is not None or markdown is not None:
                 from skillgate_ai.api_intake import extract_uploaded_skill

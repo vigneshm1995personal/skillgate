@@ -21,7 +21,7 @@ def format_compare_cli(payload: dict[str, Any]) -> str:
         lines.append(f"Dataset fingerprint  {fp[:12]}…")
     lines.append("")
     header = ["", *[str(a.get("label") or a.get("arm_id")) for a in arms]]
-    lines.append("".join(f"{col:16}" for col in header[:1]) + "".join(f"{col:16}" for col in header[1:]))
+    lines.append(_row_to_line(header))
     summary_labels = ["Checks", "Tokens", "Cost", "Latency"]
     for label in summary_labels:
         row = [label]
@@ -48,10 +48,10 @@ def format_compare_cli(payload: dict[str, Any]) -> str:
                 row.append(_fmt_duration(dur) if dur is not None else "—")
         lines.append(_row_to_line(row))
     lines.append("")
-    lines.append(f"{'Case':16}" + "".join(f"{str(a.get('label') or ''):16}" for a in arms))
+    lines.append(_row_to_line(["Case", *[str(a.get("label") or "") for a in arms]]))
     for case in cases:
         case_id = str(case.get("case_id") or "")
-        row = [case_id[:16]]
+        row = [case_id]
         results = case.get("results") or {}
         for arm in arms:
             cell = results.get(str(arm.get("arm_id"))) or {}
@@ -74,7 +74,11 @@ def format_compare_cli(payload: dict[str, Any]) -> str:
 
 
 def _row_to_line(cols: list[str]) -> str:
-    return "".join(f"{(col or '—')[:16]:16}" for col in cols)
+    if not cols:
+        return ""
+    first = (cols[0] or "—")[:32]
+    rest = [(col or "—")[:12] for col in cols[1:]]
+    return " | ".join([first.ljust(32), *rest])
 
 
 def _fmt_duration(seconds: float) -> str:

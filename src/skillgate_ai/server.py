@@ -159,7 +159,7 @@ def serve_ui(
     attach_static(app)
     url = f"http://{host}:{port}/"
     print(f"Skill Gate UI (local, no account) at {url}", flush=True)
-    print("Stop with Ctrl+C. Docker image still runs `skillgate check /pack`.", flush=True)
+    print("Stop with Ctrl+C.", flush=True)
     if open_browser:
         webbrowser.open(url)
     uvicorn.run(app, host=host, port=port, log_level="warning")
