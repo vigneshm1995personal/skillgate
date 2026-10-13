@@ -68,7 +68,7 @@ class EvalRunConfig:
             "applied": dict(self.applied),
             "judge": dict(self.judge) if self.judge else None,
             "fingerprint": config_fingerprint(self),
-            "label": config_label(self),
+            "label": customer_run_details(self),
         }
 
     @classmethod
@@ -429,10 +429,9 @@ def config_label(run: EvalRunConfig | dict[str, Any] | None) -> str:
         return ""
     parts: list[str] = [harness_display_name(cfg.harness, cfg.harness)]
     if cfg.model:
-        if (cfg.applied or {}).get("via_gateway"):
-            parts.append(f"{cfg.model} via gateway")
-        else:
-            parts.append(cfg.model)
+        model = friendly_model_name(cfg.model)
+        if model:
+            parts.append(model)
     timeout = cfg.timeout_effective if cfg.timeout_effective is not None else cfg.timeout_sec
     if timeout:
         parts.append(f"{timeout}s")
@@ -440,9 +439,6 @@ def config_label(run: EvalRunConfig | dict[str, Any] | None) -> str:
         parts.append(cfg.reasoning_effort or DEFAULT_CODEX_REASONING_EFFORT)
     elif cfg.temperature not in (0, 0.0) and (cfg.applied or {}).get("temperature"):
         parts.append(f"temp {cfg.temperature}")
-    judge = cfg.judge or {}
-    if str(judge.get("provider") or "").lower() not in {"", "skip"}:
-        parts.append(str(judge.get("display_name") or "").strip() or "the judge")
     return " · ".join(parts)
 
 

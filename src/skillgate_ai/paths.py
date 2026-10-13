@@ -31,13 +31,8 @@ def resolve_user_path(target: str | Path, root: Path | None = None) -> Path:
 
 
 def _has_workspace_skills(candidate: Path) -> bool:
-    skills = candidate / "skills"
-    if not skills.is_dir():
-        return False
-    try:
-        return any(child.is_dir() and (child / "SKILL.md").is_file() for child in skills.iterdir())
-    except OSError:
-        return False
+    """A workspace is any folder with ``skills/`` (including right after ``skillgate init``)."""
+    return (candidate / "skills").is_dir()
 
 
 def project_root() -> Path:

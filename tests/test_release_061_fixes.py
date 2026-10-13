@@ -225,7 +225,7 @@ def test_keys_list_labels_ai_gateway_api_key(tmp_path: Path, monkeypatch) -> Non
     listed = runner.invoke(app, ["keys", "list"])
     out = plain_text(listed.stdout + listed.stderr)
     assert listed.exit_code == 0, out
-    assert "AI_GATEWAY_API_KEY" in out
+    assert "AI Gateway key" in out
     assert "Other (Settings)" not in out
 
 

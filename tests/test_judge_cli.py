@@ -240,7 +240,7 @@ def test_keys_list_labels_ai_gateway_key(tmp_path: Path, monkeypatch) -> None:
     result = runner.invoke(app, ["keys", "list"])
     out = plain_text(result.stdout + result.stderr)
     assert result.exit_code == 0, out
-    assert "AI_GATEWAY_API_KEY" in out
+    assert "AI Gateway key" in out
     saved = runner.invoke(app, ["keys", "set", "Other", "gw-from-cli"])
     assert saved.exit_code == 0, saved.stdout
-    assert "AI_GATEWAY_API_KEY" in plain_text(saved.stdout)
+    assert "AI Gateway key" in plain_text(saved.stdout)

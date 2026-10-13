@@ -7,6 +7,18 @@ from pathlib import Path
 
 from skillgate_ai.errors import SkillGateError
 
+CUSTOMER_SETTINGS_KEYS = (
+    "CURSOR_API_KEY",
+    "CODEX_API_KEY",
+    "OPENAI_API_KEY",
+    "AI_GATEWAY_API_KEY",
+    "ANTHROPIC_API_KEY",
+)
+
+KEY_DISPLAY_LABELS = {
+    "AI_GATEWAY_API_KEY": "AI Gateway key",
+}
+
 PROVIDER_KEY_NAMES = (
     "CURSOR_API_KEY",
     "CODEX_API_KEY",
@@ -153,11 +165,17 @@ def internal_key_name(name: str) -> str:
 
 def public_key_name(name: str) -> str:
     canonical = internal_key_name(name)
+    if canonical in KEY_DISPLAY_LABELS:
+        return KEY_DISPLAY_LABELS[canonical]
     return canonical if canonical in PROVIDER_KEY_NAMES else name
 
 
 def public_key_presence(root: str | Path) -> dict[str, dict[str, bool]]:
-    return {public_key_name(name): meta for name, meta in key_presence(root).items()}
+    return {
+        name: meta
+        for name, meta in key_presence(root).items()
+        if name in CUSTOMER_SETTINGS_KEYS
+    }
 
 
 def key_presence(root: str | Path) -> dict[str, dict[str, bool]]:
@@ -185,7 +203,6 @@ def _require_name(name: str) -> str:
         raise SkillGateError(
             "Unknown key name.",
             hint="Use CURSOR_API_KEY, CODEX_API_KEY, OPENAI_API_KEY, "
-            "Other, ANTHROPIC_API_KEY, JEV_API_KEY, "
-            "AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, or AWS_SESSION_TOKEN.",
+            "AI_GATEWAY_API_KEY (AI Gateway key), or ANTHROPIC_API_KEY.",
         )
     return key

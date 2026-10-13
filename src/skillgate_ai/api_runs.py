@@ -26,9 +26,15 @@ from skillgate_ai.report import progress_to_dict, report_to_dict
 
 def attach_stamped_config(record: dict[str, Any], report: dict[str, Any] | None) -> None:
     """Replace the request config with the resolved stamp so UI Result/Metrics match the run."""
+    from skillgate_ai.eval_config import EvalRunConfig, customer_run_details
+
     stamped = report.get("config") if isinstance(report, dict) else None
     if isinstance(stamped, dict):
-        record["config"] = stamped
+        merged = dict(stamped)
+        cfg = EvalRunConfig.from_dict(merged)
+        if cfg is not None:
+            merged["label"] = customer_run_details(cfg)
+        record["config"] = merged
 
 
 def start_run(state: AppState, body: dict[str, Any]) -> dict[str, Any]:

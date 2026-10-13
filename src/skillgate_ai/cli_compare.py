@@ -103,6 +103,7 @@ def register_compare_commands(app: typer.Typer, *, key_env_help: str) -> None:
         run: list[str] = typer.Option([], "--run", help="History run id (repeat twice)"),
         git_ref: list[str] = typer.Option([], "--git", help="Git ref (repeat twice)"),
         rerun: bool = typer.Option(False, "--rerun", help="Re-run both arms using stored configs"),
+        dry_run: bool = typer.Option(False, "--dry-run", help="Print plan only"),
         json_out: bool = typer.Option(False, "--json", help="Machine JSON (scrubbed)"),
         key_env: list[str] | None = typer.Option(None, "--key-env", help=_KEY_ENV_HELP),
     ) -> None:
@@ -123,11 +124,12 @@ def register_compare_commands(app: typer.Typer, *, key_env_help: str) -> None:
                 path,
                 run_ids=run if run else None,
                 git_refs=git_ref if git_ref else None,
+                dry_run=dry_run,
             )
         except CompareError as exc:
             console.print(exc.render())
             raise typer.Exit(exc.exit_code) from None
-        versions_ready = len(run) >= 2 or len(git_ref) >= 2
+        versions_ready = (len(run) >= 2 or len(git_ref) >= 2) and not dry_run
         compare_id = uuid.uuid4().hex[:12]
         if versions_ready:
             line = f"Compare {compare_id} started.\n"
@@ -143,6 +145,7 @@ def register_compare_commands(app: typer.Typer, *, key_env_help: str) -> None:
                 root=project_root(),
                 rerun=rerun,
                 compare_id=compare_id,
+                dry_run=dry_run,
             )
         except CompareError as exc:
             console.print(exc.render())

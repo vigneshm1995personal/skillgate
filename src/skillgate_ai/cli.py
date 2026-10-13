@@ -147,8 +147,26 @@ def _run_gate(
     tryout = False
     if case_id:
         from skillgate_ai.pack_edit import tryout_checks
+        from skillgate_ai.paths import is_skill_pack
 
         dest = resolve_user_path(target, project_root())
+        if not is_skill_pack(dest):
+            exc = SkillGateError(
+                f"Not a skill pack: {dest}",
+                hint="Pass a skill folder with SKILL.md and evals/.",
+                exit_code=2,
+            )
+            if json_out or summary == "json":
+                _emit_json(
+                    {
+                        "error": exc.message,
+                        "hint": exc.hint,
+                        "exit_code": exc.exit_code,
+                    }
+                )
+            else:
+                console.print(exc.render())
+            raise typer.Exit(exc.exit_code) from None
         try:
             checks = tryout_checks(dest, case_id)
             tryout = True
@@ -482,14 +500,18 @@ app.add_typer(keys_app, name="keys")
 @keys_app.command("set")
 def keys_set(
     name: str = typer.Argument(
-        ..., help="CURSOR_API_KEY | CODEX_API_KEY | OPENAI_API_KEY | Other | …"
+        ..., help="CURSOR_API_KEY | CODEX_API_KEY | OPENAI_API_KEY | AI Gateway key | …"
     ),
     value: str | None = typer.Argument(
         None,
         help="The secret. Omit to paste hidden (TTY) or read stdin.",
     ),
 ) -> None:
-    """Write a key into `.skillgate/keys` (mode 0600)."""
+    """Write a key into `.skillgate/keys` (mode 0600).
+
+    Names include CURSOR_API_KEY, CODEX_API_KEY, OPENAI_API_KEY, and AI Gateway key
+    (AI_GATEWAY_API_KEY).
+    """
     from skillgate_ai.keys import public_key_name, set_vault_key
 
     root = _boot()
@@ -575,7 +597,11 @@ def new_cmd(
     """Create `skills/NAME` with SKILL.md and starter checks (same as the UI)."""
     from skillgate_ai.workspace import new_skill
 
-    root = _boot()
+    from pathlib import Path as _Path
+
+    from skillgate_ai.paths import config_root_for
+
+    root = config_root_for(_Path.cwd())
     try:
         dest = new_skill(root, name)
     except SkillGateError as exc:

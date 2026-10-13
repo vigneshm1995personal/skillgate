@@ -239,7 +239,7 @@ def test_config_label_includes_harness_and_timeout() -> None:
     run = EvalRunConfig(harness="codex", model="gpt-test", timeout_effective=300, reasoning_effort="medium")
     label = config_label(run)
     assert "Codex" in label
-    assert "gpt-test" in label
+    assert "GPT-test" in label
     assert "300s" in label
     assert "medium" in label
 
@@ -282,7 +282,7 @@ def test_attach_stamped_config_replaces_auto_request() -> None:
         },
     )
     assert record["config"]["harness"] == "llm"
-    assert "via gateway" in str(record["config"].get("label") or "")
+    assert "via gateway" not in str(record["config"].get("label") or "").lower()
     assert "Auto · Cursor" not in str(record["config"].get("label") or "")
 
 
@@ -296,8 +296,8 @@ def test_config_label_shows_llm_model_via_gateway() -> None:
     label = config_label(run)
     assert "Auto · Cursor" not in label
     assert label.startswith("LLM")
-    assert "openai/gpt-4o-mini" in label
-    assert "via gateway" in label
+    assert "GPT-4o mini" in label
+    assert "via gateway" not in label.lower()
 
 
 def test_fingerprint_ignores_scoring_provider() -> None:
@@ -326,8 +326,9 @@ def test_config_label_names_openai_scorer_not_model_id() -> None:
         },
     )
     label = config_label(run)
-    assert "OpenAI (your key)" in label
+    assert "OpenAI" not in label
     assert "gpt-6-luna" not in label
+    assert "300s" in label
     assert customer_config_label(run) == "Scored by the judge"
 
 
@@ -367,9 +368,9 @@ def test_customer_config_label_is_neutral_judge_copy() -> None:
         },
     )
     raw = config_label(run)
-    assert "openai/gpt-4o-mini" in raw
-    assert "via gateway" in raw
-    assert "OpenAI Decisions via Vercel AI Gateway (your key)" in raw
+    assert "GPT-4o mini" in raw
+    assert "via gateway" not in raw.lower()
+    assert "OpenAI Decisions via Vercel AI Gateway (your key)" not in raw
     customer = customer_config_label(run)
     assert customer == "Scored by the judge"
     assert "GPT-4o" not in customer

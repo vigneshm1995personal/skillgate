@@ -149,10 +149,15 @@ def register_pack_commands(app: typer.Typer, case_app: typer.Typer, judge_app: t
                 who = scored_by_phrase(
                     customer_scorer_name(stamp if isinstance(stamp, dict) else None)
                 )
-            gate = "pass" if row.get("passed") else "fail"
+            gate = ("pass" if row.get("passed") else "fail").ljust(4)
             passed = report.get("passed_count")
             total = report.get("task_count")
-            counts = f"  {passed}/{total}" if passed is not None and total is not None else ""
+            if passed is not None and total is not None:
+                counts = f" {passed}/{total}".rjust(6)
+            elif row.get("error"):
+                counts = "   —/—"
+            else:
+                counts = "      "
             ts = str(row.get("ts") or "")
             date = ts[:10] if ts else ""
             date_bit = f"  {date}" if date else ""

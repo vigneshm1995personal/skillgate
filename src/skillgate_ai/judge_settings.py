@@ -57,13 +57,36 @@ def load_judge_settings(root: str | Path | None = None) -> JudgeProviderSettings
     provider = str(raw.get("provider") or "auto").strip().lower() or "auto"
     if provider not in PROVIDER_IDS:
         provider = "auto"
-    return JudgeProviderSettings(
+    decisions_path = _blank(raw.get("decisions_path"))
+    settings = JudgeProviderSettings(
         provider=provider,
         region=_blank(raw.get("region")),
         model=_blank(raw.get("model")),
         base_url=_blank(raw.get("base_url")),
-        decisions_path=_blank(raw.get("decisions_path")),
+        decisions_path=decisions_path,
     )
+    if "decisions_path" in raw:
+        _rewrite_judge_file(path, settings)
+    return settings
+
+
+def _rewrite_judge_file(path: Path, settings: JudgeProviderSettings) -> None:
+    payload = {
+        "provider": settings.provider,
+        "region": settings.region,
+        "model": settings.model,
+        "base_url": settings.base_url,
+    }
+    try:
+        flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC
+        fd = os.open(path, flags, 0o600)
+        try:
+            os.write(fd, json.dumps(payload, indent=2, sort_keys=True).encode("utf-8"))
+            os.fchmod(fd, 0o600)
+        finally:
+            os.close(fd)
+    except OSError:
+        return
 
 
 def save_judge_settings(
@@ -74,6 +97,7 @@ def save_judge_settings(
     model: str | None = None,
     base_url: str | None = None,
     decisions_path: str | None = None,
+    _persist_decisions_path: bool = False,
 ) -> JudgeProviderSettings:
     name = (provider or "auto").strip().lower() or "auto"
     if name == "other":
@@ -98,8 +122,9 @@ def save_judge_settings(
         "region": settings.region,
         "model": settings.model,
         "base_url": settings.base_url,
-        "decisions_path": settings.decisions_path,
     }
+    if _persist_decisions_path and settings.decisions_path:
+        payload["decisions_path"] = settings.decisions_path
     flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC
     fd = os.open(dest, flags, 0o600)
     try:

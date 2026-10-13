@@ -42,7 +42,7 @@ def format_compare_cli(payload: dict[str, Any]) -> str:
             elif label == "Cost":
                 usage = arm.get("usage") or {}
                 cost = usage.get("cost_usd")
-                row.append(f"${cost:.2f}" if isinstance(cost, (int, float)) else "—")
+                row.append(_fmt_cost(cost))
             else:
                 dur = arm.get("duration_sec")
                 row.append(_fmt_duration(dur) if dur is not None else "—")
@@ -73,12 +73,20 @@ def format_compare_cli(payload: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+def _fmt_cost(cost: int | float | None) -> str:
+    if not isinstance(cost, (int, float)):
+        return "—"
+    if 0 < abs(cost) < 0.01:
+        return f"${cost:.4f}"
+    return f"${cost:.2f}"
+
+
 def _row_to_line(cols: list[str]) -> str:
     if not cols:
         return ""
-    first = (cols[0] or "—")[:32]
-    rest = [(col or "—")[:12] for col in cols[1:]]
-    return " | ".join([first.ljust(32), *rest])
+    first = (cols[0] or "—")[:32].ljust(32)
+    rest = [(col or "—")[:12].ljust(12) for col in cols[1:]]
+    return " | ".join([first, *rest])
 
 
 def _fmt_duration(seconds: float) -> str:

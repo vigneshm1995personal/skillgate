@@ -415,10 +415,9 @@ export function configLabel(config?: EvalRunConfig | null): string {
   const resolved = (config.harness || config.harness_pref || "auto").trim()
   const parts: string[] = [harnessDisplayName(resolved, config.harness)]
   if (config.model) {
-    if (config.applied?.via_gateway) {
-      parts.push(`${config.model} via gateway`)
-    } else {
-      parts.push(config.model)
+    const model = friendlyModelName(config.model)
+    if (model) {
+      parts.push(model)
     }
   }
   const timeout = config.timeout_effective ?? config.timeout_sec
