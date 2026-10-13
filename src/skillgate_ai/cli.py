@@ -241,7 +241,7 @@ def _run_gate(
 
 
 _HARNESS_HELP = "auto | cursor-agent | codex | llm"
-_SANDBOX_HELP = "local | docker"
+_SANDBOX_HELP = "local (default)"
 _KEY_ENV_HELP = (
     "Use this process env name as a Skill Gate key (repeatable). "
     "CI: set SKILLGATE_OPENAI_API_KEY, or pass --key-env OPENAI_API_KEY."

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import copy
 import json
+import subprocess
 import time
 import uuid
 from dataclasses import dataclass
@@ -606,6 +607,11 @@ def preflight_versions_compare(
 
             find_git_root(pack)
         return
+    if dry_run:
+        ids = [str(item).strip() for item in (run_ids or []) if str(item).strip()]
+        refs = [str(item).strip() for item in (git_refs or []) if str(item).strip()]
+        if len(ids) < 2 and len(refs) < 2:
+            return
     ids = [str(item).strip() for item in (run_ids or []) if str(item).strip()]
     if len(ids) >= 2:
         if ids[0] == ids[1]:
@@ -630,6 +636,24 @@ def preflight_versions_compare(
     raise CompareError("Pick two history runs or two git refs.", hint=hint)
 
 
+def _git_ref_picker_suggestions(pack: Path) -> list[str]:
+    try:
+        from skillgate_ai.compare_git import find_git_root
+
+        root = find_git_root(pack)
+    except CompareError:
+        return []
+    try:
+        out = subprocess.check_output(
+            ["git", "-C", str(root), "log", "-5", "--format=%h"],
+            text=True,
+        )
+    except (OSError, subprocess.CalledProcessError):
+        return ["HEAD~1", "HEAD"]
+    refs = [line.strip() for line in out.splitlines() if line.strip()]
+    return refs[:5] if refs else ["HEAD~1", "HEAD"]
+
+
 def _versions_dry_run_payload(
     pack: Path,
     *,
@@ -639,6 +663,7 @@ def _versions_dry_run_payload(
 ) -> dict[str, Any]:
     case_ids: list[str] = []
     arms: list[dict[str, Any]] = []
+    picker: dict[str, Any] | None = None
     if run_ids and len(run_ids) >= 2:
         for idx, rid in enumerate(run_ids[:2]):
             arm_id = _arm_ids(2)[idx]
@@ -679,6 +704,16 @@ def _versions_dry_run_payload(
         case_ids = _resolve_compare_case_ids(pack, None)
         for arm in arms:
             arm["task_count"] = len(case_ids)
+    else:
+        recent = [
+            str(row.get("run_id") or "")
+            for row in load_history(pack, limit=8)
+            if row.get("run_id")
+        ]
+        picker = {
+            "recent_runs": recent,
+            "git_refs": _git_ref_picker_suggestions(pack),
+        }
     return {
         "kind": "compare",
         "compare_id": compare_id,
@@ -698,6 +733,7 @@ def _versions_dry_run_payload(
         ],
         "spend": {"cap_usd": None, "spent_usd": None, "stopped_reason": None},
         "error": None,
+        "picker": picker,
     }
 
 

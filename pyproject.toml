@@ -55,6 +55,7 @@ skillgate_ai = [
 testpaths = ["tests"]
 pythonpath = ["src", "tests"]
 timeout = 120
+markers = ["slow: integration tests (git install, etc.)"]
 
 [tool.ruff]
 line-length = 100

@@ -241,6 +241,14 @@ def register_pack_commands(app: typer.Typer, case_app: typer.Typer, judge_app: t
         total = report.get("task_count")
         counts = f"  {passed}/{total}" if passed is not None and total is not None else ""
         console.print(f"{row.get('run_id')}  {gate}{counts}")
+        err = row.get("error")
+        if isinstance(err, dict):
+            message = str(err.get("message") or "").strip()
+            hint = str(err.get("hint") or "").strip()
+            if message:
+                console.print(f"  {message}")
+            if hint:
+                console.print(f"  {hint}")
         tasks = report.get("tasks") if isinstance(report.get("tasks"), list) else []
         for task in tasks:
             if not isinstance(task, dict):
@@ -248,7 +256,12 @@ def register_pack_commands(app: typer.Typer, case_app: typer.Typer, judge_app: t
             tid = str(task.get("id") or task.get("task_id") or "")
             ok = task.get("passed")
             mark = "pass" if ok is True else "fail" if ok is False else "—"
-            console.print(f"  {tid}  {mark}")
+            reason = ""
+            if ok is False:
+                failures = task.get("failures")
+                if isinstance(failures, list) and failures:
+                    reason = f"  {failures[0]}"
+            console.print(f"  {tid}  {mark}{reason}")
 
     @case_app.command("list")
     def case_list(pack: Path | None = typer.Argument(None, help="Skill pack")) -> None:
