@@ -155,8 +155,7 @@ def test_check_help_hides_docker_sandbox_option() -> None:
     assert "docker" not in collapsed.lower()
 
 
-def test_root_package_json_pins_pnpm_nine() -> None:
-    root_pkg = ROOT / "package.json"
-    assert root_pkg.is_file()
-    text = root_pkg.read_text(encoding="utf-8")
+def test_web_package_json_pins_pnpm_nine() -> None:
+    web_pkg = ROOT / "web" / "package.json"
+    text = web_pkg.read_text(encoding="utf-8")
     assert "pnpm@9" in text
