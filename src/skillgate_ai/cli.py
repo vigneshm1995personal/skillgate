@@ -132,7 +132,7 @@ def _run_gate(
     *,
     target: Path,
     skill: Path | None,
-    harness: str,
+    harness: str | None,
     sandbox: str,
     expect_fail: bool,
     summary: str,
@@ -255,7 +255,7 @@ _KEY_ENV_HELP = (
 @app.command("check")
 def check_pack(
     pack: Path = typer.Argument(..., help="Skill pack directory (SKILL.md + evals/)"),
-    harness: str = typer.Option("auto", "--harness", help=_HARNESS_HELP),
+    harness: str | None = typer.Option(None, "--harness", help=_HARNESS_HELP),
     sandbox: str = typer.Option("local", "--sandbox", help=_SANDBOX_HELP),
     expect_fail: bool = typer.Option(
         False,
@@ -301,7 +301,7 @@ def check_pack(
 def run_suite(
     suite: Path = typer.Argument(..., help="Skill pack directory or eval suite YAML"),
     skill: Path | None = typer.Option(None, "--skill", help="Override the skill folder"),
-    harness: str = typer.Option("auto", "--harness", help=_HARNESS_HELP),
+    harness: str | None = typer.Option(None, "--harness", help=_HARNESS_HELP),
     sandbox: str = typer.Option("local", "--sandbox", help=_SANDBOX_HELP),
     expect_fail: bool = typer.Option(
         False,

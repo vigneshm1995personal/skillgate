@@ -34,16 +34,20 @@ PATH_NOT_AVAILABLE = "Not available. No recorded path."
 PASS_LOCK: dict[str, frozenset[str]] = {
     "task_completion": frozenset({"fully completed"}),
     "correctness": frozenset({"correct", "mostly correct"}),
-    "instruction_adherence": frozenset({"fully followed", "minor deviation"}),
-    "evidence_action_validity": frozenset({"fully supported", "n/a"}),
+    "instruction_adherence": frozenset(
+        {"fully followed", "minor deviation", "major deviation"}
+    ),
+    "evidence_action_validity": frozenset(
+        {"fully supported", "partially supported", "n/a"}
+    ),
     "result_quality": frozenset({"clear and complete", "mostly good"}),
 }
 
 PASS_NEED_LABEL: dict[str, str] = {
     "task_completion": "Fully completed",
     "correctness": "Correct or Mostly correct",
-    "instruction_adherence": "Fully followed or Minor deviation",
-    "evidence_action_validity": "Fully supported or N/A",
+    "instruction_adherence": "Fully followed, Minor deviation, or Major deviation",
+    "evidence_action_validity": "Fully supported, Partially supported, or N/A",
     "result_quality": "Clear and complete or Mostly good",
 }
 
@@ -51,7 +55,12 @@ OUTCOME_SCORING_NOTES = (
     "Use workspace_files (collected output contents) and agent_trajectory.command_runs "
     "(commands plus captured stdout/stderr) as primary evidence. Do not claim tests or "
     "files were missing when they appear there. "
-    "instruction_adherence: Minor deviation passes; only Major deviation or Violated fails. "
+    "When workspace_files show the expected deliverable (letter, spreadsheet, export, etc.) "
+    "with correct substance, prefer Fully followed / Minor deviation for instruction_adherence "
+    "and Fully supported / Partially supported for evidence_action_validity — do not fail "
+    "solely because the agent skipped cosmetic steps or used a different tool path. "
+    "instruction_adherence: Violated fails; Major deviation passes when the deliverable in "
+    "workspace_files is substantively correct. "
     "task_completion: When SKILL.md requires refusing a shortcut, insisting on tests, or "
     "following a debug process instead of a quick fix, that behavior is Fully completed."
 )

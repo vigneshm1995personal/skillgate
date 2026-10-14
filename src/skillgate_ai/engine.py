@@ -233,6 +233,7 @@ def run_eval(
                     timeout_override=timeout_override,
                     control=control,
                     judge=outcome_judge,
+                    run_config=config,
                 )
             )
         finally:
@@ -529,13 +530,21 @@ def _live_verdict(
             return False, extra, stamped
         return det_passed, det_failures, stamped
     if judge.get("status") == "error":
-        # Scoring failed (HTTP, timeout, etc.): deterministic gate owns pass/fail.
+        reason = str(stamped.get("reason") or "").strip()
+        if not reason:
+            reasons = judge.get("reasons") or []
+            if isinstance(reasons, list) and reasons:
+                reason = str(reasons[0]).strip()
+        if not reason:
+            reason = "Quality was not scored."
         unscored = {
             **stamped,
             "passed": None,
             "quality_unscored": True,
+            "reason": reason,
         }
-        return det_passed, det_failures, unscored
+        failures = list(det_failures) if not det_passed else [reason]
+        return False, failures, unscored
     if judge.get("status") == "skip" or judge.get("passed") is None:
         return det_passed, det_failures, judge
     passed = bool(judge.get("passed"))
@@ -594,6 +603,8 @@ def _maybe_explain_fail(
     """Ask the scorer for a Fail sentence only after the gate verdict."""
     if passed or judged is None or judge is None:
         return judged
+    if judged.get("status") == "error" or judged.get("quality_unscored"):
+        return judged
     why = judge.explain_fail(
         list(failures),
         judged=judged,
@@ -621,6 +632,7 @@ def _run_task(
     timeout_override: int | None = None,
     control: RunControl | None = None,
     judge: Judge | None = None,
+    run_config: dict[str, Any] | None = None,
 ) -> TaskReport:
     timeout = task_timeout_sec(task, spec, timeout_override=timeout_override)
     if control is not None:
@@ -751,7 +763,19 @@ def _run_task(
                 passed, failures = det_passed, det_failures
             from skillgate_ai.usage import combine_task_usage
 
-            task_usage = combine_task_usage(task_usage, judged)
+            cfg_model = (run_config or {}).get("model") if isinstance(run_config, dict) else None
+            judge_block = (run_config or {}).get("judge") if isinstance(run_config, dict) else None
+            judge_model = (
+                str(judge_block.get("model")).strip()
+                if isinstance(judge_block, dict) and judge_block.get("model")
+                else None
+            )
+            task_usage = combine_task_usage(
+                task_usage,
+                judged,
+                agent_model=str(cfg_model).strip() if cfg_model else None,
+                judge_model=judge_model,
+            )
             primary = skills[0] if skills else None
             advice = (
                 advise_task(

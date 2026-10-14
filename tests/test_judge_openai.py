@@ -280,8 +280,7 @@ def test_unknown_choice_fails_closed() -> None:
         ]
     )
     passed, failures, judged = _gated(_judge(post))
-    assert passed is True
-    assert failures == []
+    assert passed is False
     assert judged["status"] == "error"
     assert judged["reasons"] == [UNUSABLE_ANSWER]
     assert judged.get("quality_unscored") is True
@@ -299,8 +298,7 @@ def test_missing_answer_name_fails_closed() -> None:
         ]
     )
     passed, failures, judged = _gated(_judge(post))
-    assert passed is True
-    assert failures == []
+    assert passed is False
     assert judged["status"] == "error"
     assert judged["reasons"] == [UNUSABLE_ANSWER]
     assert judged.get("quality_unscored") is True
@@ -334,8 +332,7 @@ def test_http_errors_fail_and_never_log_key(caplog: pytest.LogCaptureFixture) ->
         )
         with caplog.at_level("WARNING"):
             passed, failures, judged = _gated(_judge(post))
-        assert passed is True
-        assert failures == []
+        assert passed is False
         assert judged["status"] == "error"
         assert judged["reasons"] == [message]
         assert judged.get("quality_unscored") is True
@@ -378,8 +375,7 @@ def test_quota_429_is_not_retried() -> None:
         ]
     )
     passed, failures, judged = _gated(_judge(post))
-    assert passed is True
-    assert failures == []
+    assert passed is False
     assert judged["status"] == "error"
     assert judged.get("quality_unscored") is True
     assert judged["why"] is None
@@ -398,8 +394,7 @@ def test_credit_balance_exhausted_429_is_not_retried() -> None:
         ]
     )
     passed, failures, judged = _gated(_judge(post))
-    assert passed is True
-    assert failures == []
+    assert passed is False
     assert judged["status"] == "error"
     assert judged.get("quality_unscored") is True
     assert judged["why"] is None
@@ -414,8 +409,7 @@ def test_timeout_fails_closed() -> None:
         ]
     )
     passed, failures, judged = _gated(_judge(post))
-    assert passed is True
-    assert failures == []
+    assert passed is False
     assert judged["status"] == "error"
     assert judged.get("quality_unscored") is True
     assert SECRET not in json.dumps(judged)
@@ -792,8 +786,7 @@ def test_http_error_with_missing_output_names_both() -> None:
         golden={"path": "out.json", "kind": "json", "output_path": "out.json"},
         actual_output={"path": "out.json", "present": False, "body": None},
     )
-    assert passed is True
-    assert failures == []
+    assert passed is False
     assert judged["status"] == "error"
     assert judged.get("quality_unscored") is True
     assert judged["why"] is None
@@ -808,8 +801,7 @@ def test_http_500_is_not_retried() -> None:
         ]
     )
     passed, failures, judged = _gated(_judge(post))
-    assert passed is True
-    assert failures == []
+    assert passed is False
     assert judged["status"] == "error"
     assert judged.get("quality_unscored") is True
     assert judged["why"] is None

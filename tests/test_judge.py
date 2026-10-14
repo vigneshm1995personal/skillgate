@@ -210,15 +210,15 @@ def test_live_verdict_skip_keeps_det() -> None:
     assert failures == []
 
 
-def test_live_verdict_error_leaves_deterministic_verdict() -> None:
+def test_live_verdict_error_is_not_passed_when_det_green() -> None:
     passed, failures, stamped = _live_verdict(
         {"status": "error", "passed": False, "reasons": ["The judge couldn't score this check (HTTP 402)."]},
         "pdf",
         det_passed=True,
         det_failures=[],
     )
-    assert passed is True
-    assert failures == []
+    assert passed is False
+    assert failures == ["The judge couldn't score this check (HTTP 402)."]
     assert stamped is not None
     assert stamped.get("quality_unscored") is True
     assert stamped.get("passed") is None

@@ -108,7 +108,7 @@ def run_check(
     target: Path,
     *,
     skill: Path | None = None,
-    harness: str = "auto",
+    harness: str | None = None,
     sandbox: str = "local",
     demo: bool = False,
     live: bool = True,
@@ -234,8 +234,9 @@ def _execute_check(
     demo_notice: str | None = None
     started = False
     try:
+        harness_pref = (harness if harness is not None else cfg.harness_pref) or "auto"
         run_cfg = resolve_eval_config(
-            harness_pref=harness,
+            harness_pref=harness_pref,
             incoming={
                 "model": model,
                 "timeout_sec": timeout,
@@ -246,7 +247,7 @@ def _execute_check(
             source=source,
         )
         cfg = apply_eval_config(cfg, run_cfg)
-        resolved = live_harness_or_error(harness, cfg)
+        resolved = live_harness_or_error(harness_pref, cfg)
         run_cfg = stamp_resolved(run_cfg, resolved.name, cfg)
         outcome_judge = resolve_judge(cfg, harness_name=resolved.name)
         run_cfg = with_judge(run_cfg, judge_stamp(outcome_judge))

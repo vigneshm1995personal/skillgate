@@ -433,14 +433,15 @@ class DecisionsBackend(_OpenAIPosted):
         data = result["data"]
         from skillgate_ai.usage import normalize_judge_api_usage
 
-        usage = normalize_judge_api_usage(data)
+        model_name = str(data.get("model") or self.model)
+        usage = normalize_judge_api_usage(data, model=model_name)
         return _finished_answers(
             _normalize_answers(
                 _answers_from_decisions_list(data),
                 include_path=include_path,
                 spec=resolved,
             ),
-            model=str(data.get("model") or self.model),
+            model=model_name,
             usage=usage,
         )
 
@@ -521,10 +522,11 @@ class StructuredOutputsBackend(_OpenAIPosted):
             return {"status": "error", "reason": UNUSABLE_ANSWER, "model": self.model}
         from skillgate_ai.usage import normalize_judge_api_usage
 
-        usage = normalize_judge_api_usage(data)
+        model_name = str(data.get("model") or self.model)
+        usage = normalize_judge_api_usage(data, model=model_name)
         return _finished_answers(
             _normalize_answers(parsed, include_path=include_path, spec=resolved),
-            model=str(data.get("model") or self.model),
+            model=model_name,
             usage=usage,
         )
 
