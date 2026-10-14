@@ -27,7 +27,7 @@ def test_check_without_key_exits_2(project_root: Path) -> None:
     result = runner.invoke(app, ["check", str(project_root / "skills" / "pdf")])
     out = plain_text(result.stdout + result.stderr)
     assert result.exit_code == 2, out
-    assert "Add a model key in Settings or run `skillgate keys set`" in out
+    assert "skillgate keys set" in out
     assert "SKILLGATE_OPENAI_API_KEY" not in out
     assert "--key-env" not in out
     assert "built-in checker" not in out.lower()
@@ -38,7 +38,7 @@ def test_check_live_without_key_errors(project_root: Path) -> None:
     _prepare(project_root)
     result = runner.invoke(app, ["check", str(project_root / "skills" / "pdf")])
     assert result.exit_code == 2
-    assert "No model key" in result.stdout
+    assert "No agent is available" in result.stdout
     assert "built-in checker" not in result.stdout.lower()
     assert "BYOLLM" not in result.stdout
     assert "BYO LLM" not in result.stdout
@@ -62,7 +62,7 @@ def test_live_missing_key_is_not_recorded_as_failed_check(
     assert latest_check_passed(pack) is None
     result = runner.invoke(app, ["check", str(pack)])
     assert result.exit_code == 2
-    assert "No model key" in result.stdout
+    assert "No agent is available" in result.stdout
     assert latest_check_passed(pack) is None
     rows = list(hist.glob("*.jsonl")) if hist.exists() else []
     if rows:
@@ -78,9 +78,10 @@ def test_unknown_harness_is_not_recorded_and_does_not_block_deploy(
 ) -> None:
     from skillgate_ai.history import append_eval
 
-    monkeypatch.setenv("SKILLGATE_ROOT", str(tmp_path))
+    from conftest import enable_cursor_agent
+
+    enable_cursor_agent(monkeypatch, tmp_path)
     monkeypatch.setenv("SKILLGATE_CURSOR_SKILLS", str(tmp_path / "cursor-skills"))
-    set_vault_key(tmp_path, "OPENAI_API_KEY", "sk-test-not-a-real-key")
     pack = tmp_path / "pdf"
     shutil.copytree(project_root / "skills" / "pdf", pack)
     ensure_demo_pdfs(pack / "evals" / "fixtures")
@@ -89,7 +90,7 @@ def test_unknown_harness_is_not_recorded_and_does_not_block_deploy(
     assert latest_check_passed(pack) is True
     result = runner.invoke(app, ["check", str(pack), "--harness", "demo"])
     assert result.exit_code != 0
-    assert "Unknown harness" in plain_text(result.stdout + result.stderr)
+    assert "removed" in plain_text(result.stdout + result.stderr).lower()
     assert latest_check_passed(pack) is True
     hist = pack / "evals" / "history"
     rows = []
@@ -188,7 +189,7 @@ def test_check_json_error_is_json(project_root: Path) -> None:
     )
     assert result.exit_code == 2
     payload = json.loads(result.stdout)
-    assert "No model key" in str(payload.get("error") or "")
+    assert "No agent is available" in str(payload.get("error") or "")
     assert payload.get("exit_code") == 2
 
 
@@ -241,7 +242,7 @@ def test_check_relative_pack_from_subfolder(
     monkeypatch.setenv("SKILLGATE_ROOT", str(proj))
     result = runner.invoke(app, ["check", "./pdf"])
     assert result.exit_code == 2, result.stdout
-    assert "No model key" in result.stdout
+    assert "No agent is available" in result.stdout
 
 
 def test_ui_help() -> None:

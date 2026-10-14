@@ -102,7 +102,8 @@ def remove_pack_case(skill_path: str | Path, case_id: str):
     if pack is None:
         raise SuiteError("This skill has no case pack yet.")
     wanted = case_id_slug(case_id)
-    if case_is_locked(pack.skill, wanted):
+    pack_ids = [case.id for case in pack.cases]
+    if case_is_locked(pack.skill, wanted, pack_case_ids=pack_ids):
         raise SuiteError(
             "This pack's original checks stay. Add a new check instead of deleting them."
         )
@@ -127,7 +128,8 @@ def edit_pack_case(
     if pack is None:
         raise SuiteError("This skill has no case pack yet.")
     case_id = case_id_slug(case_id)
-    if case_is_locked(pack.skill, case_id):
+    pack_ids = [case.id for case in pack.cases]
+    if case_is_locked(pack.skill, case_id, pack_case_ids=pack_ids):
         raise SuiteError(SEED_EDIT_MESSAGE, hint=SEED_EDIT_HINT)
     found = False
     cases = []
@@ -274,7 +276,9 @@ def add_pack_case(
     loaded = load_case_pack(skill_path)
     taken = {case.id for case in (loaded.cases if loaded else [])}
     wanted = case_id_slug(case_id) if str(case_id or "").strip() else ""
-    if wanted and loaded and case_is_locked(loaded.skill, wanted):
+    if wanted and loaded and case_is_locked(
+        loaded.skill, wanted, pack_case_ids=[c.id for c in loaded.cases]
+    ):
         raise SuiteError(SEED_EDIT_MESSAGE, hint=SEED_EDIT_HINT)
     if wanted and wanted in taken and not force:
         raise SuiteError(f"Check {wanted} already exists. Pass --force to replace it.")

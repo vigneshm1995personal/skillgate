@@ -148,9 +148,9 @@ describe("deployAllowedForLiveGate", () => {
       id: "live-green",
       status: "done",
       skill: "pdf",
-      harness: "llm",
+      harness: "cursor-agent",
       gate_decision: "cleared",
-      report: { skill: "pdf", passed_count: 2, task_count: 2, tasks: [], harness: "llm" },
+      report: { skill: "pdf", passed_count: 2, task_count: 2, tasks: [], harness: "cursor-agent" },
     }
     expect(
       deployAllowedForLiveGate({
@@ -231,14 +231,14 @@ describe("display name vs slug identity", () => {
       id: "idea-green",
       status: "done",
       skill: "idea-brainstorming",
-      harness: "llm",
+      harness: "cursor-agent",
       gate_decision: "cleared",
       report: {
         skill: "idea-brainstorming",
         passed_count: 1,
         task_count: 1,
         tasks: [],
-        harness: "llm",
+        harness: "cursor-agent",
       },
     }
     expect(

@@ -25,11 +25,11 @@ describe("resolveModelHarness", () => {
     expect(resolveModelHarness("claude", "cursor-agent")).toBe("claude")
   })
 
-  it("uses Auto's resolved harness, including claude and llm", () => {
+  it("uses Auto's resolved harness, including claude and cursor-agent", () => {
     expect(resolveModelHarness("auto", "codex")).toBe("codex")
     expect(resolveModelHarness("auto", "cursor-agent")).toBe("cursor-agent")
     expect(resolveModelHarness("auto", "claude")).toBe("claude")
-    expect(resolveModelHarness("auto", "llm")).toBe("llm")
+    expect(resolveModelHarness("auto", "cursor-agent")).toBe("cursor-agent")
     expect(resolveModelHarness("auto")).toBe("auto")
   })
 })
@@ -39,7 +39,6 @@ describe("knownModelsForHarness", () => {
     "cursor-agent": ["composer-2.5", "claude-4-sonnet-thinking"],
     codex: ["gpt-5.6-luna"],
     claude: ["claude-sonnet-4-20250514"],
-    llm: ["openai/gpt-4o-mini"],
   }
 
   it("does not union catalogs for Auto", () => {
@@ -128,8 +127,8 @@ describe("emptyCatalogHint", () => {
       })
     ).toBeNull()
     expect(
-      emptyCatalogHint("auto", "llm", {
-        llm: { source: "empty", error: "list_failed" },
+      emptyCatalogHint("auto", "cursor-agent", {
+        "cursor-agent": { source: "empty", error: "list_failed" },
       })
     ).toMatch(/Could not list/)
   })
@@ -174,19 +173,19 @@ describe("configLabel", () => {
     expect(harnessDisplayName("auto", "auto")).toBe("Auto")
     expect(harnessDisplayName("auto", "")).toBe("Auto")
     expect(draftConfigSummary("auto", { model: "", timeoutSec: "" })).toBe("Auto")
-    expect(harnessDisplayName("auto", "llm")).toBe("Auto · LLM")
+    expect(harnessDisplayName("auto", "cursor-agent")).toBe("Auto · Cursor")
   })
 
-  it("shows the actual LLM model via gateway, not Auto · Cursor", () => {
+  it("shows the actual Cursor model via gateway, not Auto · Cursor", () => {
     expect(
       configLabel({
-        harness: "llm",
+        harness: "cursor-agent",
         harness_pref: "auto",
         model: "openai/gpt-4o-mini",
         applied: { via_gateway: true },
         label: "Auto · Cursor",
       })
-    ).toBe("LLM · GPT-4o mini")
+    ).toBe("Cursor · GPT-4o mini")
   })
 
   it("hides the default task model unless the user picked it", () => {
@@ -195,7 +194,7 @@ describe("configLabel", () => {
     expect(
       customerConfigLabel({
         label: "Scored by the judge",
-        harness: "llm",
+        harness: "cursor-agent",
       })
     ).toBe("Scored by the judge")
   })
@@ -203,12 +202,12 @@ describe("configLabel", () => {
   it("shows Scored by the judge on History and skill Runs, not the provider", () => {
     expect(
       customerConfigLabel({
-        harness: "llm",
+        harness: "cursor-agent",
         model: "openai/gpt-4o-mini",
         timeout_effective: 300,
         applied: { via_gateway: true },
         label:
-          "LLM · openai/gpt-4o-mini via gateway · 300s · OpenAI Decisions via Vercel AI Gateway (your key)",
+          "Cursor · openai/gpt-4o-mini via gateway · 300s · OpenAI Decisions via Vercel AI Gateway (your key)",
         judge: {
           provider: "openai",
           display_name:
@@ -218,7 +217,7 @@ describe("configLabel", () => {
     ).toBe("Scored by the judge")
     expect(
       customerConfigLabel({
-        harness: "llm",
+        harness: "cursor-agent",
         model: "gpt-4o-mini",
         applied: { model: true },
         judge: {
@@ -232,7 +231,7 @@ describe("configLabel", () => {
   it("puts a user-picked model in Run details only", () => {
     expect(
       customerRunDetails({
-        harness: "llm",
+        harness: "cursor-agent",
         model: "openai/gpt-4o-mini",
         timeout_effective: 300,
         applied: { via_gateway: true },
@@ -241,10 +240,10 @@ describe("configLabel", () => {
           display_name: "OpenAI Decisions via Vercel AI Gateway (your key)",
         },
       })
-    ).toBe("LLM · 300s")
+    ).toBe("Cursor · 300s")
     expect(
       customerRunDetails({
-        harness: "llm",
+        harness: "cursor-agent",
         model: "gpt-4.1",
         timeout_effective: 300,
         applied: { model: true },
@@ -253,13 +252,13 @@ describe("configLabel", () => {
           display_name: "OpenAI (your key)",
         },
       })
-    ).toBe("LLM · GPT-4.1 · 300s")
+    ).toBe("Cursor · GPT-4.1 · 300s")
   })
 
   it("names a chosen scoring provider on History", () => {
     expect(
       customerConfigLabel({
-        harness: "llm",
+        harness: "cursor-agent",
         judge: { provider: "jev", chosen: true, display_name: "Jev" },
       })
     ).toBe("Scored by Jev")
@@ -268,10 +267,10 @@ describe("configLabel", () => {
   it("does not treat an openai/ model id as the scorer", () => {
     expect(
       customerConfigLabel({
-        harness: "llm",
+        harness: "cursor-agent",
         model: "openai/gpt-4o-mini",
         applied: { via_gateway: true },
-        label: "LLM · openai/gpt-4o-mini via gateway · 300s",
+        label: "Cursor · openai/gpt-4o-mini via gateway · 300s",
         judge: { provider: "skip", display_name: "Checks" },
       })
     ).toBe("")
@@ -288,12 +287,12 @@ describe("configLabel", () => {
             label: "Auto · Cursor",
           },
           {
-            harness: "llm",
+            harness: "cursor-agent",
             model: "openai/gpt-4o-mini",
             applied: { via_gateway: true },
           }
         )
       )
-    ).toBe("LLM · GPT-4o mini")
+    ).toBe("Cursor · GPT-4o mini")
   })
 })

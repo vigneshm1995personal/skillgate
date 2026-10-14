@@ -149,14 +149,6 @@ def applied_knobs(harness: str, *, model: str | None) -> dict[str, bool]:
             "temperature": False,
             "reasoning": True,
         }
-    if name == "llm":
-        return {
-            "harness": True,
-            "model": bool(model),
-            "timeout": True,
-            "temperature": True,
-            "reasoning": False,
-        }
     if name in {"cursor-agent", "claude", "claude-code"}:
         return {
             "harness": True,
@@ -224,10 +216,6 @@ def stamp_resolved(run: EvalRunConfig, harness_name: str, cfg: LLMConfig) -> Eva
             model = cfg.codex_model
         if effort is None:
             effort = cfg.codex_reasoning_effort or DEFAULT_CODEX_REASONING_EFFORT
-    elif name == "llm":
-        if model is None:
-            model = cfg.gateway_model
-        effort = None
     elif name == "cursor-agent":
         if model is None:
             model = cfg.cursor_model
@@ -239,12 +227,6 @@ def stamp_resolved(run: EvalRunConfig, harness_name: str, cfg: LLMConfig) -> Eva
     else:
         effort = None
     applied = applied_knobs(name, model=run.model)
-    if name == "llm":
-        applied = {
-            **applied,
-            "via_gateway": bool(cfg.gateway_api_key)
-            or (cfg.gateway_base_url or "").rstrip("/") != DEFAULT_OPENAI_BASE_URL.rstrip("/"),
-        }
     return replace(
         run,
         harness=name,
@@ -288,7 +270,6 @@ def harness_display_name(pref: str | None, resolved: str | None = None) -> str:
         labels = {
             "codex": "Codex",
             "claude": "Claude",
-            "llm": "LLM",
             "cursor-agent": "Cursor",
         }
         resolved_key = (resolved or "").strip().lower()
@@ -300,7 +281,6 @@ def harness_display_name(pref: str | None, resolved: str | None = None) -> str:
         "cursor-agent": "Cursor",
         "codex": "Codex",
         "claude": "Claude",
-        "llm": "LLM",
     }
     if key in names:
         return names[key]

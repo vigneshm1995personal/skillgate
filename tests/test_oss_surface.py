@@ -191,6 +191,7 @@ def _judge_cfg(**overrides: object):
         "anthropic_api_key": None,
         "anthropic_model": "claude-sonnet-4-20250514",
         "cursor_agent_bin": "agent",
+        "claude_bin": "claude",
         "codex_api_key": None,
         "codex_bin": "codex",
         "harness_pref": "auto",
@@ -267,12 +268,12 @@ def test_oss_never_calls_skillgate_hosted_endpoint_or_runs_without_user_key(
         ]
     )
     assert cfg.judge_endpoint in (None, "")
-    assert isinstance(resolve_judge(cfg, harness_name="llm"), SkipJudge)
+    assert isinstance(resolve_judge(cfg, harness_name="cursor-agent"), SkipJudge)
 
     with pytest.raises(SkillGateError) as missing_jev_host:
         resolve_judge(
             _judge_cfg(jev_api_key="jev-user-key", judge_provider="jev", judge_chosen=True),
-            harness_name="llm",
+            harness_name="cursor-agent",
         )
     assert missing_jev_host.value.exit_code == 2
     assert "base URL" in missing_jev_host.value.message
@@ -296,5 +297,5 @@ def test_oss_never_calls_skillgate_hosted_endpoint_or_runs_without_user_key(
     assert http_calls == []
 
     with pytest.raises(MissingLLMKeyError):
-        resolve_judge(_judge_cfg(judge_pref="openai"), harness_name="llm")
+        resolve_judge(_judge_cfg(judge_pref="openai"), harness_name="cursor-agent")
     assert http_calls == []

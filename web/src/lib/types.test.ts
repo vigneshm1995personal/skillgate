@@ -7,7 +7,7 @@ describe("resolvedHarnessName", () => {
     expect(resolvedHarnessName("auto")).toBe("auto")
     expect(resolvedHarnessName("auto", null)).toBe("auto")
     expect(resolvedHarnessName("auto", { default_harness: "auto" })).toBe("auto")
-    expect(resolvedHarnessName("auto", { default_harness: "llm" })).toBe("llm")
+    expect(resolvedHarnessName("auto", { default_harness: "cursor-agent" })).toBe("cursor-agent")
     expect(resolvedHarnessName("auto", { default_harness: "cursor-agent" })).toBe(
       "cursor-agent"
     )

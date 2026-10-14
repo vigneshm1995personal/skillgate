@@ -83,7 +83,7 @@ def test_cli_deploy_matches_pack_gate_after_tryout_sequence(tmp_path: Path) -> N
         run_id="auth-fail",
         passed=None,
         tryout=False,
-        error={"message": "No model key found.", "hint": "Add a key"},
+        error={"message": "No agent is available to run checks.", "hint": "Add a key"},
         gate_moved=False,
     )
     assert pack_gate_decision(pack)[0] == "cleared"

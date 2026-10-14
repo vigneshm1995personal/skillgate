@@ -26,7 +26,7 @@ from skillgate_ai.live import create_control, drop_control
 MAX_ARMS = 4
 MIN_ARMS = 2
 DEFAULT_MAX_SPEND_USD = 5.0
-ALLOWED_COMPARE_HARNESS = frozenset({"auto", "cursor-agent", "codex", "claude", "llm"})
+ALLOWED_COMPARE_HARNESS = frozenset({"auto", "cursor-agent", "codex", "claude"})
 
 
 class CompareError(SkillGateError):
@@ -141,7 +141,7 @@ def validate_compare_plan(
         if harness not in ALLOWED_COMPARE_HARNESS:
             raise CompareError(
                 f"Unknown harness {spec.harness_pref!r}.",
-                hint="Use auto, cursor-agent, codex, claude, or llm.",
+                hint="Use auto, cursor-agent, codex, or claude.",
             )
         labels.append(spec.label.strip().lower())
     if len(labels) != len(set(labels)):
@@ -342,7 +342,7 @@ def scrub_customer_compare_payload(payload: dict[str, Any]) -> dict[str, Any]:
         if not isinstance(arm, dict):
             continue
         cfg = arm.get("config") if isinstance(arm.get("config"), dict) else {}
-        harness = str(cfg.get("harness") or cfg.get("harness_pref") or "llm")
+        harness = str(cfg.get("harness") or cfg.get("harness_pref") or "cursor-agent")
         arm["subtitle"] = harness_display_name(harness, harness)
         # Keep user arm labels from compare specs; only fill when missing.
         if not str(arm.get("label") or "").strip():

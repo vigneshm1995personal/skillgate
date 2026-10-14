@@ -252,7 +252,7 @@ def _provider_judge(cfg: LLMConfig, provider: str, *, chosen: bool) -> Judge:
 
 
 def ping_judge(cfg: LLMConfig) -> dict[str, str | bool]:
-    judge = resolve_judge(cfg, harness_name="llm")
+    judge = resolve_judge(cfg, harness_name="cursor-agent")
     if isinstance(judge, SkipJudge):
         return {"ok": False, "message": "No scoring provider — file checks only."}
     backend = getattr(judge, "backend", None)

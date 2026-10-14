@@ -148,7 +148,9 @@ def plan_case_import(
         action: Literal["add", "replace", "skip"] = "add"
         err: str | None = None
         if existing and case_id in taken:
-            if case_is_locked(skill_name, case_id):
+            if case_is_locked(
+                skill_name, case_id, pack_case_ids=taken, pack_root=root
+            ):
                 action = "skip"
             elif on_conflict == "fail":
                 action = "skip"
@@ -337,7 +339,11 @@ def _validate_check_dict(
     *,
     held: dict[str, Any],
 ) -> str | None:
-    if keep_locked_case(skill_name, held, raw) is not None:
+    pack_ids = list(held.keys())
+    if (
+        keep_locked_case(skill_name, held, raw, pack_case_ids=pack_ids)
+        is not None
+    ):
         raise ValueError("This pack's original checks stay.")
     case_id = str(raw.get("id") or "").strip()
     should = bool(raw.get("should_trigger", True))

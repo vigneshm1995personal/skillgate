@@ -60,7 +60,7 @@ def test_versions_git_two_refs_uses_runner(tmp_path: Path) -> None:
             title="t",
             skill="pdf",
             skill_description="d",
-            harness="llm",
+            harness="cursor-agent",
             sandbox="local",
             passed=True,
             tasks=tasks,

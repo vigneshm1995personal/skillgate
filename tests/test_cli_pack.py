@@ -84,6 +84,39 @@ def test_skill_paste_and_import_md(tmp_path: Path, monkeypatch) -> None:
     assert (tmp_path / "skills" / "other-helper" / "SKILL.md").is_file()
 
 
+def test_import_md_user_pdf_name_exits_zero(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("SKILLGATE_ROOT", str(tmp_path))
+    monkeypatch.chdir(tmp_path)
+    md = tmp_path / "pdf.md"
+    md.write_text(
+        "---\nname: pdf\ndescription: My own pdf helper.\n---\n\n# pdf\n",
+        encoding="utf-8",
+    )
+    imported = runner.invoke(app, ["import", "--md", str(md)])
+    out = plain_text(imported.stdout + imported.stderr)
+    assert imported.exit_code == 0, out
+    assert "original checks stay" not in out.lower()
+    assert (tmp_path / "skills" / "pdf" / "SKILL.md").is_file()
+    assert (tmp_path / "skills" / "pdf" / "evals" / "cases.yaml").is_file()
+
+
+def test_import_local_skill_folder(tmp_path: Path, monkeypatch) -> None:
+    src = tmp_path / "external" / "ledger"
+    src.mkdir(parents=True)
+    src.joinpath("SKILL.md").write_text(
+        "---\nname: ledger\ndescription: Ledger skill.\n---\n\n# Ledger\n",
+        encoding="utf-8",
+    )
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    monkeypatch.setenv("SKILLGATE_ROOT", str(workspace))
+    monkeypatch.chdir(workspace)
+    imported = runner.invoke(app, ["import", str(src)])
+    out = plain_text(imported.stdout + imported.stderr)
+    assert imported.exit_code == 0, out
+    assert (tmp_path / "workspace" / "skills" / "ledger" / "SKILL.md").is_file()
+
+
 def test_case_list_edit_remove(tmp_path: Path, monkeypatch) -> None:
     dest = _skill(tmp_path)
     monkeypatch.setenv("SKILLGATE_ROOT", str(tmp_path))

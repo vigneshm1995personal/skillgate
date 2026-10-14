@@ -134,8 +134,8 @@ def test_run_without_key_is_conflict(tmp_path: Path, monkeypatch) -> None:
     )
     assert started.status_code == 409
     detail = started.json()["detail"]
-    assert "No model key" in (detail.get("message") or "")
-    assert detail.get("hint") == "Add a model key in Settings or run `skillgate keys set`"
+    assert "No agent is available" in (detail.get("message") or "")
+    assert "skillgate keys set" in (detail.get("hint") or "")
     hint = detail.get("hint") or ""
     assert "SKILLGATE_" not in hint
     assert "--key-env" not in hint
@@ -184,7 +184,9 @@ def test_deploy_copies_into_agent_folder(tmp_path: Path, monkeypatch) -> None:
     append_eval(pack, run_id="green", passed=True)
     cursor_root = tmp_path / "cursor-skills"
     monkeypatch.setenv("SKILLGATE_CURSOR_SKILLS", str(cursor_root))
-    monkeypatch.setenv("SKILLGATE_OPENAI_API_KEY", "sk-test")
+    from conftest import enable_cursor_agent
+
+    enable_cursor_agent(monkeypatch, tmp_path)
     client = _client(tmp_path, monkeypatch)
     res = client.post("/api/deploy", json={"target": "cursor", "skill": "pdf", "mode": "local"})
     assert res.status_code == 200

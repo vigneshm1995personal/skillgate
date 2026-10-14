@@ -56,7 +56,7 @@ def test_vault_key_is_used(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> N
     assert "sk-from-vault" in dest.read_text(encoding="utf-8")
     cfg = get_llm_config(tmp_path)
     assert cfg.openai_api_key == "sk-from-vault"
-    assert cfg.has_any_key is True
+    assert cfg.has_any_key is False
 
 
 def test_skillgate_prefix_overrides_ambient(

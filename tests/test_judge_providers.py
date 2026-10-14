@@ -26,6 +26,7 @@ def _cfg(**overrides: object) -> LLMConfig:
         "anthropic_api_key": None,
         "anthropic_model": "claude-sonnet-4-20250514",
         "cursor_agent_bin": "agent",
+        "claude_bin": "claude",
         "codex_api_key": None,
         "codex_bin": "codex",
         "harness_pref": "auto",
@@ -47,7 +48,7 @@ class FakeResponse:
 
 
 def test_auto_with_only_cursor_key_skips() -> None:
-    judge = resolve_judge(_cfg(cursor_api_key="cur-test"), harness_name="llm")
+    judge = resolve_judge(_cfg(cursor_api_key="cur-test"), harness_name="cursor-agent")
     assert isinstance(judge, SkipJudge)
 
 
@@ -55,7 +56,7 @@ def test_explicit_aws_without_key_exits_2() -> None:
     with pytest.raises(MissingLLMKeyError) as caught:
         resolve_judge(
             _cfg(judge_provider="aws", judge_chosen=True, judge_region="us-east-1"),
-            harness_name="llm",
+            harness_name="cursor-agent",
         )
     assert caught.value.exit_code == 2
     assert "AWS" in caught.value.message
@@ -71,7 +72,7 @@ def test_aws_without_region_exits_2() -> None:
                 aws_access_key_id="AKIATEST",
                 aws_secret_access_key="secret",
             ),
-            harness_name="llm",
+            harness_name="cursor-agent",
         )
     assert caught.value.exit_code == 2
     assert "region" in caught.value.message.lower()
@@ -100,7 +101,7 @@ def test_openai_key_not_reused_for_jev() -> None:
                 judge_chosen=True,
                 judge_endpoint="https://example.test",
             ),
-            harness_name="llm",
+            harness_name="cursor-agent",
         )
     assert "Jev" in caught.value.message
 

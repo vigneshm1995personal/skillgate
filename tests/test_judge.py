@@ -25,6 +25,7 @@ def _cfg(**overrides: object) -> LLMConfig:
         "anthropic_api_key": None,
         "anthropic_model": "claude-sonnet-4-20250514",
         "cursor_agent_bin": "agent",
+        "claude_bin": "claude",
         "codex_api_key": None,
         "codex_bin": "codex",
         "harness_pref": "auto",
@@ -47,12 +48,12 @@ def test_skip_judge_does_not_pass_or_fail() -> None:
 
 
 def test_resolve_judge_auto_skips_without_key() -> None:
-    judge = resolve_judge(_cfg(), harness_name="llm")
+    judge = resolve_judge(_cfg(), harness_name="cursor-agent")
     assert isinstance(judge, SkipJudge)
 
 
 def test_resolve_judge_auto_openai_on_live() -> None:
-    judge = resolve_judge(_cfg(openai_api_key="sk-test"), harness_name="llm")
+    judge = resolve_judge(_cfg(openai_api_key="sk-test"), harness_name="cursor-agent")
     assert isinstance(judge, OutcomeJudge)
     assert judge.backend.name == "decisions"
 
@@ -60,7 +61,7 @@ def test_resolve_judge_auto_openai_on_live() -> None:
 def test_resolve_judge_skip_override() -> None:
     judge = resolve_judge(
         _cfg(openai_api_key="sk-test", judge_pref="skip"),
-        harness_name="llm",
+        harness_name="cursor-agent",
     )
     assert isinstance(judge, SkipJudge)
 
@@ -72,7 +73,7 @@ def test_resolve_judge_demo_always_skips() -> None:
 
 def test_resolve_judge_openai_without_key() -> None:
     with pytest.raises(MissingLLMKeyError) as caught:
-        resolve_judge(_cfg(judge_pref="openai"), harness_name="llm")
+        resolve_judge(_cfg(judge_pref="openai"), harness_name="cursor-agent")
     assert caught.value.exit_code == 2
     assert "OpenAI API key" in caught.value.message
 
@@ -97,7 +98,7 @@ def test_resolve_judge_openai_pref_uses_gateway_decisions() -> None:
             judge_pref="openai",
             gateway_base_url="https://ai-gateway.vercel.sh/v1",
         ),
-        harness_name="llm",
+        harness_name="cursor-agent",
     )
     assert isinstance(judge, OutcomeJudge)
     assert judge.backend.name == "decisions"
@@ -110,7 +111,7 @@ def test_gateway_key_uses_openai_decisions_via_gateway() -> None:
             gateway_api_key="gw-test",
             gateway_base_url="https://ai-gateway.vercel.sh/v1",
         ),
-        harness_name="llm",
+        harness_name="cursor-agent",
     )
     assert isinstance(judge, OutcomeJudge)
     assert judge.backend.name == "decisions"
@@ -127,7 +128,7 @@ def test_openai_key_keeps_judge_on_openai_decisions() -> None:
             gateway_api_key="gw-test",
             gateway_base_url="https://ai-gateway.vercel.sh/v1",
         ),
-        harness_name="llm",
+        harness_name="cursor-agent",
     )
     assert isinstance(judge, OutcomeJudge)
     assert judge.backend.name == "decisions"
@@ -143,7 +144,7 @@ def test_default_scoring_uses_decisions_not_the_task_model() -> None:
 
     direct = resolve_judge(
         _cfg(openai_api_key="sk-test", gateway_model=DEFAULT_GATEWAY_MODEL),
-        harness_name="llm",
+        harness_name="cursor-agent",
     )
     assert isinstance(direct, OutcomeJudge)
     assert direct.backend.name == "decisions"
@@ -156,7 +157,7 @@ def test_default_scoring_uses_decisions_not_the_task_model() -> None:
             gateway_base_url="https://ai-gateway.vercel.sh/v1",
             gateway_model=DEFAULT_GATEWAY_MODEL,
         ),
-        harness_name="llm",
+        harness_name="cursor-agent",
     )
     assert isinstance(gateway, OutcomeJudge)
     assert gateway.backend.name == "decisions"
@@ -165,7 +166,7 @@ def test_default_scoring_uses_decisions_not_the_task_model() -> None:
 
 
 def test_judge_stamp_has_no_secret() -> None:
-    stamp = judge_stamp(resolve_judge(_cfg(openai_api_key="sk-secret"), harness_name="llm"))
+    stamp = judge_stamp(resolve_judge(_cfg(openai_api_key="sk-secret"), harness_name="cursor-agent"))
     blob = str(stamp)
     assert "sk-secret" not in blob
     assert stamp["provider"] == "openai"
@@ -181,7 +182,7 @@ def test_gateway_judge_stamp_names_decisions_via_gateway() -> None:
                 gateway_api_key="gw-test",
                 gateway_base_url="https://ai-gateway.vercel.sh/v1",
             ),
-            harness_name="llm",
+            harness_name="cursor-agent",
         )
     )
     assert stamp["provider"] == "openai"

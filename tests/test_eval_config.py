@@ -32,6 +32,7 @@ def _llm_config(**overrides: object) -> LLMConfig:
         "anthropic_api_key": None,
         "anthropic_model": "claude-sonnet-4-20250514",
         "cursor_agent_bin": "agent",
+        "claude_bin": "claude",
         "codex_api_key": None,
         "codex_bin": "codex",
         "codex_reasoning_effort": "medium",
@@ -114,12 +115,12 @@ def test_diff_lists_only_changed_fields() -> None:
 
 def test_diff_includes_judge_model() -> None:
     previous = EvalRunConfig(
-        harness="llm",
+        harness="cursor-agent",
         timeout_effective=300,
         judge={"backend": "decisions", "model": "gpt-6-luna"},
     )
     current = EvalRunConfig(
-        harness="llm",
+        harness="cursor-agent",
         timeout_effective=300,
         judge={"backend": "decisions", "model": "other"},
     )
@@ -245,15 +246,15 @@ def test_config_label_includes_harness_and_timeout() -> None:
 
 
 def test_config_label_does_not_say_demo() -> None:
-    label = config_label(EvalRunConfig(harness="llm", timeout_effective=12))
-    assert "LLM" in label
+    label = config_label(EvalRunConfig(harness="cursor-agent", timeout_effective=12))
+    assert "Cursor" in label
     assert "demo" not in label.lower()
     assert "Built-in checker" not in label
 
 
 def test_harness_display_name_does_not_alias_demo_to_auto() -> None:
     assert harness_display_name("demo") != "Auto"
-    assert "demo" not in harness_display_name("llm").lower()
+    assert "demo" not in harness_display_name("cursor-agent").lower()
 
 
 def test_auto_without_a_key_does_not_claim_cursor() -> None:
@@ -263,45 +264,41 @@ def test_auto_without_a_key_does_not_claim_cursor() -> None:
     assert auto_live_harness_name(cfg) == "auto"
     assert harness_display_name("auto") == "Auto"
     assert "Cursor" not in harness_display_name("auto")
-    assert harness_display_name("auto", "llm") == "Auto · LLM"
+    assert harness_display_name("auto", "cursor-agent") == "Auto · Cursor"
 
 
 def test_attach_stamped_config_replaces_auto_request() -> None:
     from skillgate_ai.api_runs import attach_stamped_config
 
-    record = {"config": {"harness": "auto", "harness_pref": "auto", "model": "openai/gpt-4o-mini"}}
+    record = {"config": {"harness": "auto", "harness_pref": "auto", "model": "composer-2.5"}}
     attach_stamped_config(
         record,
         {
             "config": {
-                "harness": "llm",
-                "model": "openai/gpt-4o-mini",
-                "applied": {"via_gateway": True},
-                "label": "LLM · openai/gpt-4o-mini via gateway",
+                "harness": "cursor-agent",
+                "model": "composer-2.5",
+                "applied": {"model": True},
+                "label": "Cursor · Composer 2.5",
             }
         },
     )
-    assert record["config"]["harness"] == "llm"
-    assert "via gateway" not in str(record["config"].get("label") or "").lower()
-    assert "Auto · Cursor" not in str(record["config"].get("label") or "")
+    assert record["config"]["harness"] == "cursor-agent"
+    assert record["config"]["model"] == "composer-2.5"
 
 
-def test_config_label_shows_llm_model_via_gateway() -> None:
-    cfg = _llm_config(gateway_api_key="gw-test")
+def test_config_label_shows_cursor_model() -> None:
+    cfg = _llm_config(cursor_model="composer-2.5")
     run = stamp_resolved(
         resolve_eval_config(harness_pref="auto", incoming={}, cfg=cfg, source="ui"),
-        "llm",
+        "cursor-agent",
         cfg,
     )
     label = config_label(run)
-    assert "Auto · Cursor" not in label
-    assert label.startswith("LLM")
-    assert "GPT-4o mini" in label
-    assert "via gateway" not in label.lower()
+    assert label.startswith("Cursor")
 
 
 def test_fingerprint_ignores_scoring_provider() -> None:
-    base = EvalRunConfig(harness="llm", timeout_effective=300)
+    base = EvalRunConfig(harness="cursor-agent", timeout_effective=300)
     decisions = replace(
         base,
         judge={"provider": "openai", "backend": "decisions", "model": "gpt-6-luna"},
@@ -316,7 +313,7 @@ def test_fingerprint_ignores_scoring_provider() -> None:
 
 def test_config_label_names_openai_scorer_not_model_id() -> None:
     run = EvalRunConfig(
-        harness="llm",
+        harness="cursor-agent",
         timeout_effective=300,
         judge={
             "provider": "openai",
@@ -332,23 +329,23 @@ def test_config_label_names_openai_scorer_not_model_id() -> None:
     assert customer_config_label(run) == "Scored by the judge"
 
 
-def test_stamp_resolved_default_llm_model_is_not_user_picked() -> None:
-    cfg = _llm_config(gateway_api_key="gw-test")
+def test_stamp_resolved_default_cursor_model_is_not_user_picked() -> None:
+    cfg = _llm_config(cursor_model="composer-2.5")
     defaulted = stamp_resolved(
         resolve_eval_config(harness_pref="auto", incoming={}, cfg=cfg, source="ui"),
-        "llm",
+        "cursor-agent",
         cfg,
     )
-    assert defaulted.model == "openai/gpt-4o-mini"
+    assert defaulted.model == "composer-2.5"
     assert defaulted.applied["model"] is False
     picked = stamp_resolved(
         resolve_eval_config(
-            harness_pref="llm",
-            incoming={"model": "openai/gpt-4o-mini"},
+            harness_pref="cursor-agent",
+            incoming={"model": "composer-2.5-fast"},
             cfg=cfg,
             source="ui",
         ),
-        "llm",
+        "cursor-agent",
         cfg,
     )
     assert picked.applied["model"] is True
@@ -356,10 +353,10 @@ def test_stamp_resolved_default_llm_model_is_not_user_picked() -> None:
 
 def test_customer_config_label_is_neutral_judge_copy() -> None:
     run = EvalRunConfig(
-        harness="llm",
-        model="openai/gpt-4o-mini",
+        harness="cursor-agent",
+        model="composer-2.5",
         timeout_effective=300,
-        applied={"via_gateway": True},
+        applied={"model": True},
         judge={
             "provider": "openai",
             "backend": "decisions",
@@ -368,12 +365,12 @@ def test_customer_config_label_is_neutral_judge_copy() -> None:
         },
     )
     raw = config_label(run)
-    assert "GPT-4o mini" in raw
+    assert "Composer" in raw
     assert "via gateway" not in raw.lower()
     assert "OpenAI Decisions via Vercel AI Gateway (your key)" not in raw
     customer = customer_config_label(run)
     assert customer == "Scored by the judge"
-    assert "GPT-4o" not in customer
+    assert "Composer" not in customer
     assert "via gateway" not in customer
     assert "openai/" not in customer
     assert "300s" not in customer
@@ -382,7 +379,7 @@ def test_customer_config_label_is_neutral_judge_copy() -> None:
     assert "gpt-6-luna" not in customer
     direct = customer_config_label(
         EvalRunConfig(
-            harness="llm",
+            harness="cursor-agent",
             model="gpt-4o-mini",
             applied={"model": True},
             judge={
@@ -396,7 +393,7 @@ def test_customer_config_label_is_neutral_judge_copy() -> None:
     assert direct == "Scored by the judge"
     details = customer_run_details(
         EvalRunConfig(
-            harness="llm",
+            harness="cursor-agent",
             model="gpt-4.1",
             timeout_effective=300,
             applied={"model": True},
@@ -412,19 +409,18 @@ def test_customer_config_label_is_neutral_judge_copy() -> None:
     assert "via gateway" not in details
     assert "gpt-6-luna" not in details
     hidden = customer_run_details(run)
-    assert "GPT-4o" not in hidden
     assert "openai/" not in hidden
     assert "OpenAI" not in hidden
     chosen = customer_config_label(
         EvalRunConfig(
-            harness="llm",
+            harness="cursor-agent",
             judge={"provider": "jev", "chosen": True, "display_name": "Jev"},
         )
     )
     assert chosen == "Scored by Jev"
     scrubbed_openai = customer_config_label(
         {
-            "harness": "llm",
+            "harness": "cursor-agent",
             "label": "Scored by OpenAI",
             "judge": {"display_name": "OpenAI", "chosen": "True"},
         }
@@ -435,7 +431,7 @@ def test_customer_config_label_is_neutral_judge_copy() -> None:
 def test_from_dict_drops_judge_api_key() -> None:
     restored = EvalRunConfig.from_dict(
         {
-            "harness": "llm",
+            "harness": "cursor-agent",
             "judge": {
                 "provider": "openai",
                 "backend": "decisions",

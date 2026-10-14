@@ -9,7 +9,7 @@ import pytest
 from skillgate_ai.config import get_llm_config
 from skillgate_ai.demo_files import ensure_demo_pdfs
 from skillgate_ai.gate import run_check
-from skillgate_ai.harness import LLMHarness, live_harness_or_error
+from skillgate_ai.harness import CursorAgentHarness, live_harness_or_error
 from skillgate_ai.keys import set_vault_key
 from skillgate_ai.paths import resolve_user_path
 
@@ -21,9 +21,9 @@ def test_gate_without_key_exits_2(project_root: Path) -> None:
     assert result.exit_code == 2
     assert result.report is None
     assert result.error is not None
-    assert "No model key" in (result.error.get("message") or "")
+    assert "No agent is available" in (result.error.get("message") or "")
     hint = result.error.get("hint") or ""
-    assert hint == "Add a model key in Settings or run `skillgate keys set`"
+    assert "skillgate keys set" in hint
     assert "SKILLGATE_" not in hint
     assert "--key-env" not in hint
 
@@ -65,25 +65,29 @@ def test_run_check_uses_live_when_key_present(
     assert "live stub" in (result.error.get("message") or "")
 
 
-def test_live_auto_uses_gateway_key(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_live_auto_uses_cursor_when_vault_has_cursor_key(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     monkeypatch.setenv("SKILLGATE_ROOT", str(tmp_path))
-    monkeypatch.setenv("SKILLGATE_AI_GATEWAY_API_KEY", "gw-test-not-a-real-key")
+    set_vault_key(tmp_path, "CURSOR_API_KEY", "cur-from-vault")
     monkeypatch.setattr("skillgate_ai.harness._resolve_codex_bin", lambda _preferred: None)
-    monkeypatch.setattr("skillgate_ai.harness._resolve_agent_bin", lambda _preferred: None)
+    monkeypatch.setattr("skillgate_ai.harness._resolve_claude_bin", lambda _preferred: None)
+    monkeypatch.setattr("skillgate_ai.harness._resolve_agent_bin", lambda _preferred: "/bin/agent")
     cfg = get_llm_config(tmp_path)
     harness = live_harness_or_error("auto", cfg)
-    assert isinstance(harness, LLMHarness)
-    assert harness.name == "llm"
+    assert isinstance(harness, CursorAgentHarness)
+    assert harness.name == "cursor-agent"
 
 
-def test_vault_key_selects_live_harness(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_vault_openai_key_does_not_start_checks(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("SKILLGATE_ROOT", str(tmp_path))
     set_vault_key(tmp_path, "OPENAI_API_KEY", "sk-from-vault")
     monkeypatch.setattr("skillgate_ai.harness._resolve_codex_bin", lambda _preferred: None)
     monkeypatch.setattr("skillgate_ai.harness._resolve_agent_bin", lambda _preferred: None)
+    monkeypatch.setattr("skillgate_ai.harness._resolve_claude_bin", lambda _preferred: None)
     cfg = get_llm_config(tmp_path)
     assert cfg.openai_api_key == "sk-from-vault"
-    assert live_harness_or_error("auto", cfg).name == "llm"
+    assert cfg.has_any_key is False
 
 
 def test_openai_judge_without_scoring_key_exits_2(
@@ -91,13 +95,15 @@ def test_openai_judge_without_scoring_key_exits_2(
 ) -> None:
     monkeypatch.setenv("SKILLGATE_JUDGE", "openai")
     monkeypatch.setenv("SKILLGATE_ROOT", str(tmp_path))
-    monkeypatch.setenv("SKILLGATE_CURSOR_API_KEY", "cursor-test-key")
+    from conftest import enable_cursor_agent
+
+    enable_cursor_agent(monkeypatch, tmp_path)
     dest = tmp_path / "pdf"
     shutil.copytree(project_root / "skills" / "pdf", dest)
     ensure_demo_pdfs(dest / "evals" / "fixtures")
 
     class LiveStub:
-        name = "llm"
+        name = "cursor-agent"
 
         def run(self, *args, **kwargs):
             raise AssertionError("live harness should not run without a scoring key")

@@ -27,9 +27,9 @@ describe("historyMeta", () => {
     const meta = historyMeta({
       kind: "run",
       skill: "pdf",
-      harness: "llm",
+      harness: "cursor-agent",
       config_label:
-        "LLM · openai/gpt-4o-mini via gateway · 300s · OpenAI Decisions via Vercel AI Gateway (your key)",
+        "Cursor · openai/gpt-4o-mini via gateway · 300s · OpenAI Decisions via Vercel AI Gateway (your key)",
     })
     expect(meta.config).toBe("Scored by the judge")
     expect(meta.config).not.toMatch(/GPT-4o|OpenAI|Vercel|gpt-6-luna/)
@@ -38,15 +38,15 @@ describe("historyMeta", () => {
       historyMeta({
         kind: "run",
         skill: "pdf",
-        harness: "llm",
+        harness: "cursor-agent",
         config_label: "GPT-4o mini · Scored by OpenAI Decisions",
       }).config
     ).toBe("Scored by the judge")
     const skipped = historyMeta({
       kind: "run",
       skill: "pdf",
-      harness: "llm",
-      config_label: "LLM · openai/gpt-4o-mini via gateway · 300s",
+      harness: "cursor-agent",
+      config_label: "Cursor · openai/gpt-4o-mini via gateway · 300s",
     })
     expect(skipped.config).not.toMatch(/via gateway|openai\/|GPT-4o/)
   })
@@ -64,7 +64,7 @@ describe("historyMeta", () => {
       historyMeta({
         kind: "run",
         skill: "pdf",
-        harness: "llm",
+        harness: "cursor-agent",
         config_label: "Built-in checker · 300s",
       }).config
     ).toBe("Older run (before live-only checks)")

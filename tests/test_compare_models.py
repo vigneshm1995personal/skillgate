@@ -96,7 +96,7 @@ def test_models_compare_writes_run_and_compare_rows(
             title="t",
             skill="pdf",
             skill_description="d",
-            harness=kwargs.get("harness") or "llm",
+            harness=kwargs.get("harness") or "cursor-agent",
             sandbox="local",
             passed=tasks[0].passed,
             tasks=tasks,
@@ -145,7 +145,7 @@ def test_models_compare_fingerprint_mismatch_exits_1(
             title="t",
             skill="pdf",
             skill_description="d",
-            harness="llm",
+            harness="cursor-agent",
             sandbox="local",
             passed=True,
             tasks=[
@@ -202,7 +202,7 @@ def test_scrub_customer_compare_payload_applies_browser_scrub() -> None:
                 "subtitle": "openai/gpt-4o-mini",
                 "config": {
                     "harness": "llm",
-                    "harness_pref": "llm",
+                    "harness_pref": "cursor-agent",
                     "model": "openai/gpt-4o-mini",
                     "judge": {"provider": "openai", "model": "openai/gpt-6-luna-decisions"},
                 },
@@ -276,7 +276,7 @@ def test_spend_cap_stops_without_exit_1(
             title="t",
             skill="pdf",
             skill_description="d",
-            harness="llm",
+            harness="cursor-agent",
             sandbox="local",
             passed=True,
             tasks=[

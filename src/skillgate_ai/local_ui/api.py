@@ -17,7 +17,13 @@ from skillgate_ai.advice import (
     rewrite_skill_description,
 )
 from skillgate_ai.case_pack import CasePack, dataset_view, save_case_pack
-from skillgate_ai.config import NO_KEY_HINT, ROOT_ENV_NAMES, get_llm_config, load_env
+from skillgate_ai.config import (
+    NO_KEY_HINT,
+    ROOT_ENV_NAMES,
+    get_llm_config,
+    load_env,
+    missing_key_error,
+)
 from skillgate_ai.demo_files import ensure_demo_pdfs
 from skillgate_ai.errors import MissingLLMKeyError, SkillGateError
 from skillgate_ai.keys import set_vault_key
@@ -153,7 +159,7 @@ def meta_payload(state: UiState) -> dict[str, Any]:
         pack = display_pack_label(state.initial_pack, state.root)
     pdf = pdf_demo_path(state)
     try:
-        outcome = resolve_judge(cfg, harness_name="llm")
+        outcome = resolve_judge(cfg, harness_name="cursor-agent")
     except MissingLLMKeyError:
         judge_provider = "skip"
     else:
@@ -351,7 +357,6 @@ def _put_env(state: UiState, payload: dict[str, Any]) -> tuple[int, dict[str, An
     return 200, {"ok": True, "has_any_key": get_llm_config(state.root).has_any_key}, "application/json"
 
 
-LIVE_NO_KEY = "No model key found."
 LIVE_FAIL = "Your API key could not run this check."
 
 
@@ -366,10 +371,7 @@ def _start_check(state: UiState, payload: dict[str, Any]) -> tuple[int, dict[str
     pack = resolve_user_path(str(payload.get("path") or ""), state, must_exist=True)
     load_env(state.root)
     if not get_llm_config(state.root).has_any_key:
-        raise MissingLLMKeyError(
-            LIVE_NO_KEY,
-            hint=NO_KEY_HINT,
-        )
+        raise missing_key_error()
     with state.lock:
         if (
             state.active_run_id

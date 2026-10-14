@@ -97,7 +97,7 @@ def test_stored_config_label_has_no_via_gateway(tmp_path: Path) -> None:
     from skillgate_ai.eval_config import EvalRunConfig, coerce_eval_config
 
     cfg = EvalRunConfig(
-        harness="llm",
+        harness="cursor-agent",
         harness_pref="llm",
         model="openai/gpt-4o-mini",
         applied={"model": True, "via_gateway": True},
@@ -172,8 +172,8 @@ def test_failed_compare_appears_in_list(tmp_path: Path, monkeypatch) -> None:
         run_models_compare(
             pack,
             arms=[
-                parse_arm_spec("A:llm", arm_id="a", index=0),
-                parse_arm_spec("B:llm", arm_id="b", index=1),
+                parse_arm_spec("A:cursor-agent", arm_id="a", index=0),
+                parse_arm_spec("B:cursor-agent", arm_id="b", index=1),
             ],
             root=tmp_path,
             run_check_fn=boom,

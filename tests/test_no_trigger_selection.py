@@ -16,7 +16,7 @@ from skillgate_ai.case_pack import (
     task_missing_golden,
 )
 from skillgate_ai.engine import SuiteReport, _run_task, _seed_skill_selection, _why_expected_output
-from skillgate_ai.harness import Completion, HarnessResult, LLMHarness, _read_selection, _MISSING
+from skillgate_ai.harness import HarnessResult, _read_selection, _MISSING
 from skillgate_ai.ingest import ingest_skill
 from skillgate_ai.report import report_to_dict
 from skillgate_ai.sandbox import LocalSandbox
@@ -45,78 +45,6 @@ def test_trigger_still_pins_selected_json(tmp_path: Path) -> None:
     _seed_skill_selection(workspace, "pdf")
     data = json.loads((workspace / ".skillgate" / "selected.json").read_text(encoding="utf-8"))
     assert data == {"skill": "pdf"}
-
-
-def test_llm_harness_discovers_from_catalog_when_nothing_is_pinned(
-    monkeypatch, tmp_path: Path
-) -> None:
-    pack = tmp_path / "pdf"
-    import shutil
-
-    shutil.copytree(Path(__file__).resolve().parents[1] / "skills" / "pdf", pack)
-    skill = ingest_skill(pack, strict=False)
-    workspace = tmp_path / "ws"
-    workspace.mkdir()
-    (workspace / ".skillgate").mkdir()
-
-    harness = LLMHarness(_cfg(openai_api_key="sk-test"))
-    prompts: list[str] = []
-
-    def fake_complete(prompt, timeout_sec):
-        del timeout_sec
-        prompts.append(prompt)
-        return Completion(text='{"skill": null}', usage=Usage())
-
-    monkeypatch.setattr(harness, "_complete", fake_complete)
-    result = harness.run(
-        LocalSandbox(workspace),
-        "Write a pytest for a FastAPI /health endpoint. Do not touch any PDFs.",
-        [skill],
-        timeout_sec=5,
-    )
-    assert prompts, "router must run against the catalog"
-    assert "skill router" in prompts[0].lower()
-    assert "Gate pre-selected" not in result.transcript
-    assert "skip catalog discovery" not in result.transcript
-    assert result.trigger.selected_skill is None
-
-
-def test_llm_harness_still_skips_discovery_when_a_skill_is_pinned(
-    monkeypatch, tmp_path: Path
-) -> None:
-    pack = tmp_path / "pdf"
-    import shutil
-
-    shutil.copytree(Path(__file__).resolve().parents[1] / "skills" / "pdf", pack)
-    scripts = pack / "scripts"
-    scripts.mkdir(exist_ok=True)
-    (scripts / "create_pdf.py").write_text("print('ok')\n", encoding="utf-8")
-    skill = ingest_skill(pack, strict=False)
-    workspace = tmp_path / "ws"
-    workspace.mkdir()
-    dest = workspace / ".skillgate" / "skills" / "pdf"
-    dest.mkdir(parents=True)
-    shutil.copytree(pack, dest, dirs_exist_ok=True)
-    (workspace / ".skillgate" / "selected.json").write_text(
-        '{"skill": "pdf"}', encoding="utf-8"
-    )
-
-    harness = LLMHarness(_cfg(openai_api_key="sk-test"))
-    prompts: list[str] = []
-
-    def fake_complete(prompt, timeout_sec):
-        del timeout_sec
-        prompts.append(prompt)
-        return Completion(
-            text="RUN: python3 .skillgate/skills/pdf/scripts/create_pdf.py output/out.pdf",
-            usage=Usage(tokens_in=1, tokens_out=1),
-        )
-
-    monkeypatch.setattr(harness, "_complete", fake_complete)
-    result = harness.run(LocalSandbox(workspace), "Make a PDF", [skill], timeout_sec=5)
-    assert len(prompts) == 1
-    assert "skill router" not in prompts[0].lower()
-    assert result.trigger.selected_skill == "pdf"
 
 
 def test_no_trigger_cursor_prompt_reads_the_catalog() -> None:
@@ -203,8 +131,8 @@ def test_no_trigger_skips_judge_and_passes_when_nothing_is_selected(
     workspace.mkdir()
 
     class QuietHarness:
-        name = "llm"
-        supported_models = ("openai/gpt-4o-mini",)
+        name = "cursor-agent"
+        supported_models = ("composer-2.5",)
 
         def run(self, sandbox, prompt, skills, timeout_sec):
             del sandbox, prompt, skills, timeout_sec
@@ -246,7 +174,7 @@ def test_no_trigger_skips_judge_and_passes_when_nothing_is_selected(
         suite=spec.suite,
         title=spec.title or spec.suite,
         skill="pdf",
-        harness="llm",
+        harness="cursor-agent",
         sandbox="local",
         passed=True,
         tasks=[report],
@@ -256,37 +184,6 @@ def test_no_trigger_skips_judge_and_passes_when_nothing_is_selected(
     answers = {item["label"]: item["answer"] for item in row["check_answers"]}
     assert answers
     assert all(value == "Correctly skipped" for value in answers.values())
-
-
-def test_llm_harness_transcript_is_plain_when_nothing_is_picked(
-    monkeypatch, tmp_path: Path
-) -> None:
-    pack = tmp_path / "pdf"
-    import shutil
-
-    shutil.copytree(PDF_PACK, pack)
-    skill = ingest_skill(pack, strict=False)
-    workspace = tmp_path / "ws"
-    workspace.mkdir()
-    (workspace / ".skillgate").mkdir()
-    harness = LLMHarness(_cfg(openai_api_key="sk-test"))
-
-    def fake_complete(prompt, timeout_sec):
-        del timeout_sec
-        assert "skill router" in prompt.lower()
-        return Completion(text='{"skill": null}', usage=Usage())
-
-    monkeypatch.setattr(harness, "_complete", fake_complete)
-    result = harness.run(
-        LocalSandbox(workspace),
-        "Write a pytest for a FastAPI /health endpoint. Do not touch any PDFs.",
-        [skill],
-        timeout_sec=5,
-    )
-    assert result.trigger.selected_skill is None
-    assert "router:" not in result.transcript
-    assert '{"skill": null}' not in result.transcript
-    assert "No skill was picked, as expected" in result.transcript
 
 
 def _older_imported_no_trigger_with_notes_output() -> PackCase:

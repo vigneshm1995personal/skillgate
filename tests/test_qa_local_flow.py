@@ -205,8 +205,8 @@ def test_fake_home_import_list_open_run_deploy(tmp_path: Path, monkeypatch) -> N
     )
     assert idea_run.status_code == 409
     idea_detail = idea_run.json().get("detail") or {}
-    assert "No model key" in (idea_detail.get("message") or "")
-    assert idea_detail.get("hint") == "Add a model key in Settings or run `skillgate keys set`"
+    assert "No agent is available" in (idea_detail.get("message") or "")
+    assert "skillgate keys set" in (idea_detail.get("hint") or "")
     assert "SKILLGATE_" not in (idea_detail.get("hint") or "")
     assert "--key-env" not in (idea_detail.get("hint") or "")
 
@@ -271,11 +271,13 @@ def test_fake_home_import_list_open_run_deploy(tmp_path: Path, monkeypatch) -> N
     )
     assert started.status_code == 409
     pdf_detail = started.json().get("detail") or {}
-    assert "No model key" in (pdf_detail.get("message") or "")
+    assert "No agent is available" in (pdf_detail.get("message") or "")
 
     append_eval(dest, run_id="green-pdf", passed=True)
     append_eval(idea, run_id="green-idea", passed=True)
-    monkeypatch.setenv("SKILLGATE_OPENAI_API_KEY", "sk-test")
+    from conftest import enable_cursor_agent
+
+    enable_cursor_agent(monkeypatch, paths["root"])
 
     history = client.get("/api/history", params={"skill": "pdf"})
     assert history.status_code == 200
