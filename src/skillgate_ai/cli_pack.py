@@ -321,6 +321,56 @@ def register_pack_commands(app: typer.Typer, case_app: typer.Typer, judge_app: t
             raise typer.Exit(exc.exit_code) from None
         console.print(f"Updated {case_id}.")
 
+    @case_app.command("import")
+    def case_import_cmd(
+        pack: Path | None = typer.Argument(None, help="Skill pack"),
+        file: Path = typer.Argument(..., help="CSV, JSONL, or YAML file"),
+        dry_run: bool = typer.Option(False, "--dry-run", help="Preview without writing"),
+        on_conflict: str = typer.Option(
+            "fail",
+            "--on-conflict",
+            help="When a check id already exists: fail, skip, or replace",
+        ),
+    ) -> None:
+        """Import checks from a dataset file into evals/cases.yaml."""
+        from skillgate_ai.case_import import CaseImportError, apply_case_import
+
+        conflict = on_conflict.strip().lower()
+        if conflict not in {"fail", "skip", "replace"}:
+            console.print("--on-conflict must be fail, skip, or replace.")
+            raise typer.Exit(2)
+        try:
+            dest = _resolve_pack_arg(pack)
+            data = file.expanduser().read_bytes()
+            plan = apply_case_import(
+                dest,
+                data,
+                filename=file.name,
+                on_conflict=conflict,  # type: ignore[arg-type]
+                dry_run=dry_run,
+            )
+        except CaseImportError as exc:
+            console.print(exc.message)
+            for row in exc.rows:
+                console.print(f"  row {row.row}: {row.error}")
+            raise typer.Exit(exc.exit_code) from None
+        except SkillGateError as exc:
+            console.print(exc.render())
+            raise typer.Exit(exc.exit_code) from None
+        for row in plan.rows:
+            if row.error:
+                console.print(f"row {row.row}  error  {row.error}")
+                continue
+            action = row.action if dry_run else "imported"
+            prompt = row.prompt if len(row.prompt) <= 48 else row.prompt[:45] + "..."
+            console.print(f"row {row.row}  {row.id:<24}  {action:<8}  {prompt}")
+        for warn in plan.warnings:
+            console.print(warn)
+        if dry_run:
+            console.print(f"Would import {len(plan.checks)} check(s) from {plan.format}.")
+        else:
+            console.print(f"Imported {len(plan.checks)} check(s) from {plan.format}.")
+
     @case_app.command("bind")
     def case_bind(
         pack: Path | None = typer.Argument(None, help="Skill pack"),

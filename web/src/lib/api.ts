@@ -372,6 +372,49 @@ export const api = {
     request<DatasetView>(
       `/api/evals/dataset?skill=${encodeURIComponent(skill)}`
     ),
+  importDataset: async (opts: {
+    skill: string
+    file: File
+    dryRun?: boolean
+    confirm?: boolean
+    onConflict?: "fail" | "skip" | "replace"
+  }) => {
+    const form = new FormData()
+    form.append("skill", opts.skill)
+    form.append("file", opts.file)
+    form.append("dry_run", String(Boolean(opts.dryRun)))
+    form.append("confirm", String(Boolean(opts.confirm)))
+    form.append("on_conflict", opts.onConflict ?? "fail")
+    const res = await fetch("/api/evals/import-dataset", {
+      method: "POST",
+      body: form,
+    })
+    const data: unknown = await res.json().catch(() => ({}))
+    if (!res.ok) {
+      const parsed = detailFromBody(data)
+      const err = new ApiError(parsed.message, parsed.hint, { status: res.status })
+      if (data && typeof data === "object") {
+        const detail = (data as { detail?: { rows?: unknown } }).detail
+        if (detail && typeof detail === "object" && Array.isArray(detail.rows)) {
+          ;(err as ApiError & { rows?: unknown }).rows = detail.rows
+        }
+      }
+      throw err
+    }
+    return data as {
+      format: string
+      rows: Array<{
+        row: number
+        id: string
+        prompt: string
+        action: string
+        error?: string | null
+      }>
+      imported_count: number
+      warnings: string[]
+      dry_run: boolean
+    }
+  },
   fixtureBind: (payload: {
     skill: string
     checks: Check[]

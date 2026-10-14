@@ -16,6 +16,10 @@ my-skill/
     history/                 # append-only JSONL from `skillgate check`
 ```
 
+## Bulk import
+
+Add many checks at once with `skillgate case import <skill-path> <file>` (CSV, JSONL, or YAML list). Columns match `skillgate case add` (`id`, `prompt`, `expected` / `contains`, `output` / `output_path`, `input` / fixture paths, `should_trigger`, and so on). Missing ids are generated from the prompt. Validation runs for every row before anything is written; `--dry-run` prints a preview table. When an id already exists, use `--on-conflict skip|replace|fail` (default `fail`). Sample files: [`docs/samples/dataset-import.csv`](samples/dataset-import.csv), [`docs/samples/dataset-import.jsonl`](samples/dataset-import.jsonl).
+
 ## `evals/cases.yaml` (schema 1)
 
 ```yaml

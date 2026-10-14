@@ -68,6 +68,7 @@ Everything the local UI can do has a CLI command. New API writes must update thi
 | Edit SKILL.md or pack files | `POST /api/skills/pack-file`, `POST /api/skills/pack-upload`, `POST /api/skills/apply-fix`, `POST /api/evals/generate` | `skillgate skill write` |
 | List skills | `GET /api/skills` | `skillgate list` |
 | Add a check | `POST /api/evals/pin` | `skillgate case add` |
+| Import dataset (CSV / JSONL / YAML) | `POST /api/evals/import-dataset` | `skillgate case import` |
 | Edit a check | `POST /api/evals/pin` | `skillgate case edit` |
 | Remove a check | `POST /api/evals/pin` | `skillgate case remove` |
 | List checks | `GET /api/evals/dataset` | `skillgate case list` |

@@ -1,0 +1,1 @@
+{"id": "jsonl-smoke", "prompt": "Extract the greeting from the PDF.", "contains": "Hello", "output_path": "output/result.txt", "files": [{"src": "evals/fixtures/hello.pdf"}], "should_trigger": true}
