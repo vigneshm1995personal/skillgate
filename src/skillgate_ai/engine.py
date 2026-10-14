@@ -430,6 +430,7 @@ def _run_outcome_judge(
         transcript=result.transcript,
         path=path,
         scores=scores,
+        artifacts=outputs,
     )
     instructions = skill_instructions_text(skill_root, fallback=skill_instructions)
     judged = outcome.judge(
@@ -528,11 +529,13 @@ def _live_verdict(
             return False, extra, stamped
         return det_passed, det_failures, stamped
     if judge.get("status") == "error":
-        failures = [str(item) for item in (judge.get("reasons") or []) if str(item).strip()]
-        if not failures:
-            failures = ["The judge couldn't score this check."]
-        passed, failures = _apply_mismatch(False, failures, mismatch)
-        return passed, failures, stamped
+        # Scoring failed (HTTP, timeout, etc.): deterministic gate owns pass/fail.
+        unscored = {
+            **stamped,
+            "passed": None,
+            "quality_unscored": True,
+        }
+        return det_passed, det_failures, unscored
     if judge.get("status") == "skip" or judge.get("passed") is None:
         return det_passed, det_failures, judge
     passed = bool(judge.get("passed"))

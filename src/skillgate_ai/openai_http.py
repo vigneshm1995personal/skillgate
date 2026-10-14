@@ -72,9 +72,11 @@ def user_message_for_status(
         return f"{label} scoring is not enabled for this key."
     if status == 404:
         return f"{label} has no scoring endpoint for this key."
-    if status == 429 and error_code in _QUOTA_CODES:
+    if status in {402, 429} and error_code in _QUOTA_CODES:
         if who == "OpenAI":
             return OUT_OF_CREDITS
+        return f"{label} is out of credits. Add credits, then try again."
+    if status == 402:
         return f"{label} is out of credits. Add credits, then try again."
     if status == 429:
         return f"{label} rate-limited this request. Wait and retry, or check billing."

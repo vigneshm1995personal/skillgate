@@ -137,6 +137,25 @@ def _add_float(left: float | None, right: float | None) -> float | None:
     return round(float(left or 0.0) + float(right or 0.0), 6)
 
 
+def normalize_judge_api_usage(data: Any) -> dict[str, float | int | None] | None:
+    """Flatten Decisions / chat usage + optional cost fields from an API response."""
+    if not isinstance(data, dict):
+        return None
+    merged = Usage()
+    parts: list[dict[str, Any]] = []
+    usage = data.get("usage")
+    if isinstance(usage, dict):
+        parts.append(usage)
+    parts.append(data)
+    for part in parts:
+        parsed = usage_from_mapping(part)
+        if parsed is not None:
+            merged = merge_usage(merged, parsed) if merged.known else parsed
+    if not merged.known:
+        return None
+    return merged.to_dict()
+
+
 def combine_task_usage(
     agent: dict[str, Any] | None,
     judged: dict[str, Any] | None,

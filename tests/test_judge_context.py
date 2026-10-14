@@ -51,13 +51,14 @@ def test_build_agent_trajectory_includes_commands() -> None:
     )
     trajectory = build_agent_trajectory(
         spans=[span],
-        transcript='{"type":"result","result":"done"}\npytest -q ... passed',
+        transcript='{"type":"result","result":"done"}\npytest -q ... 1 passed',
         path={"steps": 1, "errors": 0, "had_path": True},
         scores=[Score(scorer="skill_trigger", passed=True, detail="ok")],
     )
     assert trajectory["step_count"] == 1
     assert trajectory["commands"][0]["tool"] == "shell"
     assert trajectory["test_mentions"]
+    assert "command_runs" in trajectory
 
 
 def test_state_text_includes_skill_and_trajectory() -> None:

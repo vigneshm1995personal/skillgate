@@ -372,8 +372,11 @@ def _quality_scoring_was_skipped(report: SuiteReport) -> bool:
         return False
     for task in report.tasks:
         judge = task.judge if isinstance(task.judge, dict) else None
-        if isinstance(judge, dict) and str(judge.get("status") or "") == "skip":
-            if str(judge.get("provider") or "") == "skip":
+        if isinstance(judge, dict):
+            status = str(judge.get("status") or "")
+            if status == "error":
+                return True
+            if status == "skip" and str(judge.get("provider") or "") == "skip":
                 return True
     cfg = report.config if isinstance(report.config, dict) else {}
     stamp = cfg.get("judge") if isinstance(cfg, dict) else None

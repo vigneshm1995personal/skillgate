@@ -52,6 +52,17 @@ def test_pass_lock_table() -> None:
     )
     assert passed is True
 
+    passed, reasons = outcome_verdict(
+        _pass_answers(instruction_adherence={"choice": "Minor deviation", "confidence": 0.8})
+    )
+    assert passed is True
+    assert reasons == []
+
+    passed, reasons = outcome_verdict(
+        _pass_answers(correctness={"choice": "Mostly correct", "confidence": 0.8})
+    )
+    assert passed is True
+
 
 def test_missing_or_unknown_choice_fails_closed() -> None:
     answers = _pass_answers()

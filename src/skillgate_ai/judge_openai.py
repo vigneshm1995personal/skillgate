@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 from typing import Any, Mapping, Protocol
 
+from skillgate_ai.judge_context import workspace_files_for_judge
 from skillgate_ai.judge_bank import (
     CHECK_CELL_LABELS,
     CHECK_CELL_ORDER,
@@ -171,13 +172,17 @@ def _user_content(text: str, images: list[dict[str, str]]) -> str | list[dict[st
 
 
 def _state_text(state: Mapping[str, Any]) -> str:
+    artifacts = state.get("artifacts")
     payload = {
         "check_prompt": state.get("check_prompt"),
         "expect_skill": state.get("expect_skill"),
         "selected_skill": state.get("selected_skill"),
         "skill_instructions": state.get("skill_instructions"),
         "scorer_results": state.get("scorer_results"),
-        "artifacts": _artifacts_without_bodies(state.get("artifacts")),
+        "workspace_files": workspace_files_for_judge(
+            artifacts if isinstance(artifacts, list) else None
+        ),
+        "artifacts": _artifacts_without_bodies(artifacts),
         "golden": _text_blob(state.get("golden")),
         "actual_output": _text_blob(state.get("actual_output")),
         "path": state.get("path"),
@@ -426,7 +431,9 @@ class DecisionsBackend(_OpenAIPosted):
         if result.get("status") != "ok":
             return result
         data = result["data"]
-        usage = data.get("usage") if isinstance(data.get("usage"), dict) else None
+        from skillgate_ai.usage import normalize_judge_api_usage
+
+        usage = normalize_judge_api_usage(data)
         return _finished_answers(
             _normalize_answers(
                 _answers_from_decisions_list(data),
@@ -512,7 +519,9 @@ class StructuredOutputsBackend(_OpenAIPosted):
             return {"status": "error", "reason": UNUSABLE_ANSWER, "model": self.model}
         if not isinstance(parsed, Mapping):
             return {"status": "error", "reason": UNUSABLE_ANSWER, "model": self.model}
-        usage = data.get("usage") if isinstance(data.get("usage"), dict) else None
+        from skillgate_ai.usage import normalize_judge_api_usage
+
+        usage = normalize_judge_api_usage(data)
         return _finished_answers(
             _normalize_answers(parsed, include_path=include_path, spec=resolved),
             model=str(data.get("model") or self.model),
