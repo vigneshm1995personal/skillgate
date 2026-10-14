@@ -278,13 +278,13 @@ describe("scoredByLine", () => {
     expect(line).not.toMatch(/gateway|openai\/|your key|OpenAI|Vercel|gpt-6-luna/i)
     expect(
       scoredByLine({
-        scored_by: "The skill ran live. Checks scored this run.",
+        scored_by: "The skill ran live. Quality was not scored.",
         skill: "pdf",
         passed_count: 1,
         task_count: 1,
         tasks: [passTask],
       })
-    ).toBe("Scored by Checks")
+    ).toBe("Quality was not scored")
   })
 })
 

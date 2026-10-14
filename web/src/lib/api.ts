@@ -475,6 +475,7 @@ export const api = {
       glob?: string | null
     }
     tryout?: boolean
+    no_judge?: boolean
   }) =>
     request<{ id: string; status: string }>("/api/runs", {
       method: "POST",

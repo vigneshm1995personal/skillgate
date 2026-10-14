@@ -84,8 +84,6 @@ def headline_for(score: Score) -> str:
     if score.scorer == "skill_trigger":
         if (score.actual or "none") == "none":
             return "Skill didn’t trigger"
-        if score.expected and score.actual == score.expected:
-            return "Description didn’t match this request"
         return f"Wrong skill triggered ({score.actual})"
     if score.scorer == "task_completion":
         return f"Task failed: {score.detail}"
@@ -139,21 +137,6 @@ def score_skill_trigger(
         )
 
     passed = inferred == expected
-    if passed and skills:
-        skill = next((s for s in skills if getattr(s, "name", None) == expected), None)
-        if skill is not None:
-            from skillgate_ai.harness import select_skill_from_descriptions
-
-            would = select_skill_from_descriptions(task.prompt, [skill])
-            if would != expected:
-                ran = inferred or expected
-                return Score(
-                    scorer="skill_trigger",
-                    passed=False,
-                    detail=(f"`{expected}` ran, but its description never matched this request"),
-                    expected=expected,
-                    actual=ran,
-                )
 
     if passed:
         detail = f"Triggered `{expected}`"

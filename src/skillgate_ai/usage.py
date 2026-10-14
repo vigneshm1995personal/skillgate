@@ -51,6 +51,7 @@ _COST_KEYS = (
     "costUsd",
     "totalCostUsd",
     "cost",
+    "total_cost",
 )
 
 _CODEX_BOOKKEEPING = frozenset({"thread.started", "turn.started", "turn.completed"})

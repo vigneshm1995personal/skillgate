@@ -15,6 +15,7 @@ from typing import Any
 
 from skillgate_ai.config import LLMConfig, get_llm_config, load_env
 from skillgate_ai.demo_files import ensure_demo_pdfs
+from skillgate_ai.pack_schema import _example_marker_slug
 from skillgate_ai.engine import EvalProgress, SuiteReport, run_eval
 from skillgate_ai.errors import MissingLLMKeyError, SkillGateError
 from skillgate_ai.eval_config import (
@@ -26,7 +27,7 @@ from skillgate_ai.eval_config import (
     with_judge,
     with_timeout_effective,
 )
-from skillgate_ai.harness import live_harness_or_error
+from skillgate_ai.harness import is_live_harness, live_harness_or_error
 from skillgate_ai.judge import judge_stamp, resolve_judge
 from skillgate_ai.history import append_eval
 from skillgate_ai.live import RunControl
@@ -50,7 +51,7 @@ class CheckResult:
 
 
 def prepare_pack_fixtures(pack: Path) -> None:
-    if (pack / "SKILL.md").is_file():
+    if (pack / "SKILL.md").is_file() and _example_marker_slug(pack) is not None:
         ensure_demo_pdfs(pack / "evals" / "fixtures")
 
 
@@ -123,6 +124,7 @@ def run_check(
     root: Path | None = None,
     checks: list[dict[str, Any]] | None = None,
     tryout: bool = False,
+    no_judge: bool = False,
 ) -> CheckResult:
     """Run pack-local evals. Exit 0 green, 1 red, 2 live-without-key."""
     project = root if root is not None else project_root()
@@ -347,12 +349,35 @@ def _execute_check(
             expect_fail_notice=notice,
             run_id=rid,
         )
+    exit_code = 0 if report.passed else 1
+    if (
+        not no_judge
+        and not tryout
+        and is_live_harness(report.harness)
+        and _quality_scoring_was_skipped(report)
+    ):
+        exit_code = 2
     return CheckResult(
         report=report,
-        exit_code=0 if report.passed else 1,
+        exit_code=exit_code,
         demo_notice=demo_notice,
         run_id=rid,
     )
+
+
+def _quality_scoring_was_skipped(report: SuiteReport) -> bool:
+    if not is_live_harness(report.harness):
+        return False
+    for task in report.tasks:
+        judge = task.judge if isinstance(task.judge, dict) else None
+        if isinstance(judge, dict) and str(judge.get("status") or "") == "skip":
+            if str(judge.get("provider") or "") == "skip":
+                return True
+    cfg = report.config if isinstance(report.config, dict) else {}
+    stamp = cfg.get("judge") if isinstance(cfg, dict) else None
+    if isinstance(stamp, dict) and str(stamp.get("provider") or "") == "skip":
+        return True
+    return False
 
 
 def result_payload(result: CheckResult) -> dict[str, Any]:

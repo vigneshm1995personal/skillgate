@@ -292,13 +292,15 @@ def add_pack_case(
         check["contains"] = expected
     if output_path:
         check["output_path"] = output_path
-    warning = expected_without_target_warning(
+    missing_target = expected_without_target_warning(
         contains=expected,
         output_path=output_path,
         golden_path=None,
         should_trigger=should_trigger,
     )
-    return pin_checks(skill_path, [check]), warning
+    if missing_target:
+        raise SuiteError(missing_target)
+    return pin_checks(skill_path, [check]), None
 
 
 def _short_case_id(prompt: str, taken: set[str]) -> str:

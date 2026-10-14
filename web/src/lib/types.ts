@@ -189,6 +189,7 @@ export type Usage = {
   tokens_out?: number | null
   tokens_total?: number | null
   cost_usd?: number | null
+  cost_unknown?: boolean
 }
 
 export type JudgeQuestion = {
@@ -357,6 +358,7 @@ export type TaskResult = {
   advice?: TaskAdvice
   transcript?: string
   files?: CheckFile[]
+  outputs?: Array<{ path: string; present?: boolean; size?: number }>
   scores?: TaskScore[]
   usage?: Usage | null
   judge?: JudgeResult | null

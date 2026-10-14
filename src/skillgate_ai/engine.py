@@ -38,6 +38,7 @@ class TaskReport:
     stderr: str = ""
     returncode: int | None = None
     files: list[dict[str, str]] = field(default_factory=list)
+    outputs: list[dict[str, Any]] = field(default_factory=list)
     advice: FixAdvice | None = None
     skipped: bool = False
     usage: dict[str, Any] | None = None
@@ -124,12 +125,15 @@ class SuiteReport:
             summed = sum(values)
             return round(summed, 6) if as_float else int(summed)
 
-        return {
+        totals = {
             "tokens_in": total("tokens_in"),
             "tokens_out": total("tokens_out"),
             "tokens_total": total("tokens_total"),
             "cost_usd": total("cost_usd", as_float=True),
         }
+        if totals.get("tokens_total") and totals.get("cost_usd") is None:
+            totals["cost_unknown"] = True
+        return totals
 
 
 def run_eval(
@@ -407,7 +411,11 @@ def _run_outcome_judge(
             actual_payload = actual_output_state(
                 case.golden.output_path, artifacts.workspace
             )
-    outputs = _outcome_judge_outputs(task, artifacts)
+    from skillgate_ai.workspace_outputs import collect_workspace_outputs
+
+    outputs = collect_workspace_outputs(task, artifacts.workspace)
+    if not outputs:
+        outputs = _outcome_judge_outputs(task, artifacts)
     judged = outcome.judge(
         task.prompt,
         outputs,
@@ -746,6 +754,8 @@ def _run_task(
                 result.transcript,
                 getattr(task, "budgets", None),
             )
+            from skillgate_ai.workspace_outputs import collect_workspace_outputs
+
             return TaskReport(
                 task_id=task.id,
                 prompt=task.prompt,
@@ -759,6 +769,7 @@ def _run_task(
                 stderr=result.stderr,
                 returncode=result.returncode,
                 files=[{"src": item.src, "dest": item.dest} for item in task.files],
+                outputs=collect_workspace_outputs(task, sandbox.workspace),
                 advice=advice,
                 usage=task_usage,
                 judge=judged,

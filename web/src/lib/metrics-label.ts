@@ -117,6 +117,12 @@ export function pathMetricDisplay(
 /** Suite Cost cell. Uses harness cost_usd only — Never invents dollars from tokens. */
 export function costMetricDisplay(usage?: Usage | null): MetricDisplay {
   const cost = formatCost(usage?.cost_usd)
+  if (cost) {
+    return { value: cost, hint: "", recorded: true }
+  }
+  if (usage?.tokens_total != null || usage?.cost_unknown) {
+    return { value: "Unknown", hint: "Cost not reported by the agent run", recorded: false }
+  }
   if (!cost) {
     return { value: "—", hint: NOT_RECORDED, recorded: false }
   }

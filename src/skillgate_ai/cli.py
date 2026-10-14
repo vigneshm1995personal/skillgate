@@ -141,6 +141,7 @@ def _run_gate(
     reasoning_effort: str | None,
     key_env: list[str] | None = None,
     case_id: str | None = None,
+    no_judge: bool = False,
 ) -> None:
     _bind_key_env(key_env)
     checks = None
@@ -195,6 +196,7 @@ def _run_gate(
         source="cli",
         checks=checks,
         tryout=tryout,
+        no_judge=no_judge,
     )
     machine = json_out or summary == "json"
     if not machine and summary != "github":
@@ -268,6 +270,11 @@ def check_pack(
     ),
     key_env: list[str] | None = typer.Option(None, "--key-env", help=_KEY_ENV_HELP),
     case_id: str | None = typer.Option(None, "--case", help="Run this check only (try-out)"),
+    no_judge: bool = typer.Option(
+        False,
+        "--no-judge",
+        help="Allow a run without a scoring key (exit 0 even when quality is not scored).",
+    ),
 ) -> None:
     """Run pack-local evals/cases.yaml. Exit 0 if green, 1 if red, 2 if no key."""
     _run_gate(
@@ -284,6 +291,7 @@ def check_pack(
         reasoning_effort=reasoning_effort,
         key_env=key_env,
         case_id=case_id,
+        no_judge=no_judge,
     )
 
 

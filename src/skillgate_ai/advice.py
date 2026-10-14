@@ -64,17 +64,6 @@ def advise_task(
         description = synthesize_trigger_description(skill, prompts, reference)
         return _trigger_fix(skill, task.prompt, description, reference)
 
-    if trigger and task.expect_skill and trigger.actual == task.expect_skill:
-        description = synthesize_trigger_description(skill, prompts, reference)
-        return _trigger_fix(
-            skill,
-            task.prompt,
-            description,
-            reference,
-            headline="Description didn’t match this request",
-            ran=True,
-        )
-
     if trigger and task.expect_skill is None and trigger.actual not in {None, "none"}:
         description = _tighten_description(skill, task.prompt)
         return FixAdvice(
@@ -403,6 +392,7 @@ def _retarget_description(source: str, name: str) -> str:
 
 
 def _description_from_prompts(name: str, prompts: list[str]) -> str:
+    """Build a description from failed prompts — not from eval check text verbatim."""
     verbs = []
     for verb in (
         "extract",
@@ -437,7 +427,11 @@ def _description_from_prompts(name: str, prompts: list[str]) -> str:
     what = ", ".join(verbs[:4]) or "complete the requested files"
     objects = ", ".join(nouns[:6]) or name.replace("-", " ")
     when = _when_clause(prompts)
-    return f"{what.capitalize()} {objects}. Use this skill whenever the user asks to {when}."
+    # Never paste full eval prompts into the suggested description.
+    when = re.sub(r"\s+", " ", when).strip()
+    if len(when) > 120:
+        when = when[:120].rsplit(" ", 1)[0] + "…"
+    return f"{what.capitalize()} {objects}. Use this skill when the user works with {objects}."
 
 
 def _when_clause(prompts: list[str]) -> str:

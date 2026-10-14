@@ -115,7 +115,7 @@ def ingest_skill(path: str | Path, *, strict: bool = True) -> Skill:
     description = _require_description(parsed.get("description"), folder)
     clean_meta, extra, compatibility = _frontmatter_extras(parsed, folder, strict=True)
 
-    return Skill(
+    skill = Skill(
         path=folder,
         name=name,
         display_name=name,
@@ -127,6 +127,8 @@ def ingest_skill(path: str | Path, *, strict: bool = True) -> Skill:
         metadata=clean_meta,
         extra_frontmatter=extra,
     )
+    _attach_tool_warnings(skill)
+    return skill
 
 
 def ingest_skills(paths: list[str | Path], *, strict: bool = True) -> list[Skill]:
@@ -251,7 +253,7 @@ def _ingest_lenient(folder: Path) -> Skill:
     except (TypeError, ValueError, IngestError):
         clean_meta, extra, compatibility = {}, {}, None
         warning = warning or "Couldn't read this skill’s details."
-    return Skill(
+    skill = Skill(
         path=folder,
         name=name,
         display_name=display,
@@ -264,6 +266,18 @@ def _ingest_lenient(folder: Path) -> Skill:
         extra_frontmatter=extra,
         warning=warning,
     )
+    _attach_tool_warnings(skill)
+    return skill
+
+
+def _attach_tool_warnings(skill: Skill) -> None:
+    from skillgate_ai.skill_tools import missing_tool_warnings
+
+    extra = missing_tool_warnings(skill)
+    if not extra:
+        return
+    note = " ".join(extra)
+    skill.warning = f"{skill.warning} {note}".strip() if skill.warning else note
 
 
 def _frontmatter_extras(

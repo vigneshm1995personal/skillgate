@@ -131,7 +131,7 @@ def test_judge_provider_set_help_is_neutral(tmp_path: Path, monkeypatch) -> None
     assert settings.provider == "compatible"
 
 
-def test_case_add_and_expected_without_target_warns(tmp_path: Path, monkeypatch) -> None:
+def test_case_add_expected_without_output_errors(tmp_path: Path, monkeypatch) -> None:
     dest = _skill(tmp_path)
     monkeypatch.setenv("SKILLGATE_ROOT", str(tmp_path))
     monkeypatch.chdir(tmp_path)
@@ -148,16 +148,8 @@ def test_case_add_and_expected_without_target_warns(tmp_path: Path, monkeypatch)
         ],
     )
     out = plain_text(result.stdout + result.stderr)
-    assert result.exit_code == 0, out
-    assert "Extract the invoice totals." in out or "added" in out.lower()
-    assert "expected text" in out.lower()
-    pack = load_case_pack(dest)
-    assert pack is not None
-    added = next(case for case in pack.cases if case.prompt == "Extract the invoice totals.")
-    assert added.id != "extract-the-invoice-totals-from-this"
-    assert len(added.id) <= 40
-    assert added.id != "Extract the invoice totals."
-    assert added.golden is None or added.golden.output_path != "output/result.txt"
+    assert result.exit_code != 0, out
+    assert "output" in out.lower()
 
 
 def test_case_add_short_slug_and_input_file(tmp_path: Path, monkeypatch) -> None:
