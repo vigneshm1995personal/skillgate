@@ -141,3 +141,13 @@ def test_resolve_user_path_prefers_cwd(tmp_path: Path, monkeypatch: pytest.Monke
     assert resolved == local.resolve()
     via_name = resolve_user_path(Path("pdf"), proj)
     assert via_name == local.resolve()
+
+
+def test_resolve_user_path_falls_back_to_skills_dir(tmp_path: Path) -> None:
+    proj = tmp_path / "proj"
+    pack = proj / "skills" / "pdf"
+    pack.mkdir(parents=True)
+    (pack / "SKILL.md").write_text("---\nname: pdf\n---\n", encoding="utf-8")
+    (pack / "evals").mkdir()
+    resolved = resolve_user_path(Path("pdf"), proj)
+    assert resolved == pack.resolve()
