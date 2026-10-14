@@ -200,6 +200,7 @@ def run_check(
             run_id=run_id,
             source=source,
             tryout=tryout,
+            no_judge=no_judge,
         )
     finally:
         lock.__exit__(None, None, None)
@@ -225,6 +226,7 @@ def _execute_check(
     run_id: str | None,
     source: str,
     tryout: bool,
+    no_judge: bool = False,
 ) -> CheckResult:
     rid = run_id or uuid.uuid4().hex[:12]
     skill_label = skill_path.name if skill_path else suite_path.stem

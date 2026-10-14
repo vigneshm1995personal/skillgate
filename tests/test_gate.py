@@ -118,6 +118,67 @@ def test_openai_judge_without_scoring_key_exits_2(
     assert "sk-" not in blob
 
 
+def test_run_check_exit_2_without_judge_threads_no_judge_flag(
+    project_root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from conftest import enable_cursor_agent
+    from skillgate_ai.engine import SuiteReport, TaskReport
+    from skillgate_ai.scorers import Score
+
+    enable_cursor_agent(monkeypatch, tmp_path)
+    dest = tmp_path / "pdf"
+    shutil.copytree(project_root / "skills" / "pdf", dest)
+    ensure_demo_pdfs(dest / "evals" / "fixtures")
+
+    class StubHarness:
+        name = "cursor-agent"
+
+        def run(self, *args, **kwargs):
+            raise AssertionError("run_eval is stubbed; harness.run must not be called")
+
+    def fake_run_eval(*_args, **_kwargs) -> SuiteReport:
+        task = TaskReport(
+            task_id="should-trigger-1",
+            prompt="demo",
+            expect_skill="pdf",
+            passed=True,
+            scores=[
+                Score(
+                    scorer="skill_trigger",
+                    passed=True,
+                    detail="Triggered `pdf`",
+                    expected="pdf",
+                    actual="pdf",
+                )
+            ],
+            selected_skill="pdf",
+            judge={"status": "skip", "provider": "skip", "passed": None},
+        )
+        return SuiteReport(
+            suite="pdf-pack",
+            title="Dataset",
+            skill="pdf",
+            harness="cursor-agent",
+            sandbox="local",
+            passed=True,
+            tasks=[task],
+            skill_path=str(dest),
+            config={"judge": {"provider": "skip", "display_name": "Checks"}},
+        )
+
+    monkeypatch.setattr("skillgate_ai.gate.live_harness_or_error", lambda *_a, **_k: StubHarness())
+    monkeypatch.setattr("skillgate_ai.gate.run_eval", fake_run_eval)
+
+    result = run_check(dest, source="test", root=tmp_path)
+    assert result.report is not None
+    assert result.report.passed is True
+    assert result.exit_code == 2
+
+    opted_out = run_check(dest, source="test", root=tmp_path, no_judge=True)
+    assert opted_out.report is not None
+    assert opted_out.exit_code == 0
+
+
 def test_live_without_key_still_errors(
     project_root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
