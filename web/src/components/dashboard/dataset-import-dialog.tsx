@@ -21,14 +21,12 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { api, ApiError } from "@/lib/api"
+import {
+  datasetImportFooter,
+  type ImportRow,
+} from "@/lib/dataset-import-state"
 
-export type ImportRow = {
-  row: number
-  id: string
-  prompt: string
-  action: string
-  error?: string | null
-}
+export type { ImportRow }
 
 type Props = {
   skillId: string
@@ -50,7 +48,8 @@ export function DatasetImportDialog({
   const [format, setFormat] = useState<string | null>(null)
   const [warnings, setWarnings] = useState<string[]>([])
   const [error, setError] = useState<string | null>(null)
-  const [ready, setReady] = useState(false)
+
+  const footer = datasetImportFooter(rows)
 
   const reset = () => {
     setFile(null)
@@ -58,7 +57,6 @@ export function DatasetImportDialog({
     setFormat(null)
     setWarnings([])
     setError(null)
-    setReady(false)
     if (inputRef.current) {
       inputRef.current.value = ""
     }
@@ -67,7 +65,6 @@ export function DatasetImportDialog({
   const preview = async (picked: File) => {
     setBusy(true)
     setError(null)
-    setReady(false)
     try {
       const data = await api.importDataset({
         skill: skillId,
@@ -78,8 +75,6 @@ export function DatasetImportDialog({
       setRows(data.rows || [])
       setFormat(data.format || null)
       setWarnings(data.warnings || [])
-      const hasErrors = (data.rows || []).some((row) => row.error)
-      setReady(!hasErrors && (data.imported_count || 0) > 0)
     } catch (err) {
       if (err instanceof ApiError) {
         setError(err.message)
@@ -96,7 +91,7 @@ export function DatasetImportDialog({
   }
 
   const confirm = async () => {
-    if (!file) {
+    if (!file || !footer.canImport) {
       return
     }
     setBusy(true)
@@ -129,7 +124,7 @@ export function DatasetImportDialog({
         onOpenChange(next)
       }}
     >
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="flex max-h-[min(90vh,44rem)] max-w-[min(100vw-2rem,44rem)] flex-col gap-0 overflow-hidden sm:max-w-3xl">
         <DialogHeader>
           <DialogTitle>Import dataset</DialogTitle>
           <DialogDescription>
@@ -137,7 +132,7 @@ export function DatasetImportDialog({
             saved to this skill.
           </DialogDescription>
         </DialogHeader>
-        <div className="flex flex-col gap-4">
+        <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto pr-1">
           <div className="flex flex-wrap items-center gap-2">
             <input
               ref={inputRef}
@@ -187,27 +182,29 @@ export function DatasetImportDialog({
             </ul>
           ) : null}
           {rows.length > 0 ? (
-            <div className="max-h-64 overflow-auto rounded-lg border">
-              <Table>
+            <div className="max-h-64 w-full min-w-0 overflow-auto rounded-lg border">
+              <Table className="w-full min-w-[36rem] table-fixed">
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="w-12">#</TableHead>
-                    <TableHead>Id</TableHead>
-                    <TableHead>Prompt</TableHead>
-                    <TableHead>Action</TableHead>
-                    <TableHead>Error</TableHead>
+                    <TableHead className="w-10">#</TableHead>
+                    <TableHead className="w-[7rem]">Id</TableHead>
+                    <TableHead className="w-[28%]">Prompt</TableHead>
+                    <TableHead className="w-20">Action</TableHead>
+                    <TableHead className="w-[34%]">Error</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {rows.map((row) => (
                     <TableRow key={row.row}>
-                      <TableCell>{row.row}</TableCell>
-                      <TableCell className="font-mono text-xs">{row.id}</TableCell>
-                      <TableCell className="max-w-[12rem] truncate text-sm">
+                      <TableCell className="text-sm">{row.row}</TableCell>
+                      <TableCell className="break-all font-mono text-xs">
+                        {row.id}
+                      </TableCell>
+                      <TableCell className="break-words text-sm whitespace-normal">
                         {row.prompt}
                       </TableCell>
                       <TableCell className="text-sm">{row.action}</TableCell>
-                      <TableCell className="text-sm text-destructive">
+                      <TableCell className="break-words text-sm whitespace-normal text-destructive">
                         {row.error || ""}
                       </TableCell>
                     </TableRow>
@@ -217,13 +214,22 @@ export function DatasetImportDialog({
             </div>
           ) : null}
         </div>
-        <DialogFooter>
+        <DialogFooter className="flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
+          {footer.hint ? (
+            <p
+              id="dataset-import-block-hint"
+              className="w-full text-sm text-muted-foreground sm:order-first sm:mr-auto sm:w-auto"
+            >
+              {footer.hint}
+            </p>
+          ) : null}
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
           <Button
+            id="btn-dataset-import-confirm"
             type="button"
-            disabled={busy || !ready}
+            disabled={busy || !footer.canImport}
             onClick={() => void confirm()}
           >
             {busy ? <Spinner data-icon="inline-start" /> : null}
