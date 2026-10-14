@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -47,7 +48,7 @@ def score_task(
     scores = [
         score_one(spec, task, artifacts, skills=skills)
         for spec in task.scorers
-        if not (skip_output and spec.type in {"task_completion", "rubric"})
+        if not (skip_output and spec.type in {"task_completion", "rubric", "answer_contains"})
     ]
     for score in scores:
         score.headline = headline_for(score)
@@ -67,6 +68,8 @@ def score_one(
         return score_task_completion(spec.files, artifacts.workspace)
     if spec.type == "rubric":
         return score_rubric(spec.checks, spec.min_score, artifacts.workspace)
+    if spec.type == "answer_contains":
+        return score_answer_contains(spec.answer, artifacts)
     return Score(scorer=spec.type, passed=False, detail=f"Unknown scorer {spec.type}")
 
 
@@ -80,17 +83,19 @@ def headline_for(score: Score) -> str:
             return "Task completed"
         if score.scorer == "rubric":
             return "Rubric passed"
+        if score.scorer == "answer_contains":
+            return "Answer matched"
         return "Passed"
     if score.scorer == "skill_trigger":
         if (score.actual or "none") == "none":
             return "Skill didn’t trigger"
-        if score.expected and score.actual == score.expected:
-            return "Description didn’t match this request"
         return f"Wrong skill triggered ({score.actual})"
     if score.scorer == "task_completion":
         return f"Task failed: {score.detail}"
     if score.scorer == "rubric":
         return f"Rubric missed: {score.detail}"
+    if score.scorer == "answer_contains":
+        return f"Answer mismatch: {score.detail}"
     return score.detail
 
 
@@ -139,21 +144,6 @@ def score_skill_trigger(
         )
 
     passed = inferred == expected
-    if passed and skills:
-        skill = next((s for s in skills if getattr(s, "name", None) == expected), None)
-        if skill is not None:
-            from skillgate_ai.harness import select_skill_from_descriptions
-
-            would = select_skill_from_descriptions(task.prompt, [skill])
-            if would != expected:
-                ran = inferred or expected
-                return Score(
-                    scorer="skill_trigger",
-                    passed=False,
-                    detail=(f"`{expected}` ran, but its description never matched this request"),
-                    expected=expected,
-                    actual=ran,
-                )
 
     if passed:
         detail = f"Triggered `{expected}`"
@@ -221,6 +211,60 @@ def score_task_completion(expects: list[FileExpect], workspace: Path) -> Score:
     passed = not failures
     detail = "All expected outputs present" if passed else "; ".join(failures)
     return Score(scorer="task_completion", passed=passed, detail=detail)
+
+
+def score_answer_contains(needles: list[str], artifacts: RunArtifacts) -> Score:
+    cleaned = [str(item).strip() for item in needles if str(item).strip()]
+    if not cleaned:
+        return Score(
+            scorer="answer_contains",
+            passed=True,
+            detail="No expected answer text",
+            weight=0,
+        )
+    haystack = _answer_haystack(artifacts)
+    failures = [
+        f"answer does not contain {needle!r}"
+        for needle in cleaned
+        if needle not in haystack
+    ]
+    passed = not failures
+    detail = "Expected text found in final answer" if passed else "; ".join(failures)
+    return Score(scorer="answer_contains", passed=passed, detail=detail)
+
+
+def _answer_haystack(artifacts: RunArtifacts) -> str:
+    parts = [
+        artifacts.trigger.transcript or "",
+        artifacts.stdout or "",
+        artifacts.stderr or "",
+    ]
+    for line in (artifacts.trigger.transcript or "").splitlines():
+        text = line.strip()
+        if not text.startswith("{"):
+            continue
+        try:
+            obj = json.loads(text)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(obj, dict):
+            continue
+        if obj.get("type") == "result":
+            result = obj.get("result")
+            if isinstance(result, str) and result.strip():
+                parts.append(result)
+        message = obj.get("message")
+        if isinstance(message, dict):
+            content = message.get("content")
+            if isinstance(content, str) and content.strip():
+                parts.append(content)
+            elif isinstance(content, list):
+                for block in content:
+                    if isinstance(block, dict):
+                        text_block = block.get("text")
+                        if isinstance(text_block, str) and text_block.strip():
+                            parts.append(text_block)
+    return "\n".join(parts)
 
 
 def score_rubric(checks: list[RubricCheck], min_score: float, workspace: Path) -> Score:

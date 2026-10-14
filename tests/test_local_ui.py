@@ -135,7 +135,7 @@ def test_ui_copy_has_no_internal_jargon(project_root: Path) -> None:
         assert "See a failing check" in js
         assert "Run live uses your API key" in js
         assert "Continue without a key" in js
-        assert "Checks scored this run." in js
+        assert "Quality was not scored." in js
         assert "built-in checker" not in js.lower()
         assert "not a live model" not in js.lower()
         assert "report.scored_by" in js
@@ -161,10 +161,10 @@ def test_ui_copy_has_no_internal_jargon(project_root: Path) -> None:
         assert "function scoredByLine" in js
         assert "function displayNameFromJudge" not in js
         assert "OpenAI couldn't score this run" not in js
-        assert "The skill ran live. Checks scored this run." in js
+        assert "The skill ran live. Quality was not scored." in js
         checking = js.split("function checkingLine")[1].split("function checkingPanel")[0]
         assert "not a live model" not in checking
-        assert "The skill ran live. Checks scored this run." in checking
+        assert "The skill ran live. Quality was not scored." in checking
         assert "decisions" not in js.lower()
         assert "gpt-6-luna" not in js
         assert "OpenAI (your key)" not in js

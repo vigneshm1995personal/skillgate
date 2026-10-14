@@ -57,7 +57,7 @@ class SkipJudge:
             "provider": "skip",
             "backend": "skip",
             "display_name": "Checks",
-            "reason": "Checks scored this run.",
+            "reason": "Quality scoring was skipped (no scoring key).",
         }
 
     def explain_fail(

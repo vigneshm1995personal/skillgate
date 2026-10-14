@@ -231,6 +231,7 @@ def _task_to_dict(task: TaskReport) -> dict:
         "transcript": task.transcript,
         "spans": getattr(task, "spans", None),
         "files": list(task.files),
+        "outputs": list(getattr(task, "outputs", None) or []),
         "usage": task.usage,
         "judge": task.judge,
         "metrics": getattr(task, "metrics", None),
@@ -311,8 +312,8 @@ def scored_by_line(report: SuiteReport) -> str:
     live = is_live_harness(report.harness)
     if skip:
         if live:
-            return "The skill ran live. Checks scored this run."
-        return "Checks scored this run."
+            return "The skill ran live. Quality was not scored."
+        return "Quality was not scored."
     if stamp:
         return scored_by_phrase(customer_scorer_name(stamp))
     return ""

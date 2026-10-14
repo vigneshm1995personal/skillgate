@@ -316,6 +316,9 @@ export function customerScoredBy(line: string): string {
   if (/checks scored/i.test(text)) {
     return "Scored by Checks"
   }
+  if (/quality was not scored/i.test(text)) {
+    return "Quality was not scored"
+  }
   const match = text.match(/^(.+?) scored this run\.?$/i)
   if (match) {
     const name = match[1]
@@ -336,7 +339,7 @@ export function scoredByFromJudge(judge: JudgeResult | null | undefined): string
   }
   const provider = trimText(judge.provider).toLowerCase()
   if (provider === "skip" || judge.status === "skip") {
-    return "Scored by Checks"
+    return "Quality was not scored"
   }
   const name = customerScorerName(judge)
   if (judge.status === "error") {

@@ -106,6 +106,7 @@ def start_run(state: AppState, body: dict[str, Any]) -> dict[str, Any]:
                 temperature=config.get("temperature"),
                 reasoning_effort=config.get("reasoning_effort"),
                 tryout=tryout,
+                no_judge=bool(body.get("no_judge")),
             )
             report = report_to_dict(result.report) if result.report is not None else None
             if report is not None and tryout:

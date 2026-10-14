@@ -633,11 +633,11 @@ function setRunButtonsDisabled(disabled) {
 function checkingLine(opts) {
   if (opts && opts.live && !opts.demo) {
     if (meta.judge_provider === "skip" || !meta.has_openai_key) {
-      return "The skill ran live. Checks scored this run.";
+      return "The skill ran live. Quality was not scored.";
     }
     return "Run live uses your API key.";
   }
-  return "Checks scored this run.";
+  return "Quality was not scored.";
 }
 
 function checkingPanel(opts) {
