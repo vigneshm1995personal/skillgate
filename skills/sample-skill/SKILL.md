@@ -9,22 +9,26 @@ metadata:
 
 # Commit message writer
 
-Turn a small unified diff into **one** Conventional Commits subject line. The diff is in the task text (no binary fixtures).
-
-## Required step (every task)
-
-From the workspace root, run the bundled script. It reads `SKILLGATE_TASK` and writes the message file — **do not** paste the commit line only in chat.
-
-```bash
-python3 .skillgate/skills/sample-skill/scripts/agent_entry.py
-```
-
-The task names the output path (usually `output/commit.txt`). The script creates `output/` if needed.
+Read the diff in the task. **You** choose the Conventional Commits subject (one line). Do not use a template or canned message — summarize the real change.
 
 ## Message rules
 
-- One line subject: `type: imperative summary` (lowercase type, no trailing period).
+- Format: `type: imperative summary` (lowercase type, no trailing period).
 - Subject **≤ 72 characters**.
 - Types: `fix` (bug), `feat` (new behavior), `docs` (documentation only), `refactor` (behavior-neutral code change).
 
-Summarize the **main** change in the diff (function, module, or user-visible behavior).
+## Save to `output/commit.txt`
+
+### Gateway / `skillgate check --harness llm`
+
+The harness only creates files when you emit a `RUN:` line that calls a bundled script. After you decide the subject, reply with **exactly one** line like:
+
+```text
+RUN: python3 .skillgate/skills/sample-skill/scripts/write_commit.py fix: handle empty cart total
+```
+
+Use your real subject in place of the example. The script only copies that text into `output/commit.txt` — it does not choose the message for you.
+
+### Cursor / Codex / other agents
+
+Write your subject line to `output/commit.txt` (create `output/` if needed). One line, no extra prose in the file.

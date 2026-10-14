@@ -480,8 +480,6 @@ class LLMHarness:
                 (sandbox.workspace / ".skillgate" / "skills" / selected / "scripts").glob("*.py")
             )
             script_list = "\n".join(f"- {p.name}" for p in scripts) or "(none)"
-            entry_rel = f".skillgate/skills/{selected}/scripts/agent_entry.py"
-            entry_path = sandbox.workspace / entry_rel
             act_prompt = (
                 f"The skill `{selected}` is already selected (Gate pre-selected; "
                 "skip catalog discovery). Follow its SKILL.md instructions immediately — "
@@ -495,13 +493,6 @@ class LLMHarness:
                 f"Bundled scripts:\n{script_list}\n\n"
                 f"User task:\n{prompt}"
             )
-            if entry_path.is_file():
-                act_prompt += (
-                    f"\n\nThis skill ships `agent_entry.py`. Your reply MUST include exactly:\n"
-                    f"RUN: python3 {entry_rel}\n"
-                    "Do not answer with only the commit message in prose — run the script so "
-                    "`output/commit.txt` (or the path in the task) exists on disk.\n"
-                )
             act = self._complete(act_prompt, timeout_sec)
             if act.usage is not None:
                 usage = merge_usage(usage, act.usage)
@@ -517,19 +508,6 @@ class LLMHarness:
                 returncode = proc.returncode
                 ran.append((command, proc.returncode))
                 transcript.append(f"ran {' '.join(command)} exit={proc.returncode}")
-            if entry_path.is_file() and not ran:
-                command = ["python3", entry_rel]
-                proc = sandbox.run(
-                    command, env={"SKILLGATE_TASK": prompt}, timeout=timeout_sec
-                )
-                stdout += proc.stdout
-                stderr += proc.stderr
-                returncode = proc.returncode
-                ran.append((command, proc.returncode))
-                transcript.append(f"ran {' '.join(command)} exit={proc.returncode}")
-                transcript.append(
-                    "skillgate: auto-ran agent_entry.py because the model omitted RUN lines"
-                )
         _write_selection(sandbox.workspace, selected)
         text = "\n".join(transcript)
         return HarnessResult(

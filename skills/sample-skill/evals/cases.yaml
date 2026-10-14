@@ -11,7 +11,7 @@ cases:
   - id: fix-empty-cart
     status: pinned
     prompt: |
-      Write the Conventional Commits subject to output/commit.txt (one line). Run the skill script to create that file.
+      Write the Conventional Commits subject for this diff and save it to output/commit.txt.
 
       ```diff
       --- a/cart.py
@@ -35,7 +35,7 @@ cases:
   - id: feat-export-csv
     status: pinned
     prompt: |
-      Write the Conventional Commits subject to output/commit.txt (one line). Run the skill script to create that file.
+      Write the Conventional Commits subject for this diff and save it to output/commit.txt.
 
       ```diff
       --- a/orders.py
@@ -61,7 +61,7 @@ cases:
   - id: docs-readme
     status: pinned
     prompt: |
-      Write the Conventional Commits subject to output/commit.txt (one line). Run the skill script to create that file.
+      Write the Conventional Commits subject for this diff and save it to output/commit.txt.
 
       ```diff
       --- a/README.md
@@ -85,7 +85,7 @@ cases:
   - id: refactor-rename
     status: pinned
     prompt: |
-      Write the Conventional Commits subject to output/commit.txt (one line). Run the skill script to create that file.
+      Write the Conventional Commits subject for this diff and save it to output/commit.txt.
 
       ```diff
       --- a/pricing.py
