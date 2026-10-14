@@ -115,6 +115,8 @@ def test_openai_judge_docs_do_not_say_fixture_checks_decide_pass_fail() -> None:
 def test_pack_docs_drop_demo_harness() -> None:
     text = (ROOT / "docs" / "pack.md").read_text(encoding="utf-8").lower()
     assert "demo harness" not in text
+    assert "openai-compatible" not in text
+    assert "llm harness" not in text
 
 
 def test_oct_extract_plans_are_marked_historical() -> None:

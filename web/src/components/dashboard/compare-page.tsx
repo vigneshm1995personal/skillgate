@@ -46,7 +46,7 @@ import { useDashboard } from "@/lib/dashboard-provider"
 import { api } from "@/lib/api"
 import { resolvedHarnessName } from "@/lib/types"
 
-type CompareHarnessPref = "auto" | "cursor-agent" | "codex" | "claude" | "llm"
+type CompareHarnessPref = "auto" | "cursor-agent" | "codex" | "claude"
 
 type ArmDraft = {
   label: string
@@ -56,7 +56,6 @@ type ArmDraft = {
 
 const HARNESS_OPTS: { value: CompareHarnessPref; label: string }[] = [
   { value: "auto", label: "Auto" },
-  { value: "llm", label: "LLM (AI Gateway key)" },
   { value: "cursor-agent", label: "Cursor" },
   { value: "codex", label: "Codex" },
   { value: "claude", label: "Claude" },

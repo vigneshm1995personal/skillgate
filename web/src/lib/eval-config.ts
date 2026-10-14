@@ -64,7 +64,6 @@ export function resolveModelHarness(
   if (
     pref === "cursor-agent" ||
     pref === "codex" ||
-    pref === "llm" ||
     pref === "claude"
   ) {
     return pref
@@ -72,7 +71,6 @@ export function resolveModelHarness(
   if (
     resolvedHarness === "codex" ||
     resolvedHarness === "cursor-agent" ||
-    resolvedHarness === "llm" ||
     resolvedHarness === "claude"
   ) {
     return resolvedHarness
@@ -135,7 +133,6 @@ export function harnessDisplayName(
     const labels: Record<string, string> = {
       codex: "Codex",
       claude: "Claude",
-      llm: "LLM",
       "cursor-agent": "Cursor",
     }
     const resolved = labels[resolvedHarness || ""]
@@ -152,9 +149,6 @@ export function harnessDisplayName(
   }
   if (pref === "claude") {
     return "Claude"
-  }
-  if (pref === "llm") {
-    return "LLM"
   }
   return pref
 }
@@ -236,7 +230,7 @@ function collapseDuplicateTimeout(label: string): string {
   return out.join(" · ")
 }
 
-const LIVE_HARNESS_NAMES = new Set(["llm", "cursor-agent", "codex", "claude"])
+const LIVE_HARNESS_NAMES = new Set(["cursor-agent", "codex", "claude"])
 
 export function stampRunConfig(
   runConfig?: EvalRunConfig | null,

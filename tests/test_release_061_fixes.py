@@ -60,7 +60,7 @@ def test_compare_models_cases_limits_history_task_count(
             title="t",
             skill="pdf",
             skill_description="d",
-            harness=kwargs.get("harness") or "llm",
+            harness=kwargs.get("harness") or "cursor-agent",
             sandbox="local",
             passed=True,
             tasks=tasks,
@@ -80,8 +80,8 @@ def test_compare_models_cases_limits_history_task_count(
     result = run_models_compare(
         pack,
         arms=[
-            parse_arm_spec("A:llm", arm_id="a", index=0),
-            parse_arm_spec("B:llm:gpt-4o-mini", arm_id="b", index=1),
+            parse_arm_spec("A:cursor-agent", arm_id="a", index=0),
+            parse_arm_spec("B:cursor-agent:gpt-4o-mini", arm_id="b", index=1),
         ],
         root=tmp_path,
         case_ids=case_ids,
@@ -132,7 +132,7 @@ def test_compare_models_arm_model_override_reaches_run_check(
             title="t",
             skill="pdf",
             skill_description="d",
-            harness="llm",
+            harness="cursor-agent",
             sandbox="local",
             passed=True,
             tasks=tasks,
@@ -144,8 +144,8 @@ def test_compare_models_arm_model_override_reaches_run_check(
     run_models_compare(
         pack,
         arms=[
-            parse_arm_spec("A:llm", arm_id="a", index=0),
-            parse_arm_spec("B:llm:gpt-4o-mini", arm_id="b", index=1),
+            parse_arm_spec("A:cursor-agent", arm_id="a", index=0),
+            parse_arm_spec("B:cursor-agent:gpt-4o-mini", arm_id="b", index=1),
         ],
         root=tmp_path,
         case_ids=["extract-hello"],

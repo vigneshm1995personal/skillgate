@@ -41,7 +41,7 @@ def _leaky_report() -> dict:
         suite="pdf",
         title="pdf",
         skill="pdf",
-        harness="llm",
+        harness="cursor-agent",
         sandbox="local",
         passed=True,
         tasks=[
@@ -237,39 +237,6 @@ def test_canonical_skill_matches_generic_mount_folder() -> None:
     assert canonical_skill_name("pdf", [mounted]) == "pdf"
 
 
-def test_llm_harness_does_not_crash_when_selected_is_mount_folder(
-    tmp_path: Path, monkeypatch
-) -> None:
-    from test_judge import _cfg
-
-    from skillgate_ai.harness import Completion, LLMHarness
-    from skillgate_ai.ingest import ingest_skill
-    from skillgate_ai.sandbox import LocalSandbox, prepare_workspace
-    from skillgate_ai.usage import Usage
-
-    pack = tmp_path / "pack"
-    shutil.copytree(ROOT / "skills" / "pdf", pack)
-    skill = ingest_skill(pack, strict=False)
-    assert skill.name == "pdf"
-    assert pack.name == "pack"
-    workspace = tmp_path / "ws"
-    workspace.mkdir()
-    prepare_workspace(workspace, [skill], [])
-    (workspace / ".skillgate" / "selected.json").write_text(
-        '{"skill": "pack"}', encoding="utf-8"
-    )
-    harness = LLMHarness(_cfg(openai_api_key="sk-test"))
-
-    def fake_complete(prompt, timeout_sec):
-        del prompt, timeout_sec
-        return Completion(text="ok", usage=Usage(tokens_in=1, tokens_out=1))
-
-    monkeypatch.setattr(harness, "_complete", fake_complete)
-    sandbox = LocalSandbox(workspace)
-    result = harness.run(sandbox, "Extract hello.pdf", [skill], timeout_sec=5)
-    assert result.trigger.selected_skill == "pdf"
-
-
 def test_docker_sandbox_fails_before_run_when_image_missing(monkeypatch) -> None:
     from skillgate_ai.sandbox import DockerSandbox
 
@@ -343,8 +310,9 @@ def test_skill_write_generate_refuses_skill_md(tmp_path: Path, monkeypatch) -> N
 
 def test_cli_deploy_writes_deploys_jsonl(tmp_path: Path, monkeypatch) -> None:
     dest = _pdf(tmp_path)
-    monkeypatch.setenv("SKILLGATE_ROOT", str(tmp_path))
-    monkeypatch.setenv("SKILLGATE_OPENAI_API_KEY", "sk-test")
+    from conftest import enable_cursor_agent
+
+    enable_cursor_agent(monkeypatch, tmp_path)
     monkeypatch.chdir(tmp_path)
     skills_home = tmp_path / "agent-skills"
     monkeypatch.setenv("SKILLGATE_CURSOR_SKILLS", str(skills_home))
@@ -619,7 +587,7 @@ def test_deploy_refuses_without_key_even_after_green(tmp_path: Path, monkeypatch
     result = runner.invoke(app, ["deploy", str(dest), "--target", "cursor"])
     out = plain_text(result.stdout + result.stderr)
     assert result.exit_code == 2, out
-    assert "no model key" in out.lower()
+    assert "no agent" in out.lower()
     assert "keys set" in out.lower()
     assert not (skills_home / "pdf").exists()
     forced = runner.invoke(app, ["deploy", str(dest), "--target", "cursor", "--force"])
@@ -635,7 +603,10 @@ def test_deploy_accepts_skillgate_prefix_without_vault(tmp_path: Path, monkeypat
     dest = _pdf(tmp_path)
     monkeypatch.setenv("SKILLGATE_ROOT", str(tmp_path))
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setenv("SKILLGATE_OPENAI_API_KEY", "sk-ci-prefix")
+    from conftest import enable_cursor_agent
+
+    enable_cursor_agent(monkeypatch, tmp_path)
+    monkeypatch.setenv("SKILLGATE_CURSOR_API_KEY", "cur-ci-prefix")
     skills_home = tmp_path / "agent-skills"
     monkeypatch.setenv("SKILLGATE_CURSOR_SKILLS", str(skills_home))
     append_eval(dest, run_id="green", passed=True, report={"passed": True, "skill": "pdf"})

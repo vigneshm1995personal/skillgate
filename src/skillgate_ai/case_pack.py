@@ -146,8 +146,10 @@ class TrustSuite:
     suite: SuiteSpec
 
 
-def _reject_missing_seed_cases(pack: CasePack) -> None:
-    reject_missing_seed_cases(pack.skill, {case.id for case in pack.cases})
+def _reject_missing_seed_cases(pack: CasePack, pack_root: Path) -> None:
+    ids = {case.id for case in pack.cases}
+    reject_missing_seed_cases(pack.skill, ids, pack_root=pack_root)
+    reject_missing_seed_cases(pack_root.name, ids, pack_root=pack_root)
 
 
 def _reject_removed_seed_cases(previous: CasePack | None, pack: CasePack) -> None:
@@ -251,7 +253,7 @@ def load_case_pack(skill_path: str | Path) -> CasePack | None:
             hint="Set `skill:` in evals/cases.yaml to the folder name.",
         )
     _validate_pack_on_disk(root, pack)
-    _reject_missing_seed_cases(pack)
+    _reject_missing_seed_cases(pack, root)
     return pack
 
 
@@ -271,7 +273,7 @@ def save_case_pack(skill_path: str | Path, pack: CasePack) -> Path:
         except Exception:
             previous = None
     _reject_removed_seed_cases(previous, pack)
-    _reject_missing_seed_cases(pack)
+    _reject_missing_seed_cases(pack, root)
     _validate_pack_on_disk(root, pack)
     dest.parent.mkdir(parents=True, exist_ok=True)
     dest.write_text(_dump_pack(pack), encoding="utf-8")
@@ -394,7 +396,9 @@ def checks_from_pack(pack: CasePack, *, include_drafts: bool = False) -> list[di
             "golden_path": case.golden.path if case.golden else None,
             "golden_kind": case.golden.kind if case.golden else None,
             "bank_status": case.status,
-            "locked": case_is_locked(pack.skill, case.id),
+            "locked": case_is_locked(
+                pack.skill, case.id, pack_case_ids=[c.id for c in pack.cases]
+            ),
         }
         if case.judge is not None and not case.judge.is_empty():
             check["judge"] = case.judge.to_sparse_dict()
@@ -486,8 +490,11 @@ def pin_checks(skill_path: str | Path, checks: list[dict[str, Any]]) -> CasePack
     by_id: dict[str, PackCase] = {case.id: case for case in (existing.cases if existing else [])}
     if not checks:
         raise ValueError("Pin needs at least one check.")
+    pack_ids = list(by_id.keys()) + [
+        case_id_slug(raw.get("id") or "") for raw in checks if raw.get("id")
+    ]
     for raw in checks:
-        if keep_locked_case(skill_name, by_id, raw) is not None:
+        if keep_locked_case(skill_name, by_id, raw, pack_case_ids=pack_ids) is not None:
             continue
         case = _case_from_check(root, raw, skill_name)
         by_id[case.id] = case
@@ -498,7 +505,7 @@ def pin_checks(skill_path: str | Path, checks: list[dict[str, Any]]) -> CasePack
         budgets=existing.budgets if existing else None,
         judge=existing.judge if existing else None,
     )
-    _reject_missing_seed_cases(pack)
+    _reject_missing_seed_cases(pack, root)
     save_case_pack(root, pack)
     return pack
 
@@ -575,17 +582,23 @@ def suite_from_checks(
     held = {case.id: case for case in (existing.cases if existing else [])}
     try:
         cases = []
+        pack_ids = [case_id_slug(row.get("id") or "") for row in checks if row.get("id")]
+        pack_ids.extend(held.keys())
         for raw in checks:
             row = dict(raw)
-            seed = keep_locked_case(skill_name, held, row)
+            seed = keep_locked_case(skill_name, held, row, pack_case_ids=pack_ids)
             cases.append(seed if seed is not None else _case_from_check(root, row, skill_name))
     except ValueError as exc:
         hint = PIN_NEEDS_EXPECTED_HINT if PIN_NEEDS_EXPECTED in str(exc) else None
         raise SuiteError(str(exc), hint=hint) from exc
     if not tryout and not only_listed and existing is not None:
         present = {case.id for case in cases}
+        all_ids = present | {c.id for c in existing.cases}
         cases.extend(
-            c for c in existing.cases if case_is_locked(existing.skill, c.id) and c.id not in present
+            c
+            for c in existing.cases
+            if case_is_locked(existing.skill, c.id, pack_case_ids=all_ids)
+            and c.id not in present
         )
     pack = CasePack(
         schema_version=1,

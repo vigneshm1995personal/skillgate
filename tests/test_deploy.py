@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
-from conftest import plain_text
+from conftest import enable_cursor_agent, plain_text
 from skillgate_ai.cli import app
 from skillgate_ai.deploy import CursorAdapter, DeployError, latest_check_passed
 from skillgate_ai.errors import friendly_os_error
@@ -19,8 +19,8 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 @pytest.fixture(autouse=True)
-def _grant_model_key(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("SKILLGATE_OPENAI_API_KEY", "sk-test")
+def _grant_model_key(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    enable_cursor_agent(monkeypatch, tmp_path)
 
 
 def _wipe_history(pack: Path) -> None:

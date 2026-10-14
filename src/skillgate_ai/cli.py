@@ -240,7 +240,7 @@ def _run_gate(
     raise typer.Exit(result.exit_code)
 
 
-_HARNESS_HELP = "auto | cursor-agent | codex | llm"
+_HARNESS_HELP = "auto | cursor-agent | codex | claude"
 _SANDBOX_HELP = "local (default)"
 _KEY_ENV_HELP = (
     "Use this process env name as a Skill Gate key (repeatable). "

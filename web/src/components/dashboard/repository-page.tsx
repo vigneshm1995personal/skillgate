@@ -19,6 +19,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import {
   Empty,
   EmptyContent,
@@ -70,6 +72,8 @@ export function RepositoryPage() {
   const [sources, setSources] = useState<ImportSource[]>([])
   const [selected, setSelected] = useState<string[]>([])
   const [sourcesError, setSourcesError] = useState("")
+  const [folderPath, setFolderPath] = useState("")
+  const [gitUrl, setGitUrl] = useState("")
 
   const openImport = async () => {
     setImportOpen(true)
@@ -94,7 +98,7 @@ export function RepositoryPage() {
     setSelected(wanted)
     setImporting(true)
     try {
-      const data = await api.importSkills(wanted)
+      const data = await api.importSkills({ sources: wanted })
       await refreshSkills()
       const count = data.imported?.length ?? 0
       toast.add({
@@ -105,6 +109,32 @@ export function RepositoryPage() {
         type: "success",
       })
       setImportOpen(false)
+    } catch (err) {
+      const message = err instanceof ApiError ? err.message : "Could not import skills."
+      toast.add({ title: message, type: "error" })
+    } finally {
+      setImporting(false)
+    }
+  }
+
+  const importFolderOrGit = async (opts: { folder?: string; git_url?: string }) => {
+    setImporting(true)
+    try {
+      const data = await api.importSkills(opts)
+      await refreshSkills()
+      const count = data.imported?.length ?? 0
+      toast.add({
+        title:
+          count > 0
+            ? `Imported ${count} skill${count === 1 ? "" : "s"}.`
+            : "Nothing was imported.",
+        type: count > 0 ? "success" : "error",
+      })
+      if (count > 0) {
+        setImportOpen(false)
+        setFolderPath("")
+        setGitUrl("")
+      }
     } catch (err) {
       const message = err instanceof ApiError ? err.message : "Could not import skills."
       toast.add({ title: message, type: "error" })
@@ -288,6 +318,51 @@ export function RepositoryPage() {
               ))}
             </div>
           )}
+          <div className="flex flex-col gap-3 border-t pt-4">
+            <p className="text-sm font-medium">From disk or git</p>
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="import-folder-path">Skill folder</Label>
+              <div className="flex gap-2">
+                <Input
+                  id="import-folder-path"
+                  placeholder="/path/to/my-skill"
+                  value={folderPath}
+                  disabled={importing}
+                  onChange={(event) => setFolderPath(event.target.value)}
+                />
+                <Button
+                  id="btn-import-folder"
+                  variant="secondary"
+                  disabled={importing || !folderPath.trim()}
+                  onClick={() =>
+                    void importFolderOrGit({ folder: folderPath.trim() })
+                  }
+                >
+                  Import
+                </Button>
+              </div>
+            </div>
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="import-git-url">Git URL</Label>
+              <div className="flex gap-2">
+                <Input
+                  id="import-git-url"
+                  placeholder="https://github.com/org/skills.git"
+                  value={gitUrl}
+                  disabled={importing}
+                  onChange={(event) => setGitUrl(event.target.value)}
+                />
+                <Button
+                  id="btn-import-git"
+                  variant="secondary"
+                  disabled={importing || !gitUrl.trim()}
+                  onClick={() => void importFolderOrGit({ git_url: gitUrl.trim() })}
+                >
+                  Clone
+                </Button>
+              </div>
+            </div>
+          </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setImportOpen(false)}>
               Cancel

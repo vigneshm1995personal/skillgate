@@ -10,7 +10,11 @@ from fastapi import FastAPI, File, Form, Request, UploadFile
 from fastapi.responses import FileResponse
 
 from skillgate_ai.advice import description_from_paste, rewrite_skill_description
-from skillgate_ai.api_intake import extract_uploaded_skill, write_pasted_skill
+from skillgate_ai.api_intake import (
+    extract_uploaded_skill,
+    import_path_or_git_result,
+    write_pasted_skill,
+)
 from skillgate_ai.api_payloads import fail, history_payload, skill_payload, state_of
 from skillgate_ai.catalog import (
     agent_source_status,
@@ -70,11 +74,18 @@ def register_skill_routes(app: FastAPI) -> None:
     async def import_skills(request: Request) -> dict[str, Any]:
         state = state_of(request)
         body = await request.json() if request.headers.get("content-length") not in {None, "0"} else {}
-        sources = body.get("sources") if isinstance(body, dict) else None
-        result = import_from_agent_folders(
-            state.root,
-            sources=sources if isinstance(sources, list) else None,
-        )
+        if not isinstance(body, dict):
+            body = {}
+        folder = str(body.get("folder") or body.get("path") or "").strip()
+        git_url = str(body.get("git_url") or body.get("git") or "").strip()
+        if folder or git_url:
+            result = import_path_or_git_result(state.root, git_url or folder)
+        else:
+            sources = body.get("sources")
+            result = import_from_agent_folders(
+                state.root,
+                sources=sources if isinstance(sources, list) else None,
+            )
         skills: list[dict[str, Any]] = []
         for item in catalog_entries(state.root):
             try:

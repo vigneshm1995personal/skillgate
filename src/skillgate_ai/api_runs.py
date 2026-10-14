@@ -17,7 +17,7 @@ from skillgate_ai.api_payloads import (
     state_of,
 )
 from skillgate_ai.catalog import find_skill
-from skillgate_ai.config import NO_KEY_HINT, get_llm_config, load_env
+from skillgate_ai.config import get_llm_config, load_env, missing_key_error
 from skillgate_ai.errors import MissingLLMKeyError, SkillGateError
 from skillgate_ai.gate import run_check
 from skillgate_ai.live import create_control, drop_control, get_control
@@ -46,10 +46,7 @@ def start_run(state: AppState, body: dict[str, Any]) -> dict[str, Any]:
     tryout = bool(body.get("tryout"))
     checks = body.get("checks") if isinstance(body.get("checks"), list) else None
     if not get_llm_config(state.root).has_any_key:
-        raise MissingLLMKeyError(
-            "No model key found.",
-            hint=NO_KEY_HINT,
-        )
+        raise missing_key_error()
     config = body.get("config") if isinstance(body.get("config"), dict) else {}
     if state.gate_busy():
         fail(409, "A check or compare is already running.")
@@ -94,7 +91,7 @@ def start_run(state: AppState, body: dict[str, Any]) -> dict[str, Any]:
 
             pref = str(config.get("harness_pref") or "").strip().lower()
             requested = str(body.get("harness") or "").strip().lower()
-            harness = pref if pref in {"auto", "cursor-agent", "codex", "claude", "llm"} else (requested or "auto")
+            harness = pref if pref in {"auto", "cursor-agent", "codex", "claude"} else (requested or "auto")
             result = run_check(
                 skill_path,
                 harness=harness,

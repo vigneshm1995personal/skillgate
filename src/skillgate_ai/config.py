@@ -88,6 +88,7 @@ class LLMConfig:
     anthropic_api_key: str | None
     anthropic_model: str
     cursor_agent_bin: str
+    claude_bin: str
     codex_api_key: str | None
     codex_bin: str
     harness_pref: str
@@ -118,13 +119,9 @@ class LLMConfig:
 
     @property
     def has_any_key(self) -> bool:
-        return bool(
-            self.cursor_api_key
-            or self.codex_api_key
-            or self.gateway_api_key
-            or self.openai_api_key
-            or self.anthropic_api_key
-        )
+        from skillgate_ai.harness import has_startable_agent
+
+        return has_startable_agent(self)
 
     @property
     def live_backends(self) -> list[str]:
@@ -143,10 +140,9 @@ class LLMConfig:
 
     @property
     def available_harnesses(self) -> list[str]:
-        found = ["cursor-agent", "codex"]
-        if self.anthropic_api_key or self.gateway_api_key or self.openai_api_key:
-            found.append("llm")
-        return found
+        from skillgate_ai.harness import startable_agent_kinds
+
+        return startable_agent_kinds(self)
 
     @property
     def default_harness(self) -> str:
@@ -173,6 +169,7 @@ def get_llm_config(root: Path | None = None) -> LLMConfig:
         anthropic_api_key=keys.get("ANTHROPIC_API_KEY"),
         anthropic_model=os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-4-20250514"),
         cursor_agent_bin=os.environ.get("CURSOR_AGENT_BIN", "agent"),
+        claude_bin=os.environ.get("CLAUDE_BIN", "claude"),
         codex_api_key=keys.get("CODEX_API_KEY") or openai_key,
         codex_bin=os.environ.get("CODEX_BIN", "codex"),
         harness_pref=os.environ.get("SKILLGATE_HARNESS", "auto").strip().lower() or "auto",
@@ -257,21 +254,46 @@ def _env_temperature() -> float:
     return value
 
 
-NO_KEY_MESSAGE = "No model key found."
-NO_KEY_HINT = "Add a model key in Settings or run `skillgate keys set`"
-UI_NO_KEY_HINT = "Add a key in Settings, then press Run."
+NO_KEY_MESSAGE = "No agent is available to run checks."
+NO_KEY_HINT = (
+    "Install Cursor Agent, Codex CLI, or Claude Code, then add a matching key with "
+    "`skillgate keys set` (CURSOR_API_KEY, CODEX_API_KEY, or ANTHROPIC_API_KEY)."
+)
+UI_NO_KEY_HINT = "Set up an agent and key in Settings, then press Run."
 
 
-def missing_key_error(*, live: bool = True, for_codex: bool = False) -> MissingLLMKeyError:
+def missing_key_error(
+    *,
+    live: bool = True,
+    for_codex: bool = False,
+    for_cursor: bool = False,
+    for_claude: bool = False,
+) -> MissingLLMKeyError:
     del live
     if for_codex:
         hint = (
             "Codex CLI needs a key in Settings (`skillgate keys set`) "
             "or a ChatGPT login (`codex login`)."
         )
+    elif for_cursor:
+        hint = (
+            "Cursor Agent needs CURSOR_API_KEY in Settings (`skillgate keys set`) "
+            "and the `agent` CLI on your PATH (or set CURSOR_AGENT_BIN)."
+        )
+    elif for_claude:
+        hint = (
+            "Claude Code needs ANTHROPIC_API_KEY in Settings (`skillgate keys set`) "
+            "and the `claude` CLI on your PATH (or set CLAUDE_BIN)."
+        )
     else:
         hint = NO_KEY_HINT
     return MissingLLMKeyError(NO_KEY_MESSAGE, hint=hint)
+
+
+def no_agent_available_error(cfg: LLMConfig) -> MissingLLMKeyError:
+    """Exit 2 when auto cannot pick Cursor, Codex, or Claude Code."""
+    del cfg
+    return missing_key_error()
 
 
 def merge_env_file(path: Path, updates: dict[str, str]) -> None:

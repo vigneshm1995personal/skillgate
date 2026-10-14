@@ -34,7 +34,7 @@ def _report(*, harness: str, tasks: list[TaskReport], config: dict | None = None
 
 def test_scored_by_openai_error_not_claimed_as_scored() -> None:
     report = _report(
-        harness="llm",
+        harness="cursor-agent",
         config={"judge": {"provider": "openai", "display_name": "OpenAI (your key)"}},
         tasks=[
             _task(
@@ -62,7 +62,7 @@ def test_scored_by_openai_error_not_claimed_as_scored() -> None:
 
 def test_scored_by_skip_on_live_does_not_deny_live_model() -> None:
     report = _report(
-        harness="llm",
+        harness="cursor-agent",
         config={"judge": {"provider": "skip", "display_name": "Built-in checker"}},
         tasks=[
             _task(
@@ -94,7 +94,7 @@ def test_scored_by_skip_without_live_harness() -> None:
 
 def test_scored_by_openai_with_answers() -> None:
     report = _report(
-        harness="llm",
+        harness="cursor-agent",
         config={"judge": {"provider": "openai", "display_name": "OpenAI (your key)"}},
         tasks=[
             _task(
@@ -115,7 +115,7 @@ def test_scored_by_openai_with_answers() -> None:
     assert "OpenAI Decisions" not in text
     assert "OpenAI (your key) scored this run." not in text
     gateway = _report(
-        harness="llm",
+        harness="cursor-agent",
         config={
             "judge": {
                 "provider": "openai",
@@ -153,14 +153,14 @@ def test_happened_no_trigger_pass_is_plain() -> None:
     task = _task(judge=None, passed=True)
     task.expect_skill = None
     task.selected_skill = None
-    payload = report_to_dict(_report(harness="llm", tasks=[task]))
+    payload = report_to_dict(_report(harness="cursor-agent", tasks=[task]))
     assert payload["tasks"][0]["happened"] == "No skill was picked, as expected."
 
 
 def test_happened_uses_warning_on_pass() -> None:
     payload = report_to_dict(
         _report(
-            harness="llm",
+            harness="cursor-agent",
             tasks=[
                 _task(
                     passed=True,
@@ -172,7 +172,7 @@ def test_happened_uses_warning_on_pass() -> None:
     assert payload["tasks"][0]["happened"] == "The judge wasn't very sure about this one."
     text = format_github(
         _report(
-            harness="llm",
+            harness="cursor-agent",
             tasks=[
                 _task(
                     passed=True,
@@ -188,7 +188,7 @@ def test_happened_uses_warning_on_pass() -> None:
 def test_happened_uses_why_on_fail() -> None:
     payload = report_to_dict(
         _report(
-            harness="llm",
+            harness="cursor-agent",
             tasks=[_task(passed=False, judge={"why": "Wrong file."})],
         )
     )
@@ -198,7 +198,7 @@ def test_happened_uses_why_on_fail() -> None:
 def test_check_answers_from_openai_cells() -> None:
     payload = report_to_dict(
         _report(
-            harness="llm",
+            harness="cursor-agent",
             tasks=[
                 _task(
                     judge={

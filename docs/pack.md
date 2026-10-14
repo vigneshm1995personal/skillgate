@@ -65,4 +65,4 @@ Pick who scores in Settings or `skillgate judge provider set`. Keys stay in `.sk
 
 ## Live check
 
-`skillgate check` always runs a live harness (Cursor / Codex / Claude / OpenAI-compatible). No key → exit 2; add a key in Settings or `skillgate keys set`. Deterministic scorers (file exists, contains, page count, skill trigger) still grade the live run’s files.
+`skillgate check` always runs a live agent harness (Cursor Agent, Codex CLI, or Claude Code). No agent → exit 2; install a CLI and add a matching key in Settings or `skillgate keys set`. Deterministic scorers (file exists, contains, page count, skill trigger) still grade the live run’s files.

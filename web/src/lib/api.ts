@@ -229,7 +229,11 @@ export const api = {
         folder_label: string
       }>
     }>("/api/skills/import-sources"),
-  importSkills: (sources?: string[]) =>
+  importSkills: (opts?: {
+    sources?: string[]
+    folder?: string
+    git_url?: string
+  }) =>
     request<{
       skills: SkillPayload[]
       imported: Array<{
@@ -250,7 +254,7 @@ export const api = {
     }>("/api/skills/import", {
       method: "POST",
       headers: jsonHeaders,
-      body: JSON.stringify(sources ? { sources } : {}),
+      body: JSON.stringify(opts ?? {}),
     }),
   skill: (name: string) =>
     request<SkillDetailPayload>(`/api/skills/${encodeURIComponent(packSkillName(name))}`),

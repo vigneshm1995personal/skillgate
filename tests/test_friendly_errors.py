@@ -2,18 +2,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import httpx
 import pytest
 from pydantic import ValidationError
 
 from skillgate_ai.case_pack import CasePack
 from skillgate_ai.config import LLMConfig
-from skillgate_ai.errors import (
-    OFFLINE_MESSAGE,
-    friendly_validation_error,
-)
-from skillgate_ai.harness import LLMHarness
-from skillgate_ai.sandbox import LocalSandbox
+from skillgate_ai.errors import friendly_validation_error
 
 
 def _cfg(**overrides: object) -> LLMConfig:
@@ -25,6 +19,7 @@ def _cfg(**overrides: object) -> LLMConfig:
         "anthropic_api_key": None,
         "anthropic_model": "claude-sonnet-4-20250514",
         "cursor_agent_bin": "agent",
+        "claude_bin": "claude",
         "codex_api_key": None,
         "codex_bin": "codex",
         "codex_reasoning_effort": "medium",
@@ -37,29 +32,6 @@ def _cfg(**overrides: object) -> LLMConfig:
     }
     fields.update(overrides)
     return LLMConfig(**fields)  # type: ignore[arg-type]
-
-
-def test_dns_failure_is_offline_message(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    exc = httpx.ConnectError("[Errno -3] Temporary failure in name resolution")
-
-    def fake_post(*_args, **_kwargs):
-        raise exc
-
-    monkeypatch.setattr("skillgate_ai.harness.httpx.post", fake_post)
-    sandbox = LocalSandbox(tmp_path)
-    try:
-        from skillgate_ai.errors import HarnessError
-
-        with pytest.raises(HarnessError) as caught:
-            LLMHarness(_cfg()).run(sandbox, "hello", [], timeout_sec=5)
-    finally:
-        sandbox.close()
-    assert "Errno" in str(exc)
-    assert caught.value.message == OFFLINE_MESSAGE
-    assert "Errno" not in caught.value.message
-    assert "BYO" not in caught.value.message
 
 
 def test_schema_validation_names_schema_not_pydantic() -> None:
@@ -91,47 +63,3 @@ def test_case_id_validation_names_the_id() -> None:
     assert "Bad_ID" in text
     assert "cases.0.id" not in text
     assert "pydantic" not in text.lower()
-
-
-def test_gateway_401_is_bad_key(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    class FakeResponse:
-        status_code = 401
-
-        def json(self):
-            return {"error": {"message": "Incorrect API key"}}
-
-    def fake_post(*_args, **_kwargs):
-        return FakeResponse()
-
-    monkeypatch.setattr("skillgate_ai.harness.httpx.post", fake_post)
-    sandbox = LocalSandbox(tmp_path)
-    try:
-        with pytest.raises(Exception) as caught:
-            LLMHarness(_cfg()).run(sandbox, "hello", [], timeout_sec=5)
-    finally:
-        sandbox.close()
-    from skillgate_ai.errors import HarnessError
-
-    assert isinstance(caught.value, HarnessError)
-    assert caught.value.message == "Your model provider did not accept this key."
-    assert "Settings" in (caught.value.hint or "")
-    assert "BYO" not in caught.value.message
-    assert "401" not in caught.value.message
-
-
-def test_gateway_offline_is_friendly(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    def fake_post(*_args, **_kwargs):
-        raise httpx.ConnectError("[Errno -3] Temporary failure in name resolution")
-
-    monkeypatch.setattr("skillgate_ai.harness.httpx.post", fake_post)
-    sandbox = LocalSandbox(tmp_path)
-    try:
-        from skillgate_ai.errors import HarnessError
-
-        with pytest.raises(HarnessError) as caught:
-            LLMHarness(_cfg()).run(sandbox, "hello", [], timeout_sec=5)
-    finally:
-        sandbox.close()
-    assert caught.value.message == OFFLINE_MESSAGE
-    assert "Errno" not in caught.value.message
-    assert "BYO" not in caught.value.message

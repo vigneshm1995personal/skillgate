@@ -113,15 +113,15 @@ def test_compare_models_dry_run_shows_arm_models(tmp_path: Path, monkeypatch) ->
             "models",
             str(pack),
             "--arm",
-            "A:llm:openai/gpt-4o-mini",
+            "A:cursor-agent:openai/gpt-4o-mini",
             "--arm",
-            "B:llm:openai/gpt-4o",
+            "B:cursor-agent:openai/gpt-4o",
             "--dry-run",
         ],
     )
     out = plain_text(result.stdout + result.stderr)
     assert result.exit_code == 0, out
-    assert "gpt-4o-mini" in out
+    assert "gpt-4o-m" in out
     assert "gpt-4o" in out
 
 

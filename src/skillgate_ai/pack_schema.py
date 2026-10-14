@@ -45,6 +45,9 @@ SEED_LOCK_HINT = "Add a new check instead of deleting the original ones."
 SEED_EDIT_MESSAGE = "This pack's original checks stay. Add a new check instead of editing them."
 SEED_EDIT_HINT = "Use `skillgate case add` to add your own check."
 
+# Trigger scaffold ids; overlap with the pdf demo must not imply a seed pack.
+_SCAFFOLD_CASE_IDS = frozenset({"should-trigger-1", "no-trigger-unrelated"})
+
 
 class ExtraQuestion(BaseModel):
     id: str
@@ -122,30 +125,95 @@ def case_id_slug(value: object) -> str:
     return slug or "case"
 
 
-def case_is_locked(skill: str, case_id: str) -> bool:
-    return case_id_slug(case_id) in SEED_CASE_IDS.get(skill, frozenset())
+def _example_marker_slug(pack_root: Path | None) -> str | None:
+    if pack_root is None:
+        return None
+    marker = pack_root / "evals" / ".skillgate-example"
+    if not marker.is_file():
+        return None
+    slug = marker.read_text(encoding="utf-8").strip()
+    return slug if slug in SEED_CASE_IDS else None
 
 
-def refuse_locked_prompt_change(skill: str, case_id: str, old_prompt: str, new_prompt: str) -> None:
-    if case_is_locked(skill, case_id) and old_prompt != new_prompt:
+def _seed_case_ids(
+    skill: str, case_ids: Iterable[str], *, pack_root: Path | None = None
+) -> frozenset[str]:
+    """Seed lock for bundled examples; user skills with the same name are not locked."""
+    marked = _example_marker_slug(pack_root)
+    if marked:
+        return SEED_CASE_IDS[marked]
+    locked = SEED_CASE_IDS.get(skill)
+    if not locked:
+        return frozenset()
+    present = {case_id_slug(item) for item in case_ids if item}
+    if not (present & locked):
+        return frozenset()
+    anchor = present - _SCAFFOLD_CASE_IDS
+    if not (anchor & locked):
+        return frozenset()
+    return locked
+
+
+def case_is_locked(
+    skill: str,
+    case_id: str,
+    *,
+    pack_case_ids: Iterable[str] | None = None,
+    pack_root: Path | None = None,
+) -> bool:
+    slug = case_id_slug(case_id)
+    if pack_case_ids is None:
+        marked = _example_marker_slug(pack_root)
+        if marked:
+            return slug in SEED_CASE_IDS.get(marked, frozenset())
+        return slug in SEED_CASE_IDS.get(skill, frozenset())
+    return slug in _seed_case_ids(skill, pack_case_ids, pack_root=pack_root)
+
+
+def refuse_locked_prompt_change(
+    skill: str,
+    case_id: str,
+    old_prompt: str,
+    new_prompt: str,
+    *,
+    pack_case_ids: Iterable[str],
+) -> None:
+    if (
+        case_is_locked(skill, case_id, pack_case_ids=pack_case_ids)
+        and old_prompt != new_prompt
+    ):
         raise SuiteError(SEED_EDIT_MESSAGE, hint=SEED_EDIT_HINT)
 
 
-def keep_locked_case(skill: str, by_id: Mapping[str, Any], raw: Mapping[str, Any]) -> Any:
+def keep_locked_case(
+    skill: str,
+    by_id: Mapping[str, Any],
+    raw: Mapping[str, Any],
+    *,
+    pack_case_ids: Iterable[str],
+) -> Any:
     case_id = case_id_slug(raw.get("id") or "")
     existing = by_id.get(case_id)
-    if existing is None or not case_is_locked(skill, case_id):
+    if existing is None or not case_is_locked(skill, case_id, pack_case_ids=pack_case_ids):
         return None
     if "prompt" in raw:
-        refuse_locked_prompt_change(skill, case_id, existing.prompt, str(raw.get("prompt") or ""))
+        refuse_locked_prompt_change(
+            skill,
+            case_id,
+            existing.prompt,
+            str(raw.get("prompt") or ""),
+            pack_case_ids=pack_case_ids,
+        )
     return existing
 
 
-def reject_missing_seed_cases(skill: str, case_ids: Iterable[str]) -> None:
-    locked = SEED_CASE_IDS.get(skill)
+def reject_missing_seed_cases(
+    skill: str, case_ids: Iterable[str], *, pack_root: Path | None = None
+) -> None:
+    locked = _seed_case_ids(skill, case_ids, pack_root=pack_root)
     if not locked:
         return
-    present = {item for item in case_ids if item}
+    present = {case_id_slug(item) for item in case_ids if item}
     missing = sorted(locked - present)
     if missing:
         raise SuiteError(SEED_LOCK_MESSAGE, hint=SEED_LOCK_HINT, exit_code=2)
@@ -175,8 +243,8 @@ def guard_cases_yaml_write(root: Path, rel: str, content: str | bytes) -> None:
             if isinstance(item, dict) and item.get("id"):
                 ids.add(str(item.get("id")))
     skill = str(raw.get("skill") or root.name).strip()
-    reject_missing_seed_cases(skill, ids)
-    reject_missing_seed_cases(root.name, ids)
+    reject_missing_seed_cases(skill, ids, pack_root=root)
+    reject_missing_seed_cases(root.name, ids, pack_root=root)
 
 
 def merge_judge_block(

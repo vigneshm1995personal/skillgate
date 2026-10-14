@@ -21,6 +21,9 @@ def register_pack_commands(app: typer.Typer, case_app: typer.Typer, judge_app: t
 
     @app.command("import")
     def import_cmd(
+        target: str | None = typer.Argument(
+            None, help="Local skill folder or git URL (https://… or git@…)"
+        ),
         source: list[str] | None = typer.Option(
             None, "--source", help="cursor | claude | codex (repeatable)"
         ),
@@ -30,13 +33,20 @@ def register_pack_commands(app: typer.Typer, case_app: typer.Typer, judge_app: t
             None, "--only", help="Import only these skill slugs (repeatable)"
         ),
     ) -> None:
-        """Copy skills from an agent folder, a zip, or a SKILL.md file."""
+        """Copy skills from a folder, git URL, agent folder, zip, or SKILL.md."""
         from pathlib import Path as _Path
 
         from skillgate_ai.paths import config_root_for
 
         root = config_root_for(_Path.cwd())
         try:
+            if target is not None:
+                from skillgate_ai.api_intake import import_path_or_git_result
+
+                result = import_path_or_git_result(root, target)
+                for row in result.get("imported") or []:
+                    console.print(f"imported  {row.get('slug') or row.get('name')}")
+                return
             if zip_path is not None or markdown is not None:
                 from skillgate_ai.api_intake import extract_uploaded_skill
 

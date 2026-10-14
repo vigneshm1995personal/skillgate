@@ -31,7 +31,7 @@ def test_check_without_key_exits_2(tmp_path: Path, monkeypatch) -> None:
     result = runner.invoke(app, ["check", str(pack)])
     out = plain_text(result.stdout + result.stderr)
     assert result.exit_code == 2, out
-    assert "Add a model key in Settings or run `skillgate keys set`" in out
+    assert "skillgate keys set" in out
     assert "SKILLGATE_OPENAI_API_KEY" not in out
     assert "--key-env" not in out
     assert "built-in checker" not in out.lower()
@@ -46,7 +46,7 @@ def test_run_check_without_key_does_not_start(tmp_path: Path) -> None:
     assert result.report is None
     assert result.error is not None
     message = (result.error.get("message") or "") + " " + (result.error.get("hint") or "")
-    assert result.error.get("hint") == "Add a model key in Settings or run `skillgate keys set`"
+    assert "skillgate keys set" in (result.error.get("hint") or "")
     assert "SKILLGATE_" not in message
     assert "--key-env" not in message
 
@@ -72,26 +72,26 @@ def test_demo_flag_is_unknown(tmp_path: Path, monkeypatch) -> None:
     assert "no such option" in combined or "unrecognized" in combined or "unexpected" in combined
 
 
-def test_harness_demo_is_unknown(tmp_path: Path, monkeypatch) -> None:
+def test_harness_demo_is_removed(tmp_path: Path, monkeypatch) -> None:
+    from conftest import enable_cursor_agent
+
     pack = tmp_path / "pdf"
     shutil.copytree(ROOT / "skills" / "pdf", pack)
-    monkeypatch.setenv("SKILLGATE_ROOT", str(tmp_path))
-    set_vault_key(tmp_path, "OPENAI_API_KEY", "sk-test-not-a-real-key")
+    enable_cursor_agent(monkeypatch, tmp_path)
     result = runner.invoke(app, ["check", str(pack), "--harness", "demo"])
     combined = plain_text(result.stdout + result.stderr)
     assert result.exit_code != 0, combined
-    assert "Unknown harness" in combined
-    assert "No model key found" not in combined
+    assert "removed" in combined.lower()
 
 
 def test_resolve_harness_auto_is_not_demo(tmp_path: Path, monkeypatch) -> None:
-    monkeypatch.setenv("SKILLGATE_ROOT", str(tmp_path))
-    set_vault_key(tmp_path, "OPENAI_API_KEY", "sk-test-not-a-real-key")
+    from conftest import enable_cursor_agent
     from skillgate_ai.config import get_llm_config
 
+    enable_cursor_agent(monkeypatch, tmp_path)
     cfg = get_llm_config(tmp_path)
     harness = resolve_harness("auto", cfg)
-    assert harness.name != "demo"
+    assert harness.name == "cursor-agent"
 
 
 def test_customer_copy_denylist() -> None:

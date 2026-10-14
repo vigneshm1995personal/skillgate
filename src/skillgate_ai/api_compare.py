@@ -123,10 +123,9 @@ def _start_models_compare(state: AppState, body: dict[str, Any]) -> dict[str, An
     if not skill_raw:
         fail(400, "Pick a skill first.")
     if not get_llm_config(state.root).has_any_key:
-        raise MissingLLMKeyError(
-            "No model key found.",
-            hint="Add a key in Settings (`skillgate ui`) or run `skillgate keys set`.",
-        )
+        from skillgate_ai.config import missing_key_error
+
+        raise missing_key_error()
     if state.gate_busy():
         fail(409, "A check or compare is already running.")
     path = find_skill(state.root, skill_raw)

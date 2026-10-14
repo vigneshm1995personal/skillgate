@@ -473,7 +473,7 @@ def test_ui_check_without_key_is_409(project_root: Path, tmp_path: Path) -> None
         status, started = _request("POST", f"{base}/api/check", {"path": str(dest)})
         assert status == 409, started
         blob = json.dumps(started).lower()
-        assert "api key" in blob or "no model key" in blob
+        assert "no agent" in blob or "api key" in blob
         assert "skillgate keys set" in blob
     finally:
         server.shutdown()
@@ -514,7 +514,7 @@ def test_ui_live_without_key_is_409(project_root: Path) -> None:
         )
         assert status == 409, payload
         blob = json.dumps(payload).lower()
-        assert "no model key" in blob or "api key" in blob
+        assert "no agent" in blob or "api key" in blob
         assert "skillgate keys set" in blob
         assert status != 202
     finally:
@@ -525,13 +525,15 @@ def test_ui_live_without_key_is_409(project_root: Path) -> None:
 def test_ui_live_with_key_does_not_use_builtin(
     project_root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv("SKILLGATE_OPENAI_API_KEY", "sk-test-not-a-real-key")
+    from conftest import enable_cursor_agent
+
+    enable_cursor_agent(monkeypatch, project_root)
     dest = tmp_path / "pdf"
     shutil.copytree(project_root / "skills" / "pdf", dest)
     ensure_demo_pdfs(dest / "evals" / "fixtures")
 
     class LiveStub:
-        name = "llm"
+        name = "cursor-agent"
 
         def run(self, *args, **kwargs):
             from skillgate_ai.errors import HarnessError
@@ -564,13 +566,15 @@ def test_ui_live_with_key_does_not_use_builtin(
 def test_ui_demo_flag_still_runs_live(
     project_root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv("SKILLGATE_OPENAI_API_KEY", "sk-test-not-a-real-key")
+    from conftest import enable_cursor_agent
+
+    enable_cursor_agent(monkeypatch, project_root)
     dest = tmp_path / "pdf"
     shutil.copytree(project_root / "skills" / "pdf", dest)
     ensure_demo_pdfs(dest / "evals" / "fixtures")
 
     class LiveStub:
-        name = "llm"
+        name = "cursor-agent"
 
         def run(self, *args, **kwargs):
             from skillgate_ai.errors import HarnessError
@@ -611,7 +615,7 @@ def test_ui_new_pack_no_key_is_409(project_root: Path, tmp_path: Path) -> None:
         status, started = _request("POST", f"{base}/api/check", {"path": created["path"]})
         assert status == 409, started
         blob = json.dumps(started).lower()
-        assert "no model key" in blob or "api key" in blob
+        assert "no agent" in blob or "api key" in blob
     finally:
         server.shutdown()
         server.server_close()

@@ -66,6 +66,14 @@ def _no_live_keys(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("SKILLGATE_JUDGE_WHY", raising=False)
 
 
+def enable_cursor_agent(monkeypatch: pytest.MonkeyPatch, root: Path | None = None) -> None:
+    if root is not None:
+        monkeypatch.setenv("SKILLGATE_ROOT", str(root))
+    monkeypatch.setenv("SKILLGATE_CURSOR_API_KEY", "cur-test")
+    monkeypatch.setattr("skillgate_ai.harness._resolve_agent_bin", lambda _preferred: "/bin/agent")
+    monkeypatch.setattr("skillgate_ai.harness._resolve_claude_bin", lambda _preferred: None)
+
+
 @pytest.fixture
 def project_root(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
     monkeypatch.setenv("SKILLGATE_ROOT", str(ROOT))

@@ -3,14 +3,30 @@
 from __future__ import annotations
 
 import io
+import re
+import shutil
+import tempfile
 import zipfile
 from pathlib import Path
+from typing import Any
 
 from skillgate_ai.case_pack import CASES_REL
 from skillgate_ai.catalog import safe_skill_folder_name, workspace_skills_root
 from skillgate_ai.errors import SkillGateError
 from skillgate_ai.ingest import FRONTMATTER_RE, ingest_skill
+from skillgate_ai.pack import copy_skill_pack
 from skillgate_ai.scaffold import scaffold_trigger_cases
+
+_GIT_URL_RE = re.compile(r"^(https?://|git@|ssh://).+", re.IGNORECASE)
+
+
+def looks_like_git_url(text: str) -> bool:
+    cleaned = (text or "").strip()
+    if not cleaned:
+        return False
+    if _GIT_URL_RE.match(cleaned):
+        return True
+    return cleaned.endswith(".git")
 
 
 def _inside(root: Path, candidate: Path) -> Path:
@@ -107,3 +123,84 @@ def extract_uploaded_skill(root: Path, data: bytes, *, filename: str) -> Path:
         target.write_bytes(archive.read(info))
     ingest_skill(dest, strict=False)
     return dest
+
+
+def import_skill_folder(root: Path, source: str | Path) -> Path:
+    """Copy a local skill folder into ``<root>/skills/<slug>``."""
+    src = Path(source).expanduser().resolve()
+    if not src.is_dir() or not (src / "SKILL.md").is_file():
+        raise SkillGateError(
+            "Pass a skill folder that contains SKILL.md.",
+            hint="Example: skillgate import ./my-skill",
+        )
+    loaded = ingest_skill(src, strict=False)
+    slug = safe_skill_folder_name(loaded.name or src.name)
+    parent = workspace_skills_root(root)
+    parent.mkdir(parents=True, exist_ok=True)
+    dest = _inside(parent, parent / slug)
+    if dest.exists():
+        shutil.rmtree(dest)
+    copy_skill_pack(src, dest, include_goldens=True)
+    ingest_skill(dest, strict=False)
+    return dest
+
+
+def import_skills_from_git(root: Path, repo_url: str) -> list[Path]:
+    """Clone a repo and import skill pack(s) from its root or ``skills/``."""
+    from skillgate_ai.sync import _clone, _reject_symlinks, _skill_names
+
+    url = (repo_url or "").strip()
+    if not looks_like_git_url(url):
+        raise SkillGateError(
+            "Pass a git URL to clone.",
+            hint="Example: skillgate import https://github.com/org/skills.git",
+        )
+    with tempfile.TemporaryDirectory(prefix="sg-import-") as td:
+        work = Path(td)
+        _clone(url, work)
+        if (work / "SKILL.md").is_file():
+            _reject_symlinks(work)
+            return [import_skill_folder(root, work)]
+        names = _skill_names(work, "skills")
+        if not names:
+            raise SkillGateError(
+                "That repo has no SKILL.md at the root and no skills/ folder.",
+                hint="Point at a single-skill repo or a monorepo with skills/<name>/SKILL.md.",
+            )
+        imported: list[Path] = []
+        for name in names:
+            skill_dir = work / "skills" / name
+            _reject_symlinks(skill_dir)
+            imported.append(import_skill_folder(root, skill_dir))
+        return imported
+
+
+def import_path_or_git_result(root: Path, target: str) -> dict[str, Any]:
+    """CLI/API helper: one folder path or git URL."""
+    from skillgate_ai.catalog import catalog_entries
+
+    text = (target or "").strip()
+    if not text:
+        raise SkillGateError("Pass a skill folder or a git URL.")
+    if looks_like_git_url(text):
+        paths = import_skills_from_git(root, text)
+        source = "git"
+    else:
+        paths = [import_skill_folder(root, text)]
+        source = "folder"
+    imported: list[dict[str, str]] = []
+    for dest in paths:
+        loaded = ingest_skill(dest, strict=False)
+        imported.append(
+            {
+                "name": loaded.display_name or dest.name,
+                "slug": loaded.name or dest.name,
+                "source": source,
+                "warning": loaded.warning or "",
+            }
+        )
+    return {
+        "imported": imported,
+        "skipped": [],
+        "skills": catalog_entries(root),
+    }

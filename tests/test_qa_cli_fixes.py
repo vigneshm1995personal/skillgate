@@ -38,7 +38,7 @@ def _leaky_report() -> SuiteReport:
         suite="pdf",
         title="pdf",
         skill="pdf",
-        harness="llm",
+        harness="cursor-agent",
         sandbox="local",
         passed=True,
         tasks=[
@@ -263,7 +263,7 @@ def test_check_case_runs_single_tryout(tmp_path: Path, monkeypatch) -> None:
         return CheckResult(
             report=None,
             exit_code=2,
-            error={"message": "No model key found."},
+            error={"message": "No agent is available to run checks."},
         )
 
     monkeypatch.setattr("skillgate_ai.cli.run_check", fake_run)
