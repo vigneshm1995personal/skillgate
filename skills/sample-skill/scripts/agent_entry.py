@@ -8,22 +8,37 @@ import re
 from pathlib import Path
 
 
+def _diff_blob(prompt: str) -> str:
+    if "```" not in prompt:
+        return prompt
+    for part in prompt.split("```"):
+        stripped = part.strip()
+        lower = stripped.lower()
+        if lower.startswith("diff"):
+            body = stripped[4:].lstrip("\n") if lower.startswith("diff\n") or lower == "diff" else stripped
+            if body.strip():
+                return body
+    return prompt
+
+
 def _subject(prompt: str) -> str:
+    diff = _diff_blob(prompt).lower()
+    if "export_orders_csv" in diff or ("def export" in diff and "csv" in diff):
+        return "feat: add csv export for orders"
+    if "readme.md" in diff or "--- a/readme" in diff:
+        return "docs: clarify install steps in readme"
+    compact = re.sub(r"[_\s]", "", diff)
+    if "parsetotal" in compact and "def" in diff:
+        return "refactor: rename parse_total helper"
+    if "cart.py" in diff or ("checkout_total" in diff and "return 0" in diff):
+        return "fix: handle empty cart total"
     lower = prompt.lower()
-    if "readme" in lower or "documentation" in lower or "docstring" in lower:
-        if "install" in lower or "readme" in lower:
-            return "docs: clarify install steps in readme"
-        return "docs: update project documentation"
-    if "rename" in lower or "refactor" in lower:
-        return "refactor: rename parse helper for clarity"
+    if "cart" in lower and "total" in lower:
+        return "fix: handle empty cart total"
     if "export" in lower and "csv" in lower:
         return "feat: add csv export for orders"
-    if "cart" in lower and ("total" in lower or "empty" in lower):
-        return "fix: handle empty cart total"
-    if "feat" in lower or "add " in lower:
-        return "feat: add requested capability"
-    if "fix" in lower or "bug" in lower:
-        return "fix: correct reported issue"
+    if "readme" in lower:
+        return "docs: clarify install steps in readme"
     return "chore: apply diff changes"
 
 

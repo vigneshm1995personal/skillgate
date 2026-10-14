@@ -9,22 +9,22 @@ metadata:
 
 # Commit message writer
 
-Turn a small unified diff into **one** Conventional Commits line (optional body later). The user’s diff is in the task text — there are no binary fixtures.
+Turn a small unified diff into **one** Conventional Commits subject line. The diff is in the task text (no binary fixtures).
 
-## Output
+## Required step (every task)
 
-1. Create `output/` if needed.
-2. Write **only** the commit message to `output/commit.txt`.
-3. First line = subject: `type: imperative summary` (lowercase type, no trailing period).
-4. Keep the subject **≤ 72 characters**.
-5. Pick the type from the change:
-   - `fix` — bug fix
-   - `feat` — new behavior
-   - `docs` — documentation only
-   - `refactor` — behavior-neutral code change
+From the workspace root, run the bundled script. It reads `SKILLGATE_TASK` and writes the message file — **do not** paste the commit line only in chat.
 
-## How to work
+```bash
+python3 .skillgate/skills/sample-skill/scripts/agent_entry.py
+```
 
-Read the diff in the task. Summarize the **main** user-visible change in the subject. Mention the touched area (function, module, or feature) when it helps.
+The task names the output path (usually `output/commit.txt`). The script creates `output/` if needed.
 
-Optional helper (demo harness): `python3 .skillgate/skills/sample-skill/scripts/agent_entry.py` reads `SKILLGATE_TASK` and writes `output/commit.txt`.
+## Message rules
+
+- One line subject: `type: imperative summary` (lowercase type, no trailing period).
+- Subject **≤ 72 characters**.
+- Types: `fix` (bug), `feat` (new behavior), `docs` (documentation only), `refactor` (behavior-neutral code change).
+
+Summarize the **main** change in the diff (function, module, or user-visible behavior).

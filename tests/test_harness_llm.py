@@ -82,6 +82,43 @@ def test_count_path_steps_counts_llm_run_commands() -> None:
     assert steps >= 1
 
 
+def test_llm_harness_auto_runs_agent_entry_when_model_omits_run(monkeypatch, tmp_path) -> None:
+    import shutil
+
+    from skillgate_ai.harness import Completion, LLMHarness
+    from skillgate_ai.ingest import ingest_skill
+    from skillgate_ai.sandbox import LocalSandbox
+    from skillgate_ai.usage import Usage
+
+    pack = tmp_path / "sample-skill"
+    shutil.copytree(Path(__file__).resolve().parents[1] / "skills" / "sample-skill", pack)
+    skill = ingest_skill(pack, strict=False)
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    dest_skill = workspace / ".skillgate" / "skills" / "sample-skill"
+    dest_skill.mkdir(parents=True)
+    shutil.copytree(pack, dest_skill, dirs_exist_ok=True)
+    (workspace / ".skillgate" / "selected.json").write_text(
+        '{"skill": "sample-skill"}', encoding="utf-8"
+    )
+    harness = LLMHarness(_cfg(openai_api_key="sk-test"))
+    prompt = "Write output/commit.txt for a cart fix diff in cart.py"
+
+    def fake_complete(act_prompt, timeout_sec):
+        del act_prompt, timeout_sec
+        return Completion(
+            text="fix: handle empty cart total",
+            usage=Usage(tokens_in=1, tokens_out=1),
+        )
+
+    monkeypatch.setattr(harness, "_complete", fake_complete)
+    sandbox = LocalSandbox(workspace)
+    result = harness.run(sandbox, prompt, [skill], timeout_sec=5)
+    assert (workspace / "output" / "commit.txt").is_file()
+    assert "auto-ran agent_entry" in result.transcript
+    assert any(span.get("name") == "tool.shell" for span in result.spans)
+
+
 def test_llm_harness_records_run_commands_as_spans(monkeypatch, tmp_path) -> None:
     from skillgate_ai.harness import Completion, LLMHarness
     from skillgate_ai.ingest import ingest_skill
