@@ -34,9 +34,7 @@ PATH_NOT_AVAILABLE = "Not available. No recorded path."
 PASS_LOCK: dict[str, frozenset[str]] = {
     "task_completion": frozenset({"fully completed"}),
     "correctness": frozenset({"correct", "mostly correct"}),
-    "instruction_adherence": frozenset(
-        {"fully followed", "minor deviation", "major deviation"}
-    ),
+    "instruction_adherence": frozenset({"fully followed", "minor deviation"}),
     "evidence_action_validity": frozenset(
         {"fully supported", "partially supported", "n/a"}
     ),
@@ -46,7 +44,7 @@ PASS_LOCK: dict[str, frozenset[str]] = {
 PASS_NEED_LABEL: dict[str, str] = {
     "task_completion": "Fully completed",
     "correctness": "Correct or Mostly correct",
-    "instruction_adherence": "Fully followed, Minor deviation, or Major deviation",
+    "instruction_adherence": "Fully followed or Minor deviation",
     "evidence_action_validity": "Fully supported, Partially supported, or N/A",
     "result_quality": "Clear and complete or Mostly good",
 }
@@ -56,11 +54,13 @@ OUTCOME_SCORING_NOTES = (
     "(commands plus captured stdout/stderr) as primary evidence. Do not claim tests or "
     "files were missing when they appear there. "
     "When workspace_files show the expected deliverable (letter, spreadsheet, export, etc.) "
-    "with correct substance, prefer Fully followed / Minor deviation for instruction_adherence "
-    "and Fully supported / Partially supported for evidence_action_validity — do not fail "
-    "solely because the agent skipped cosmetic steps or used a different tool path. "
-    "instruction_adherence: Violated fails; Major deviation passes when the deliverable in "
-    "workspace_files is substantively correct. "
+    "with correct substance and task_completion is Fully completed, use Minor deviation (or "
+    "Fully followed) for instruction_adherence when the only gap is style, tool choice, or "
+    "cosmetic steps — do not label those Major deviation. Major deviation fails the check. "
+    "Use Fully supported / Partially supported for evidence_action_validity when outputs "
+    "substantiate the result. "
+    "instruction_adherence: Violated and Major deviation fail; only Minor deviation or Fully "
+    "followed pass. "
     "task_completion: When SKILL.md requires refusing a shortcut, insisting on tests, or "
     "following a debug process instead of a quick fix, that behavior is Fully completed."
 )
@@ -100,7 +100,11 @@ OUTCOME_QUESTIONS: dict[str, dict[str, Any]] = {
                 "Refusing a shortcut or requiring tests when SKILL.md demands it counts as following."
             ),
             "Minor deviation": "Small deviations that did not undermine the result.",
-            "Major deviation": "Material deviations from the instructions.",
+            "Major deviation": (
+                "Material deviations from required process or constraints that are not explained "
+                "by a correct deliverable in workspace_files. Do not use when the work is fully "
+                "done and the gap is style or tooling only — use Minor deviation instead."
+            ),
             "Violated": "Clear violations of the rules or constraints.",
         },
     },

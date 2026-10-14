@@ -123,18 +123,30 @@ def test_stamp_resolved_codex_default_model_label() -> None:
     assert run.model == CODEX_DEFAULT_MODEL_LABEL
 
 
-def test_judge_pass_lock_partially_supported_and_major_deviation() -> None:
-    answers = {
+def test_judge_pass_lock_partially_supported_passes_major_deviation_fails() -> None:
+    base = {
         "task_completion": {"choice": "Fully completed", "confidence": 0.9},
         "correctness": {"choice": "Correct", "confidence": 0.9},
-        "instruction_adherence": {"choice": "Major deviation", "confidence": 0.9},
-        "evidence_action_validity": {"choice": "Partially supported", "confidence": 0.9},
         "result_quality": {"choice": "Clear and complete", "confidence": 0.9},
         "path_efficiency": {"choice": "Efficient", "confidence": 0.9},
     }
-    passed, reasons = outcome_verdict(answers)
+    partial = {
+        **base,
+        "instruction_adherence": {"choice": "Fully followed", "confidence": 0.9},
+        "evidence_action_validity": {"choice": "Partially supported", "confidence": 0.9},
+    }
+    passed, reasons = outcome_verdict(partial)
     assert passed is True
     assert reasons == []
+
+    major = {
+        **base,
+        "instruction_adherence": {"choice": "Major deviation", "confidence": 0.9},
+        "evidence_action_validity": {"choice": "Fully supported", "confidence": 0.9},
+    }
+    passed, reasons = outcome_verdict(major)
+    assert passed is False
+    assert any("Followed the rules?" in item for item in reasons)
 
 
 def test_normalize_judge_api_usage_reads_top_level_completion_tokens() -> None:

@@ -75,7 +75,8 @@ def test_pass_lock_table() -> None:
             instruction_adherence={"choice": "Major deviation", "confidence": 0.8}
         )
     )
-    assert passed is True
+    assert passed is False
+    assert any("Followed the rules?" in item for item in reasons)
 
 
 def test_missing_or_unknown_choice_fails_closed() -> None:
