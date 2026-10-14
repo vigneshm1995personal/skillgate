@@ -567,6 +567,42 @@ def test_settings_keys_label_ai_gateway_api_key(tmp_path: Path, monkeypatch) -> 
     assert "decisions_path" not in judge
 
 
+def test_import_dataset_preview_and_commit(tmp_path: Path, monkeypatch) -> None:
+    pack = _copy_pack(tmp_path)
+    client = _client(tmp_path, monkeypatch)
+    sample = (ROOT / "docs" / "samples" / "dataset-import.csv").read_bytes()
+    preview = client.post(
+        "/api/evals/import-dataset",
+        data={
+            "skill": "pdf",
+            "dry_run": "true",
+            "confirm": "false",
+            "on_conflict": "fail",
+        },
+        files={"file": ("rows.csv", sample, "text/csv")},
+    )
+    assert preview.status_code == 200, preview.text
+    body = preview.json()
+    assert body["format"] == "csv"
+    assert body["imported_count"] == 1
+    assert body["dry_run"] is True
+    before = (pack / "evals" / "cases.yaml").read_text(encoding="utf-8")
+    commit = client.post(
+        "/api/evals/import-dataset",
+        data={
+            "skill": "pdf",
+            "dry_run": "false",
+            "confirm": "true",
+            "on_conflict": "fail",
+        },
+        files={"file": ("rows.csv", sample, "text/csv")},
+    )
+    assert commit.status_code == 200, commit.text
+    after = (pack / "evals" / "cases.yaml").read_text(encoding="utf-8")
+    assert after != before
+    assert "csv-smoke" in after
+
+
 def test_pin_refuses_seed_prompt_rewrite(tmp_path: Path, monkeypatch) -> None:
     pack = _copy_pack(tmp_path)
     before = (pack / "evals" / "cases.yaml").read_text(encoding="utf-8")

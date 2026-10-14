@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, File, Form, Request, UploadFile
 
 from skillgate_ai.api_payloads import fail, skill_payload, state_of
 from skillgate_ai.case_pack import (
@@ -94,6 +94,59 @@ def register_eval_routes(app: FastAPI) -> None:
             "skill": skill_payload(state, skill_path),
             "pack_judge": pack_judge_dict(pack),
             "warnings": warnings,
+        }
+
+    @app.post("/api/evals/import-dataset")
+    async def import_dataset(
+        request: Request,
+        skill: str = Form(...),
+        file: UploadFile = File(...),
+        dry_run: bool = Form(False),
+        on_conflict: str = Form("fail"),
+        confirm: bool = Form(False),
+    ) -> dict[str, Any]:
+        state = state_of(request)
+        skill_path = find_skill(state.root, skill)
+        conflict = str(on_conflict or "fail").strip().lower()
+        if conflict not in {"fail", "skip", "replace"}:
+            fail(400, "on_conflict must be fail, skip, or replace.")
+        data = await file.read()
+        from skillgate_ai.case_import import CaseImportError, apply_case_import, plan_case_import
+
+        try:
+            if dry_run or not confirm:
+                plan = plan_case_import(
+                    skill_path,
+                    data,
+                    filename=file.filename,
+                    on_conflict=conflict,  # type: ignore[arg-type]
+                )
+            else:
+                plan = apply_case_import(
+                    skill_path,
+                    data,
+                    filename=file.filename,
+                    on_conflict=conflict,  # type: ignore[arg-type]
+                    dry_run=False,
+                )
+        except CaseImportError as exc:
+            fail(
+                400,
+                exc.message,
+                rows=[row.__dict__ for row in exc.rows],
+            )
+        except SuiteError as exc:
+            fail(400, exc.message, hint=exc.hint)
+        pack = load_case_pack(skill_path)
+        return {
+            "skill": skill_payload(state, skill_path),
+            "format": plan.format,
+            "rows": [row.__dict__ for row in plan.rows],
+            "imported_count": len(plan.checks),
+            "warnings": plan.warnings,
+            "dry_run": dry_run or not confirm,
+            "checks": checks_from_pack(pack, include_drafts=True) if pack else [],
+            "pack_judge": pack_judge_dict(pack),
         }
 
     @app.get("/api/evals/dataset")

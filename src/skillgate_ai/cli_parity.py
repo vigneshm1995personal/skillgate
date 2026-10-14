@@ -27,6 +27,7 @@ WRITE_ROUTE_CLI: dict[tuple[str, str], str] = {
     ("POST", "/api/skills/apply-fix"): "skill write",
     ("POST", "/api/evals/generate"): "skill write",
     ("POST", "/api/evals/pin"): "case add",
+    ("POST", "/api/evals/import-dataset"): "case import",
     ("POST", "/api/evals/fixture-bind"): "case bind",
     ("POST", "/api/runs"): "check",
     ("POST", "/api/runs/{run_id}/skip"): "check",

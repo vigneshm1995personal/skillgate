@@ -29,6 +29,7 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { AssistantMarkdown } from "@/components/dashboard/assistant-markdown"
 import { EvalMosaic, MosaicLegend } from "@/components/dashboard/eval-mosaic"
+import { DatasetImportDialog } from "@/components/dashboard/dataset-import-dialog"
 import { DatasetViewer } from "@/components/dashboard/dataset-viewer"
 import { SkillPackBrowser } from "@/components/dashboard/skill-pack-browser"
 import { GateBadge, PageHeader } from "@/components/dashboard/chrome"
@@ -55,6 +56,7 @@ export function SkillDetailPage({ name }: { name: string }) {
   const [error, setError] = useState("")
   const [skillSettled, setSkillSettled] = useState(false)
   const [datasetOpen, setDatasetOpen] = useState(false)
+  const [importOpen, setImportOpen] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -165,6 +167,16 @@ export function SkillDetailPage({ name }: { name: string }) {
               onClick={() => setDatasetOpen(true)}
             >
               View Dataset
+            </Button>
+            <Button
+              id="btn-import-dataset-detail"
+              variant="outline"
+              className="touch-manipulation"
+              aria-haspopup="dialog"
+              aria-expanded={importOpen}
+              onClick={() => setImportOpen(true)}
+            >
+              Import dataset
             </Button>
             <Button
               onClick={() => void selectSkill(item?.absolute || name)}
@@ -492,6 +504,12 @@ export function SkillDetailPage({ name }: { name: string }) {
         skillId={item?.absolute || item?.id || name}
         open={datasetOpen}
         onOpenChange={setDatasetOpen}
+      />
+      <DatasetImportDialog
+        skillId={item?.absolute || item?.id || name}
+        open={importOpen}
+        onOpenChange={setImportOpen}
+        onImported={() => setDatasetOpen(true)}
       />
     </div>
   )

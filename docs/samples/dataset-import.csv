@@ -1,0 +1,2 @@
+id,prompt,expected,output,input,should_trigger
+csv-smoke,Extract the greeting from the PDF.,Hello,output/result.txt,evals/fixtures/hello.pdf,true
