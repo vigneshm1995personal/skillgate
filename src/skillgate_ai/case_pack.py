@@ -206,11 +206,7 @@ def expected_without_target_warning(
             or str(golden_path or "").strip()
         )
         return NO_TRIGGER_OUTPUT_WARNING if leftover else None
-    if not str(contains or "").strip():
-        return None
-    if str(output_path or "").strip() or str(golden_path or "").strip():
-        return None
-    return EXPECTED_WITHOUT_TARGET
+    return None
 
 
 def cases_path(skill_path: str | Path) -> Path:
@@ -351,6 +347,13 @@ def suite_from_pack(pack: CasePack, skill_rel: str) -> SuiteSpec:
             if case.contains:
                 rubric["contains"] = case.contains[0]
             scorers.append({"type": "rubric", "min_score": 1.0, "checks": [rubric]})
+        elif case.contains and case.should_trigger:
+            scorers.append(
+                {
+                    "type": "answer_contains",
+                    "answer": list(case.contains),
+                }
+            )
         task_raw: dict[str, Any] = {
             "id": case.id,
             "prompt": case.prompt,
@@ -403,8 +406,6 @@ def checks_from_pack(pack: CasePack, *, include_drafts: bool = False) -> list[di
         if case.judge is not None and not case.judge.is_empty():
             check["judge"] = case.judge.to_sparse_dict()
         warning = no_trigger_output_warning(case)
-        if warning is None and case.contains and case.golden is None:
-            warning = EXPECTED_WITHOUT_TARGET
         if warning:
             check["warning"] = warning
         effective = merge_budgets(pack.budgets, case.budgets)

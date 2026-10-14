@@ -82,6 +82,8 @@ def ingest(
         raise typer.Exit(exc.exit_code) from None
     console.print(f"OK  {loaded.name}")
     console.print(loaded.description)
+    if loaded.warning:
+        console.print(f"Warning: {loaded.warning}")
 
 
 def _present_check(result) -> None:

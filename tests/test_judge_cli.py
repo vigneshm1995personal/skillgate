@@ -131,7 +131,7 @@ def test_judge_provider_set_help_is_neutral(tmp_path: Path, monkeypatch) -> None
     assert settings.provider == "compatible"
 
 
-def test_case_add_expected_without_output_errors(tmp_path: Path, monkeypatch) -> None:
+def test_case_add_expected_without_output_pins_text_check(tmp_path: Path, monkeypatch) -> None:
     dest = _skill(tmp_path)
     monkeypatch.setenv("SKILLGATE_ROOT", str(tmp_path))
     monkeypatch.chdir(tmp_path)
@@ -142,14 +142,15 @@ def test_case_add_expected_without_output_errors(tmp_path: Path, monkeypatch) ->
             "add",
             str(dest),
             "--prompt",
-            "Extract the invoice totals.",
+            "What is 2+2?",
             "--expected",
-            "Total 40.00",
+            "4",
         ],
     )
     out = plain_text(result.stdout + result.stderr)
-    assert result.exit_code != 0, out
-    assert "output" in out.lower()
+    assert result.exit_code == 0, out
+    pack = load_case_pack(dest)
+    assert any(case.contains == ["4"] for case in pack.cases)
 
 
 def test_case_add_short_slug_and_input_file(tmp_path: Path, monkeypatch) -> None:

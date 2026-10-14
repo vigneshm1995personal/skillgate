@@ -167,8 +167,14 @@ def _pick(current: float | None, update: float | None) -> float | None:
 def _usage_objects(obj: dict[str, Any]):
     kind = obj.get("type")
     if kind in {"turn.completed", "result"}:
-        # Codex exec turn, or Cursor stream-json final result.
-        yield obj.get("usage")
+        # Codex exec turn, or Cursor / Claude Code stream-json final result.
+        usage = obj.get("usage")
+        merged: dict[str, Any] = dict(usage) if isinstance(usage, dict) else {}
+        for key in _COST_KEYS:
+            if key in obj:
+                merged[key] = obj[key]
+        if merged:
+            yield merged
         return
     if kind == "event_msg":
         payload = obj.get("payload")

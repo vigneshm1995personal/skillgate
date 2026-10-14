@@ -39,9 +39,10 @@ class RubricCheck(BaseModel):
 
 
 class ScorerSpec(BaseModel):
-    type: Literal["skill_trigger", "task_completion", "rubric"]
+    type: Literal["skill_trigger", "task_completion", "rubric", "answer_contains"]
     files: list[FileExpect] = Field(default_factory=list)
     checks: list[RubricCheck] = Field(default_factory=list)
+    answer: list[str] = Field(default_factory=list)
     min_score: float = 1.0
 
 

@@ -292,14 +292,6 @@ def add_pack_case(
         check["contains"] = expected
     if output_path:
         check["output_path"] = output_path
-    missing_target = expected_without_target_warning(
-        contains=expected,
-        output_path=output_path,
-        golden_path=None,
-        should_trigger=should_trigger,
-    )
-    if missing_target:
-        raise SuiteError(missing_target)
     return pin_checks(skill_path, [check]), None
 
 

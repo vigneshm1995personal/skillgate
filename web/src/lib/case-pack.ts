@@ -57,20 +57,7 @@ export function noTriggerOutputWarning(
 export function expectedWithoutTargetWarning(
   check: Pick<Check, "should_trigger" | "output_path" | "contains" | "golden_path">
 ): string | null {
-  const leftover = noTriggerOutputWarning(check)
-  if (leftover) {
-    return leftover
-  }
-  if (!String(check.contains || "").trim()) {
-    return null
-  }
-  if (
-    String(check.output_path || "").trim() ||
-    String(check.golden_path || "").trim()
-  ) {
-    return null
-  }
-  return EXPECTED_WITHOUT_TARGET_WARNING
+  return noTriggerOutputWarning(check)
 }
 
 export function expectedFieldValue(

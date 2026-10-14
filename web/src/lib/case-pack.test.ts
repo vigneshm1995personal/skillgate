@@ -86,14 +86,14 @@ describe("no-trigger expected output", () => {
 })
 
 describe("expected text without a target", () => {
-  it("warns when expected text has nothing to check it against", () => {
-    const warning = expectedWithoutTargetWarning({
-      prompt: "Extract hello.pdf",
-      should_trigger: true,
-      contains: "Hello Skill Gate",
-    })
-    expect(warning).toMatch(/expected text/i)
-    expect(warning).not.toMatch(/output_path|golden|contains/)
+  it("allows text-only expected checks without an output file", () => {
+    expect(
+      expectedWithoutTargetWarning({
+        prompt: "What is the capital of France?",
+        should_trigger: true,
+        contains: "Paris",
+      })
+    ).toBeNull()
     expect(
       expectedWithoutTargetWarning({
         prompt: "Extract hello.pdf",
