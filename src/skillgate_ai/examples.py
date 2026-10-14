@@ -1,4 +1,4 @@
-"""Packaged example skills (pdf / pdf-sabotaged) for `skillgate example`."""
+"""Packaged example skills for `skillgate example`."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from pathlib import Path
 
 from skillgate_ai.errors import SkillGateError
 
-EXAMPLE_NAMES = ("pdf", "pdf-sabotaged")
+EXAMPLE_NAMES = ("sample-skill", "pdf", "pdf-sabotaged")
 
 
 def bundled_example(name: str) -> Path:
@@ -16,7 +16,7 @@ def bundled_example(name: str) -> Path:
     if slug not in EXAMPLE_NAMES:
         raise SkillGateError(
             f"Unknown example {slug!r}.",
-            hint="Try `skillgate example pdf` or `skillgate example pdf-sabotaged`.",
+            hint="Try `skillgate example sample-skill`, `skillgate example pdf`, or `skillgate example pdf-sabotaged`.",
         )
     try:
         packaged = files("skillgate_ai").joinpath("examples").joinpath(slug)

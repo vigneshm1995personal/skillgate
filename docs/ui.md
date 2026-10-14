@@ -30,7 +30,7 @@ The result panel names who scored the run in plain words (`Scored by the judge`,
 
 ## Intentional red path
 
-1. On the picker, open the muted **See a failing check** card (`skills/pdf-sabotaged`).
+1. On the picker, use **Try an example** for `skills/sample-skill`, or open the muted **See a failing check** card (`skills/pdf-sabotaged`).
 2. Press Run (needs a key) → Failed, exit 1, description paste (PDF-shaped, not grocery/dinner).
 3. Apply the paste on **this same pack**, then re-run → Passed, exit 0.
 

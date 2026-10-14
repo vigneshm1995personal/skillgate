@@ -20,22 +20,21 @@ my-skill/
 
 ```yaml
 schema: 1
-skill: pdf
+skill: sample-skill
 cases:
-  - id: extract-hello
+  - id: fix-empty-cart
     status: pinned          # only pinned cases run
-    prompt: Extract the text from hello.pdf …
+    prompt: Write a Conventional Commits message for this diff to output/commit.txt …
     should_trigger: true
     input:
-      files:
-        - src: evals/fixtures/hello.pdf
-          dest: hello.pdf
+      files: []
     golden:
-      output_path: output/extracted.txt
-      path: evals/goldens/extract-hello.txt
+      output_path: output/commit.txt
+      path: evals/goldens/fix-empty-cart.txt
       kind: text            # text | json | bytes
     contains:
-      - Hello Skill Gate
+      - "fix:"
+      - cart
   - id: no-trigger-unrelated
     status: pinned
     prompt: Write a pytest for a FastAPI /health endpoint.

@@ -24,7 +24,7 @@ def _prepare(project_root: Path) -> None:
 
 def test_check_without_key_exits_2(project_root: Path) -> None:
     _prepare(project_root)
-    result = runner.invoke(app, ["check", str(project_root / "skills" / "pdf")])
+    result = runner.invoke(app, ["check", str(project_root / "skills" / "sample-skill")])
     out = plain_text(result.stdout + result.stderr)
     assert result.exit_code == 2, out
     assert "Add a model key in Settings or run `skillgate keys set`" in out
@@ -36,7 +36,7 @@ def test_check_without_key_exits_2(project_root: Path) -> None:
 
 def test_check_live_without_key_errors(project_root: Path) -> None:
     _prepare(project_root)
-    result = runner.invoke(app, ["check", str(project_root / "skills" / "pdf")])
+    result = runner.invoke(app, ["check", str(project_root / "skills" / "sample-skill")])
     assert result.exit_code == 2
     assert "No model key" in result.stdout
     assert "built-in checker" not in result.stdout.lower()

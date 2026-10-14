@@ -519,11 +519,11 @@ def test_example_defaults_to_skills_folder(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("SKILLGATE_ROOT", str(tmp_path))
     (tmp_path / "skills").mkdir()
-    result = runner.invoke(app, ["example", "pdf"])
+    result = runner.invoke(app, ["example", "sample-skill"])
     out = plain_text(result.stdout + result.stderr)
     assert result.exit_code == 0, out
-    assert (tmp_path / "skills" / "pdf" / "SKILL.md").is_file()
-    assert not (tmp_path / "pdf" / "SKILL.md").exists()
+    assert (tmp_path / "skills" / "sample-skill" / "SKILL.md").is_file()
+    assert not (tmp_path / "sample-skill" / "SKILL.md").exists()
 
 
 def test_catalog_does_not_list_root_level_duplicate(tmp_path: Path) -> None:

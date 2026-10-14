@@ -88,9 +88,9 @@ def test_ui_meta_no_account(project_root: Path) -> None:
 def test_ui_pack_display_path_is_relative(project_root: Path) -> None:
     server, base, _state = start_background(root=project_root, host="127.0.0.1", port=0)
     try:
-        status, payload = _request("GET", f"{base}/api/pack?path=skills/pdf")
+        status, payload = _request("GET", f"{base}/api/pack?path=skills/sample-skill")
         assert status == 200, payload
-        assert payload["display_path"] == "skills/pdf"
+        assert payload["display_path"] == "skills/sample-skill"
         assert not str(payload["display_path"]).startswith("/")
         assert "oss-qa" not in payload["display_path"]
         status, meta = _request("GET", f"{base}/api/meta")
@@ -321,7 +321,7 @@ def test_ui_only_start_check_posts_check(project_root: Path) -> None:
     assert 'id="skip"' in keys
     first = js.split('if (step === "firstSkill")')[1].split('if (step === "name")')[0]
     assert "/api/check" not in first
-    assert "location.hash = packHref(pdf)" in first
+    assert "location.hash = packHref(example)" in first
     pack = js.split("async function renderPack")[1].split("async function startCheck")[0]
     assert "/api/check" not in pack
     assert "startCheck(path, { live: true })" in pack
@@ -510,7 +510,7 @@ def test_ui_live_without_key_is_409(project_root: Path) -> None:
     server, base, _state = start_background(root=project_root, host="127.0.0.1", port=0)
     try:
         status, payload = _request(
-            "POST", f"{base}/api/check", {"path": "skills/pdf", "live": True}
+            "POST", f"{base}/api/check", {"path": "skills/sample-skill", "live": True}
         )
         assert status == 409, payload
         blob = json.dumps(payload).lower()

@@ -83,7 +83,7 @@ def clone_pdf_layout(dest: str | Path, *, source: str | Path) -> Path:
     if not src.is_dir() or not (src / "SKILL.md").is_file():
         raise IngestError(
             f"PDF demo pack not found: {src}",
-            hint="Pass a folder with skills/pdf, or scaffold trigger-only cases instead.",
+            hint="Pass a folder with skills/sample-skill (or skills/pdf), or scaffold trigger-only cases instead.",
         )
     loaded = ingest_skill(src)
     dst.parent.mkdir(parents=True, exist_ok=True)

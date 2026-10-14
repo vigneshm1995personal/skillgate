@@ -4,7 +4,7 @@ const NAME_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const MOTION_MS = 350;
 const CHECKING_MIN_MS = 700;
 const SETUP_DONE_KEY = "skillgate-setup-done";
-let meta = { account: false, demo_default: false, packs: [], has_any_key: false, has_openai_key: false, judge_provider: "skip", pdf_path: null };
+let meta = { account: false, demo_default: false, packs: [], has_any_key: false, has_openai_key: false, judge_provider: "skip", example_path: null };
 let wizard = blankWizard();
 let lastRoutePath = "";
 let lastRun = { path: "", snap: null };
@@ -203,7 +203,7 @@ async function renderPicker() {
   if (example) {
     const tryEx = $(`<button type="button" class="choice" id="example-btn">
       <strong>Try an example</strong>
-      <span>Open the pdf skill. Run live from the skill page.</span>
+      <span>Open the sample commit-message skill. Run live from the skill page.</span>
     </button>`);
     tryEx.onclick = () => { location.hash = packHref(example); };
     choices.appendChild(tryEx);
@@ -230,7 +230,7 @@ async function renderPicker() {
   const open = $(`<div class="card">
     <h2>Open a folder</h2>
     <label for="open-path">Path</label>
-    <input id="open-path" placeholder="skills/pdf">
+    <input id="open-path" placeholder="skills/sample-skill">
     <p><button type="button" id="open-btn">Open</button></p>
     <div id="open-err"></div>
   </div>`);
@@ -387,12 +387,12 @@ function buildWizardPanel() {
   }
 
   if (step === "firstSkill") {
-    const pdf = meta.pdf_path;
+    const example = meta.example_path;
     const card = $(`<div class="card">
       <h2>Want to add your first skill?</h2>
       <p class="muted">You run checks on the skill page, not here.</p>
       <p><button type="button" id="yes">Yes</button>
-      ${pdf ? `<button type="button" class="secondary" id="pdf">Try the pdf example</button>` : ""}
+      ${example ? `<button type="button" class="secondary" id="example">Try the sample-skill example</button>` : ""}
       <button type="button" class="secondary" id="later">Not now</button></p>
     </div>`);
     card.querySelector("#yes").onclick = () => {
@@ -400,9 +400,9 @@ function buildWizardPanel() {
       wizard.step = "name";
       paintWizard();
     };
-    const pdfBtn = card.querySelector("#pdf");
-    if (pdfBtn) {
-      pdfBtn.onclick = () => { location.hash = packHref(pdf); };
+    const exampleBtn = card.querySelector("#example");
+    if (exampleBtn) {
+      exampleBtn.onclick = () => { location.hash = packHref(example); };
     }
     card.querySelector("#later").onclick = () => { location.hash = "#/"; };
     return card;

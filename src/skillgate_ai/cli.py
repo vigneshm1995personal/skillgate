@@ -612,7 +612,10 @@ def new_cmd(
 
 @app.command("example")
 def example_cmd(
-    name: str = typer.Argument(..., help="pdf | pdf-sabotaged"),
+    name: str = typer.Argument(
+        "sample-skill",
+        help="sample-skill (default) | pdf | pdf-sabotaged",
+    ),
     dest: Path | None = typer.Option(None, "--dest", help="Folder to write (default: ./NAME)"),
 ) -> None:
     """Copy a packaged example skill into this folder."""
@@ -649,9 +652,11 @@ def _resolve_pack_arg(pack: Path | None) -> Path:
     elif is_skill_pack(root):
         dest = root
     else:
-        pdf = root / "skills" / "pdf"
-        if is_skill_pack(pdf):
-            dest = pdf
+        sample = root / "skills" / "sample-skill"
+        if is_skill_pack(sample):
+            dest = sample
+        elif is_skill_pack(root / "skills" / "pdf"):
+            dest = root / "skills" / "pdf"
         else:
             raise SkillGateError(
                 "Pass a skill pack (folder with SKILL.md and evals/).",
@@ -668,7 +673,9 @@ def _resolve_pack_arg(pack: Path | None) -> Path:
 
 @judge_app.command("show")
 def judge_show(
-    pack: Path | None = typer.Argument(None, help="Skill pack (default: this folder or skills/pdf)"),
+    pack: Path | None = typer.Argument(
+        None, help="Skill pack (default: this folder or skills/sample-skill)"
+    ),
     case_id: str | None = typer.Option(None, "--case", help="Case id"),
     json_out: bool = typer.Option(False, "--json", help="Resolved spec JSON"),
 ) -> None:

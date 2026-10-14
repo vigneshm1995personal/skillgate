@@ -12,7 +12,7 @@ Local Apache-2.0 gate for Agent Skills. One pack on disk + `skillgate check` (ex
 
 - `src/skillgate_ai/` — package (CLI, gate, judges, local UI, sync/helper)
 - `tests/` — pytest
-- `skills/` — seed packs (`pdf`, `pdf-sabotaged`)
+- `skills/` — seed packs (`sample-skill`, `pdf`, `pdf-sabotaged`)
 - `docs/` — quickstart, pack schema, plans
 - `scripts/` — maintainer helpers
 - `.github/workflows/gate.yml` — CI
@@ -23,12 +23,12 @@ Local Apache-2.0 gate for Agent Skills. One pack on disk + `skillgate check` (ex
 python3 -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
 pytest -q
-skillgate check skills/pdf
+skillgate check skills/sample-skill
 skillgate check skills/pdf-sabotaged --expect-fail
 ruff check .    # optional; ruff is a dev dep
 ```
 
-Docker: `docker build -t skillgate:test --target runtime .` then `docker run --rm -v "$PWD/skills/pdf:/pack" skillgate:test`.
+Docker: `docker build -t skillgate:test --target runtime .` then `docker run --rm -v "$PWD/skills/sample-skill:/pack" skillgate:test`.
 
 ## Agent skills
 

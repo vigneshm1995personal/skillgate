@@ -16,8 +16,8 @@ pip install skillgate-ai
 python3 -m venv .venv && source .venv/bin/activate
 pip install skillgate-ai
 skillgate keys set OPENAI_API_KEY   # hidden prompt; or pipe stdin. Or paste in Settings (`skillgate ui`)
-skillgate example pdf
-skillgate check pdf
+skillgate example sample-skill
+skillgate check sample-skill
 ```
 
 From a clone of this repo, `pip install -e .` works the same once the virtualenv is on Python 3.11+.
@@ -37,8 +37,8 @@ skillgate check pdf-sabotaged --expect-fail   # exit 0 after a live red run
 `skillgate deploy pdf` copies **only the skill files** (not `evals/`) into Cursor, Claude, or Codex **only if** this pack already has a passing check **and a model key is set**. It does not run check for you. Without a key, Deploy/Install stay blocked (CLI, API, and UI) even after a green check.
 
 ```bash
-skillgate check pdf
-skillgate deploy pdf
+skillgate check sample-skill
+skillgate deploy sample-skill
 ```
 
 Create a workspace and a new skill (same as the UI):
@@ -53,7 +53,7 @@ skillgate new notes-helper
 Image `ENTRYPOINT` is `skillgate`; default `CMD` is `check /pack` (never `serve`). Without a key, that exits 2.
 
 ```bash
-docker compose run --rm --no-TTY skillgate example pdf --dest /tmp/pdf
+docker compose run --rm --no-TTY skillgate example sample-skill --dest /tmp/sample-skill
 ```
 
 Public image tag:
@@ -88,7 +88,7 @@ Or set `SKILLGATE_OPENAI_API_KEY` in the job env instead of `--key-env`.
 
 ## Docs
 
-- [`docs/quickstart.md`](docs/quickstart.md) — keys, example pdf, live check
+- [`docs/quickstart.md`](docs/quickstart.md) — keys, sample-skill example, live check
 - [`docs/plans/compare.md`](docs/plans/compare.md) — compare design
 - [`docs/pack.md`](docs/pack.md) — `evals/cases.yaml` schema 1, fixtures, goldens, history
 - [`docs/plans/0.5-decisions.md`](docs/plans/0.5-decisions.md) — 0.5 live-only / explicit keys

@@ -36,17 +36,17 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install -e .
-      # Dest folder must match SKILL.md `name:` (pdf), not example-pdf.
+      # Dest folder must match SKILL.md `name:` (sample-skill).
       # This repo has no live secrets, so check stays keyless and must exit 2.
       # Downstream Action: `skillgate check . --key-env OPENAI_API_KEY` with
       # env OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}, or set
       # SKILLGATE_OPENAI_API_KEY (decision B — never ambient OPENAI_API_KEY).
-      - run: skillgate example pdf --dest /tmp/pdf
-      - run: skillgate ingest /tmp/pdf
+      - run: skillgate example sample-skill --dest /tmp/sample-skill
+      - run: skillgate ingest /tmp/sample-skill
       - name: keyless check exits 2
         run: |
           set +e
-          skillgate check /tmp/pdf
+          skillgate check /tmp/sample-skill
           test $? -eq 2
 
   web-build:
@@ -122,8 +122,8 @@ jobs:
         # Live check needs SKILLGATE_OPENAI_API_KEY or --key-env OPENAI_API_KEY.
         # This image job has no secrets; default CMD keyless check must exit 2.
         run: |
-          docker run --rm skillgate:test example pdf --dest /tmp/pdf
-          docker run --rm -v "$PWD/skills/pdf:/pack" skillgate:test ingest /pack
+          docker run --rm skillgate:test example sample-skill --dest /tmp/sample-skill
+          docker run --rm -v "$PWD/skills/sample-skill:/pack" skillgate:test ingest /pack
           set +e
-          docker run --rm -v "$PWD/skills/pdf:/pack" skillgate:test
+          docker run --rm -v "$PWD/skills/sample-skill:/pack" skillgate:test
           test $? -eq 2

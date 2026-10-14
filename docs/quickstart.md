@@ -15,9 +15,7 @@ skillgate version           # 0.6.1
 
 (`pip install skillgate` is a different product.) From a clone of this repo you can use `pip install -e .` instead.
 
-Skill scripts run with that same Python — install the skill’s own packages there too (the pdf example needs `pypdf`).
-
-## Keys, then the pdf example
+## Keys, then the sample-skill example
 
 Skill Gate does not read `OPENAI_API_KEY` from the shell unless you pass `--key-env`. Set a key explicitly (vault, Settings, or the `SKILLGATE_*` CI/Docker prefix):
 
@@ -25,8 +23,8 @@ Skill Gate does not read `OPENAI_API_KEY` from the shell unless you pass `--key-
 skillgate keys set OPENAI_API_KEY
 # hidden prompt; or pipe stdin: printf '%s\n' "$OPENAI_API_KEY" | skillgate keys set OPENAI_API_KEY
 # or paste in Settings (`skillgate ui`)
-skillgate example pdf
-skillgate check pdf
+skillgate example sample-skill
+skillgate check sample-skill
 echo $?    # 0 when the live run is green
 ```
 
@@ -52,10 +50,10 @@ Live scoring is optional — pick OpenAI, Jev, AWS, or Other in Settings. See [j
 `skillgate deploy` copies **only the skill files** (not `evals/`) into Cursor, Claude, or Codex. It refuses unless this pack already has a passing check **and a model key is set** (vault, Settings, or `SKILLGATE_*`). It does not run check for you. Without a key, Deploy stays blocked even after a green check; the pointer is Settings / `skillgate keys set`.
 
 ```bash
-skillgate check pdf
-skillgate deploy pdf
-skillgate deploy pdf --target claude
-skillgate deploy pdf --targets cursor,codex
+skillgate check sample-skill
+skillgate deploy sample-skill
+skillgate deploy sample-skill --target claude
+skillgate deploy sample-skill --targets cursor,codex
 ```
 
 ## Optional local UI
@@ -71,7 +69,7 @@ Same `run_check` engine as the CLI. Run is disabled until a key is in Settings. 
 Multi-stage image, non-root UID 1001, `ENTRYPOINT ["skillgate"]`, `CMD ["check", "/pack"]`. Keyless `check` exits 2.
 
 ```bash
-docker compose run --rm --no-TTY skillgate example pdf --dest /tmp/pdf
+docker compose run --rm --no-TTY skillgate example sample-skill --dest /tmp/sample-skill
 ```
 
 ## Copy-paste Action
