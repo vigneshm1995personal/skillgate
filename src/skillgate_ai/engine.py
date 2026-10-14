@@ -130,10 +130,13 @@ class SuiteReport:
             "tokens_out": total("tokens_out"),
             "tokens_total": total("tokens_total"),
             "cost_usd": total("cost_usd", as_float=True),
+            "agent_cost_usd": total("agent_cost_usd", as_float=True),
+            "judge_cost_usd": total("judge_cost_usd", as_float=True),
         }
+        totals = {key: value for key, value in totals.items() if value is not None}
         if totals.get("tokens_total") and totals.get("cost_usd") is None:
             totals["cost_unknown"] = True
-        return totals
+        return totals or None
 
 
 def run_eval(
@@ -341,8 +344,11 @@ def _outcome_judge_outputs(task: TaskSpec, artifacts: RunArtifacts) -> list[dict
             present = dest.is_file()
             row: dict[str, Any] = {"path": item.path, "present": present}
             if present:
+                from skillgate_ai.judge_context import enrich_output_row
+
                 sniffed = sniff_output_bytes(dest.read_bytes())
                 row.update(sniffed)
+                row = enrich_output_row(row, dest)
             outputs.append(row)
     return outputs
 
@@ -382,6 +388,8 @@ def _run_outcome_judge(
     skill_root: Path | None = None,
     path: dict[str, Any] | None = None,
     judge: Judge | None = None,
+    spans: list[dict[str, Any]] | None = None,
+    skill_instructions: str | None = None,
 ) -> tuple[
     dict[str, Any] | None,
     str | None,
@@ -411,11 +419,19 @@ def _run_outcome_judge(
             actual_payload = actual_output_state(
                 case.golden.output_path, artifacts.workspace
             )
+    from skillgate_ai.judge_context import build_agent_trajectory, skill_instructions_text
     from skillgate_ai.workspace_outputs import collect_workspace_outputs
 
     outputs = collect_workspace_outputs(task, artifacts.workspace)
     if not outputs:
         outputs = _outcome_judge_outputs(task, artifacts)
+    trajectory = build_agent_trajectory(
+        spans=spans,
+        transcript=result.transcript,
+        path=path,
+        scores=scores,
+    )
+    instructions = skill_instructions_text(skill_root, fallback=skill_instructions)
     judged = outcome.judge(
         task.prompt,
         outputs,
@@ -429,6 +445,8 @@ def _run_outcome_judge(
         workspace=artifacts.workspace,
         skill_root=skill_root,
         spec=spec,
+        skill_instructions=instructions,
+        agent_trajectory=trajectory,
     )
     mismatch = expected_output_mismatch_reason(
         golden=golden_payload if isinstance(golden_payload, dict) else None,
@@ -701,6 +719,8 @@ def _run_task(
                     skill_root=skill_root,
                     path={"steps": steps, "errors": errors, "had_path": had_path},
                     judge=judge,
+                    spans=spans,
+                    skill_instructions=skills[0].body if skills else None,
                 )
                 passed, failures, judged = _live_verdict(
                     judged,
@@ -726,6 +746,9 @@ def _run_task(
             else:
                 judged = None
                 passed, failures = det_passed, det_failures
+            from skillgate_ai.usage import combine_task_usage
+
+            task_usage = combine_task_usage(task_usage, judged)
             primary = skills[0] if skills else None
             advice = (
                 advise_task(

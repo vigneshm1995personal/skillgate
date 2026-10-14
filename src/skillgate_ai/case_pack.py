@@ -696,20 +696,15 @@ def actual_output_state(
         }
     data = dest.read_bytes()
     sniffed = sniff_output_bytes(data)
-    if sniffed["kind"] == "bytes":
-        return {
-            "path": output_path,
-            "present": True,
-            "body": None,
-            **sniffed,
-        }
-    body = read_capped_text(dest)
-    return {
+    from skillgate_ai.judge_context import enrich_output_row
+
+    row: dict[str, Any] = {
         "path": output_path,
         "present": True,
-        "body": body,
+        "body": None if sniffed["kind"] == "bytes" else read_capped_text(dest),
         **sniffed,
     }
+    return enrich_output_row(row, dest)
 
 
 def case_for_task(pack: CasePack | None, task_id: str) -> PackCase | None:

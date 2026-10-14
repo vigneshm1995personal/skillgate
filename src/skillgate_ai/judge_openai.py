@@ -175,11 +175,13 @@ def _state_text(state: Mapping[str, Any]) -> str:
         "check_prompt": state.get("check_prompt"),
         "expect_skill": state.get("expect_skill"),
         "selected_skill": state.get("selected_skill"),
+        "skill_instructions": state.get("skill_instructions"),
         "scorer_results": state.get("scorer_results"),
         "artifacts": _artifacts_without_bodies(state.get("artifacts")),
         "golden": _text_blob(state.get("golden")),
         "actual_output": _text_blob(state.get("actual_output")),
         "path": state.get("path"),
+        "agent_trajectory": state.get("agent_trajectory"),
         "transcript_tail": state.get("transcript_tail"),
         "omitted_images": state.get("omitted_images"),
     }
@@ -192,6 +194,9 @@ def _artifacts_without_bodies(raw: Any) -> list[dict[str, Any]]:
     for item in rows:
         if not isinstance(item, Mapping):
             continue
+        snippet = item.get("extracted_text") or item.get("body")
+        if isinstance(snippet, str) and len(snippet) > 4000:
+            snippet = snippet[-4000:]
         out.append(
             {
                 "path": item.get("path"),
@@ -200,6 +205,7 @@ def _artifacts_without_bodies(raw: Any) -> list[dict[str, Any]]:
                 "magic": item.get("magic"),
                 "mime": item.get("mime"),
                 "size": item.get("size"),
+                "extracted_text": snippet,
             }
         )
     return out
@@ -212,6 +218,8 @@ def _text_blob(raw: Any) -> Any:
     data = dict(raw)
     if isinstance(data.get("body"), bytes):
         data["body"] = None
+    if data.get("body") is None and data.get("extracted_text"):
+        data["body"] = data.get("extracted_text")
     return data
 
 
@@ -575,11 +583,13 @@ class OutcomeJudge:
             "check_prompt": goal,
             "expect_skill": kwargs.get("expect_skill"),
             "selected_skill": kwargs.get("selected_skill"),
+            "skill_instructions": kwargs.get("skill_instructions"),
             "scorer_results": scores,
             "artifacts": artifacts,
             "golden": golden,
             "actual_output": actual,
             "path": path,
+            "agent_trajectory": kwargs.get("agent_trajectory"),
             "transcript_tail": _tail(transcript_tail),
             "omitted_images": omitted,
         }

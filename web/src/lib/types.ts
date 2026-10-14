@@ -189,6 +189,8 @@ export type Usage = {
   tokens_out?: number | null
   tokens_total?: number | null
   cost_usd?: number | null
+  agent_cost_usd?: number | null
+  judge_cost_usd?: number | null
   cost_unknown?: boolean
 }
 

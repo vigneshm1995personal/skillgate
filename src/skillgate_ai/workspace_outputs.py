@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from skillgate_ai.case_pack import read_capped_text, sniff_output_bytes
+from skillgate_ai.judge_context import enrich_output_row
 from skillgate_ai.suite import TaskSpec
 
 
@@ -44,6 +45,7 @@ def collect_workspace_outputs(task: TaskSpec, workspace: Path) -> list[dict[str,
             row.update(sniffed)
             if sniffed.get("kind") != "bytes":
                 row["body"] = read_capped_text(dest)
+            row = enrich_output_row(row, dest)
         else:
             row["size"] = 0
         rows.append(row)

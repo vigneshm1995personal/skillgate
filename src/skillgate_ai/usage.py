@@ -41,9 +41,9 @@ from typing import Any
 
 # Order matters: prefer the harness's own underscore names, then OpenAI's
 # prompt/completion names, then Cursor's camelCase, then short aliases.
-_IN_KEYS = ("input_tokens", "prompt_tokens", "inputTokens", "input")
-_OUT_KEYS = ("output_tokens", "completion_tokens", "outputTokens", "output")
-_TOTAL_KEYS = ("total_tokens", "totalTokens")
+_IN_KEYS = ("tokens_in", "input_tokens", "prompt_tokens", "inputTokens", "input")
+_OUT_KEYS = ("tokens_out", "output_tokens", "completion_tokens", "outputTokens", "output")
+_TOTAL_KEYS = ("tokens_total", "total_tokens", "totalTokens")
 _COST_KEYS = (
     "cost_usd",
     "total_cost_usd",
@@ -117,6 +117,62 @@ def merge_usage(current: Usage, update: Usage) -> Usage:
         tokens_total=_pick(current.tokens_total, update.tokens_total),
         cost_usd=_pick(current.cost_usd, update.cost_usd),
     )
+
+
+def usage_from_mapping(raw: Any) -> Usage | None:
+    if not isinstance(raw, dict):
+        return None
+    return _usage_from_tokens(raw)
+
+
+def _add_int(left: int | None, right: int | None) -> int | None:
+    if left is None and right is None:
+        return None
+    return int(left or 0) + int(right or 0)
+
+
+def _add_float(left: float | None, right: float | None) -> float | None:
+    if left is None and right is None:
+        return None
+    return round(float(left or 0.0) + float(right or 0.0), 6)
+
+
+def combine_task_usage(
+    agent: dict[str, Any] | None,
+    judged: dict[str, Any] | None,
+) -> dict[str, Any] | None:
+    """Merge harness usage with the judge call's usage for check results."""
+    agent_u = usage_from_mapping(agent)
+    judge_raw = judged.get("usage") if isinstance(judged, dict) else None
+    judge_u = usage_from_mapping(judge_raw)
+    if agent_u is None and judge_u is None:
+        return agent
+    agent_cost = agent_u.cost_usd if agent_u else None
+    judge_cost = judge_u.cost_usd if judge_u else None
+    total_cost = _add_float(agent_cost, judge_cost)
+    out: dict[str, Any] = {
+        "tokens_in": _add_int(
+            agent_u.tokens_in if agent_u else None,
+            judge_u.tokens_in if judge_u else None,
+        ),
+        "tokens_out": _add_int(
+            agent_u.tokens_out if agent_u else None,
+            judge_u.tokens_out if judge_u else None,
+        ),
+        "tokens_total": _add_int(
+            agent_u.tokens_total if agent_u else None,
+            judge_u.tokens_total if judge_u else None,
+        ),
+        "cost_usd": total_cost,
+    }
+    if agent_cost is not None:
+        out["agent_cost_usd"] = agent_cost
+    if judge_cost is not None:
+        out["judge_cost_usd"] = judge_cost
+    tokens_seen = out.get("tokens_total") is not None
+    if tokens_seen and total_cost is None:
+        out["cost_unknown"] = True
+    return {key: value for key, value in out.items() if value is not None}
 
 
 def render_stream_line(raw: str) -> str | None:

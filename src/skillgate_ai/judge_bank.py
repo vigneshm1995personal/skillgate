@@ -71,7 +71,10 @@ OUTCOME_QUESTIONS: dict[str, dict[str, Any]] = {
         "type": "choice",
         "instructions": "Followed the rules?",
         "criteria": {
-            "Fully followed": "Followed the skill and check instructions fully.",
+            "Fully followed": (
+                "Followed the user check and the skill's SKILL.md instructions fully. "
+                "Refusing a shortcut or requiring tests when SKILL.md demands it counts as following."
+            ),
             "Minor deviation": "Small deviations that did not undermine the result.",
             "Major deviation": "Material deviations from the instructions.",
             "Violated": "Clear violations of the rules or constraints.",
@@ -81,7 +84,9 @@ OUTCOME_QUESTIONS: dict[str, dict[str, Any]] = {
         "type": "choice",
         "instructions": "Used the right evidence/actions?",
         "criteria": {
-            "Fully supported": "Claims and actions are backed by real evidence/tools.",
+            "Fully supported": (
+                "Claims and actions are backed by transcript, agent_trajectory, or tool output."
+            ),
             "Partially supported": "Some claims or actions lack support.",
             "Unsupported": "Key claims or actions are unsupported.",
             "N/A": "No evidence/actions were required for this check.",

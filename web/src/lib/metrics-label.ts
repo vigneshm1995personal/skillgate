@@ -34,6 +34,16 @@ export function formatCost(value?: number | null) {
   return `$${value.toFixed(2)}`
 }
 
+/** Total cost with optional scoring breakdown when the judge reported dollars. */
+export function formatCostWithScoring(usage?: Usage | null) {
+  const total = formatCost(usage?.cost_usd)
+  const scoring = formatCost(usage?.judge_cost_usd)
+  if (total && scoring) {
+    return `${total} (${scoring} scoring)`
+  }
+  return total
+}
+
 type PathBits = {
   steps?: number
   had_path?: boolean
@@ -116,7 +126,7 @@ export function pathMetricDisplay(
 
 /** Suite Cost cell. Uses harness cost_usd only — Never invents dollars from tokens. */
 export function costMetricDisplay(usage?: Usage | null): MetricDisplay {
-  const cost = formatCost(usage?.cost_usd)
+  const cost = formatCostWithScoring(usage)
   if (cost) {
     return { value: cost, hint: "", recorded: true }
   }
@@ -144,7 +154,7 @@ export function runMetricsLine(opts: {
   if (pathRecorded(path) && typeof path.steps === "number") {
     parts.push(`${path.steps} steps`)
   }
-  const cost = formatCost(opts.usage?.cost_usd)
+  const cost = formatCostWithScoring(opts.usage)
   if (cost) {
     parts.push(cost)
   }
@@ -183,7 +193,7 @@ export function compactTaskMetrics(
   if (had || (typeof steps === "number" && steps > 0)) {
     parts.push(`${steps ?? 0} steps`)
   }
-  const cost = formatCost(task.usage?.cost_usd)
+  const cost = formatCostWithScoring(task.usage)
   if (cost) {
     parts.push(cost)
   }
