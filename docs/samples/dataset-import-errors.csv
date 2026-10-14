@@ -1,0 +1,4 @@
+id,prompt,expected,output,input
+dup-row,Say hello.,Hi,output/a.txt,evals/fixtures/hello.pdf
+dup-row,Duplicate id row.,Hi,output/b.txt,evals/fixtures/hello.pdf
+empty-prompt,,Hi,output/c.txt,evals/fixtures/hello.pdf
