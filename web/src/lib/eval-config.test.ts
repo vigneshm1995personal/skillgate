@@ -186,7 +186,7 @@ describe("configLabel", () => {
         applied: { via_gateway: true },
         label: "Auto · Cursor",
       })
-    ).toBe("LLM · openai/gpt-4o-mini via gateway")
+    ).toBe("LLM · GPT-4o mini")
   })
 
   it("hides the default task model unless the user picked it", () => {
@@ -294,6 +294,6 @@ describe("configLabel", () => {
           }
         )
       )
-    ).toBe("LLM · openai/gpt-4o-mini via gateway")
+    ).toBe("LLM · GPT-4o mini")
   })
 })

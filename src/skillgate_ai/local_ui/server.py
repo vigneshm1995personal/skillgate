@@ -152,7 +152,7 @@ def serve_ui(
     bound_host, bound_port = server.server_address[:2]
     url = f"http://{bound_host}:{bound_port}/"
     print(f"Skill Gate UI (local, no account) at {url}", flush=True)
-    print("Stop with Ctrl+C. Docker image still runs `skillgate check /pack`.", flush=True)
+    print("Stop with Ctrl+C.", flush=True)
     if open_browser:
         webbrowser.open(url)
     try:

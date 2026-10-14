@@ -203,6 +203,7 @@ def test_compare_models_cases_limits_run_check(tmp_path: Path, monkeypatch: pyte
     assert result.exit_code == 0
     assert len(seen_checks) == 2
     assert seen_checks[0] == case_ids
+    assert len(seen_checks[0]) == 3
     assert result.payload["cases"] and len(result.payload["cases"]) == 3
     usage = result.payload["arms"][0].get("usage") or {}
     assert usage.get("cost_usd") == pytest.approx(0.03)

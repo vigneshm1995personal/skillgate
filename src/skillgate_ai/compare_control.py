@@ -10,6 +10,8 @@ from typing import Any
 
 from skillgate_ai.live import get_control
 
+_TERMINAL_COMPARE_STATUSES = frozenset({"done", "cancelled", "error"})
+
 _COMPARE_ID_RE = re.compile(r"^[a-f0-9]{12}$", re.IGNORECASE)
 
 _LOCK = threading.Lock()
@@ -39,21 +41,28 @@ def _kill_compare_run(control: CompareControl) -> None:
             run_control.request_kill()
 
 
-def request_cancel_compare(root: Path, compare_id: str) -> bool:
-    """Signal cancel. Returns True if cancel was accepted."""
+def request_cancel_compare(root: Path, compare_id: str) -> str:
+    """Signal cancel. Returns ``unknown``, ``already_done``, or ``requested``."""
     root = root.expanduser().resolve()
     cid = compare_id.strip()
     if not is_compare_id_format(cid):
-        return False
+        return "unknown"
+    from skillgate_ai.compare import find_compare_anywhere
+
+    found = find_compare_anywhere(root, cid)
+    if found is not None:
+        row = found[1]
+        if str(row.get("status") or "") in _TERMINAL_COMPARE_STATUSES:
+            return "already_done"
     with _LOCK:
         control = _CONTROLS.get(cid)
     if control is not None:
         control._event.set()
         _write_cancel_flag(root, cid)
         _kill_compare_run(control)
-        return True
+        return "requested"
     _write_cancel_flag(root, cid)
-    return True
+    return "requested"
 
 
 def is_compare_cancelled(root: Path, compare_id: str) -> bool:

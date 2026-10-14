@@ -56,7 +56,7 @@ type ArmDraft = {
 
 const HARNESS_OPTS: { value: CompareHarnessPref; label: string }[] = [
   { value: "auto", label: "Auto" },
-  { value: "llm", label: "LLM (gateway / Other)" },
+  { value: "llm", label: "LLM (AI Gateway key)" },
   { value: "cursor-agent", label: "Cursor" },
   { value: "codex", label: "Codex" },
   { value: "claude", label: "Claude" },

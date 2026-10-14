@@ -31,7 +31,11 @@ def register_pack_commands(app: typer.Typer, case_app: typer.Typer, judge_app: t
         ),
     ) -> None:
         """Copy skills from an agent folder, a zip, or a SKILL.md file."""
-        root = _boot()
+        from pathlib import Path as _Path
+
+        from skillgate_ai.paths import config_root_for
+
+        root = config_root_for(_Path.cwd())
         try:
             if zip_path is not None or markdown is not None:
                 from skillgate_ai.api_intake import extract_uploaded_skill
@@ -145,10 +149,15 @@ def register_pack_commands(app: typer.Typer, case_app: typer.Typer, judge_app: t
                 who = scored_by_phrase(
                     customer_scorer_name(stamp if isinstance(stamp, dict) else None)
                 )
-            gate = "pass" if row.get("passed") else "fail"
+            gate = ("pass" if row.get("passed") else "fail").ljust(4)
             passed = report.get("passed_count")
             total = report.get("task_count")
-            counts = f"  {passed}/{total}" if passed is not None and total is not None else ""
+            if passed is not None and total is not None:
+                counts = f" {passed}/{total}".rjust(6)
+            elif row.get("error"):
+                counts = "   —/—"
+            else:
+                counts = "      "
             ts = str(row.get("ts") or "")
             date = ts[:10] if ts else ""
             date_bit = f"  {date}" if date else ""
@@ -232,6 +241,14 @@ def register_pack_commands(app: typer.Typer, case_app: typer.Typer, judge_app: t
         total = report.get("task_count")
         counts = f"  {passed}/{total}" if passed is not None and total is not None else ""
         console.print(f"{row.get('run_id')}  {gate}{counts}")
+        err = row.get("error")
+        if isinstance(err, dict):
+            message = str(err.get("message") or "").strip()
+            hint = str(err.get("hint") or "").strip()
+            if message:
+                console.print(f"  {message}")
+            if hint:
+                console.print(f"  {hint}")
         tasks = report.get("tasks") if isinstance(report.get("tasks"), list) else []
         for task in tasks:
             if not isinstance(task, dict):
@@ -239,7 +256,12 @@ def register_pack_commands(app: typer.Typer, case_app: typer.Typer, judge_app: t
             tid = str(task.get("id") or task.get("task_id") or "")
             ok = task.get("passed")
             mark = "pass" if ok is True else "fail" if ok is False else "—"
-            console.print(f"  {tid}  {mark}")
+            reason = ""
+            if ok is False:
+                failures = task.get("failures")
+                if isinstance(failures, list) and failures:
+                    reason = f"  {failures[0]}"
+            console.print(f"  {tid}  {mark}{reason}")
 
     @case_app.command("list")
     def case_list(pack: Path | None = typer.Argument(None, help="Skill pack")) -> None:

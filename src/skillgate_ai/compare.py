@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import copy
 import json
+import subprocess
 import time
 import uuid
 from dataclasses import dataclass
@@ -217,7 +218,7 @@ def _dry_run_payload(
         {
             "arm_id": spec.arm_id,
             "label": spec.label,
-            "subtitle": harness_display_name(spec.harness_pref, spec.harness_pref),
+            "subtitle": _plan_subtitle(spec),
             "source": "plan",
             "passed_count": None,
             "task_count": len(case_ids),
@@ -354,7 +355,54 @@ def scrub_customer_compare_payload(payload: dict[str, Any]) -> dict[str, Any]:
 
 
 def _subtitle_for_arm(spec: CompareArmSpec, harness: str | None) -> str:
-    return harness_display_name(harness or spec.harness_pref, spec.harness_pref)
+    base = harness_display_name(harness or spec.harness_pref, spec.harness_pref)
+    if spec.model:
+        return f"{base} · {spec.model}"
+    return base
+
+
+def _plan_subtitle(spec: CompareArmSpec) -> str:
+    return _subtitle_for_arm(spec, spec.harness_pref)
+
+
+def _case_ids_from_report(report: dict[str, Any]) -> list[str]:
+    tasks = report.get("tasks")
+    if isinstance(tasks, list):
+        ids = [str(item.get("id")) for item in tasks if isinstance(item, dict) and item.get("id")]
+        if ids:
+            return ids
+    return list(report.get("pack_case_ids") or [])
+
+
+def _arm_stats_from_report(report: dict[str, Any], case_ids: list[str]) -> tuple[int, int, dict[str, dict[str, Any]]]:
+    tasks = _task_map(report)
+    active = case_ids or _case_ids_from_report(report)
+    subset = {key: tasks[key] for key in active if key in tasks}
+    passed_count = sum(1 for task in subset.values() if task.get("passed") is True)
+    task_count = len(active) if active else len(subset)
+    return passed_count, task_count, subset
+
+
+def _append_compare_failure(
+    pack: Path,
+    *,
+    compare_id: str,
+    mode: str,
+    exc: CompareError,
+) -> None:
+    append_compare(
+        pack,
+        row={
+            "kind": "compare",
+            "compare_id": compare_id,
+            "mode": mode,
+            "skill": pack.name,
+            "status": "error",
+            "error": {"message": exc.message, "hint": exc.hint},
+            "arms": [],
+            "cases": [],
+        },
+    )
 
 
 def run_models_compare(
@@ -369,9 +417,37 @@ def run_models_compare(
     run_check_fn: Callable[..., Any] | None = None,
 ) -> CompareResult:
     pack = pack.expanduser().resolve()
+    compare_id = compare_id or uuid.uuid4().hex[:12]
+    try:
+        return _run_models_compare(
+            pack,
+            arms=arms,
+            root=root,
+            max_spend_usd=max_spend_usd,
+            case_ids=case_ids,
+            dry_run=dry_run,
+            compare_id=compare_id,
+            run_check_fn=run_check_fn,
+        )
+    except CompareError as exc:
+        if not dry_run:
+            _append_compare_failure(pack, compare_id=compare_id, mode="models", exc=exc)
+        raise
+
+
+def _run_models_compare(
+    pack: Path,
+    *,
+    arms: list[CompareArmSpec],
+    root: Path,
+    max_spend_usd: float | None = DEFAULT_MAX_SPEND_USD,
+    case_ids: list[str] | None = None,
+    dry_run: bool = False,
+    compare_id: str,
+    run_check_fn: Callable[..., Any] | None = None,
+) -> CompareResult:
     validate_compare_plan(arms, max_spend_usd=max_spend_usd)
     runner = run_check_fn or run_check
-    compare_id = compare_id or uuid.uuid4().hex[:12]
     resolved_case_ids = _resolve_compare_case_ids(pack, case_ids)
     if dry_run:
         return CompareResult(
@@ -514,6 +590,153 @@ def _history_report(pack: Path, run_id: str) -> dict[str, Any]:
     raise CompareError(f"Unknown run {run_id}.")
 
 
+def preflight_versions_compare(
+    pack: Path,
+    *,
+    run_ids: list[str] | None = None,
+    git_refs: list[str] | None = None,
+    dry_run: bool = False,
+) -> None:
+    """Validate versions compare inputs before printing started or spawning work."""
+    pack = pack.expanduser().resolve()
+    if git_refs and len(git_refs) >= 2:
+        if len(git_refs) != 2:
+            raise CompareError("Pick exactly two git refs.", hint="Use --git twice.")
+        if not dry_run:
+            from skillgate_ai.compare_git import find_git_root
+
+            find_git_root(pack)
+        return
+    if dry_run:
+        ids = [str(item).strip() for item in (run_ids or []) if str(item).strip()]
+        refs = [str(item).strip() for item in (git_refs or []) if str(item).strip()]
+        if len(ids) < 2 and len(refs) < 2:
+            return
+    ids = [str(item).strip() for item in (run_ids or []) if str(item).strip()]
+    if len(ids) >= 2:
+        if ids[0] == ids[1]:
+            raise CompareError(
+                "Pick two different history runs.",
+                hint="Use two distinct run ids from `skillgate history`.",
+            )
+        if not dry_run:
+            for rid in ids[:2]:
+                _history_report(pack, rid)
+        return
+    recent = [
+        str(row.get("run_id") or "")
+        for row in load_history(pack, limit=8)
+        if row.get("run_id")
+    ]
+    hint = (
+        f"Recent runs: {', '.join(recent)}"
+        if recent
+        else "Use --run twice or --git twice."
+    )
+    raise CompareError("Pick two history runs or two git refs.", hint=hint)
+
+
+def _git_ref_picker_suggestions(pack: Path) -> list[str]:
+    try:
+        from skillgate_ai.compare_git import find_git_root
+
+        root = find_git_root(pack)
+    except CompareError:
+        return []
+    try:
+        out = subprocess.check_output(
+            ["git", "-C", str(root), "log", "-5", "--format=%h"],
+            text=True,
+        )
+    except (OSError, subprocess.CalledProcessError):
+        return ["HEAD~1", "HEAD"]
+    refs = [line.strip() for line in out.splitlines() if line.strip()]
+    return refs[:5] if refs else ["HEAD~1", "HEAD"]
+
+
+def _versions_dry_run_payload(
+    pack: Path,
+    *,
+    compare_id: str,
+    run_ids: list[str] | None,
+    git_refs: list[str] | None,
+) -> dict[str, Any]:
+    case_ids: list[str] = []
+    arms: list[dict[str, Any]] = []
+    picker: dict[str, Any] | None = None
+    if run_ids and len(run_ids) >= 2:
+        for idx, rid in enumerate(run_ids[:2]):
+            arm_id = _arm_ids(2)[idx]
+            arms.append(
+                {
+                    "arm_id": arm_id,
+                    "label": f"Run {rid[:6]}",
+                    "subtitle": "history",
+                    "source": "plan",
+                    "passed_count": None,
+                    "task_count": None,
+                    "usage": None,
+                    "duration_sec": None,
+                }
+            )
+        try:
+            report = _history_report(pack, run_ids[0])
+            case_ids = _case_ids_from_report(report)
+            for arm in arms:
+                arm["task_count"] = len(case_ids)
+        except CompareError:
+            pass
+    elif git_refs and len(git_refs) >= 2:
+        for idx, ref in enumerate(git_refs[:2]):
+            arm_id = _arm_ids(2)[idx]
+            arms.append(
+                {
+                    "arm_id": arm_id,
+                    "label": ref[:12],
+                    "subtitle": ref,
+                    "source": "plan",
+                    "passed_count": None,
+                    "task_count": None,
+                    "usage": None,
+                    "duration_sec": None,
+                }
+            )
+        case_ids = _resolve_compare_case_ids(pack, None)
+        for arm in arms:
+            arm["task_count"] = len(case_ids)
+    else:
+        recent = [
+            str(row.get("run_id") or "")
+            for row in load_history(pack, limit=8)
+            if row.get("run_id")
+        ]
+        picker = {
+            "recent_runs": recent,
+            "git_refs": _git_ref_picker_suggestions(pack),
+        }
+    return {
+        "kind": "compare",
+        "compare_id": compare_id,
+        "mode": "versions",
+        "skill": pack.name,
+        "pack_fingerprint": None,
+        "pack_case_ids": case_ids,
+        "status": "dry_run",
+        "arms": arms,
+        "cases": [
+            {
+                "case_id": cid,
+                "results": {arm["arm_id"]: {"passed": None} for arm in arms},
+                "disagreement": False,
+            }
+            for cid in case_ids
+        ],
+        "spend": {"cap_usd": None, "spent_usd": None, "stopped_reason": None},
+        "error": None,
+        "picker": picker,
+    }
+
+
 def run_versions_compare(
     pack: Path,
     *,
@@ -523,9 +746,45 @@ def run_versions_compare(
     rerun: bool = False,
     compare_id: str | None = None,
     run_check_fn: Callable[..., Any] | None = None,
+    dry_run: bool = False,
 ) -> CompareResult:
     pack = pack.expanduser().resolve()
     compare_id = compare_id or uuid.uuid4().hex[:12]
+    preflight_versions_compare(
+        pack, run_ids=run_ids, git_refs=git_refs, dry_run=dry_run
+    )
+    if dry_run:
+        return CompareResult(
+            exit_code=0,
+            payload=_versions_dry_run_payload(
+                pack, compare_id=compare_id, run_ids=run_ids, git_refs=git_refs
+            ),
+        )
+    try:
+        return _run_versions_compare(
+            pack,
+            run_ids=run_ids,
+            git_refs=git_refs,
+            root=root,
+            rerun=rerun,
+            compare_id=compare_id,
+            run_check_fn=run_check_fn,
+        )
+    except CompareError as exc:
+        _append_compare_failure(pack, compare_id=compare_id, mode="versions", exc=exc)
+        raise
+
+
+def _run_versions_compare(
+    pack: Path,
+    *,
+    run_ids: list[str] | None = None,
+    git_refs: list[str] | None = None,
+    root: Path,
+    rerun: bool = False,
+    compare_id: str,
+    run_check_fn: Callable[..., Any] | None = None,
+) -> CompareResult:
     if git_refs and len(git_refs) == 2:
         from skillgate_ai.compare_git import run_git_versions_compare
 
@@ -593,11 +852,13 @@ def run_versions_compare(
             "These runs used different Datasets.",
             hint=f"{fps[0][:12]}… vs {right}",
         )
-    case_ids = list(reports[0].get("pack_case_ids") or [])
+    case_ids = _case_ids_from_report(reports[0])
+    if not case_ids:
+        case_ids = _case_ids_from_report(reports[1])
     arm_rows: list[dict[str, Any]] = []
     for idx, (rid, report) in enumerate(zip(run_ids, reports, strict=True)):
         arm_id = _arm_ids(2)[idx]
-        tasks = _task_map(report)
+        passed_count, task_count, tasks = _arm_stats_from_report(report, case_ids)
         arm_row: dict[str, Any] = {
             "arm_id": arm_id,
             "label": f"Run {rid[:6]}",
@@ -605,8 +866,8 @@ def run_versions_compare(
             "source": "history",
             "run_id": rid,
             "passed": report.get("passed"),
-            "passed_count": report.get("passed_count"),
-            "task_count": report.get("task_count"),
+            "passed_count": passed_count,
+            "task_count": task_count,
             "usage": _usage_from_report(report),
             "duration_sec": None,
             "task_by_id": tasks,

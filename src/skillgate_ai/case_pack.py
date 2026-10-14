@@ -560,7 +560,11 @@ def trust_suite_for_skill(skill_path: str | Path) -> TrustSuite | None:
 
 
 def suite_from_checks(
-    skill_path: str | Path, checks: list[dict[str, Any]], *, tryout: bool = False
+    skill_path: str | Path,
+    checks: list[dict[str, Any]],
+    *,
+    tryout: bool = False,
+    only_listed: bool = False,
 ) -> SuiteSpec:
     """Build a suite from the Checks tab without writing evals/cases.yaml."""
     root = Path(skill_path).expanduser().resolve()
@@ -578,7 +582,7 @@ def suite_from_checks(
     except ValueError as exc:
         hint = PIN_NEEDS_EXPECTED_HINT if PIN_NEEDS_EXPECTED in str(exc) else None
         raise SuiteError(str(exc), hint=hint) from exc
-    if not tryout and existing is not None:
+    if not tryout and not only_listed and existing is not None:
         present = {case.id for case in cases}
         cases.extend(
             c for c in existing.cases if case_is_locked(existing.skill, c.id) and c.id not in present

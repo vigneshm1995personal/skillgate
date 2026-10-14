@@ -31,13 +31,8 @@ def resolve_user_path(target: str | Path, root: Path | None = None) -> Path:
 
 
 def _has_workspace_skills(candidate: Path) -> bool:
-    skills = candidate / "skills"
-    if not skills.is_dir():
-        return False
-    try:
-        return any(child.is_dir() and (child / "SKILL.md").is_file() for child in skills.iterdir())
-    except OSError:
-        return False
+    """A workspace is any folder with ``skills/`` (including right after ``skillgate init``)."""
+    return (candidate / "skills").is_dir()
 
 
 def project_root() -> Path:
@@ -68,13 +63,19 @@ def config_root_for(path: str | Path | None = None) -> Path:
     """
     start = Path(path).expanduser().resolve() if path is not None else Path.cwd()
     pack = None
+    nearest_workspace: Path | None = None
+    nearest_keys: Path | None = None
     for candidate in (start, *start.parents):
-        if (candidate / ".skillgate" / "keys").is_file():
-            return candidate
-        if _has_workspace_skills(candidate):
-            return candidate
+        if nearest_workspace is None and _has_workspace_skills(candidate):
+            nearest_workspace = candidate
+        if nearest_keys is None and (candidate / ".skillgate" / "keys").is_file():
+            nearest_keys = candidate
         if pack is None and (is_skill_pack(candidate) or (candidate / "SKILL.md").is_file()):
             pack = candidate
+    if nearest_workspace is not None:
+        return nearest_workspace
+    if nearest_keys is not None:
+        return nearest_keys
     if pack is not None:
         return pack
     return project_root()

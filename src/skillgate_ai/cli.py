@@ -147,8 +147,26 @@ def _run_gate(
     tryout = False
     if case_id:
         from skillgate_ai.pack_edit import tryout_checks
+        from skillgate_ai.paths import is_skill_pack
 
         dest = resolve_user_path(target, project_root())
+        if not is_skill_pack(dest):
+            exc = SkillGateError(
+                f"Not a skill pack: {dest}",
+                hint="Pass a skill folder with SKILL.md and evals/.",
+                exit_code=2,
+            )
+            if json_out or summary == "json":
+                _emit_json(
+                    {
+                        "error": exc.message,
+                        "hint": exc.hint,
+                        "exit_code": exc.exit_code,
+                    }
+                )
+            else:
+                console.print(exc.render())
+            raise typer.Exit(exc.exit_code) from None
         try:
             checks = tryout_checks(dest, case_id)
             tryout = True
@@ -223,7 +241,7 @@ def _run_gate(
 
 
 _HARNESS_HELP = "auto | cursor-agent | codex | llm"
-_SANDBOX_HELP = "local | docker"
+_SANDBOX_HELP = "local (default)"
 _KEY_ENV_HELP = (
     "Use this process env name as a Skill Gate key (repeatable). "
     "CI: set SKILLGATE_OPENAI_API_KEY, or pass --key-env OPENAI_API_KEY."
@@ -482,14 +500,18 @@ app.add_typer(keys_app, name="keys")
 @keys_app.command("set")
 def keys_set(
     name: str = typer.Argument(
-        ..., help="CURSOR_API_KEY | CODEX_API_KEY | OPENAI_API_KEY | Other | …"
+        ..., help="CURSOR_API_KEY | CODEX_API_KEY | OPENAI_API_KEY | AI Gateway key | …"
     ),
     value: str | None = typer.Argument(
         None,
         help="The secret. Omit to paste hidden (TTY) or read stdin.",
     ),
 ) -> None:
-    """Write a key into `.skillgate/keys` (mode 0600)."""
+    """Write a key into `.skillgate/keys` (mode 0600).
+
+    Names include CURSOR_API_KEY, CODEX_API_KEY, OPENAI_API_KEY, and AI Gateway key
+    (AI_GATEWAY_API_KEY).
+    """
     from skillgate_ai.keys import public_key_name, set_vault_key
 
     root = _boot()
@@ -575,7 +597,11 @@ def new_cmd(
     """Create `skills/NAME` with SKILL.md and starter checks (same as the UI)."""
     from skillgate_ai.workspace import new_skill
 
-    root = _boot()
+    from pathlib import Path as _Path
+
+    from skillgate_ai.paths import config_root_for
+
+    root = config_root_for(_Path.cwd())
     try:
         dest = new_skill(root, name)
     except SkillGateError as exc:
@@ -610,7 +636,7 @@ judge_app = typer.Typer(
 judge_provider_app = typer.Typer(
     add_completion=False,
     no_args_is_help=True,
-    help="Scoring provider (OpenAI, Jev, AWS, Other).",
+    help="Who scores live checks (auto or a configured judge).",
 )
 app.add_typer(judge_app, name="judge")
 judge_app.add_typer(judge_provider_app, name="provider")
@@ -810,14 +836,11 @@ def case_add_cmd(
 def judge_provider_show() -> None:
     """Who scores live checks."""
     from skillgate_ai.config import get_llm_config
-    from skillgate_ai.judge_copy import CHOSEN_LABELS, DEFAULT_NAME
+    from skillgate_ai.judge_copy import DEFAULT_NAME
 
     root = _boot()
     cfg = get_llm_config(root)
-    if cfg.judge_chosen and cfg.judge_provider in CHOSEN_LABELS:
-        console.print(f"Scoring with {CHOSEN_LABELS[cfg.judge_provider]} (your key)")
-        return
-    if cfg.openai_api_key or cfg.gateway_api_key:
+    if cfg.judge_chosen or cfg.openai_api_key or cfg.gateway_api_key:
         console.print(f"Scoring with {DEFAULT_NAME}")
         return
     console.print("No scoring provider — file checks only.")
@@ -825,7 +848,7 @@ def judge_provider_show() -> None:
 
 @judge_provider_app.command("set")
 def judge_provider_set(
-    provider: str = typer.Argument(..., help="auto | openai | jev | aws | Other"),
+    provider: str = typer.Argument(..., help="auto, openai, jev, aws, or other"),
     base_url: str | None = typer.Option(None, "--base-url"),
     region: str | None = typer.Option(None, "--region"),
     model: str | None = typer.Option(None, "--model"),
@@ -848,9 +871,7 @@ def judge_provider_set(
         console.print(exc.render())
         raise typer.Exit(exc.exit_code) from None
     if settings.chosen:
-        from skillgate_ai.judge_copy import CHOSEN_LABELS
-
-        console.print(f"Scoring provider: {CHOSEN_LABELS.get(settings.provider, settings.provider)}")
+        console.print("Scoring provider: the judge")
     else:
         console.print("Scoring provider: Auto")
 
