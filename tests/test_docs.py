@@ -70,12 +70,12 @@ def test_deploy_docs_require_a_check_first() -> None:
     assert "already has a passing check" in blob or "Run the checks first" in blob
     assert "does not run check" in blob.lower() or "does not run check for you" in blob
     assert "deploy skills/pdf" not in README.read_text(encoding="utf-8")
-    assert "skillgate deploy pdf" in README.read_text(encoding="utf-8")
+    assert "skillgate deploy sample-skill" in README.read_text(encoding="utf-8")
 
 
 def test_quickstart_uses_example_and_keys() -> None:
     text = QUICKSTART.read_text(encoding="utf-8")
-    assert "skillgate example pdf" in text
+    assert "skillgate example sample-skill" in text
     assert "skillgate keys set" in text
     assert "--key-env" in text
     assert "SKILLGATE_OPENAI_API_KEY" in text

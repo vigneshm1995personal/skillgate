@@ -1,0 +1,114 @@
+schema: 1
+skill: sample-skill
+judge:
+  extra_questions:
+    - id: subject_under_72
+      type: predicate
+      ask: Is the first line of output/commit.txt at most 72 characters (Conventional Commits subject limit)?
+      on_fail: block
+      pass_if: { gte: 0.85 }
+cases:
+  - id: fix-empty-cart
+    status: pinned
+    prompt: |
+      Write the Conventional Commits subject for this diff and save it to output/commit.txt.
+
+      ```diff
+      --- a/cart.py
+      +++ b/cart.py
+      @@ -12,6 +12,9 @@ def checkout_total(items):
+           if not items:
+      -        return None
+      +        return 0
+           return sum(i.price for i in items)
+      ```
+    should_trigger: true
+    input:
+      files: []
+    golden:
+      output_path: output/commit.txt
+      path: evals/goldens/fix-empty-cart.txt
+      kind: text
+    contains:
+      - "fix:"
+      - cart
+  - id: feat-export-csv
+    status: pinned
+    prompt: |
+      Write the Conventional Commits subject for this diff and save it to output/commit.txt.
+
+      ```diff
+      --- a/orders.py
+      +++ b/orders.py
+      @@ -1,4 +1,10 @@
+      +def export_orders_csv(path):
+      +    rows = load_all_orders()
+      +    write_csv(path, rows)
+      +
+       def load_all_orders():
+           ...
+      ```
+    should_trigger: true
+    input:
+      files: []
+    golden:
+      output_path: output/commit.txt
+      path: evals/goldens/feat-export-csv.txt
+      kind: text
+    contains:
+      - "feat:"
+      - export
+  - id: docs-readme
+    status: pinned
+    prompt: |
+      Write the Conventional Commits subject for this diff and save it to output/commit.txt.
+
+      ```diff
+      --- a/README.md
+      +++ b/README.md
+      @@ -3,6 +3,7 @@
+       ## Install
+
+       pip install myapp
+      +Use Python 3.11 or newer.
+      ```
+    should_trigger: true
+    input:
+      files: []
+    golden:
+      output_path: output/commit.txt
+      path: evals/goldens/docs-readme.txt
+      kind: text
+    contains:
+      - "docs:"
+      - install
+  - id: refactor-rename
+    status: pinned
+    prompt: |
+      Write the Conventional Commits subject for this diff and save it to output/commit.txt.
+
+      ```diff
+      --- a/pricing.py
+      +++ b/pricing.py
+      @@ -4,7 +4,7 @@
+      -def parseTotal(value):
+      +def parse_total(value):
+           return int(value)
+      ```
+    should_trigger: true
+    input:
+      files: []
+    golden:
+      output_path: output/commit.txt
+      path: evals/goldens/refactor-rename.txt
+      kind: text
+    contains:
+      - "refactor:"
+      - parse
+  - id: no-trigger-unrelated
+    status: pinned
+    prompt: Write a pytest for a FastAPI /health endpoint. Do not write any commit messages.
+    should_trigger: false
+    input:
+      files: []
+    golden: null

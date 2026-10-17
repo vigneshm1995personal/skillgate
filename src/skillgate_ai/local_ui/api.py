@@ -126,7 +126,7 @@ def list_packs(state: UiState) -> list[dict[str, Any]]:
                 "path": str(resolved),
                 "display_path": display_pack_label(resolved, state.root),
                 "red_demo": name == "pdf-sabotaged",
-                "green_demo": name == "pdf",
+                "green_demo": name == "sample-skill",
             }
         )
     return found
@@ -144,8 +144,8 @@ def display_pack_label(path: Path, root: Path) -> str:
     return text
 
 
-def pdf_demo_path(state: UiState) -> Path | None:
-    candidate = state.root / "skills" / "pdf"
+def example_demo_path(state: UiState) -> Path | None:
+    candidate = state.root / "skills" / "sample-skill"
     if candidate.is_dir() and (candidate / "SKILL.md").is_file():
         return candidate.resolve()
     return None
@@ -157,7 +157,7 @@ def meta_payload(state: UiState) -> dict[str, Any]:
     pack = None
     if state.initial_pack:
         pack = display_pack_label(state.initial_pack, state.root)
-    pdf = pdf_demo_path(state)
+    example = example_demo_path(state)
     try:
         outcome = resolve_judge(cfg, harness_name="cursor-agent")
     except MissingLLMKeyError:
@@ -172,7 +172,7 @@ def meta_payload(state: UiState) -> dict[str, Any]:
         "demo_default": False,
         "account": False,
         "pack": pack,
-        "pdf_path": display_pack_label(pdf, state.root) if pdf else None,
+        "example_path": display_pack_label(example, state.root) if example else None,
     }
 
 
@@ -276,9 +276,9 @@ def _create_pack(state: UiState, payload: dict[str, Any]) -> tuple[int, dict[str
     parent = resolve_user_path(parent_raw, state)
     parent.mkdir(parents=True, exist_ok=True)
     if payload.get("clone_pdf"):
-        source = pdf_demo_path(state)
+        source = example_demo_path(state)
         if source is None:
-            raise SkillGateError("No skills/pdf demo pack under --root to clone.")
+            raise SkillGateError("No skills/sample-skill demo pack under --root to clone.")
         dest = clone_pdf_layout(parent / name, source=source)
     else:
         dest = create_pack(parent, name, description=payload.get("description"))

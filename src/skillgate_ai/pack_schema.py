@@ -13,6 +13,15 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 from skillgate_ai.errors import SuiteError, friendly_validation_error
 
 SEED_CASE_IDS = {
+    "sample-skill": frozenset(
+        {
+            "fix-empty-cart",
+            "feat-export-csv",
+            "docs-readme",
+            "refactor-rename",
+            "no-trigger-unrelated",
+        }
+    ),
     "pdf": frozenset(
         {
             "extract-hello",

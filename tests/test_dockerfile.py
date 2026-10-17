@@ -78,8 +78,8 @@ def test_compose_has_no_ui_ports() -> None:
 def test_dockerignore_allows_packaged_example_skills() -> None:
     dockerfile = (ROOT / "Dockerfile").read_text(encoding="utf-8")
     assert "COPY skills" in dockerfile
-    assert not _dockerignored("skills/pdf/SKILL.md")
-    assert not _dockerignored("skills/pdf/evals/cases.yaml")
+    assert not _dockerignored("skills/sample-skill/SKILL.md")
+    assert not _dockerignored("skills/sample-skill/evals/cases.yaml")
     assert not _dockerignored("skills/pdf-sabotaged/SKILL.md")
     assert not _dockerignored("skills")
 
@@ -87,8 +87,8 @@ def test_dockerignore_allows_packaged_example_skills() -> None:
 def test_gate_workflow_example_dest_matches_skill_name() -> None:
     text = (ROOT / ".github" / "workflows" / "gate.yml").read_text(encoding="utf-8")
     assert "/tmp/example-pdf" not in text
-    assert "skillgate example pdf --dest /tmp/pdf" in text
-    assert "skillgate ingest /tmp/pdf" in text
+    assert "skillgate example sample-skill --dest /tmp/sample-skill" in text
+    assert "skillgate ingest /tmp/sample-skill" in text
     assert "SKILLGATE_OPENAI_API_KEY" in text
     assert "--key-env" in text
 
