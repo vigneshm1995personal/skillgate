@@ -365,7 +365,6 @@ def test_react_ui_customer_copy() -> None:
         "pack fixtures",
         "semver + version fingerprint",
         "evals/fixtures/*",
-        ">Harness<",
         ">Stamp<",
         "Pin as baseline",
         "Pinned as baseline",

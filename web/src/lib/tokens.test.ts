@@ -16,7 +16,12 @@ const landing = readFileSync(
   "utf8"
 )
 
-const STATUS = new Set(["success", "success-foreground", "destructive"])
+const STATUS = new Set([
+  "success",
+  "success-foreground",
+  "destructive",
+  "sidebar-primary",
+])
 
 function slice(start: string, end?: string) {
   const i = css.indexOf(start)
@@ -46,8 +51,8 @@ const root = tokens(slice(":root {", "\n.dark {"))
 const dark = tokens(slice("\n.dark {", "\n}"))
 
 describe("design tokens", () => {
-  it("does not use the generic purple sidebar accent", () => {
-    expect(css).not.toMatch(/264\.376/)
+  it("uses the hosted radius and sidebar primary", () => {
+    expect(css).toMatch(/264\.376/)
     expect(css).toMatch(/--radius:\s*0\.75rem/)
   })
 

@@ -1,14 +1,40 @@
 export const BUILTIN_QUESTIONS = [
-  { id: "task_completion", ask: "Got the job done?", defaultOnFail: "block" },
-  { id: "correctness", ask: "Got it right?", defaultOnFail: "block" },
-  { id: "instruction_adherence", ask: "Followed the rules?", defaultOnFail: "block" },
   {
-    id: "evidence_action_validity",
-    ask: "Used the right evidence/actions?",
+    id: "task_completion",
+    ask: "Did it finish the task?",
+    explain: "The agent completed what the test case asked for.",
     defaultOnFail: "block",
   },
-  { id: "result_quality", ask: "Delivered a good result?", defaultOnFail: "block" },
-  { id: "path_efficiency", ask: "Path", defaultOnFail: "warn" },
+  {
+    id: "correctness",
+    ask: "Is the answer right?",
+    explain: "The result matches what this test case expected.",
+    defaultOnFail: "block",
+  },
+  {
+    id: "instruction_adherence",
+    ask: "Did it follow the skill?",
+    explain: "It stayed inside the instructions in this skill.",
+    defaultOnFail: "block",
+  },
+  {
+    id: "evidence_action_validity",
+    ask: "Did it use the right inputs?",
+    explain: "It used the files and actions this test case allows.",
+    defaultOnFail: "block",
+  },
+  {
+    id: "result_quality",
+    ask: "Is the result usable?",
+    explain: "The output is something you could keep, not just a file that exists.",
+    defaultOnFail: "block",
+  },
+  {
+    id: "path_efficiency",
+    ask: "Did it take a direct path?",
+    explain: "A miss here warns you. It does not fail the test case by itself.",
+    defaultOnFail: "warn",
+  },
 ] as const
 
 export const MAX_SCORING_QUESTIONS = 20

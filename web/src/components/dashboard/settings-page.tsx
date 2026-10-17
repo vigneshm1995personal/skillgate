@@ -116,17 +116,24 @@ function LocalSettings() {
   )
   const [agents, setAgents] = useState<AgentAuthRow[]>(FALLBACK_AGENTS)
   const [judgeDraft, setJudgeDraft] = useState("")
+  const [baseUrl, setBaseUrl] = useState("")
+  const [model, setModel] = useState("")
+  const [testMessage, setTestMessage] = useState("")
+  const [testing, setTesting] = useState(false)
   const [busy, setBusy] = useState(false)
   const [loadError, setLoadError] = useState("")
   const [loginBusy, setLoginBusy] = useState<string | null>(null)
 
   const load = async () => {
     try {
-      const [keyData, loginData] = await Promise.all([
+      const [keyData, loginData, judgeData] = await Promise.all([
         api.settingsKeys(),
         api.loginStatus(),
+        api.settingsJudge(),
       ])
       setKeys(keyData.keys)
+      setBaseUrl(judgeData.judge.base_url || "")
+      setModel(judgeData.judge.model || "")
       if (loginData.harnesses?.length) {
         setAgents(loginData.harnesses)
       }
@@ -141,23 +148,52 @@ function LocalSettings() {
     void load()
   }, [])
 
-  const onSaveJudge = async () => {
+  const persistJudgeSetup = async () => {
     const value = judgeDraft.trim()
-    if (!value) {
-      return
-    }
-    setBusy(true)
-    try {
-      const data = await api.setSettingsKey("OPENAI_API_KEY", value)
+    const url = baseUrl.trim()
+    if (value) {
+      await api.setSettingsKey("OPENAI_API_KEY", value)
+      const data = await api.setSettingsKey("AI_GATEWAY_API_KEY", value)
       setKeys(data.keys)
       setJudgeDraft("")
+    }
+    await api.setSettingsJudge({
+      provider: url ? "compatible" : "auto",
+      base_url: url || null,
+      model: model.trim() || null,
+    })
+  }
+
+  const onSaveJudge = async () => {
+    setBusy(true)
+    try {
+      await persistJudgeSetup()
       await refreshStatus()
-      toast.add({ title: "Key saved", type: "success" })
+      toast.add({ title: "Judge saved", type: "success" })
     } catch (err) {
-      const message = err instanceof ApiError ? err.message : "Could not save that key."
+      const message = err instanceof ApiError ? err.message : "Could not save the judge."
       toast.add({ title: message, type: "error" })
     } finally {
       setBusy(false)
+    }
+  }
+
+  const onTestJudge = async () => {
+    setTesting(true)
+    setTestMessage("")
+    try {
+      await persistJudgeSetup()
+      await refreshStatus()
+      const result = await api.pingJudge()
+      const message = /no scoring provider/i.test(result.message)
+        ? "No judge yet. Add a base URL and an API key, then test again."
+        : result.message || (result.ok ? "The judge answered." : "The judge did not answer.")
+      setTestMessage(message)
+    } catch (err) {
+      const message = err instanceof ApiError ? err.message : "Could not test the judge."
+      setTestMessage(message)
+    } finally {
+      setTesting(false)
     }
   }
 
@@ -176,6 +212,10 @@ function LocalSettings() {
         setKeys(latest)
       }
       setJudgeDraft("")
+      setBaseUrl("")
+      setModel("")
+      setTestMessage("")
+      await api.setSettingsJudge({ provider: "auto", base_url: null, model: null })
       await refreshStatus()
       toast.add({ title: "Key cleared", type: "success" })
     } catch (err) {
@@ -272,7 +312,7 @@ function LocalSettings() {
         <CardHeader>
           <CardTitle>Judge key (optional)</CardTitle>
           <CardDescription>
-            Scores checks. Skip it to run without the judge.
+            Any OpenAI-compatible endpoint. Skip it to run without the judge.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -285,8 +325,29 @@ function LocalSettings() {
           {keys ? (
             <FieldGroup>
               <Field orientation="vertical">
+                <FieldLabel htmlFor="settings-judge-base-url">Base URL</FieldLabel>
+                <Input
+                  id="settings-judge-base-url"
+                  type="url"
+                  autoComplete="off"
+                  value={baseUrl}
+                  placeholder="https://openrouter.ai/api/v1"
+                  onChange={(event) => setBaseUrl(event.target.value)}
+                />
+              </Field>
+              <Field orientation="vertical">
+                <FieldLabel htmlFor="settings-judge-model">Model</FieldLabel>
+                <Input
+                  id="settings-judge-model"
+                  autoComplete="off"
+                  value={model}
+                  placeholder="Model name"
+                  onChange={(event) => setModel(event.target.value)}
+                />
+              </Field>
+              <Field orientation="vertical">
                 <div className="flex flex-wrap items-center gap-2">
-                  <FieldLabel htmlFor="settings-judge-key-input">Judge key</FieldLabel>
+                  <FieldLabel htmlFor="settings-judge-key-input">API key</FieldLabel>
                   <Badge
                     id="settings-judge-key-state"
                     variant={presence.set ? "secondary" : "outline"}
@@ -313,11 +374,21 @@ function LocalSettings() {
                   <Button
                     id="btn-settings-save-judge"
                     size="sm"
-                    disabled={busy || !judgeDraft.trim()}
+                    disabled={busy || testing}
                     onClick={() => void onSaveJudge()}
                   >
                     {busy ? <Spinner data-icon="inline-start" /> : null}
                     Save
+                  </Button>
+                  <Button
+                    id="btn-settings-test-judge"
+                    variant="outline"
+                    size="sm"
+                    disabled={busy || testing}
+                    onClick={() => void onTestJudge()}
+                  >
+                    {testing ? <Spinner data-icon="inline-start" /> : null}
+                    Test
                   </Button>
                   <Tooltip>
                     <TooltipTrigger
@@ -327,7 +398,11 @@ function LocalSettings() {
                             id="btn-settings-clear-judge"
                             variant="outline"
                             size="sm"
-                            disabled={busy || !presence.from_vault}
+                            disabled={
+                              busy ||
+                              testing ||
+                              (!presence.from_vault && !baseUrl.trim() && !model.trim())
+                            }
                             onClick={() => void onClearJudge()}
                           >
                             Clear
@@ -346,6 +421,11 @@ function LocalSettings() {
                     </TooltipContent>
                   </Tooltip>
                 </div>
+                {testMessage ? (
+                  <p id="settings-judge-test" className="text-sm text-muted-foreground">
+                    {testMessage}
+                  </p>
+                ) : null}
               </Field>
             </FieldGroup>
           ) : null}

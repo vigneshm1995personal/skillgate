@@ -1,15 +1,9 @@
 import { EvalConfigFields } from "@/components/dashboard/eval-config-fields"
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/components/ui/accordion"
 import { Field, FieldGroup, FieldTitle } from "@/components/ui/field"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import {
-  draftConfigSummary,
   knownModelsForHarness,
+  plainRunSetup,
   type EvalConfigDraft,
   type SupportedModelsMeta,
 } from "@/lib/eval-config"
@@ -40,84 +34,71 @@ export function RunConfigAccordion({
 }) {
   const claudeReady = (availableHarnesses || []).includes("claude")
 
-  const summary = draftConfigSummary(harnessPref, evalConfig, resolvedHarness)
+  const summary = plainRunSetup(harnessPref, evalConfig, resolvedHarness)
 
   return (
-    <Accordion defaultValue={[]} id="run-config-accordion">
-      <AccordionItem value="run-config" className="rounded-lg border px-2">
-        <AccordionTrigger className="py-1.5 hover:no-underline">
-          <span className="flex min-w-0 flex-1 items-center gap-2 pr-2">
-            <span className="sr-only">Run config </span>
-            <span
-              id="run-config-summary"
-              className="min-w-0 flex-1 truncate text-left text-sm font-normal text-muted-foreground"
+    <div id="run-config-accordion" className="flex flex-col gap-3">
+      <p id="run-config-summary" className="text-sm text-muted-foreground">
+        {summary}
+      </p>
+      <FieldGroup>
+        <Field data-disabled={disabled || undefined}>
+          <FieldTitle id="harness-label">Agent</FieldTitle>
+          <p className="text-sm text-muted-foreground">
+            Choose for me uses the agent you are signed in to.
+          </p>
+          <ToggleGroup
+            id="harness-select"
+            aria-labelledby="harness-label"
+            spacing={2}
+            variant="outline"
+            value={[harnessPref]}
+            onValueChange={(value) => {
+              const next = value[0]
+              if (
+                next === "auto" ||
+                next === "cursor-agent" ||
+                next === "codex" ||
+                next === "claude"
+              ) {
+                const allowed = knownModelsForHarness(
+                  next,
+                  next === "auto" ? resolvedHarness : next,
+                  supportedModels
+                )
+                setHarnessPref(next as HarnessPref)
+                const current = evalConfig.model.trim()
+                if (current && !allowed.includes(current)) {
+                  setEvalConfig({ ...evalConfig, model: "" })
+                }
+              }
+            }}
+            disabled={disabled}
+          >
+            <ToggleGroupItem value="auto">Choose for me</ToggleGroupItem>
+            <ToggleGroupItem value="cursor-agent">Cursor</ToggleGroupItem>
+            <ToggleGroupItem value="codex">Codex</ToggleGroupItem>
+            <ToggleGroupItem
+              value="claude"
+              disabled={!claudeReady}
+              title={claudeReady ? "Claude" : "Sign in with Claude first"}
             >
-              {summary}
-            </span>
-          </span>
-        </AccordionTrigger>
-        <AccordionContent>
-          <FieldGroup>
-            <Field data-disabled={disabled || undefined}>
-              <FieldTitle id="harness-label">Agent</FieldTitle>
-              <ToggleGroup
-                id="harness-select"
-                aria-labelledby="harness-label"
-                spacing={2}
-                variant="outline"
-                value={[harnessPref]}
-                onValueChange={(value) => {
-                  const next = value[0]
-                  if (
-                    next === "auto" ||
-                    next === "cursor-agent" ||
-                    next === "codex" ||
-                    next === "claude"
-                  ) {
-                    const allowed = knownModelsForHarness(
-                      next,
-                      next === "auto" ? resolvedHarness : next,
-                      supportedModels
-                    )
-                    setHarnessPref(next as HarnessPref)
-                    const current = evalConfig.model.trim()
-                    if (current && !allowed.includes(current)) {
-                      setEvalConfig({ ...evalConfig, model: "" })
-                    }
-                  }
-                }}
-                disabled={disabled}
-              >
-                <ToggleGroupItem value="auto">Auto</ToggleGroupItem>
-                <ToggleGroupItem value="cursor-agent">Cursor</ToggleGroupItem>
-                <ToggleGroupItem value="codex">Codex</ToggleGroupItem>
-                <ToggleGroupItem
-                  value="claude"
-                  disabled={!claudeReady}
-                  title={
-                    claudeReady
-                      ? "Claude Code"
-                      : "Add a key or run skillgate login claude"
-                  }
-                >
-                  {claudeReady ? "Claude" : "Claude · Coming next"}
-                </ToggleGroupItem>
-              </ToggleGroup>
-            </Field>
-            <EvalConfigFields
-              key={harnessPref}
-              value={evalConfig}
-              onChange={setEvalConfig}
-              harnessPref={harnessPref}
-              resolvedHarness={resolvedHarness}
-              disabled={disabled}
-              supportedModels={supportedModels}
-              supportedModelsMeta={supportedModelsMeta}
-              defaultTimeoutSec={defaultTimeoutSec}
-            />
-          </FieldGroup>
-        </AccordionContent>
-      </AccordionItem>
-    </Accordion>
+              {claudeReady ? "Claude" : "Claude, sign in first"}
+            </ToggleGroupItem>
+          </ToggleGroup>
+        </Field>
+        <EvalConfigFields
+          key={harnessPref}
+          value={evalConfig}
+          onChange={setEvalConfig}
+          harnessPref={harnessPref}
+          resolvedHarness={resolvedHarness}
+          disabled={disabled}
+          supportedModels={supportedModels}
+          supportedModelsMeta={supportedModelsMeta}
+          defaultTimeoutSec={defaultTimeoutSec}
+        />
+      </FieldGroup>
+    </div>
   )
 }

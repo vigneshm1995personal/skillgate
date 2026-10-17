@@ -22,7 +22,7 @@ This is a **local process**, not hosted `serve`. Default bind is `127.0.0.1:8765
 
 **Compare** (sidebar tab) has CLI equivalents: `skillgate compare models` (arms via `--arm 'Label:codex'`, spend cap via `--max-spend-usd`), `skillgate compare versions --run …`, `skillgate compare list`, `skillgate compare show`, and `skillgate compare cancel` while a job is running.
 
-The React app in `web/` is the only Skill Gate UI (`@skillgate/ui`). `skillgate ui` serves that build. Home is the first screen. Paid screens (cloud sign-in, billing, shared history, hosted judge, sandboxes) are slots: off here, supplied by the hosted app. Import from `~/.cursor/skills`, `~/.codex/skills`, and `~/.claude/skills`, or use packs under `skills/`. Open a skill to read `SKILL.md`, edit checks, then **press Run**. Nothing evaluates until you press it. Run is disabled until `skillgate login` (Settings → Sign in). An optional judge key in Settings scores checks; skip it to run without the judge. Results use the same drawn mark, Result | Check | What happened, and five answers.
+The React app in `web/` is the only Skill Gate UI (`@skillgate/ui`). `skillgate ui` serves that build. Home is the first screen. Paid screens (cloud sign-in, billing, shared history, hosted judge, sandboxes) are slots: off here, supplied by the hosted app. Import from `~/.cursor/skills`, `~/.codex/skills`, and `~/.claude/skills`, or use packs under `skills/`. Evaluate uses the same collapsed sections as the hosted app: pick a skill, then checks, with agent and model tucked in an accordion, and one **Run**. Nothing evaluates until you press it. Run is disabled until `skillgate login` (Settings → Sign in). The optional judge is that one Settings card: base URL, model, and API key. Test uses the same call as `skillgate judge provider test`. Results use the same drawn mark, Result | Check | What happened, and the built-in checks.
 
 **Deploy** copies a green-gated skill (skill files only, not `evals/`) into those same agent folders. Install stays disabled without an agent (`skillgate login` or Settings → Sign in), even after a passing check. The optional judge key lives in this project’s `.skillgate/keys`, or CI/Docker can set `SKILLGATE_*` (always read). `skillgate check` still exits 0, 1, or 2 with no account.
 
@@ -60,9 +60,9 @@ Everything the local UI can do has a CLI command. New API writes must update thi
 | Save a judge key (optional) | `PUT /api/settings/keys/{name}` | `skillgate keys set` |
 | Clear a judge key | `DELETE /api/settings/keys/{name}` | `skillgate keys clear` |
 | List keys | `GET /api/settings/keys` | `skillgate keys list` |
-| Pick who scores | `PUT /api/settings/judge` | `skillgate judge provider set` |
-| Test scoring | `POST /api/judge/ping` | `skillgate judge provider test` |
-| Show scoring provider | `GET /api/settings/judge` | `skillgate judge provider show` |
+| Save judge base URL and model | `PUT /api/settings/judge` | `skillgate judge provider set` |
+| Test the judge | `POST /api/judge/ping` | `skillgate judge provider test` |
+| Show the judge | `GET /api/settings/judge` | `skillgate judge provider show` |
 | Import from agent folders / zip / SKILL.md | `POST /api/skills/import`, `POST /api/skills/upload` | `skillgate import --only` |
 | Create a skill | `POST /api/skills/paste` | `skillgate skill paste` / `skillgate new` |
 | Edit SKILL.md or pack files | `POST /api/skills/pack-file`, `POST /api/skills/pack-upload`, `POST /api/skills/apply-fix`, `POST /api/evals/generate` | `skillgate skill write` |
@@ -72,8 +72,8 @@ Everything the local UI can do has a CLI command. New API writes must update thi
 | Edit a check | `POST /api/evals/pin` | `skillgate case edit` |
 | Remove a check | `POST /api/evals/pin` | `skillgate case remove` |
 | List checks | `GET /api/evals/dataset` | `skillgate case list` |
-| Bind fixtures | `POST /api/evals/fixture-bind` | `skillgate case bind` |
-| Add a scoring question | Checks editor → pin | `skillgate judge add-question` (`--choices` for pick one) |
+| Use this skill’s sample files | `POST /api/evals/fixture-bind` | `skillgate case bind` |
+| Add a question for every test case | Checks editor → pin | `skillgate judge add-question` (`--choices` for pick one) |
 | Edit Fail vs warn | Checks editor → pin | `skillgate judge set-question` |
 | Remove an extra question | Checks editor → pin | `skillgate judge remove-question` |
 | Run | `POST /api/runs` | `skillgate check` |

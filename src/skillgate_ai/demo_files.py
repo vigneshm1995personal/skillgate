@@ -8,7 +8,24 @@ from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
 
 
+def _stale_example_marker(fixtures_dir: Path) -> bool:
+    """A copied pdf example marker must not seed those PDFs into another skill."""
+    if fixtures_dir.name != "fixtures":
+        return False
+    skill_root = fixtures_dir.parent.parent
+    marker = skill_root / "evals" / ".skillgate-example"
+    if not marker.is_file():
+        return False
+    try:
+        slug = marker.read_text(encoding="utf-8").strip()
+    except OSError:
+        return False
+    return bool(slug) and slug != skill_root.name
+
+
 def ensure_demo_pdfs(fixtures_dir: Path) -> None:
+    if _stale_example_marker(fixtures_dir):
+        return
     fixtures_dir.mkdir(parents=True, exist_ok=True)
     specs = {
         "hello.pdf": "Hello Skill Gate",
