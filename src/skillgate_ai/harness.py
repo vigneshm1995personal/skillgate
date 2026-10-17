@@ -306,6 +306,7 @@ def _codex_exec_command(
     *,
     reasoning_effort: str = DEFAULT_CODEX_REASONING_EFFORT,
     model: str | None = None,
+    extra_config: list[str] | None = None,
 ) -> list[str]:
     """argv for `codex exec` on 0.154.
 
@@ -323,6 +324,10 @@ def _codex_exec_command(
     `--json` makes stdout JSONL so `turn.completed` carries real token counts.
     Skill selection still rides on `.skillgate/selected.json`; the JSONL rows
     are rendered back into a readable transcript for the trigger parser.
+
+    ``skills.include_instructions=false`` and ``skills.bundled.enabled=false``
+    are session overrides on Codex 0.163 (`codex exec -c`). They keep the
+    login ``CODEX_HOME`` and drop user plus bundled skills from the prompt.
     """
     effort = normalize_codex_reasoning_effort(reasoning_effort)
     command = [
@@ -337,7 +342,13 @@ def _codex_exec_command(
         str(workspace),
         "-c",
         f'model_reasoning_effort="{effort}"',
+        "-c",
+        "skills.include_instructions=false",
+        "-c",
+        "skills.bundled.enabled=false",
     ]
+    for item in extra_config or []:
+        command.extend(["-c", item])
     model_id = (model or "").strip() or None
     if model_id:
         command.extend(["-m", model_id])
@@ -589,16 +600,24 @@ class CodexCliHarness:
             )
         agent_prompt = _agent_prompt(sandbox.workspace, prompt, skills)
         model = _codex_model_flag(self.cfg.codex_model, cli_login=not bool(key))
+        extra_config: list[str] = []
+        skill_config = _codex_user_skill_config_override()
+        if skill_config:
+            extra_config.append(skill_config)
         command = _codex_exec_command(
             binary,
             sandbox.workspace,
             agent_prompt,
             reasoning_effort=self.cfg.codex_reasoning_effort,
             model=model,
+            extra_config=extra_config,
         )
+        # Leave CODEX_HOME alone so `codex login` (auth.json in that home) is used.
+        # A tokenless home drops the subscription, and Codex 0.163 has no flag
+        # that moves only the skills directory.
         env: dict[str, str] = {"SKILLGATE_TASK": prompt}
-        home_env = _prepare_codex_env(sandbox.workspace, api_key=key, skills=skills)
-        env.update(home_env)
+        if key:
+            env["CODEX_API_KEY"] = key
         proc = sandbox.run(command, env=env, timeout=timeout_sec)
         _raise_if_auth_failed(proc.stdout or "", proc.stderr or "")
         transcript = _codex_transcript(proc.stdout or "", proc.stderr or "")
@@ -837,31 +856,91 @@ def _codex_auth_key(cfg: LLMConfig) -> str | None:
     return cfg.codex_api_key
 
 
-def _prepare_codex_env(
-    workspace: Path,
-    *,
-    api_key: str | None,
-    skills: list[Skill],
-) -> dict[str, str]:
-    """Isolated CODEX_HOME with only the skills under test.
+_SKILL_WALK_SKIP = {"node_modules", ".git"}
+_SKILL_WALK_MAX_DEPTH = 6
 
-    Does not copy ``~/.codex/skills`` or ``~/.codex/auth.json``. ChatGPT
-    subscription tokens stay in the user's home. Set ``CODEX_API_KEY`` when
-    this isolated home must authenticate without that file.
+
+def _toml_basic_string(value: str) -> str:
+    escaped = value.replace("\\", "\\\\").replace('"', '\\"')
+    return f'"{escaped}"'
+
+
+def _codex_user_skill_roots() -> list[Path]:
+    """Directories Codex scans for user skills. Does not open auth.json."""
+    codex_home = os.environ.get("CODEX_HOME", "").strip()
+    if codex_home:
+        roots = [Path(codex_home) / "skills"]
+    else:
+        roots = [Path.home() / ".codex" / "skills"]
+    roots.append(Path.home() / ".agents" / "skills")
+    return roots
+
+
+def _skill_markdown_files(root: Path) -> list[Path]:
+    """SKILL.md paths under ``root``. Stats only; file bodies are not read."""
+    try:
+        if not root.is_dir():
+            return []
+    except OSError:
+        return []
+    found: list[Path] = []
+    seen_dirs: set[tuple[int, int]] = set()
+
+    def _on_error(_err: OSError) -> None:
+        return
+
+    for dirpath, dirnames, filenames in os.walk(root, followlinks=True, onerror=_on_error):
+        try:
+            stat = os.stat(dirpath)
+            depth = len(Path(dirpath).resolve().relative_to(root.resolve()).parts)
+        except (OSError, ValueError):
+            dirnames.clear()
+            continue
+        marker = (stat.st_dev, stat.st_ino)
+        if marker in seen_dirs:
+            dirnames.clear()
+            continue
+        seen_dirs.add(marker)
+        dirnames[:] = [
+            name
+            for name in dirnames
+            if not name.startswith(".") and name not in _SKILL_WALK_SKIP
+        ]
+        if depth >= _SKILL_WALK_MAX_DEPTH:
+            dirnames.clear()
+        if "SKILL.md" not in filenames:
+            continue
+        skill_md = Path(dirpath) / "SKILL.md"
+        try:
+            if skill_md.is_file():
+                found.append(skill_md)
+        except OSError:
+            continue
+    return found
+
+
+def _codex_user_skill_config_override() -> str | None:
+    """Session ``skills.config`` that disables discovered user skills.
+
+    Codex 0.163 applies ``enabled=false`` only when ``path`` is the SKILL.md
+    file. A directory path leaves the skill in the prompt. There is no config
+    key that points the skills directory somewhere else.
     """
-    home = workspace / ".skillgate" / "codex-home"
-    if home.exists():
-        shutil.rmtree(home)
-    skills_root = home / "skills"
-    skills_root.mkdir(parents=True)
-    from skillgate_ai.pack import copy_skill_pack
-
-    for skill in skills:
-        copy_skill_pack(skill.path, skills_root / skill.name)
-    env = {"CODEX_HOME": str(home)}
-    if api_key:
-        env["CODEX_API_KEY"] = api_key
-    return env
+    paths: list[str] = []
+    seen: set[str] = set()
+    for root in _codex_user_skill_roots():
+        for skill_md in _skill_markdown_files(root):
+            text = str(skill_md)
+            if text in seen or "\n" in text or text.endswith(f"{os.sep}auth.json"):
+                continue
+            seen.add(text)
+            paths.append(text)
+    if not paths:
+        return None
+    entries = ",".join(
+        f"{{path={_toml_basic_string(path)},enabled=false}}" for path in paths
+    )
+    return f"skills.config=[{entries}]"
 
 
 _CODEX_LOGIN_STATUS_TIMEOUT_SEC = 5

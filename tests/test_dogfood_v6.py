@@ -87,7 +87,7 @@ def test_auto_includes_cursor_when_session_ok(monkeypatch: pytest.MonkeyPatch) -
     assert isinstance(harness, CursorAgentHarness)
 
 
-def test_codex_run_sets_isolated_codex_home(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_codex_run_keeps_login_home(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     captured: dict[str, str] = {}
 
     class FakeSandbox:
@@ -108,9 +108,12 @@ def test_codex_run_sets_isolated_codex_home(monkeypatch: pytest.MonkeyPatch) -> 
     monkeypatch.setattr("skillgate_ai.harness._parse_selected", lambda *a: "pdf")
     monkeypatch.setattr("skillgate_ai.harness._parse_read_paths", lambda _t: [])
     monkeypatch.setattr("skillgate_ai.harness._write_selection", lambda *a: None)
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path / "home"))
+    monkeypatch.delenv("CODEX_HOME", raising=False)
     harness = CodexCliHarness(_cfg(codex_api_key="k"))
     harness.run(FakeSandbox(), "task", [], timeout_sec=5)
-    assert captured["CODEX_HOME"].endswith("/.skillgate/codex-home")
+    assert "CODEX_HOME" not in captured
+    assert captured["CODEX_API_KEY"] == "k"
 
 
 def test_stamp_resolved_codex_default_model_label() -> None:

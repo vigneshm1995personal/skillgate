@@ -15,4 +15,4 @@
 - Git compare arms are saved on the pack's history, including the failure text.
 - The task prompt no longer tells the agent to put files in `output/` when the task names another path.
 - Trigger mode installs the skill without naming it in the prompt and records whether the agent loaded it.
-- Codex runs use an isolated `CODEX_HOME` with only the skill under test. Login tokens are not copied.
+- Codex checks keep `codex login` and do not need `CODEX_API_KEY`. Session flags turn off user and bundled skill discovery. Skill Gate does not set `CODEX_HOME` and does not read `auth.json`.

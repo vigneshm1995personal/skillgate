@@ -331,9 +331,10 @@ def test_trigger_mode_prompt_does_not_name_the_skill(tmp_path: Path, monkeypatch
     assert ".skillgate/skills" in prompt
 
 
-def test_codex_home_has_only_the_skill_under_test(
+def test_codex_login_disables_user_skills_without_api_key(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """Subscription login stays put. User skills are disabled by session config."""
     from skillgate_ai.harness import AUTH_CLI_LOGIN, CodexCliHarness
     from test_judge import _cfg
 
@@ -344,9 +345,19 @@ def test_codex_home_has_only_the_skill_under_test(
         "---\nname: other-skill\ndescription: not this test\n---\nsecret-other\n",
         encoding="utf-8",
     )
+    nested = user_home / ".agents" / "skills" / 'odd"name' / "nested"
+    nested.mkdir(parents=True)
+    (nested / "SKILL.md").write_text(
+        "---\nname: nested-skill\ndescription: nested\n---\nsecret-nested\n",
+        encoding="utf-8",
+    )
+    hidden = user_home / ".codex" / "skills" / ".system" / "imagegen"
+    hidden.mkdir(parents=True)
+    (hidden / "SKILL.md").write_text("# system\n", encoding="utf-8")
     auth = user_home / ".codex" / "auth.json"
     auth.write_text('{"token":"sekret-token"}\n', encoding="utf-8")
     monkeypatch.setattr(Path, "home", classmethod(lambda cls: user_home))
+    monkeypatch.delenv("CODEX_HOME", raising=False)
 
     skill_dir = tmp_path / "reviewer"
     skill_dir.mkdir()
@@ -362,11 +373,13 @@ def test_codex_home_has_only_the_skill_under_test(
         def __init__(self) -> None:
             self.workspace = workspace
             self.env: dict[str, str] = {}
+            self.command: list[str] = []
 
         def run(self, command, *, env=None, timeout=0, cwd=None):
-            del command, timeout, cwd
+            del timeout, cwd
+            self.command = list(command)
             self.env = dict(env or {})
-            return subprocess.CompletedProcess(["codex"], 0, stdout="", stderr="")
+            return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
 
     monkeypatch.setattr("skillgate_ai.harness._codex_ready", lambda _c: True)
     monkeypatch.setattr("skillgate_ai.harness._resolve_codex_bin", lambda _p: "/bin/codex")
@@ -381,17 +394,83 @@ def test_codex_home_has_only_the_skill_under_test(
         [skill],
         timeout_sec=5,
     )
-    home = Path(sandbox.env["CODEX_HOME"])
-    assert home.is_dir()
-    assert not (home / "auth.json").exists()
+    assert "CODEX_HOME" not in sandbox.env
+    assert "CODEX_API_KEY" not in sandbox.env
+    assert not (workspace / ".skillgate" / "codex-home").exists()
     assert auth.read_text(encoding="utf-8") == '{"token":"sekret-token"}\n'
-    installed = home / "skills" / "reviewer" / "SKILL.md"
-    assert installed.is_file()
-    tree = " ".join(path.as_posix() for path in home.rglob("*"))
-    assert "other-skill" not in tree
-    assert "sekret-token" not in tree
-    assert "sekret-token" not in json.dumps(sandbox.env)
+    blob = json.dumps({"env": sandbox.env, "argv": sandbox.command})
+    assert "sekret-token" not in blob
+    assert "secret-other" not in blob
+    assert "secret-nested" not in blob
+    overrides = [sandbox.command[i + 1] for i, arg in enumerate(sandbox.command) if arg == "-c"]
+    assert "skills.include_instructions=false" in overrides
+    assert "skills.bundled.enabled=false" in overrides
+    disabled = next(item for item in overrides if item.startswith("skills.config="))
+    assert str(foreign / "SKILL.md") in disabled
+    nested_md = str(nested / "SKILL.md").replace("\\", "\\\\").replace('"', '\\"')
+    assert nested_md in disabled
+    assert "enabled=false" in disabled
+    assert ".system" not in disabled
+    assert "auth.json" not in disabled
+    assert "reviewer" not in disabled
     assert result.auth_mode == AUTH_CLI_LOGIN
+
+
+def test_codex_custom_home_disables_that_skills_dir(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from skillgate_ai.harness import CodexCliHarness
+    from test_judge import _cfg
+
+    user_home = tmp_path / "home"
+    user_home.mkdir()
+    login_home = tmp_path / "login-home"
+    custom = login_home / "skills" / "from-home"
+    custom.mkdir(parents=True)
+    (custom / "SKILL.md").write_text("# from home\nsecret-home\n", encoding="utf-8")
+    ignored = user_home / ".codex" / "skills" / "ignored-skill"
+    ignored.mkdir(parents=True)
+    (ignored / "SKILL.md").write_text("# ignored\n", encoding="utf-8")
+    agents = user_home / ".agents" / "skills" / "agents-skill"
+    agents.mkdir(parents=True)
+    (agents / "SKILL.md").write_text("# agents\n", encoding="utf-8")
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: user_home))
+    monkeypatch.setenv("CODEX_HOME", str(login_home))
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+
+    class Sandbox:
+        def __init__(self) -> None:
+            self.workspace = workspace
+            self.command: list[str] = []
+            self.env: dict[str, str] = {}
+
+        def run(self, command, *, env=None, timeout=0, cwd=None):
+            del timeout, cwd
+            self.command = list(command)
+            self.env = dict(env or {})
+            return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+
+    monkeypatch.setattr("skillgate_ai.harness._codex_ready", lambda _c: True)
+    monkeypatch.setattr("skillgate_ai.harness._resolve_codex_bin", lambda _p: "/bin/codex")
+    monkeypatch.setattr("skillgate_ai.harness._read_selection", lambda _w: None)
+    monkeypatch.setattr("skillgate_ai.harness._parse_selected", lambda *a: None)
+    monkeypatch.setattr("skillgate_ai.harness._parse_read_paths", lambda _t: [])
+    monkeypatch.setattr("skillgate_ai.harness._write_selection", lambda *a: None)
+    sandbox = Sandbox()
+    CodexCliHarness(_cfg(codex_api_key=None)).run(
+        sandbox,  # type: ignore[arg-type]
+        "task",
+        [],
+        timeout_sec=5,
+    )
+    assert "CODEX_HOME" not in sandbox.env
+    overrides = [sandbox.command[i + 1] for i, arg in enumerate(sandbox.command) if arg == "-c"]
+    disabled = next(item for item in overrides if item.startswith("skills.config="))
+    assert str(custom / "SKILL.md") in disabled
+    assert str(agents / "SKILL.md") in disabled
+    assert "ignored-skill" not in disabled
+    assert "secret-home" not in disabled
 
 
 def test_round3_custom_answer_and_rate_limit_repros(tmp_path: Path) -> None:

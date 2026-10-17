@@ -82,6 +82,9 @@ def test_claude_harness_skips_permissions_headless() -> None:
 def test_codex_harness_approves_headless() -> None:
     cmd = _codex_exec_command("/bin/codex", "/tmp/ws", "run task")
     assert "--approve-for-me" in cmd
+    overrides = [cmd[i + 1] for i, arg in enumerate(cmd) if arg == "-c"]
+    assert "skills.include_instructions=false" in overrides
+    assert "skills.bundled.enabled=false" in overrides
 
 
 def test_user_pdf_skill_name_does_not_require_seed_cases(tmp_path) -> None:

@@ -99,6 +99,12 @@ def test_docs_keys_set_never_puts_value_on_the_command_line() -> None:
     assert "skillgate keys set OPENAI_API_KEY" in blob
 
 
+def test_quickstart_does_not_require_codex_api_key() -> None:
+    text = QUICKSTART.read_text(encoding="utf-8")
+    assert "isolated `CODEX_HOME`" not in text
+    assert "authenticates the isolated run" not in text
+
+
 def test_quickstart_does_not_promise_fixture_checks_without_a_key() -> None:
     text = QUICKSTART.read_text(encoding="utf-8").lower()
     assert "without that key, fixture checks" not in text
