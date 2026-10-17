@@ -94,6 +94,7 @@ Or set `SKILLGATE_OPENAI_API_KEY` in the job env instead of `--key-env`.
 - [`docs/plans/0.5-decisions.md`](docs/plans/0.5-decisions.md) — 0.5 live-only / explicit keys
 - [`docs/judge.md`](docs/judge.md) — bring your own judge; custom scoring questions
 - [`docs/ui.md`](docs/ui.md) — local React UI (`skillgate ui`), red path, Docker stays `check /pack`
+- [UI revamp plan](docs/plans/ui-revamp.md) — shared `web/` look and copy for local and cloud
 - [`docs/proof/PUBLISH.md`](docs/proof/PUBLISH.md) — secret scan, tag, PyPI Trusted Publishing, GHCR
 
 Keys live in `{project}/.skillgate/keys` (gitignored, mode 0600). Ambient `OPENAI_API_KEY` / `AI_GATEWAY_API_KEY` / `AWS_*` are ignored unless you pass `--key-env`. **CI and Docker:** set `SKILLGATE_OPENAI_API_KEY` / `SKILLGATE_AI_GATEWAY_API_KEY` (and the other `SKILLGATE_*` key names). That prefix is the documented job path and is always read. See `.env.example` for non-secret config. Pick who scores in Settings (`skillgate judge provider set`). Default results say **Scored by the judge** unless you picked a provider.
