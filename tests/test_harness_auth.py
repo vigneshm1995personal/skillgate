@@ -316,6 +316,33 @@ def _claude_sandbox_run(stdout: str) -> _FakeSandbox:
     return sandbox
 
 
+def test_claude_run_resolves_alias_to_model_usage(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sandbox = _claude_sandbox_run(
+        _claude_jsonl(
+            [
+                {"type": "system", "model": "claude-sonnet-5-5"},
+                {
+                    "type": "result",
+                    "subtype": "success",
+                    "result": "done",
+                    "modelUsage": {"claude-sonnet-5-5": {"inputTokens": 1, "outputTokens": 1}},
+                },
+            ]
+        )
+    )
+    _stub_run(monkeypatch)
+    monkeypatch.setattr("skillgate_ai.harness._claude_ready", lambda _c: True)
+    monkeypatch.setattr("skillgate_ai.harness._resolve_claude_bin", lambda _p: "/bin/claude")
+    result = ClaudeCodeHarness(_cfg(anthropic_api_key=None, anthropic_model="sonnet")).run(
+        sandbox, "task", [], timeout_sec=5
+    )
+    assert "--model" in sandbox.command
+    assert sandbox.command[sandbox.command.index("--model") + 1] == "sonnet"
+    assert result.model == "claude-sonnet-5-5"
+
+
 def test_claude_run_parses_model_from_result_model_usage(
     monkeypatch: pytest.MonkeyPatch
 ) -> None:

@@ -251,6 +251,7 @@ def _task_to_dict(task: TaskReport) -> dict:
         "usage": task.usage,
         "judge": task.judge,
         "metrics": getattr(task, "metrics", None),
+        "model": getattr(task, "model", None),
         "happened": _task_happened(task),
         "check_kind": kind,
         "check_answers": answers,

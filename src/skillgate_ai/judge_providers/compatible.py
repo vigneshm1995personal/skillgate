@@ -8,12 +8,18 @@ from skillgate_ai.judge_openai import (
     DEFAULT_TIMEOUT_SEC,
     DecisionsBackend,
     StructuredOutputsBackend,
-    _path_is_recorded,
 )
 from skillgate_ai.judge_spec import JudgeSpec, builtin_spec
 from skillgate_ai.openai_http import PostFn, post_openai_json
 
 DISPLAY_NAME = "Other"
+
+
+def _missing_scoring_endpoint(result: Mapping[str, Any]) -> bool:
+    if int(result.get("http_status") or 0) == 404:
+        return True
+    reason = str(result.get("reason") or "").lower()
+    return "no scoring endpoint" in reason or "no matching endpoint" in reason
 
 
 class CompatibleBackend:
@@ -61,16 +67,13 @@ class CompatibleBackend:
         spec: JudgeSpec | None = None,
     ) -> dict[str, Any]:
         resolved = spec or builtin_spec()
-        include_path = _path_is_recorded(state.get("path"))
         first = self._decisions.evaluate(
             state=state, images=images, timeout_sec=timeout_sec, spec=resolved
         )
         if first.get("status") == "completed":
             self.supports_confidence = True
             return first
-        if int(first.get("http_status") or 0) == 404 or "no scoring endpoint" in str(
-            first.get("reason") or ""
-        ).lower() or "no matching endpoint" in str(first.get("reason") or "").lower():
+        if _missing_scoring_endpoint(first):
             self.supports_confidence = False
             fallback = self._structured.evaluate(
                 state=state, images=images, timeout_sec=timeout_sec, spec=resolved
@@ -115,9 +118,23 @@ class CompatibleBackend:
             model=self.model,
             post=self._post,
             retries=False,
+            who=DISPLAY_NAME,
         )
         if result.get("status") == "ok":
             return {"ok": True, "message": f"Connected to {DISPLAY_NAME}."}
+        if _missing_scoring_endpoint(result):
+            fallback = self._structured.post_json(
+                "/responses",
+                {"model": self.model, "input": "ping"},
+                timeout_sec=timeout_sec,
+                retries=False,
+            )
+            if fallback.get("status") == "ok":
+                return {"ok": True, "message": f"Connected to {DISPLAY_NAME}."}
+            return {
+                "ok": False,
+                "message": "This endpoint did not accept scoring requests. Check the base URL.",
+            }
         reason = str(result.get("reason") or "Could not connect.")
         reason = reason.replace("OpenAI", DISPLAY_NAME).replace("the judge", DISPLAY_NAME)
         return {"ok": False, "message": reason}

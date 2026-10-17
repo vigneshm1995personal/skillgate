@@ -74,6 +74,7 @@ def workspace_files_for_judge(artifacts: list[dict[str, Any]] | None) -> list[di
 
 def parse_command_runs(transcript: str) -> list[dict[str, Any]]:
     runs: list[dict[str, Any]] = []
+    pending: dict[str, dict[str, Any]] = {}
     for line in (transcript or "").splitlines():
         text = line.strip()
         if not text.startswith("{"):
@@ -113,7 +114,94 @@ def parse_command_runs(transcript: str) -> list[dict[str, Any]]:
                                 ],
                             }
                         )
+            continue
+        if kind in {"assistant", "user", "tool_use", "tool_result"}:
+            _ingest_claude_stream_event(runs, pending, obj)
     return runs[:30]
+
+
+def _claude_message_parts(obj: dict[str, Any]) -> list[dict[str, Any]]:
+    if obj.get("type") in {"tool_use", "tool_result"}:
+        return [obj]
+    message = obj.get("message")
+    if not isinstance(message, dict):
+        return []
+    parts = message.get("content")
+    if isinstance(parts, list):
+        return [part for part in parts if isinstance(part, dict)]
+    return []
+
+
+def _claude_tool_command(part: dict[str, Any]) -> str:
+    name = str(part.get("name") or "tool").strip() or "tool"
+    args = part.get("input") or part.get("args") or part.get("arguments")
+    if not isinstance(args, dict):
+        args = {}
+    detail = ""
+    for key in ("command", "cmd", "script", "file_path", "path", "pattern", "query"):
+        value = args.get(key)
+        if isinstance(value, str) and value.strip():
+            detail = value.strip()
+            break
+    if name.lower() in {"bash", "shell", "run"} and detail:
+        return detail
+    return f"{name} {detail}".strip()
+
+
+def _claude_tool_output(part: dict[str, Any]) -> str:
+    raw = part.get("content")
+    if isinstance(raw, str):
+        return raw.strip()
+    if isinstance(raw, list):
+        bits: list[str] = []
+        for item in raw:
+            if isinstance(item, str) and item.strip():
+                bits.append(item.strip())
+            elif isinstance(item, dict):
+                text = item.get("text") or item.get("content")
+                if isinstance(text, str) and text.strip():
+                    bits.append(text.strip())
+        return "\n".join(bits)
+    for key in ("output", "result", "stdout"):
+        value = part.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return ""
+
+
+def _ingest_claude_stream_event(
+    runs: list[dict[str, Any]],
+    pending: dict[str, dict[str, Any]],
+    obj: dict[str, Any],
+) -> None:
+    for part in _claude_message_parts(obj):
+        kind = part.get("type")
+        if kind == "tool_use":
+            command = _claude_tool_command(part)
+            call_id = str(part.get("id") or "").strip()
+            row = {
+                "command": command[:500],
+                "output": None,
+                "tool": str(part.get("name") or "").strip() or None,
+            }
+            if call_id:
+                pending[call_id] = row
+            runs.append(row)
+            continue
+        if kind != "tool_result":
+            continue
+        output = _claude_tool_output(part)
+        call_id = str(part.get("tool_use_id") or part.get("id") or "").strip()
+        row = pending.pop(call_id, None) if call_id else None
+        if row is not None:
+            row["output"] = output[:_COMMAND_OUTPUT_CAP] if output else None
+            continue
+        runs.append(
+            {
+                "command": "",
+                "output": output[:_COMMAND_OUTPUT_CAP] if output else None,
+            }
+        )
 
 
 def _append_command_run(runs: list[dict[str, Any]], item: dict[str, Any]) -> None:

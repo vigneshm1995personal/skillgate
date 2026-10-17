@@ -142,6 +142,9 @@ def _scrub_browser(value: Any) -> Any:
             out[key] = _scrub_config(item)
             continue
         if key == "model" and isinstance(item, str):
+            harness = str(value.get("harness") or "").strip().lower()
+            if "arm_id" in value or harness in LIVE_AGENT_HARNESSES:
+                out[key] = item
             continue
         out[key] = _scrub_browser(item)
     if "scored_by" in out and isinstance(out["scored_by"], str):

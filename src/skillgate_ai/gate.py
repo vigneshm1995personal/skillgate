@@ -280,7 +280,7 @@ def _execute_check(
             )
             run_cfg = with_timeout_effective(run_cfg, report.timeout_effective)
             agent_model = next((t.model for t in report.tasks if t.model), None)
-            if agent_model and not (run_cfg.model or "").strip():
+            if agent_model:
                 run_cfg = with_model(run_cfg, agent_model)
             report.config = run_cfg.to_dict()
             set_eval_passed(report.passed)

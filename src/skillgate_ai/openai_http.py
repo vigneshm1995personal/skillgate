@@ -93,7 +93,10 @@ def _status_error(
 ) -> dict[str, Any]:
     code = openai_error_code(response)
     reason = user_message_for_status(response.status_code, error_code=code, who=who)
-    _LOG.warning("scoring HTTP %s", response.status_code)
+    if response.status_code == 404:
+        _LOG.debug("scoring HTTP %s", response.status_code)
+    else:
+        _LOG.warning("scoring HTTP %s", response.status_code)
     return {
         "status": "error",
         "reason": reason,

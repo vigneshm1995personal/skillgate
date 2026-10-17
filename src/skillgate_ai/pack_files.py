@@ -29,7 +29,9 @@ def sniff_output_bytes(data: bytes) -> dict[str, Any]:
     return {"kind": "text", "magic": None, "mime": None, "size": size}
 
 
-def read_capped_text(path: str | Path | None, *, limit: int = GOLDEN_TAIL_CHARS) -> str | None:
+def read_capped_text(
+    path: str | Path | None, *, limit: int | None = GOLDEN_TAIL_CHARS
+) -> str | None:
     if path is None:
         return None
     file_path = Path(path)
@@ -39,6 +41,8 @@ def read_capped_text(path: str | Path | None, *, limit: int = GOLDEN_TAIL_CHARS)
     if b"\0" in data[:1024]:
         return None
     text = data.decode("utf-8", errors="replace")
+    if limit is None:
+        return text
     if limit <= 0:
         return ""
     return text[-limit:]

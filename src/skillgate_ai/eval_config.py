@@ -48,6 +48,7 @@ class EvalRunConfig:
     harness: str = ""
     harness_pref: str = "auto"
     model: str | None = None
+    requested_model: str | None = None
     timeout_sec: int | None = None
     timeout_effective: int | None = None
     temperature: float = 0.0
@@ -62,6 +63,7 @@ class EvalRunConfig:
             "harness": self.harness,
             "harness_pref": self.harness_pref,
             "model": self.model,
+            "requested_model": self.requested_model,
             "timeout_sec": self.timeout_sec,
             "timeout_effective": self.timeout_effective,
             "temperature": self.temperature,
@@ -85,6 +87,7 @@ class EvalRunConfig:
             harness=str(data.get("harness") or ""),
             harness_pref=str(data.get("harness_pref") or "auto"),
             model=_blank_to_none(data.get("model")),
+            requested_model=_blank_to_none(data.get("requested_model")),
             timeout_sec=_as_optional_int(data.get("timeout_sec")),
             timeout_effective=_as_optional_int(data.get("timeout_effective")),
             temperature=float(data.get("temperature") or 0.0),
@@ -185,6 +188,7 @@ def resolve_eval_config(
         harness=resolved_harness,
         harness_pref=(harness_pref or "auto").strip().lower() or "auto",
         model=model,
+        requested_model=model,
         timeout_sec=timeout_sec,
         temperature=temperature,
         reasoning_effort=effort,
@@ -246,7 +250,10 @@ def with_timeout_effective(run: EvalRunConfig, effective: int | None) -> EvalRun
 
 def with_model(run: EvalRunConfig, model: str | None) -> EvalRunConfig:
     """Record the model the harness actually used (keeps applied.model untouched)."""
-    return replace(run, model=model)
+    resolved = (model or "").strip() or None
+    previous = (run.model or "").strip() or None
+    requested = run.requested_model or (previous if previous and previous != resolved else None)
+    return replace(run, model=resolved, requested_model=requested)
 
 
 def with_judge(run: EvalRunConfig, stamp: dict[str, str] | None) -> EvalRunConfig:

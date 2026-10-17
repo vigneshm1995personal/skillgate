@@ -427,7 +427,9 @@ def _run_outcome_judge(
         case = case_for_task(pack, task.id)
         spec = _resolve_task_spec(skill_root, pack, case)
         if case is not None and case.golden is not None:
-            golden_payload = golden_state(case.golden, skill_root)
+            golden_payload = golden_state(
+                case.golden, skill_root, contains=case.contains
+            )
             actual_payload = actual_output_state(
                 case.golden.output_path, artifacts.workspace
             )
