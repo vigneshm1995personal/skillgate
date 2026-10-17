@@ -49,10 +49,34 @@ PASS_NEED_LABEL: dict[str, str] = {
     "result_quality": "Clear and complete or Mostly good",
 }
 
+EVIDENCE_RULE = (
+    "Cite concrete evidence for this answer: a file path and line, or a command and its output. "
+    "If that evidence shows no violation, answer not applicable or pass. "
+    "Absence of a forbidden pattern is not a failure. "
+    "Apply this rule the same way whenever you see the same evidence."
+)
+
+REFERENCE_EXAMPLE_NOTE = (
+    "The reference (golden) is an example of an acceptable answer, not a full specification. "
+    "Grade against the case prompt and the checks. "
+    "Treat details in the example as required only when the case marks them required."
+)
+
+
+def with_evidence_rule(text: str) -> str:
+    body = (text or "").strip()
+    if "cite concrete evidence" in body.lower():
+        return body
+    if not body:
+        return EVIDENCE_RULE
+    return f"{body} {EVIDENCE_RULE}"
+
+
 OUTCOME_SCORING_NOTES = (
     "Use workspace_files (collected output contents) and agent_trajectory.command_runs "
     "(commands plus captured stdout/stderr) as primary evidence. Do not claim tests or "
     "files were missing when they appear there. "
+    f"{EVIDENCE_RULE} {REFERENCE_EXAMPLE_NOTE} "
     "When workspace_files show the expected deliverable (letter, spreadsheet, export, etc.) "
     "with correct substance and task_completion is Fully completed, use Minor deviation (or "
     "Fully followed) for instruction_adherence when the only gap is style, tool choice, or "

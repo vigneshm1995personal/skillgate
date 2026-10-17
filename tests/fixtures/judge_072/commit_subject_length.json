@@ -1,0 +1,14 @@
+{
+  "line": "feat(api): align the public checkout payload with the billing service contract and document the retry header",
+  "cases": [
+    {
+      "id": "commit_subject_short",
+      "question": "commit subject is at most 100 characters"
+    },
+    {
+      "id": "commit_scope_matches",
+      "question": "commit subject is at most 100 characters"
+    }
+  ],
+  "note": "The same over-100-character subject must be graded from the same cited line in every case."
+}

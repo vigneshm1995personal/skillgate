@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from skillgate_ai.engine import EvalProgress, SuiteReport, TaskProgress, TaskReport
 from skillgate_ai.eval_config import customer_run_details
 from skillgate_ai.harness import is_live_harness
@@ -143,7 +145,7 @@ def report_to_dict(report: SuiteReport) -> dict:
                 primary = _advice_to_dict(task.advice)
                 break
     tasks = [_task_to_dict(t) for t in report.tasks]
-    return {
+    payload = {
         "suite": report.suite,
         "title": report.title,
         "skill": report.skill,
@@ -168,6 +170,10 @@ def report_to_dict(report: SuiteReport) -> dict:
         "pack_case_ids": list(report.pack_case_ids or ()),
         "scored_by": scored_by_line(report),
     }
+    endpoint = _scoring_endpoint(report)
+    if endpoint:
+        payload["scoring_endpoint"] = endpoint
+    return payload
 
 
 def _progress_task_to_dict(task: TaskProgress) -> dict:
@@ -356,14 +362,38 @@ def _task_happened(task: TaskReport) -> str:
     return _task_fail_line(task)
 
 
-def _cell_answer(cell: dict) -> str:
-    choice = str(cell.get("choice") or "").strip()
+def _scoring_endpoint(report: SuiteReport) -> str | None:
+    for task in report.tasks:
+        judge = task.judge if isinstance(task.judge, dict) else None
+        if not isinstance(judge, dict):
+            continue
+        endpoint = judge.get("scoring_endpoint")
+        if isinstance(endpoint, str) and endpoint.strip():
+            return endpoint.strip()
+    return None
+
+
+def _cell_answer(cell: dict, answer: Any = None) -> str:
+    merged = dict(cell)
+    if isinstance(answer, dict):
+        for key in ("choice", "probability", "score"):
+            if merged.get(key) in (None, "") and answer.get(key) is not None:
+                merged[key] = answer[key]
+    choice = str(merged.get("choice") or "").strip()
     if choice:
         return choice
-    reason = str(cell.get("reason") or "").strip()
+    probability = merged.get("probability")
+    if isinstance(probability, (int, float)) and not isinstance(probability, bool):
+        return "Yes" if float(probability) >= 0.8 else "No"
+    score = merged.get("score")
+    if isinstance(score, (int, float)) and not isinstance(score, bool):
+        return str(score)
+    if isinstance(score, str) and score.strip():
+        return score.strip()
+    reason = str(merged.get("reason") or "").strip()
     if reason.lower().startswith("not available"):
         return "Not available"
-    label = str(cell.get("label") or "").strip()
+    label = str(merged.get("label") or "").strip()
     if label.lower() in {"path", "how it ran"}:
         return "Not available"
     return reason or "Not available"
@@ -379,16 +409,22 @@ def _task_check_answers(task: TaskReport) -> tuple[list[dict[str, str]], str]:
     elif isinstance(raw, list):
         cells = [item for item in raw if isinstance(item, dict)]
     if cells:
-        return (
-            [
+        answers_map = judge.get("answers") if isinstance(judge.get("answers"), dict) else {}
+        rows: list[dict[str, str]] = []
+        if isinstance(raw, dict):
+            pairs = (
+                (str(key), cell) for key, cell in raw.items() if isinstance(cell, dict)
+            )
+        else:
+            pairs = ((str(cell.get("label") or ""), cell) for cell in cells)
+        for key, cell in pairs:
+            rows.append(
                 {
                     "label": str(cell.get("label") or "").strip() or "Check",
-                    "answer": _cell_answer(cell),
+                    "answer": _cell_answer(cell, answers_map.get(key)),
                 }
-                for cell in cells
-            ],
-            "openai",
-        )
+            )
+        return rows, "openai"
     rows: list[dict[str, str]] = []
     for score in task.scores:
         title = (score.headline or score.detail or "Check").strip()

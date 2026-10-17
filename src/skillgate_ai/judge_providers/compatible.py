@@ -72,6 +72,8 @@ class CompatibleBackend:
         )
         if first.get("status") == "completed":
             self.supports_confidence = True
+            first["scoring_endpoint"] = "decisions"
+            self.scoring_endpoint = "decisions"
             return first
         if _missing_scoring_endpoint(first):
             self.supports_confidence = False
@@ -79,6 +81,8 @@ class CompatibleBackend:
                 state=state, images=images, timeout_sec=timeout_sec, spec=resolved
             )
             if fallback.get("status") == "completed":
+                fallback["scoring_endpoint"] = "responses"
+                self.scoring_endpoint = "responses"
                 return fallback
             return {
                 "status": "error",
@@ -121,7 +125,12 @@ class CompatibleBackend:
             who=DISPLAY_NAME,
         )
         if result.get("status") == "ok":
-            return {"ok": True, "message": f"Connected to {DISPLAY_NAME}."}
+            self.scoring_endpoint = "decisions"
+            return {
+                "ok": True,
+                "message": f"Connected to {DISPLAY_NAME} via the Decisions API.",
+                "scoring_endpoint": "decisions",
+            }
         if _missing_scoring_endpoint(result):
             fallback = self._structured.post_json(
                 "/responses",
@@ -130,7 +139,12 @@ class CompatibleBackend:
                 retries=False,
             )
             if fallback.get("status") == "ok":
-                return {"ok": True, "message": f"Connected to {DISPLAY_NAME}."}
+                self.scoring_endpoint = "responses"
+                return {
+                    "ok": True,
+                    "message": f"Connected to {DISPLAY_NAME} via the Responses API.",
+                    "scoring_endpoint": "responses",
+                }
             return {
                 "ok": False,
                 "message": "This endpoint did not accept scoring requests. Check the base URL.",

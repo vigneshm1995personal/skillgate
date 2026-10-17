@@ -231,6 +231,7 @@ class CursorAgentHarness:
         if self.cfg.cursor_api_key:
             env["CURSOR_API_KEY"] = self.cfg.cursor_api_key
         proc = sandbox.run(command, env=env, timeout=timeout_sec)
+        _raise_if_auth_failed(proc.stdout or "", proc.stderr or "")
         transcript = _cursor_transcript(proc.stdout or "", proc.stderr or "")
         selected = _parse_selected(sandbox.workspace, transcript, skills)
         read_paths = _parse_read_paths(transcript)
@@ -350,17 +351,42 @@ def _codex_exec_command(
     return command
 
 
+_CLAUDE_PREAMBLE = (
+    "This run is non-interactive. Do not ask for confirmation and do not wait. "
+    "Proceed and finish the task. Stay inside this workspace; "
+    "do not read or write files outside it.\n\n"
+)
+# Docs: code.claude.com/docs/en/headless — acceptEdits auto-approves edits only
+# inside the working directory. --permission-prompts none removes AskUserQuestion
+# and denies anything that would wait for a person. bypassPermissions is not used:
+# it auto-approves writes outside the throwaway workspace.
+_CLAUDE_SYSTEM_PREAMBLE = (
+    "Non-interactive eval. Do not ask for confirmation. Do not use AskUserQuestion. "
+    "Stay inside this workspace; do not read or write files outside it."
+)
+
+
 def _claude_code_exec_command(
     binary: str,
     prompt: str,
     *,
     model: str | None = None,
 ) -> list[str]:
-    """argv for headless ``claude -p`` in the eval sandbox (no approval prompts)."""
+    """argv for headless ``claude -p`` confined to the sandbox cwd.
+
+    ``--permission-mode acceptEdits`` auto-approves file edits in the working
+    directory only (https://code.claude.com/docs/en/headless).
+    ``--permission-prompts none`` does not wait for a person.
+    """
     command = [
         binary,
         "-p",
-        "--dangerously-skip-permissions",
+        "--permission-mode",
+        "acceptEdits",
+        "--permission-prompts",
+        "none",
+        "--append-system-prompt",
+        _CLAUDE_SYSTEM_PREAMBLE,
         "--output-format",
         "stream-json",
         "--verbose",
@@ -590,6 +616,7 @@ class CodexCliHarness:
         finally:
             if not key:
                 _restore_codex_auth(Path(home_env["CODEX_HOME"]))
+        _raise_if_auth_failed(proc.stdout or "", proc.stderr or "")
         transcript = _codex_transcript(proc.stdout or "", proc.stderr or "")
         if _codex_rejected_chatgpt_model(proc.stdout or "", proc.stderr or ""):
             rejected, accepted = _codex_rejected_model(proc.stdout or "", proc.stderr or "")
@@ -682,13 +709,14 @@ class ClaudeCodeHarness:
             )
         command = _claude_code_exec_command(
             binary,
-            agent_prompt,
+            _CLAUDE_PREAMBLE + agent_prompt,
             model=(self.cfg.anthropic_model or "").strip() or None,
         )
         env: dict[str, str] = {"SKILLGATE_TASK": prompt}
         if self.cfg.anthropic_api_key:
             env["ANTHROPIC_API_KEY"] = self.cfg.anthropic_api_key
         proc = sandbox.run(command, env=env, timeout=timeout_sec)
+        _raise_if_auth_failed(proc.stdout or "", proc.stderr or "")
         requested = (self.cfg.anthropic_model or "").strip() or None
         if _claude_model_access_error(proc.stdout or "", proc.stderr or ""):
             raise HarnessError(
@@ -907,10 +935,58 @@ def _codex_session_ok(cfg: LLMConfig) -> bool:
 _CURSOR_LOGIN_STATUS_TIMEOUT_SEC = 5
 
 
+_AUTH_FAILURE_RE = re.compile(
+    r"unable to fetch user details"
+    r"|not logged in"
+    r"|not authenticated"
+    r"|authentication required"
+    r"|please (?:re-?)?log ?in"
+    r"|invalid api key",
+    re.IGNORECASE,
+)
+
+
+def auth_failure_message(stdout: str, stderr: str) -> str | None:
+    """Auth failure in harness stderr or an error event. Not assistant prose."""
+    if _AUTH_FAILURE_RE.search(stderr or ""):
+        return "The agent is not signed in."
+    for line in (stdout or "").splitlines():
+        text = line.strip()
+        if not text.startswith("{"):
+            continue
+        try:
+            obj = json.loads(text)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(obj, dict):
+            continue
+        kind = str(obj.get("type") or "")
+        errored = kind == "error" or (kind == "result" and obj.get("is_error") is True)
+        if not errored:
+            continue
+        blob = " ".join(str(obj.get(key) or "") for key in ("message", "error", "result"))
+        if _AUTH_FAILURE_RE.search(blob):
+            return "The agent is not signed in."
+    return None
+
+
+def _raise_if_auth_failed(stdout: str, stderr: str) -> None:
+    message = auth_failure_message(stdout, stderr)
+    if message is None:
+        return
+    raise HarnessError(
+        message,
+        hint="Run `skillgate login` for Cursor, Codex, or Claude Code.",
+        exit_code=2,
+    )
+
+
 def _cursor_login_status_authenticated(returncode: int, stdout: str, stderr: str) -> bool:
     if returncode != 0:
         return False
     text = f"{stdout}\n{stderr}".lower()
+    if "unable to fetch user details" in text:
+        return False
     if "not logged in" in text or "not authenticated" in text:
         return False
     return True

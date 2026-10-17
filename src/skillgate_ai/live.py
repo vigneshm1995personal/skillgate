@@ -19,6 +19,7 @@ from typing import Any, Protocol
 from skillgate_ai.spans import spans_from_jsonl
 from skillgate_ai.usage import (
     Usage,
+    is_non_content_stream_line,
     merge_usage,
     parse_usage_line,
     render_stream_line,
@@ -213,8 +214,17 @@ class RunControl:
             if update is not None:
                 self._usage = merge_usage(self._usage, update)
             self._output_count += 1
-            if text.lstrip().startswith("{"):
+            if text.lstrip().startswith("{") and not is_non_content_stream_line(text):
                 self._jsonl_buf.append(text)
+            from skillgate_ai.harness import auth_failure_message
+
+            stdout = "" if stream == "stderr" else text
+            stderr = text if stream == "stderr" else ""
+            if auth_failure_message(stdout, stderr):
+                self._kill = True
+                proc = self._proc
+                if proc is not None:
+                    self._terminate(proc)
             # Render Codex JSONL rows for the tail; usage-only rows are dropped.
             display = render_stream_line(text)
             if display is None:

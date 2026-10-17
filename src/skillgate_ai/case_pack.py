@@ -688,7 +688,14 @@ def golden_state(
         payload["contains"] = needles
         payload["note"] = (
             "Required substring — the actual output must include this text; "
-            "it does not need to equal the whole file."
+            "it does not need to equal the whole file. "
+            "Other details in this example are not required unless the case marks them required."
+        )
+    else:
+        payload["note"] = (
+            "Example of an acceptable answer, not a full specification. "
+            "Grade against the case prompt and the checks. "
+            "Treat details in this example as required only when the case marks them required."
         )
     return payload
 

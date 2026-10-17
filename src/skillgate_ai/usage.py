@@ -85,6 +85,19 @@ _COST_KEYS = (
 _CODEX_BOOKKEEPING = frozenset({"thread.started", "turn.started", "turn.completed"})
 # Cursor stream-json envelopes that carry no human text for the live tail.
 _CURSOR_BOOKKEEPING = frozenset({"system", "user", "result"})
+# Claude / Cursor events that are account or transport noise, not evidence.
+_NON_CONTENT_EVENTS = frozenset(
+    {
+        "rate_limit_event",
+        "system",
+        "ping",
+        "stream_event",
+        "hook_started",
+        "hook_progress",
+        "hook_response",
+        "prompt_suggestion",
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -321,6 +334,20 @@ def combine_task_usage(
     return {key: value for key, value in out.items() if value is not None}
 
 
+def is_non_content_stream_line(raw: str) -> bool:
+    """True for rate-limit, system/init, and other non-content stream events."""
+    text = raw.strip()
+    if not text.startswith("{"):
+        return False
+    try:
+        obj = json.loads(text)
+    except json.JSONDecodeError:
+        return False
+    if not isinstance(obj, dict):
+        return False
+    return str(obj.get("type") or "") in _NON_CONTENT_EVENTS
+
+
 def render_stream_line(raw: str) -> str | None:
     """Human-readable live-tail line; None drops harness bookkeeping rows."""
     text = raw.strip()
@@ -357,6 +384,8 @@ def render_stream_line(raw: str) -> str | None:
         if isinstance(payload, dict) and payload.get("type") == "token_count":
             return None
         return raw
+    if kind in _NON_CONTENT_EVENTS:
+        return None
     return raw
 
 

@@ -22,6 +22,7 @@ from skillgate_ai.judge_bank import (
     extract_confidence,
     outcome_verdict,
     structured_output_schema,
+    with_evidence_rule,
 )
 
 MAX_QUESTIONS = 20
@@ -66,14 +67,15 @@ class JudgeQuestion:
         return self.ask
 
     def to_decisions(self) -> dict[str, Any]:
+        instructions = with_evidence_rule(self.ask)
         if self.type == "predicate":
-            return {"type": "predicate", "name": self.id, "instructions": self.ask}
+            return {"type": "predicate", "name": self.id, "instructions": instructions}
         if self.type == "score":
             labels = list(self.levels) or ["1", "2", "3", "4", "5"]
             return {
                 "type": "score",
                 "name": self.id,
-                "instructions": self.ask,
+                "instructions": instructions,
                 "levels": [{"label": label} for label in labels],
             }
         choices = []
@@ -85,7 +87,7 @@ class JudgeQuestion:
         return {
             "type": "choice",
             "name": self.id,
-            "instructions": self.ask,
+            "instructions": instructions,
             "choices": choices,
         }
 
@@ -329,7 +331,24 @@ def extra_block_failures(
     return failures
 
 
+_NOT_APPLICABLE = frozenset({"not applicable", "n/a", "na", "not_applicable"})
+
+
+def _is_not_applicable(answer: Any) -> bool:
+    texts: list[str] = []
+    if isinstance(answer, str):
+        texts.append(answer)
+    elif isinstance(answer, Mapping):
+        for key in ("choice", "score", "label", "value"):
+            value = answer.get(key)
+            if isinstance(value, str):
+                texts.append(value)
+    return any(text.strip().lower() in _NOT_APPLICABLE for text in texts)
+
+
 def extra_question_passed(question: JudgeQuestion, answer: Any) -> tuple[bool, str | None]:
+    if _is_not_applicable(answer):
+        return True, None
     if question.builtin and question.id in SOFT_CELL_ORDER:
         if answer is None:
             return True, None

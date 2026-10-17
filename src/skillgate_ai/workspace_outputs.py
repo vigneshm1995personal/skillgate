@@ -3,13 +3,38 @@
 from __future__ import annotations
 
 import json
+import os
 import re
+import subprocess
 from pathlib import Path
 from typing import Any
 
 from skillgate_ai.case_pack import read_capped_text, sniff_output_bytes
 from skillgate_ai.judge_context import enrich_output_row
 from skillgate_ai.suite import TaskSpec
+
+_SKIP_DIR_NAMES = frozenset(
+    {
+        "node_modules",
+        ".git",
+        "__pycache__",
+        ".venv",
+        "venv",
+        "dist",
+        "build",
+        ".next",
+        "coverage",
+        ".pytest_cache",
+        ".mypy_cache",
+        ".ruff_cache",
+        ".tox",
+        "target",
+        ".skillgate",
+        ".skillgate-git-home",
+    }
+)
+_MAX_EXTRA_BYTES = 262_144
+_EXTRA_TEXT_CAP = 16_000
 
 _NARRATION_LINE = re.compile(
     r"^(i['’]ll |i will |let me |i am going to |i['’]m going to |first[, ]|i need to )",
@@ -100,31 +125,134 @@ def persist_harness_answer(workspace: Path, stdout: str) -> Path | None:
     return dest
 
 
-def collect_workspace_outputs(task: TaskSpec, workspace: Path) -> list[dict[str, Any]]:
-    """Paths from the check plus anything under ``output/`` in the workspace."""
-    rel_paths: set[str] = set(expected_output_paths(task))
-    output_dir = workspace / "output"
-    if output_dir.is_dir():
-        for path in output_dir.rglob("*"):
-            if path.is_file():
-                try:
-                    rel_paths.add(path.relative_to(workspace).as_posix())
-                except ValueError:
-                    continue
+def _skipped_rel(rel: str) -> bool:
+    return any(part in _SKIP_DIR_NAMES for part in Path(rel).parts)
+
+
+def _protected_output(rel: str, expected: set[str]) -> bool:
+    return rel in expected or rel.startswith("output/")
+
+
+def _git_env(workspace: Path) -> dict[str, str]:
+    scratch = workspace / ".skillgate-git-home"
+    scratch.mkdir(exist_ok=True)
+    env = os.environ.copy()
+    env["HOME"] = str(scratch)
+    env["GIT_CONFIG_GLOBAL"] = str(scratch / "no-gitconfig")
+    env["GIT_CONFIG_NOSYSTEM"] = "1"
+    env["GIT_PAGER"] = "cat"
+    return env
+
+
+def _git_text_artifacts(workspace: Path) -> list[dict[str, Any]]:
+    if not (workspace / ".git").exists():
+        return []
+    env = _git_env(workspace)
+    commands = (
+        ("git/log.txt", ["git", "log", "-n", "20", "--pretty=format:%h %s"]),
+        ("git/diff.txt", ["git", "diff", "--no-ext-diff"]),
+        ("git/status.txt", ["git", "status", "--short"]),
+    )
+    rows: list[dict[str, Any]] = []
+    for rel, args in commands:
+        try:
+            proc = subprocess.run(
+                args,
+                cwd=workspace,
+                env=env,
+                capture_output=True,
+                text=True,
+                timeout=10,
+                check=False,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            continue
+        text = (proc.stdout or "").strip()
+        if not text and proc.returncode != 0:
+            text = (proc.stderr or "").strip()
+        rows.append(
+            {
+                "path": rel,
+                "present": True,
+                "kind": "text",
+                "size": len(text),
+                "body": text[:_EXTRA_TEXT_CAP],
+            }
+        )
+    return rows
+
+
+def snapshot_workspace(workspace: Path) -> dict[str, tuple[int, int]]:
+    """Size and mtime for files present before the agent runs."""
+    found: dict[str, tuple[int, int]] = {}
+    if not workspace.is_dir():
+        return found
+    for path in workspace.rglob("*"):
+        if not path.is_file():
+            continue
+        try:
+            rel = path.relative_to(workspace).as_posix()
+        except ValueError:
+            continue
+        if _skipped_rel(rel):
+            continue
+        stat = path.stat()
+        found[rel] = (stat.st_size, stat.st_mtime_ns)
+    return found
+
+
+def _agent_changed(rel: str, path: Path, baseline: dict[str, tuple[int, int]] | None) -> bool:
+    if baseline is None:
+        return True
+    previous = baseline.get(rel)
+    if previous is None:
+        return True
+    stat = path.stat()
+    return previous != (stat.st_size, stat.st_mtime_ns)
+
+
+def collect_workspace_outputs(
+    task: TaskSpec,
+    workspace: Path,
+    *,
+    baseline: dict[str, tuple[int, int]] | None = None,
+) -> list[dict[str, Any]]:
+    """Named outputs, ``output/``, and files the agent created or changed."""
+    expected = set(expected_output_paths(task))
+    rel_paths: set[str] = set(expected)
+    if workspace.is_dir():
+        for path in workspace.rglob("*"):
+            if not path.is_file():
+                continue
+            try:
+                rel = path.relative_to(workspace).as_posix()
+            except ValueError:
+                continue
+            if _skipped_rel(rel):
+                continue
+            if _protected_output(rel, expected) or _agent_changed(rel, path, baseline):
+                rel_paths.add(rel)
     rows: list[dict[str, Any]] = []
     for rel in sorted(rel_paths):
         dest = workspace / rel
         present = dest.is_file()
         row: dict[str, Any] = {"path": rel, "present": present}
         if present:
-            sniffed = sniff_output_bytes(dest.read_bytes())
-            row.update(sniffed)
-            if sniffed.get("kind") != "bytes":
-                row["body"] = read_capped_text(dest, limit=None)
-            row = enrich_output_row(row, dest)
+            size = dest.stat().st_size
+            protected = _protected_output(rel, expected)
+            if not protected and size > _MAX_EXTRA_BYTES:
+                row.update({"kind": "text", "size": size, "body": None, "omitted": "size"})
+            else:
+                sniffed = sniff_output_bytes(dest.read_bytes())
+                row.update(sniffed)
+                if sniffed.get("kind") != "bytes":
+                    limit = None if protected else _EXTRA_TEXT_CAP
+                    row["body"] = read_capped_text(dest, limit=limit)
+                row = enrich_output_row(row, dest)
         else:
             row["size"] = 0
         rows.append(row)
+    rows.extend(_git_text_artifacts(workspace))
     return rows
 
 

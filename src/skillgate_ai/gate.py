@@ -358,7 +358,8 @@ def _execute_check(
         )
     exit_code = 0 if report.passed else 1
     if (
-        not no_judge
+        report.passed
+        and not no_judge
         and not tryout
         and is_live_harness(report.harness)
         and _quality_scoring_was_skipped(report)

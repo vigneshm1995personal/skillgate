@@ -1,0 +1,7 @@
+{
+  "id": "avoids_useeffect_fetch",
+  "question": "avoids useEffect fetch",
+  "source_path": "src/App.tsx",
+  "source": "export function App() {\n  return <main>Hello</main>;\n}\n",
+  "note": "The file has no useEffect. Absence of the pattern is not a violation."
+}
