@@ -8,7 +8,7 @@
     ".": "./src/index.ts",
     "./styles.css": "./src/index.css",
     "./tokens.css": "./src/tokens.css",
-    "./vite": "./host/skillgate-ui-plugin.ts",
+    "./vite": "./host/skillgate-ui-plugin.mjs",
     "./slots": "./src/slots/index.ts"
   },
   "scripts": {

@@ -17,7 +17,7 @@ describe("shared UI package", () => {
     expect(pkg.exports["."]).toBe("./src/index.ts")
     expect(pkg.exports["./tokens.css"]).toBe("./src/tokens.css")
     expect(pkg.exports["./styles.css"]).toBe("./src/index.css")
-    expect(pkg.exports["./vite"]).toBe("./host/skillgate-ui-plugin.ts")
+    expect(pkg.exports["./vite"]).toBe("./host/skillgate-ui-plugin.mjs")
     expect(pkg.exports["./slots"]).toBe("./src/slots/index.ts")
   })
 
