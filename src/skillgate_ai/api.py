@@ -179,7 +179,7 @@ def _register_core_routes(app: FastAPI) -> None:
 
     @app.post("/api/login/{agent}")
     def start_login(agent: str, request: Request) -> dict[str, Any]:
-        from skillgate_ai.harness import harness_auth_status, normalize_login_agent
+        from skillgate_ai.harness import normalize_login_agent, run_official_login
 
         state = state_of(request)
         load_env(state.root)
@@ -187,25 +187,18 @@ def _register_core_routes(app: FastAPI) -> None:
         if kind is None:
             fail(400, "Use cursor, claude, or codex.")
         cfg = get_llm_config(state.root)
-        # Browser requests cannot inherit a TTY. Point at the CLI login.
-        rows = harness_auth_status(cfg)
-        row = next((item for item in rows if item["agent"] == kind), None)
-        installed = bool(row and row["installed"])
-        install = str((row or {}).get("install") or "")
-        command = f"skillgate login {kind}"
+        result = run_official_login(kind, cfg)
+        installed = bool(result.get("installed"))
         return {
-            "agent": kind,
+            "agent": result.get("agent") or kind,
             "installed": installed,
-            "install": install,
-            "command": command,
-            "auth": (row or {}).get("auth") or "none",
-            "status": (row or {}).get("status") or "none",
-            "needs_terminal": True,
-            "message": (
-                f"Not installed. {install}"
-                if not installed
-                else f"Run `{command}` in your terminal to finish Sign in."
-            ),
+            "install": str(result.get("install") or ""),
+            "command": str(result.get("command") or f"skillgate login {kind}"),
+            "auth": "cli_login" if result.get("ok") else "none",
+            "status": result.get("status") or "none",
+            "ok": bool(result.get("ok")),
+            "needs_terminal": not installed,
+            "message": str(result.get("message") or ""),
         }
 
     @app.delete("/api/settings/keys/{name}")

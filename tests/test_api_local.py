@@ -6,6 +6,7 @@ import shutil
 import zipfile
 from pathlib import Path
 
+import pytest
 from fastapi.testclient import TestClient
 
 from skillgate_ai.api import create_app
@@ -885,3 +886,73 @@ def test_generate_sample_writes_fixture(tmp_path: Path, monkeypatch) -> None:
     assert photo.status_code == 200
     assert photo.json()["needs_upload"] is True
     assert photo.json()["file"] is None
+
+
+def _isolate_home(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: home))
+    return home
+
+
+def test_login_status_lists_agents_without_touching_home(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    home = _isolate_home(monkeypatch, tmp_path)
+    client = _client(tmp_path, monkeypatch)
+    res = client.get("/api/login/status")
+    assert res.status_code == 200, res.text
+    harnesses = res.json()["harnesses"]
+    assert [row["agent"] for row in harnesses] == ["cursor", "codex", "claude"]
+    assert [row["name"] for row in harnesses] == ["Cursor", "Codex", "Claude Code"]
+    for row in harnesses:
+        assert row["auth"] in {"none", "cli_login", "api_key"}
+        assert "status" in row
+        assert row["command"] == f"skillgate login {row['agent']}"
+    assert list(home.iterdir()) == []
+
+
+def test_login_start_runs_official_login(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    home = _isolate_home(monkeypatch, tmp_path)
+    called: list[str] = []
+
+    def fake_login(agent: str, cfg) -> dict:
+        del cfg
+        called.append(agent)
+        return {
+            "ok": True,
+            "agent": agent,
+            "installed": True,
+            "status": "logged in",
+            "install": "",
+            "command": f"skillgate login {agent}",
+            "message": f"{agent} is logged in.",
+        }
+
+    monkeypatch.setattr("skillgate_ai.harness.run_official_login", fake_login)
+    client = _client(tmp_path, monkeypatch)
+    res = client.post("/api/login/cursor", json={})
+    assert res.status_code == 200, res.text
+    data = res.json()
+    assert called == ["cursor"]
+    assert data["ok"] is True
+    assert data["agent"] == "cursor"
+    assert data["installed"] is True
+    assert data["command"] == "skillgate login cursor"
+    assert "logged in" in str(data["message"]).lower()
+    assert list(home.iterdir()) == []
+
+
+def test_login_start_rejects_unknown_agent(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _isolate_home(monkeypatch, tmp_path)
+    client = _client(tmp_path, monkeypatch)
+    res = client.post("/api/login/chatgpt", json={})
+    assert res.status_code == 400, res.text
+    detail = res.json()["detail"]
+    message = detail.get("message") if isinstance(detail, dict) else str(detail)
+    assert "cursor" in message.lower()

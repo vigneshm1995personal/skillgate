@@ -54,6 +54,10 @@ def test_parity_table_is_in_docs() -> None:
     assert "UI / CLI parity" in text
     for command in sorted(set(WRITE_ROUTE_CLI.values())):
         assert command in text, command
+    for command in sorted(set(READ_ROUTE_CLI.values())):
+        assert command in text, command
+    assert "login --status" in text
+    assert "skillgate login" in text
     assert "skillgate history" in text
     assert "case list" in text
     assert "case remove" in text
