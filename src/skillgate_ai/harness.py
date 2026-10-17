@@ -361,14 +361,19 @@ _CLAUDE_PREAMBLE = (
     "Proceed and finish the task. Stay inside this workspace; "
     "do not read or write files outside it.\n\n"
 )
-# Docs: code.claude.com/docs/en/headless — acceptEdits auto-approves edits only
-# inside the working directory. --permission-prompts none removes AskUserQuestion
-# and denies anything that would wait for a person. bypassPermissions is not used:
-# it auto-approves writes outside the throwaway workspace.
+# acceptEdits auto-approves edits inside the working directory.
+# --permission-prompts none denies anything that would still prompt.
+# --allowedTools pre-approves Bash and the file tools a case runs in that
+# directory. Writes outside the workspace still prompt and are denied.
+# bypassPermissions is not used.
 _CLAUDE_SYSTEM_PREAMBLE = (
     "Non-interactive eval. Do not ask for confirmation. Do not use AskUserQuestion. "
     "Stay inside this workspace; do not read or write files outside it."
 )
+
+
+# Claude Code 2.1.302: --allowedTools is comma- or space-separated.
+_CLAUDE_WORKSPACE_TOOLS = "Bash,Read,Edit,Write,Glob,Grep"
 
 
 def _claude_code_exec_command(
@@ -377,12 +382,7 @@ def _claude_code_exec_command(
     *,
     model: str | None = None,
 ) -> list[str]:
-    """argv for headless ``claude -p`` confined to the sandbox cwd.
-
-    ``--permission-mode acceptEdits`` auto-approves file edits in the working
-    directory only (https://code.claude.com/docs/en/headless).
-    ``--permission-prompts none`` does not wait for a person.
-    """
+    """argv for headless ``claude -p`` confined to the sandbox cwd."""
     command = [
         binary,
         "-p",
@@ -390,6 +390,8 @@ def _claude_code_exec_command(
         "acceptEdits",
         "--permission-prompts",
         "none",
+        "--allowedTools",
+        _CLAUDE_WORKSPACE_TOOLS,
         "--append-system-prompt",
         _CLAUDE_SYSTEM_PREAMBLE,
         "--output-format",

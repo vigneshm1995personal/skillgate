@@ -381,6 +381,9 @@ def test_claude_harness_is_noninteractive_inside_workspace(
     assert "bypassPermissions" not in command
     assert command[command.index("--permission-mode") + 1] == "acceptEdits"
     assert command[command.index("--permission-prompts") + 1] == "none"
+    tools_flag = "--allowedTools" if "--allowedTools" in command else "--allowed-tools"
+    assert tools_flag in command
+    assert "Bash" in command[command.index(tools_flag) + 1]
     prompt = command[-1]
     assert "Do not ask for confirmation" in prompt
     assert "Stay inside this workspace" in prompt
@@ -406,6 +409,44 @@ def test_judge_provider_test_accepts_key_env(
     assert result.exit_code == 0, out
     assert seen["key"] == "sk-from-env-not-a-real-key"
     assert "Decisions API" in out
+
+
+def test_judge_provider_set_stores_key_env_name_not_value(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("SKILLGATE_ROOT", str(tmp_path))
+    monkeypatch.chdir(tmp_path)
+    secret = "sk-openrouter-secret-value"
+    monkeypatch.setenv("OPENROUTER_API_KEY", secret)
+    result = runner.invoke(
+        app,
+        [
+            "judge",
+            "provider",
+            "set",
+            "other",
+            "--base-url",
+            "https://openrouter.ai/api/v1",
+            "--model",
+            "openai/gpt-4o-mini",
+            "--key-env",
+            "OPENROUTER_API_KEY",
+        ],
+    )
+    out = plain_text(result.stdout + result.stderr)
+    assert result.exit_code == 0, out
+    assert "No such option" not in out
+    assert secret not in out
+    raw = (tmp_path / ".skillgate" / "judge").read_text(encoding="utf-8")
+    assert "OPENROUTER_API_KEY" in raw
+    assert secret not in raw
+
+    from skillgate_ai.config import get_llm_config
+    from skillgate_ai.judge import resolve_judge
+
+    cfg = get_llm_config(tmp_path)
+    judge = resolve_judge(cfg, harness_name="cursor-agent")
+    assert judge.backend.api_key == secret
 
 
 def test_scoring_endpoint_recorded_for_responses_fallback() -> None:

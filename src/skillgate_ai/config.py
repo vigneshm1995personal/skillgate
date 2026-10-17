@@ -116,6 +116,7 @@ class LLMConfig:
     judge_endpoint: str | None = None
     judge_provider_model: str | None = None
     judge_decisions_path: str | None = None
+    judge_key_env: tuple[str, ...] = ()
 
     @property
     def has_any_key(self) -> bool:
@@ -201,6 +202,7 @@ def get_llm_config(root: Path | None = None) -> LLMConfig:
         judge_endpoint=settings.base_url,
         judge_provider_model=settings.model,
         judge_decisions_path=settings.decisions_path,
+        judge_key_env=tuple(settings.key_env),
     )
 
 

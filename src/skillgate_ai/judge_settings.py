@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -15,6 +16,7 @@ from skillgate_ai.paths import project_root
 JUDGE_FILENAME = "judge"
 PROVIDER_IDS = ("auto", "openai", "jev", "aws", "compatible")
 CHOSEN_IDS = frozenset({"openai", "jev", "aws", "compatible"})
+_ENV_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 
 @dataclass(frozen=True)
@@ -24,19 +26,23 @@ class JudgeProviderSettings:
     model: str | None = None
     base_url: str | None = None
     decisions_path: str | None = None
+    key_env: tuple[str, ...] = ()
 
     @property
     def chosen(self) -> bool:
         return self.provider in CHOSEN_IDS
 
     def to_public_dict(self) -> dict[str, Any]:
-        return {
+        payload = {
             "provider": self.provider,
             "chosen": self.chosen,
             "region": self.region,
             "model": self.model,
             "base_url": self.base_url,
         }
+        if self.key_env:
+            payload["key_env"] = list(self.key_env)
+        return payload
 
 
 def judge_settings_path(root: str | Path | None = None) -> Path:
@@ -64,6 +70,7 @@ def load_judge_settings(root: str | Path | None = None) -> JudgeProviderSettings
         model=_blank(raw.get("model")),
         base_url=_blank(raw.get("base_url")),
         decisions_path=decisions_path,
+        key_env=_stored_key_env(raw.get("key_env")),
     )
     if "decisions_path" in raw:
         _rewrite_judge_file(path, settings)
@@ -77,6 +84,8 @@ def _rewrite_judge_file(path: Path, settings: JudgeProviderSettings) -> None:
         "model": settings.model,
         "base_url": settings.base_url,
     }
+    if settings.key_env:
+        payload["key_env"] = list(settings.key_env)
     try:
         flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC
         fd = os.open(path, flags, 0o600)
@@ -97,6 +106,7 @@ def save_judge_settings(
     model: str | None = None,
     base_url: str | None = None,
     decisions_path: str | None = None,
+    key_env: list[str] | tuple[str, ...] | None = None,
     _persist_decisions_path: bool = False,
 ) -> JudgeProviderSettings:
     name = (provider or "auto").strip().lower() or "auto"
@@ -113,6 +123,7 @@ def save_judge_settings(
         model=_blank(model),
         base_url=_blank(base_url),
         decisions_path=_blank(decisions_path),
+        key_env=_require_key_env(key_env),
     )
     dest = judge_settings_path(root)
     dest.parent.mkdir(parents=True, exist_ok=True)
@@ -123,6 +134,8 @@ def save_judge_settings(
         "model": settings.model,
         "base_url": settings.base_url,
     }
+    if settings.key_env:
+        payload["key_env"] = list(settings.key_env)
     if _persist_decisions_path and settings.decisions_path:
         payload["decisions_path"] = settings.decisions_path
     flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC
@@ -138,6 +151,34 @@ def save_judge_settings(
     finally:
         os.close(fd)
     return settings
+
+
+def _require_key_env(value: Any) -> tuple[str, ...]:
+    names = _key_env_items(value)
+    for name in names:
+        if not _ENV_NAME.fullmatch(name):
+            raise SkillGateError(
+                "Pass the env var name, not the key.",
+                hint="Example: --key-env OPENROUTER_API_KEY",
+                exit_code=2,
+            )
+    return tuple(names)
+
+
+def _stored_key_env(value: Any) -> tuple[str, ...]:
+    return tuple(name for name in _key_env_items(value) if _ENV_NAME.fullmatch(name))
+
+
+def _key_env_items(value: Any) -> list[str]:
+    if value is None:
+        return []
+    raw_items = value if isinstance(value, (list, tuple)) else [value]
+    names: list[str] = []
+    for item in raw_items:
+        name = str(item or "").strip()
+        if name and name not in names:
+            names.append(name)
+    return names
 
 
 def _blank(value: Any) -> str | None:

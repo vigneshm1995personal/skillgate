@@ -1007,8 +1007,9 @@ def judge_provider_set(
     region: str | None = typer.Option(None, "--region"),
     model: str | None = typer.Option(None, "--model"),
     decisions_path: str | None = typer.Option(None, "--decisions-path", hidden=True),
+    key_env: list[str] | None = typer.Option(None, "--key-env", help=_KEY_ENV_HELP),
 ) -> None:
-    """Write `.skillgate/judge`. Does not print keys."""
+    """Write `.skillgate/judge`. Stores env var names, never key values."""
     from skillgate_ai.judge_settings import save_judge_settings
 
     root = _boot()
@@ -1020,6 +1021,7 @@ def judge_provider_set(
             model=model,
             base_url=base_url,
             decisions_path=decisions_path,
+            key_env=key_env,
         )
     except SkillGateError as exc:
         console.print(exc.render())

@@ -77,6 +77,12 @@ def test_claude_harness_skips_permissions_headless() -> None:
     assert cmd[cmd.index("--permission-prompts") + 1] == "none"
     assert "--dangerously-skip-permissions" not in cmd
     assert "bypassPermissions" not in cmd
+    tools_flag = "--allowedTools" if "--allowedTools" in cmd else "--allowed-tools"
+    assert tools_flag in cmd
+    tools = cmd[cmd.index(tools_flag) + 1]
+    assert "Bash" in tools
+    assert "Edit" in tools
+    assert "Write" in tools
 
 
 def test_codex_harness_approves_headless() -> None:

@@ -24,9 +24,12 @@ Or paste the key in `skillgate ui` (Settings). **CI and Docker:** set `SKILLGATE
 Pick a scoring provider in Settings or:
 
 ```bash
-skillgate judge provider set openai|jev|aws|Other
+skillgate judge provider set openai|jev|aws|other
+skillgate judge provider set other --base-url https://openrouter.ai/api/v1 --model openai/gpt-4o-mini --key-env OPENROUTER_API_KEY
 skillgate judge provider test
 ```
+
+`--key-env` on `set` stores the env var name in `.skillgate/judge`. The key stays in that environment variable. Skill Gate does not write the value.
 
 Override if you need it (CI / scripts — keep these `SKILLGATE_*` names):
 

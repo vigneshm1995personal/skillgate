@@ -181,20 +181,11 @@ export function emptyCatalogHint(
 }
 
 export function unsupportedModelHint(
-  pref: string,
-  resolvedHarness: string | undefined,
-  known: string[]
-): string {
-  if (resolveModelHarness(pref, resolvedHarness) === "codex") {
-    if (known.length === 0 || known.length > 8) {
-      return "Not on this agent's list. Codex + ChatGPT login needs a Codex model."
-    }
-    return `Not on this agent's list. That's not a Codex model (${known.join(", ")}).`
-  }
-  if (known.length === 0 || known.length > 8) {
-    return "Not on this agent's list. Pick from the list for this agent or leave Agent default."
-  }
-  return `Not on this agent's list. Pick from the list for this agent (${known.join(", ")}) or leave Agent default.`
+  _pref: string,
+  _resolvedHarness: string | undefined,
+  _known: string[]
+): string | null {
+  return null
 }
 
 export function draftConfigSummary(
@@ -353,7 +344,15 @@ function scoredByFromStamp(judge?: EvalRunConfig["judge"]): string {
   if (name === "Checks" || provider === "skip") {
     return ""
   }
-  if (name === "OpenAI" || name === "Jev" || name === "AWS" || name === "Other") {
+  if (
+    provider === "compatible" ||
+    provider === "other" ||
+    name === "Other" ||
+    name.toLowerCase() === "your judge"
+  ) {
+    return "Scored by your judge"
+  }
+  if (name === "OpenAI" || name === "Jev" || name === "AWS") {
     return `Scored by ${name}`
   }
   if (stampIsChosen(judge)) {
@@ -366,8 +365,8 @@ function scoredByFromStamp(judge?: EvalRunConfig["judge"]): string {
     if (provider === "aws") {
       return "Scored by AWS"
     }
-    if (provider === "compatible") {
-      return "Scored by Other"
+    if (provider === "compatible" || provider === "other") {
+      return "Scored by your judge"
     }
   }
   if (!provider || provider === "skip") {

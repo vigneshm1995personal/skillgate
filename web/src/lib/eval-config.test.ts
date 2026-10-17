@@ -93,16 +93,10 @@ describe("modelSelectValue", () => {
 })
 
 describe("unsupportedModelHint", () => {
-  it("uses plain words instead of gateway model ids", () => {
-    const short = unsupportedModelHint("codex", "codex", [])
-    const listed = unsupportedModelHint("codex", "codex", ["gpt-5.6-luna"])
-    expect(short).toMatch(/Codex model/)
-    expect(short).not.toMatch(/gateway ids/i)
-    expect(short).not.toMatch(/openai\/gpt-4o-mini/)
-    expect(listed).toContain("gpt-5.6-luna")
-    expect(listed).not.toMatch(/openai\/gpt-4o-mini/)
-    expect(listed).not.toMatch(/gateway model id/i)
-    expect(listed).toMatch(/not a Codex model/i)
+  it("does not error for a custom id that is not on the list", () => {
+    expect(unsupportedModelHint("codex", "codex", ["gpt-5.6-luna"])).toBeNull()
+    expect(unsupportedModelHint("claude", "claude", ["sonnet", "claude-sonnet-5"])).toBeNull()
+    expect(unsupportedModelHint("codex", "codex", [])).toBeNull()
   })
 })
 
@@ -300,6 +294,21 @@ describe("configLabel", () => {
         judge: { provider: "jev", chosen: true, display_name: "Jev" },
       })
     ).toBe("Scored by Jev")
+  })
+
+  it("uses a neutral stamp for the other judge", () => {
+    expect(
+      customerConfigLabel({
+        harness: "codex",
+        judge: { provider: "compatible", chosen: true, display_name: "Other" },
+      })
+    ).toBe("Scored by your judge")
+    expect(
+      customerConfigLabel({
+        harness: "codex",
+        judge: { provider: "other", chosen: true, display_name: "Other" },
+      })
+    ).toBe("Scored by your judge")
   })
 
   it("does not treat an openai/ model id as the scorer", () => {

@@ -4,15 +4,17 @@ from __future__ import annotations
 
 from typing import Any, Mapping
 
+YOUR_JUDGE = "your judge"
 CHOSEN_LABELS = {
     "openai": "OpenAI",
     "jev": "Jev",
     "aws": "AWS",
-    "compatible": "Other",
+    "compatible": YOUR_JUDGE,
 }
 DEFAULT_NAME = "the judge"
 SKIP_NAME = "Checks"
 SCORED_BY_JUDGE = "Scored by the judge"
+SCORED_BY_YOUR_JUDGE = "Scored by your judge"
 SCORED_BY_CHECKS = "Scored by Checks"
 
 
@@ -31,11 +33,13 @@ def customer_scorer_name(stamp: Mapping[str, Any] | None) -> str:
     if not isinstance(stamp, Mapping):
         return DEFAULT_NAME
     provider = str(stamp.get("provider") or "").strip().lower()
-    if provider in {"jev", "aws", "compatible"}:
+    display = str(stamp.get("display_name") or "").strip()
+    if provider in {"compatible", "other"} or display.lower() in {"other", YOUR_JUDGE}:
+        return YOUR_JUDGE
+    if provider in {"jev", "aws"}:
         return CHOSEN_LABELS[provider]
     if provider == "skip":
         return SKIP_NAME
-    display = str(stamp.get("display_name") or "").strip()
     if display in CHOSEN_LABELS.values():
         return display
     if display == SKIP_NAME:
@@ -46,6 +50,8 @@ def customer_scorer_name(stamp: Mapping[str, Any] | None) -> str:
 
 
 def scored_by_phrase(name: str) -> str:
+    if (name or "").strip().lower() in {"other", YOUR_JUDGE}:
+        return SCORED_BY_YOUR_JUDGE
     if name == SKIP_NAME:
         return SCORED_BY_CHECKS
     if name == DEFAULT_NAME or not name:
@@ -54,6 +60,8 @@ def scored_by_phrase(name: str) -> str:
 
 
 def title_scorer(name: str) -> str:
+    if (name or "").strip().lower() in {YOUR_JUDGE, "other"}:
+        return "Your judge"
     if name == DEFAULT_NAME or not name:
         return "The judge"
     return name

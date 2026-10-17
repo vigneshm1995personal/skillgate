@@ -71,16 +71,17 @@ export function EvalConfigFields({
     supportedModels
   )
   const customRaw = value.model.trim()
-  const customUnsupported = Boolean(
-    customOpen && customRaw && !known.includes(customRaw)
-  )
+  const modelHint =
+    customOpen && customRaw
+      ? unsupportedModelHint(harnessPref, resolvedHarness, known)
+      : null
   const modelPlaceholder =
     resolveModelHarness(harnessPref, resolvedHarness) === "codex"
       ? "gpt-5.6-luna"
       : known[0] || "model id"
 
   const emptyHint =
-    !customUnsupported && known.length === 0
+    !modelHint && known.length === 0
       ? emptyCatalogHint(harnessPref, resolvedHarness, supportedModelsMeta)
       : null
 
@@ -90,7 +91,7 @@ export function EvalConfigFields({
       <FieldGroup>
         <Field
           data-disabled={disabled || undefined}
-          data-invalid={customUnsupported || undefined}
+          data-invalid={modelHint ? true : undefined}
         >
           <FieldLabel htmlFor="eval-model">Model</FieldLabel>
           <Select
@@ -142,15 +143,15 @@ export function EvalConfigFields({
               value={value.model}
               placeholder={modelPlaceholder}
               disabled={disabled}
-              aria-invalid={customUnsupported || undefined}
+              aria-invalid={modelHint ? true : undefined}
               onChange={(event) =>
                 onChange({ ...value, model: event.target.value })
               }
             />
           ) : null}
-          {customUnsupported ? (
+          {modelHint ? (
             <FieldDescription id="eval-model-unsupported">
-              {unsupportedModelHint(harnessPref, resolvedHarness, known)}
+              {modelHint}
             </FieldDescription>
           ) : emptyHint ? (
             <FieldDescription id="eval-model-empty">{emptyHint}</FieldDescription>

@@ -7,8 +7,10 @@
 - Treat the reference output as an example of an acceptable answer. Grade against the case prompt and checks. `contains` substrings stay required.
 - Ask every rubric question to cite a file and line, or a command. No violation in that evidence is not applicable or a pass.
 - Save other files the agent created or changed in the workspace, with a size cap and a skip list (`node_modules`, `.git`, and similar), plus `git log` / `git diff` / `git status` when the workspace is a git repo.
-- Run the Claude harness non-interactively inside the throwaway workspace (`--permission-mode acceptEdits`, `--permission-prompts none`) and tell it not to ask.
-- `skillgate judge provider test` accepts `--key-env`, matching `check`.
+- Run the Claude harness non-interactively inside the throwaway workspace (`--permission-mode acceptEdits`, `--permission-prompts none`, `--allowedTools` for Bash and file tools). Commands outside that workspace still need a prompt and are denied.
+- `skillgate judge provider set` and `test` accept `--key-env`. `set` stores the env var name and does not store the key.
+- The model picker lists the current Codex and Claude models from each harness. A custom model id is not an error.
+- An Other judge stamp says "Scored by your judge".
 - Record the scoring endpoint that was actually used (Decisions API or Responses API) on the check JSON and in `judge provider test`.
 - Treat Cursor "unable to fetch user details" as not signed in. Auth errors fail fast. A red check exits 1. `skillgate login cursor` says when Cursor is already signed in.
 - `skillgate compare versions --git` accepts `--harness` and otherwise uses the harness from the skill's history runs.
