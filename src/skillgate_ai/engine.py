@@ -696,7 +696,15 @@ def _run_task(
                 copies.append((src, item.dest))
             staged = skills if task.expect_skill is not None else []
             prepare_workspace(sandbox.workspace, staged, copies)
-            _seed_skill_selection(sandbox.workspace, task.expect_skill)
+            if task.trigger_mode:
+                mode = sandbox.workspace / ".skillgate" / "mode"
+                mode.parent.mkdir(parents=True, exist_ok=True)
+                mode.write_text("trigger\n", encoding="utf-8")
+                selected = sandbox.workspace / ".skillgate" / "selected.json"
+                if selected.is_file():
+                    selected.unlink()
+            else:
+                _seed_skill_selection(sandbox.workspace, task.expect_skill)
             from skillgate_ai.workspace_outputs import snapshot_workspace
 
             file_baseline = snapshot_workspace(sandbox.workspace)

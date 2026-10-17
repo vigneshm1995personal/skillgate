@@ -54,6 +54,7 @@ class TaskSpec(BaseModel):
     scorers: list[ScorerSpec]
     timeout_sec: int | None = None
     budgets: CaseBudgets | None = None
+    trigger_mode: bool = False
 
     @field_validator("id")
     @classmethod

@@ -455,9 +455,8 @@ def test_codex_run_reuses_host_login_without_copying_auth(
     result = CodexCliHarness(_cfg(codex_api_key=None)).run(sandbox, "task", [], timeout_sec=5)
     home = Path(sandbox.env["CODEX_HOME"])
     assert str(home).endswith("/.skillgate/codex-home")
-    linked = home / "auth.json"
-    assert linked.is_symlink()
-    assert linked.resolve() == real_auth.resolve()
+    assert not (home / "auth.json").exists()
+    assert real_auth.read_text(encoding="utf-8") == f'{{"marker":"{marker}"}}\n'
     assert "CODEX_API_KEY" not in sandbox.env
     assert marker not in json.dumps(sandbox.env)
     assert result.auth_mode == AUTH_CLI_LOGIN

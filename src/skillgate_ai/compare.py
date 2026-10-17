@@ -759,6 +759,34 @@ def _versions_dry_run_payload(
     }
 
 
+def harness_from_history(pack: Path) -> str:
+    """Resolved harness from the newest history run, or ``auto``."""
+    rows = load_history(pack, limit=30)
+    for row in reversed(rows):
+        report = row.get("report") if isinstance(row.get("report"), dict) else {}
+        cfg = row.get("config") if isinstance(row.get("config"), dict) else {}
+        for candidate in (report.get("harness"), cfg.get("harness"), cfg.get("harness_pref")):
+            name = str(candidate or "").strip().lower()
+            if name in {"cursor", "agent"}:
+                return "cursor-agent"
+            if name == "claude-code":
+                return "claude"
+            if name in ALLOWED_COMPARE_HARNESS and name != "auto":
+                return name
+    return "auto"
+
+
+def _normalize_compare_harness(name: str | None) -> str:
+    raw = (name or "").strip().lower()
+    if raw in {"cursor", "agent"}:
+        return "cursor-agent"
+    if raw == "claude-code":
+        return "claude"
+    if raw in ALLOWED_COMPARE_HARNESS:
+        return raw
+    return ""
+
+
 def run_versions_compare(
     pack: Path,
     *,
@@ -769,6 +797,7 @@ def run_versions_compare(
     compare_id: str | None = None,
     run_check_fn: Callable[..., Any] | None = None,
     dry_run: bool = False,
+    harness: str | None = None,
 ) -> CompareResult:
     pack = pack.expanduser().resolve()
     compare_id = compare_id or uuid.uuid4().hex[:12]
@@ -791,6 +820,7 @@ def run_versions_compare(
             rerun=rerun,
             compare_id=compare_id,
             run_check_fn=run_check_fn,
+            harness=harness,
         )
     except CompareError as exc:
         _append_compare_failure(pack, compare_id=compare_id, mode="versions", exc=exc)
@@ -806,16 +836,19 @@ def _run_versions_compare(
     rerun: bool = False,
     compare_id: str,
     run_check_fn: Callable[..., Any] | None = None,
+    harness: str | None = None,
 ) -> CompareResult:
     if git_refs and len(git_refs) == 2:
         from skillgate_ai.compare_git import run_git_versions_compare
 
+        chosen = _normalize_compare_harness(harness) or harness_from_history(pack)
         return run_git_versions_compare(
             pack,
             refs=git_refs,
             compare_id=compare_id,
             root=root,
             run_check_fn=run_check_fn,
+            harness=chosen,
         )
     if run_ids and len(run_ids) == 2 and run_ids[0] == run_ids[1]:
         raise CompareError(

@@ -81,6 +81,7 @@ def run_git_versions_compare(
     compare_id: str,
     root: Path,
     run_check_fn: Callable[..., Any] | None = None,
+    harness: str = "auto",
 ) -> CompareResult:
     if len(refs) != 2:
         raise CompareError("Pick exactly two git refs.")
@@ -101,7 +102,7 @@ def run_git_versions_compare(
             spec = CompareArmSpec(
                 arm_id=arm_id,
                 label=label,
-                harness_pref="auto",
+                harness_pref=harness,
             )
             runner = run_check_fn
             from skillgate_ai.compare import run_check as default_run
@@ -115,13 +116,36 @@ def run_git_versions_compare(
                 root=root,
                 **spec.to_run_kwargs(),
             )
+            from skillgate_ai.history import append_eval
+            from skillgate_ai.report import report_to_dict
+
+            arm_config = {
+                "harness": harness,
+                "harness_pref": harness,
+                "source": "compare",
+                "git_ref": ref,
+            }
+            if result.report is not None:
+                append_eval(
+                    pack,
+                    run_id=run_id,
+                    passed=result.report.passed,
+                    report=report_to_dict(result.report),
+                    config={**arm_config, "harness": result.report.harness or harness},
+                )
+            elif result.error:
+                append_eval(
+                    pack,
+                    run_id=run_id,
+                    passed=False,
+                    error=result.error,
+                    config=arm_config,
+                )
             if result.error or result.report is None:
                 raise CompareError(
                     result.error.get("message") if result.error else f"Ref {ref} failed to run.",
                     hint=result.error.get("hint") if result.error else None,
                 )
-            from skillgate_ai.report import report_to_dict
-
             report = report_to_dict(result.report)
             fp = str(report.get("pack_fingerprint") or "")
             if pack_fp is None:

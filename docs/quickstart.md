@@ -23,6 +23,8 @@ Sign in with the agent CLI (subscription login) or set a key. Skill Gate does no
 
 ```bash
 skillgate login                  # cursor | claude | codex; omit to sign in missing agents
+
+Codex checks run with an isolated `CODEX_HOME` that contains only the skill under test. Skill Gate does not copy `~/.codex/skills` or `~/.codex/auth.json` into that home. A `CODEX_API_KEY` (vault, `SKILLGATE_CODEX_API_KEY`, or `--key-env`) authenticates the isolated run. ChatGPT subscription tokens stay in your own `~/.codex`.
 skillgate login --status         # installed / logged in / API key / none
 # or a key: skillgate keys set OPENAI_API_KEY
 # hidden prompt; or pipe stdin: printf '%s\n' "$OPENAI_API_KEY" | skillgate keys set OPENAI_API_KEY

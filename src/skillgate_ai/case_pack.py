@@ -99,6 +99,7 @@ class PackCase(BaseModel):
     min_pages: int | None = None
     budgets: CaseBudgets | None = None
     judge: JudgeBlock | None = None
+    trigger_mode: bool = False
 
     @field_validator("id")
     @classmethod
@@ -354,12 +355,16 @@ def suite_from_pack(pack: CasePack, skill_rel: str) -> SuiteSpec:
                     "answer": list(case.contains),
                 }
             )
+        trigger_mode = bool(case.trigger_mode) or (
+            case.should_trigger and case.golden is None and not case.contains
+        )
         task_raw: dict[str, Any] = {
             "id": case.id,
             "prompt": case.prompt,
             "expect_skill": pack.skill if case.should_trigger else None,
             "files": [{"src": item.src, "dest": item.dest} for item in case.input.files],
             "scorers": scorers,
+            "trigger_mode": trigger_mode,
         }
         effective = merge_budgets(pack.budgets, case.budgets)
         if effective is not None:
@@ -760,6 +765,8 @@ def _dump_pack(pack: CasePack) -> str:
             item.pop("judge", None)
         else:
             item["judge"] = case.judge.to_sparse_dict()
+        if not case.trigger_mode:
+            item.pop("trigger_mode", None)
     return yaml.safe_dump(payload, sort_keys=False, allow_unicode=True)
 
 

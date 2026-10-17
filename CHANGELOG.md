@@ -11,3 +11,8 @@
 - `skillgate judge provider test` accepts `--key-env`, matching `check`.
 - Record the scoring endpoint that was actually used (Decisions API or Responses API) on the check JSON and in `judge provider test`.
 - Treat Cursor "unable to fetch user details" as not signed in. Auth errors fail fast. A red check exits 1. `skillgate login cursor` says when Cursor is already signed in.
+- `skillgate compare versions --git` accepts `--harness` and otherwise uses the harness from the skill's history runs.
+- Git compare arms are saved on the pack's history, including the failure text.
+- The task prompt no longer tells the agent to put files in `output/` when the task names another path.
+- Trigger mode installs the skill without naming it in the prompt and records whether the agent loaded it.
+- Codex runs use an isolated `CODEX_HOME` with only the skill under test. Login tokens are not copied.
