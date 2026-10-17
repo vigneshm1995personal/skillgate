@@ -54,7 +54,20 @@ _MODEL_USD_PER_MILLION: dict[str, tuple[float, float]] = {
     "composer-2.5": (1.25, 10.00),
     "composer-2.5-fast": (0.50, 4.00),
     "codex-default": (1.25, 10.00),
+    "claude-fable-5-1": (10.00, 50.00),
+    "claude-fable-5": (10.00, 50.00),
+    "claude-opus-5-5": (4.00, 20.00),
+    "claude-opus-5": (5.00, 25.00),
+    "claude-opus-4-8": (5.00, 25.00),
+    "claude-opus-4-7": (5.00, 25.00),
+    "claude-opus-4-6": (5.00, 25.00),
+    "claude-sonnet-5-5": (2.00, 10.00),
+    "claude-sonnet-5": (2.00, 10.00),
+    "claude-sonnet-4-6": (3.00, 15.00),
+    "claude-sonnet-4-5": (3.00, 15.00),
     "claude-sonnet-4-20250514": (3.00, 15.00),
+    "claude-haiku-5-5": (0.10, 0.50),
+    "claude-haiku-4-5": (1.00, 5.00),
 }
 
 SUBSCRIPTION_COST_LABEL = "subscription (not metered)"
@@ -170,10 +183,14 @@ def estimate_usage_cost_usd(model: str | None, usage: Usage | None) -> float | N
         return None
     prices = _MODEL_USD_PER_MILLION.get(key)
     if prices is None:
+        best: tuple[str, tuple[float, float]] | None = None
         for name, rate in _MODEL_USD_PER_MILLION.items():
-            if key.startswith(name) or name.startswith(key):
-                prices = rate
-                break
+            if (key.startswith(name) or name.startswith(key)) and (
+                best is None or len(name) > len(best[0])
+            ):
+                best = (name, rate)
+        if best is not None:
+            prices = best[1]
     if prices is None:
         return None
     tin = int(usage.tokens_in or 0)

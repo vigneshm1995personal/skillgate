@@ -45,6 +45,7 @@ class TaskReport:
     judge: dict[str, Any] | None = None
     spans: list[dict[str, Any]] | None = None
     metrics: dict[str, Any] | None = None
+    model: str | None = None
 
     def failed_scorers(self) -> list[Score]:
         return [s for s in self.scores if not s.passed]
@@ -785,10 +786,12 @@ def _run_task(
             )
             from skillgate_ai.harness import AUTH_CLI_LOGIN
 
+            used_model = (result.model or "").strip() or None
+            agent_model = used_model or (str(cfg_model).strip() if cfg_model else None)
             task_usage = combine_task_usage(
                 task_usage,
                 judged,
-                agent_model=str(cfg_model).strip() if cfg_model else None,
+                agent_model=agent_model,
                 judge_model=judge_model,
                 agent_subscription=getattr(result, "auth_mode", None) == AUTH_CLI_LOGIN,
             )
@@ -840,6 +843,7 @@ def _run_task(
                 usage=task_usage,
                 judge=judged,
                 metrics=metrics,
+                model=result.model,
             )
     finally:
         if control is not None:

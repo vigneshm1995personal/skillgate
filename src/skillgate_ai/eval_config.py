@@ -226,7 +226,7 @@ def stamp_resolved(run: EvalRunConfig, harness_name: str, cfg: LLMConfig) -> Eva
         effort = None
     elif name in {"claude", "claude-code"}:
         if model is None:
-            model = cfg.anthropic_model
+            model = (cfg.anthropic_model or "").strip() or None
         effort = None
     else:
         effort = None
@@ -242,6 +242,11 @@ def stamp_resolved(run: EvalRunConfig, harness_name: str, cfg: LLMConfig) -> Eva
 
 def with_timeout_effective(run: EvalRunConfig, effective: int | None) -> EvalRunConfig:
     return replace(run, timeout_effective=effective)
+
+
+def with_model(run: EvalRunConfig, model: str | None) -> EvalRunConfig:
+    """Record the model the harness actually used (keeps applied.model untouched)."""
+    return replace(run, model=model)
 
 
 def with_judge(run: EvalRunConfig, stamp: dict[str, str] | None) -> EvalRunConfig:
@@ -391,7 +396,8 @@ def customer_run_details(
     if name:
         parts.append(name)
     show_model = bool((cfg.applied or {}).get("model")) or (
-        (cfg.harness or "").strip().lower() == "codex" and bool(cfg.model)
+        (cfg.harness or "").strip().lower() in {"codex", "claude", "claude-code"}
+        and bool(cfg.model)
     )
     if show_model:
         model = friendly_model_name(cfg.model)

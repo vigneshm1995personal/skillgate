@@ -276,6 +276,23 @@ def test_format_cli_names_codex_default_model() -> None:
     assert "Older run" not in text
 
 
+def test_format_cli_names_claude_model() -> None:
+    report = _report(
+        harness="claude",
+        config={
+            "harness": "claude",
+            "model": "claude-opus-5-5",
+            "timeout_effective": 240,
+            "applied": {"model": False},
+        },
+        tasks=[_task(judge=None)],
+    )
+    text = format_cli(report)
+    assert "Claude" in text
+    assert "Opus" in text
+    assert "Older run" not in text
+
+
 def test_format_cli_shows_subscription_or_dollar_cost() -> None:
     sub = _report(
         harness="cursor-agent",

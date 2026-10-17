@@ -5,6 +5,9 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import sys
+import threading
+import time
 from pathlib import Path
 
 import pytest
@@ -27,8 +30,10 @@ from skillgate_ai.harness import (
     _codex_login_status_authenticated,
     _codex_model_flag,
     _codex_rejected_model,
+    _codex_used_model,
     _cursor_exec_command,
     _cursor_login_status_authenticated,
+    _login_timeout_sec,
     _resolve_agent_bin,
     _run_inherited,
     claude_auth_kind,
@@ -42,6 +47,33 @@ from skillgate_ai.harness import (
     run_official_login,
 )
 from skillgate_ai.usage import SUBSCRIPTION_COST_LABEL, combine_task_usage
+
+
+def _pid_alive(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except OSError:
+        return False
+    stat = Path(f"/proc/{pid}/stat")
+    if stat.is_file():
+        try:
+            tail = stat.read_text(encoding="utf-8").rsplit(")", 1)
+            if len(tail) > 1 and tail[1].split()[0] == "Z":
+                return False
+        except OSError:
+            pass
+    return True
+
+
+def _pid_gone(pid: int, *, timeout: float = 5.0) -> bool:
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        if not _pid_alive(pid):
+            return True
+        time.sleep(0.05)
+    return False
 
 
 class _FakeSandbox:
@@ -166,7 +198,7 @@ def test_login_claude_succeeds_when_auth_status_json_logged_in(
 ) -> None:
     home = _isolate_home(monkeypatch, tmp_path)
     monkeypatch.setattr("skillgate_ai.harness._resolve_claude_bin", lambda _p: "/bin/claude")
-    monkeypatch.setattr("skillgate_ai.harness._run_inherited", lambda _argv: 0)
+    monkeypatch.setattr("skillgate_ai.harness._run_inherited", lambda _argv, timeout=None: 0)
 
     def fake_run(argv, **_kwargs):
         assert argv[:3] == ["/bin/claude", "auth", "status"]
@@ -238,6 +270,144 @@ def test_claude_run_injects_key_when_set(
     )
     assert sandbox.env["ANTHROPIC_API_KEY"] == "ant-secret"
     assert result.auth_mode == AUTH_API_KEY
+
+
+def test_claude_run_omits_model_flag_by_default(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    sandbox = _FakeSandbox(tmp_path)
+    _stub_run(monkeypatch)
+    monkeypatch.setattr("skillgate_ai.harness._claude_ready", lambda _c: True)
+    monkeypatch.setattr("skillgate_ai.harness._resolve_claude_bin", lambda _p: "/bin/claude")
+    result = ClaudeCodeHarness(_cfg(anthropic_api_key=None, anthropic_model="")).run(
+        sandbox, "task", [], timeout_sec=5
+    )
+    assert "--model" not in sandbox.command
+    assert result.model is None
+
+
+def test_claude_run_passes_model_flag_when_chosen(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    sandbox = _FakeSandbox(tmp_path)
+    _stub_run(monkeypatch)
+    monkeypatch.setattr("skillgate_ai.harness._claude_ready", lambda _c: True)
+    monkeypatch.setattr("skillgate_ai.harness._resolve_claude_bin", lambda _p: "/bin/claude")
+    ClaudeCodeHarness(_cfg(anthropic_api_key=None, anthropic_model="sonnet")).run(
+        sandbox, "task", [], timeout_sec=5
+    )
+    assert "--model" in sandbox.command
+    assert sandbox.command[sandbox.command.index("--model") + 1] == "sonnet"
+
+
+def _claude_jsonl(lines: list[dict]) -> str:
+    return "".join(json.dumps(line) + "\n" for line in lines)
+
+
+def _claude_sandbox_run(stdout: str) -> _FakeSandbox:
+    sandbox = _FakeSandbox(Path("/tmp/ws"))
+
+    def run(command, *, env=None, timeout=0, cwd=None):
+        sandbox.command = list(command)
+        sandbox.env = dict(env or {})
+        return subprocess.CompletedProcess(command, 0, stdout=stdout, stderr="")
+
+    sandbox.run = run  # type: ignore[method-assign]
+    return sandbox
+
+
+def test_claude_run_parses_model_from_result_model_usage(
+    monkeypatch: pytest.MonkeyPatch
+) -> None:
+    sandbox = _claude_sandbox_run(
+        _claude_jsonl(
+            [
+                {"type": "system", "model": "claude-opus-5-5"},
+                {
+                    "type": "result",
+                    "subtype": "success",
+                    "result": "done",
+                    "modelUsage": {"claude-opus-5-5": {"inputTokens": 1, "outputTokens": 1}},
+                },
+            ]
+        )
+    )
+    _stub_run(monkeypatch)
+    monkeypatch.setattr("skillgate_ai.harness._claude_ready", lambda _c: True)
+    monkeypatch.setattr("skillgate_ai.harness._resolve_claude_bin", lambda _p: "/bin/claude")
+    result = ClaudeCodeHarness(_cfg(anthropic_api_key=None, anthropic_model="")).run(
+        sandbox, "task", [], timeout_sec=5
+    )
+    assert result.model == "claude-opus-5-5"
+
+
+def test_claude_run_parses_model_from_system_init_fallback(
+    monkeypatch: pytest.MonkeyPatch
+) -> None:
+    sandbox = _claude_sandbox_run(
+        _claude_jsonl(
+            [
+                {"type": "system", "model": "claude-sonnet-5-5"},
+                {"type": "assistant", "message": {"content": [{"type": "text", "text": "hi"}]}},
+            ]
+        )
+    )
+    _stub_run(monkeypatch)
+    monkeypatch.setattr("skillgate_ai.harness._claude_ready", lambda _c: True)
+    monkeypatch.setattr("skillgate_ai.harness._resolve_claude_bin", lambda _p: "/bin/claude")
+    result = ClaudeCodeHarness(_cfg(anthropic_api_key=None, anthropic_model="")).run(
+        sandbox, "task", [], timeout_sec=5
+    )
+    assert result.model == "claude-sonnet-5-5"
+
+
+def test_claude_run_raises_model_access_error(
+    monkeypatch: pytest.MonkeyPatch
+) -> None:
+    sandbox = _FakeSandbox(Path("/tmp/ws"))
+
+    def run(command, *, env=None, timeout=0, cwd=None):
+        sandbox.command = list(command)
+        sandbox.env = dict(env or {})
+        return subprocess.CompletedProcess(
+            command, 1, stdout="", stderr="There's an issue with the selected model."
+        )
+
+    sandbox.run = run  # type: ignore[method-assign]
+    _stub_run(monkeypatch)
+    monkeypatch.setattr("skillgate_ai.harness._claude_ready", lambda _c: True)
+    monkeypatch.setattr("skillgate_ai.harness._resolve_claude_bin", lambda _p: "/bin/claude")
+    with pytest.raises(HarnessError) as caught:
+        ClaudeCodeHarness(_cfg(anthropic_api_key=None, anthropic_model="")).run(
+            sandbox, "task", [], timeout_sec=5
+        )
+    assert caught.value.exit_code == 2
+    assert "its default model" in caught.value.message
+    assert "--model" in (caught.value.hint or "")
+
+
+def test_claude_run_model_access_error_names_requested_model(
+    monkeypatch: pytest.MonkeyPatch
+) -> None:
+    sandbox = _FakeSandbox(Path("/tmp/ws"))
+
+    def run(command, *, env=None, timeout=0, cwd=None):
+        sandbox.command = list(command)
+        sandbox.env = dict(env or {})
+        return subprocess.CompletedProcess(
+            command, 1, stdout="", stderr="There's an issue with the selected model."
+        )
+
+    sandbox.run = run  # type: ignore[method-assign]
+    _stub_run(monkeypatch)
+    monkeypatch.setattr("skillgate_ai.harness._claude_ready", lambda _c: True)
+    monkeypatch.setattr("skillgate_ai.harness._resolve_claude_bin", lambda _p: "/bin/claude")
+    with pytest.raises(HarnessError) as caught:
+        ClaudeCodeHarness(
+            _cfg(anthropic_api_key=None, anthropic_model="claude-sonnet-4-20250514")
+        ).run(sandbox, "task", [], timeout_sec=5)
+    assert caught.value.exit_code == 2
+    assert "claude-sonnet-4-20250514" in caught.value.message
 
 
 def test_codex_run_reuses_host_login_without_copying_auth(
@@ -376,7 +546,7 @@ def test_login_runs_official_cli(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("skillgate_ai.harness._resolve_agent_bin", lambda _p: "/bin/agent")
     monkeypatch.setattr(
         "skillgate_ai.harness._run_inherited",
-        lambda argv: seen.append(list(argv)) or 0,
+        lambda argv, timeout=None: seen.append(list(argv)) or 0,
     )
     monkeypatch.setattr("skillgate_ai.harness._probe_cursor_login_status", lambda _b: True)
     result = run_official_login("cursor", _cfg())
@@ -392,7 +562,7 @@ def test_login_claude_and_codex_argv(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("skillgate_ai.harness._resolve_codex_bin", lambda _p: "/bin/codex")
     monkeypatch.setattr(
         "skillgate_ai.harness._run_inherited",
-        lambda argv: seen.append(list(argv)) or 0,
+        lambda argv, timeout=None: seen.append(list(argv)) or 0,
     )
     monkeypatch.setattr("skillgate_ai.harness._probe_claude_login_status", lambda _b: True)
     monkeypatch.setattr("skillgate_ai.harness._probe_codex_login_status", lambda _b: True)
@@ -412,6 +582,61 @@ def test_login_missing_cli_returns_install(monkeypatch: pytest.MonkeyPatch) -> N
     out = plain_text(cli.stdout + cli.stderr)
     assert cli.exit_code == 2, out
     assert "npm install -g @anthropic-ai/claude-code" in out
+
+
+def test_login_claude_short_circuits_when_signed_in(
+    monkeypatch: pytest.MonkeyPatch
+) -> None:
+    called: list[str] = []
+
+    def fake_login(agent: str, cfg) -> dict:
+        called.append(agent)
+        return {
+            "ok": True,
+            "agent": agent,
+            "installed": True,
+            "status": "logged in",
+            "install": "",
+            "command": f"skillgate login {agent}",
+        }
+
+    monkeypatch.setattr("skillgate_ai.harness.claude_auth_kind", lambda _c: AUTH_CLI_LOGIN)
+    monkeypatch.setattr("skillgate_ai.harness.run_official_login", fake_login)
+    runner = CliRunner()
+    result = runner.invoke(app, ["login", "claude"])
+    out = plain_text(result.stdout + result.stderr)
+    assert result.exit_code == 0, out
+    assert out.strip() == "Claude Code is already signed in"
+    assert called == []
+
+
+def test_login_claude_force_runs_login(monkeypatch: pytest.MonkeyPatch) -> None:
+    called: list[str] = []
+
+    def fake_login(agent: str, cfg) -> dict:
+        called.append(agent)
+        return {
+            "ok": True,
+            "agent": agent,
+            "installed": True,
+            "status": "logged in",
+            "install": "",
+            "command": f"skillgate login {agent}",
+        }
+
+    monkeypatch.setattr("skillgate_ai.harness.claude_auth_kind", lambda _c: AUTH_CLI_LOGIN)
+    monkeypatch.setattr("skillgate_ai.harness.run_official_login", fake_login)
+    monkeypatch.setattr(
+        "skillgate_ai.harness._resolve_claude_bin", lambda _p: "/bin/claude"
+    )
+    monkeypatch.setattr("skillgate_ai.harness._probe_claude_login_status", lambda _b: True)
+    monkeypatch.setattr("skillgate_ai.harness.harness_auth_status", lambda _c: [])
+    runner = CliRunner()
+    result = runner.invoke(app, ["login", "claude", "--force"])
+    out = plain_text(result.stdout + result.stderr)
+    assert result.exit_code == 0, out
+    assert called == ["claude"]
+    assert "already signed in" not in out
 
 
 def test_login_no_arg_runs_missing(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -550,17 +775,152 @@ def test_cursor_cli_login_runs_without_api_key(
 def test_run_inherited_passes_no_open_browser(monkeypatch: pytest.MonkeyPatch) -> None:
     recorded: dict[str, object] = {}
 
-    def fake_run(argv, **kwargs):
-        recorded["argv"] = list(argv)
-        recorded["kwargs"] = kwargs
-        return subprocess.CompletedProcess(argv, 0)
+    class FakePopen:
+        def __init__(self, argv, start_new_session=False, **kwargs):
+            recorded["argv"] = list(argv)
+            recorded["start_new_session"] = start_new_session
+            recorded["env"] = kwargs.get("env")
+            self.returncode = 0
 
-    monkeypatch.setattr("skillgate_ai.harness.subprocess.run", fake_run)
+        def wait(self, timeout=None):
+            del timeout
+            return 0
+
+        def poll(self):
+            return 0
+
+    monkeypatch.setattr("skillgate_ai.harness.subprocess.Popen", FakePopen)
     monkeypatch.setenv("NO_OPEN_BROWSER", "1")
     assert _run_inherited(["/bin/agent", "login"]) == 0
-    env = recorded["kwargs"].get("env")
-    assert env is None or env.get("NO_OPEN_BROWSER") == "1"
     assert recorded["argv"] == ["/bin/agent", "login"]
+    assert recorded["start_new_session"] is True
+
+
+def test_run_inherited_kills_process_group_on_timeout(tmp_path: Path) -> None:
+    grandchild = tmp_path / "grandchild.py"
+    grandchild.write_text(
+        "import signal, sys, time\n"
+        "def on_term(signum, frame):\n"
+        "    open(sys.argv[1], 'w').write('dead')\n"
+        "    sys.exit(0)\n"
+        "signal.signal(signal.SIGTERM, on_term)\n"
+        "time.sleep(60)\n",
+        encoding="utf-8",
+    )
+    parent = tmp_path / "parent.py"
+    parent.write_text(
+        "import os, subprocess, sys, time\n"
+        "child = subprocess.Popen([sys.executable, sys.argv[2], sys.argv[3]])\n"
+        "open(sys.argv[1], 'w').write(f'{os.getpid()} {child.pid}')\n"
+        "time.sleep(60)\n",
+        encoding="utf-8",
+    )
+    pids_file = tmp_path / "pids.txt"
+    dead_marker = tmp_path / "dead.txt"
+    code = _run_inherited(
+        [sys.executable, str(parent), str(pids_file), str(grandchild), str(dead_marker)],
+        timeout=1,
+    )
+    assert code == 124
+    parent_pid, child_pid = (int(part) for part in pids_file.read_text(encoding="utf-8").split())
+    assert _pid_gone(parent_pid)
+    deadline = time.time() + 5
+    while time.time() < deadline and not dead_marker.is_file():
+        time.sleep(0.05)
+    assert dead_marker.is_file()
+    assert dead_marker.read_text(encoding="utf-8") == "dead"
+    assert _pid_gone(child_pid)
+
+
+def test_run_inherited_keyboard_interrupt_kills_group(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from skillgate_ai import harness
+
+    grandchild = tmp_path / "grandchild.py"
+    grandchild.write_text(
+        "import signal, sys, time\n"
+        "def on_term(signum, frame):\n"
+        "    open(sys.argv[1], 'w').write('dead')\n"
+        "    sys.exit(0)\n"
+        "signal.signal(signal.SIGTERM, on_term)\n"
+        "time.sleep(60)\n",
+        encoding="utf-8",
+    )
+    parent = tmp_path / "parent.py"
+    parent.write_text(
+        "import os, subprocess, sys, time\n"
+        "child = subprocess.Popen([sys.executable, sys.argv[2], sys.argv[3]])\n"
+        "open(sys.argv[1], 'w').write(f'{os.getpid()} {child.pid}')\n"
+        "time.sleep(60)\n",
+        encoding="utf-8",
+    )
+    pids_file = tmp_path / "pids.txt"
+    dead_marker = tmp_path / "dead.txt"
+    real_popen = harness.subprocess.Popen
+
+    class KeyboardInterruptPopen:
+        def __init__(self, argv, start_new_session=False):
+            self._proc = real_popen(argv, start_new_session=start_new_session)
+            self.start_new_session = start_new_session
+            self._interrupted = False
+
+        @property
+        def pid(self):
+            return self._proc.pid
+
+        def wait(self, timeout=None):
+            if not self._interrupted:
+                self._interrupted = True
+                deadline = time.time() + 5
+                while time.time() < deadline and not pids_file.is_file():
+                    time.sleep(0.05)
+                raise KeyboardInterrupt()
+            return self._proc.wait(timeout=timeout)
+
+        def poll(self):
+            return self._proc.poll()
+
+    monkeypatch.setattr("skillgate_ai.harness.subprocess.Popen", KeyboardInterruptPopen)
+    with pytest.raises(KeyboardInterrupt):
+        harness._run_inherited(
+            [sys.executable, str(parent), str(pids_file), str(grandchild), str(dead_marker)]
+        )
+    parent_pid, child_pid = (int(part) for part in pids_file.read_text(encoding="utf-8").split())
+    assert _pid_gone(parent_pid)
+    deadline = time.time() + 5
+    while time.time() < deadline and not dead_marker.is_file():
+        time.sleep(0.05)
+    assert dead_marker.is_file()
+    assert _pid_gone(child_pid)
+
+
+def test_run_inherited_works_off_main_thread() -> None:
+    errors: list[Exception] = []
+
+    def call() -> None:
+        try:
+            code = _run_inherited([sys.executable, "-c", "pass"], timeout=30)
+            assert code == 0
+        except Exception as exc:  # pragma: no cover - transport for the assertion  # noqa: BLE001
+            errors.append(exc)
+
+    thread = threading.Thread(target=call)
+    thread.start()
+    thread.join(timeout=30)
+    assert not thread.is_alive()
+    assert errors == []
+
+
+def test_login_timeout_sec_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("SKILLGATE_LOGIN_TIMEOUT", raising=False)
+    assert _login_timeout_sec() == 600
+    monkeypatch.setenv("SKILLGATE_LOGIN_TIMEOUT", "30")
+    assert _login_timeout_sec() == 30
+    monkeypatch.setenv("SKILLGATE_LOGIN_TIMEOUT", "not-a-number")
+    assert _login_timeout_sec() == 600
+    monkeypatch.setenv("SKILLGATE_LOGIN_TIMEOUT", "0")
+    assert _login_timeout_sec() == 600
 
 
 def test_codex_cli_login_defaults_to_chatgpt_luna() -> None:
@@ -614,11 +974,24 @@ def test_codex_cli_login_run_passes_luna_when_no_model(
     _stub_run(monkeypatch)
     monkeypatch.setattr("skillgate_ai.harness._codex_ready", lambda _c: True)
     monkeypatch.setattr("skillgate_ai.harness._resolve_codex_bin", lambda _p: "/bin/codex")
-    CodexCliHarness(_cfg(codex_api_key=None, codex_model=None)).run(
+    result = CodexCliHarness(_cfg(codex_api_key=None, codex_model=None)).run(
         sandbox, "task", [], timeout_sec=5
     )
     assert sandbox.command[sandbox.command.index("-m") + 1] == "gpt-5.6-luna"
     assert sandbox.env["CODEX_HOME"].endswith("/.skillgate/codex-home")
+    assert result.model == "gpt-5.6-luna"
+
+
+def test_codex_run_reports_model_from_json_output() -> None:
+    assert _codex_used_model("", None) is None
+    assert _codex_used_model('{"type":"turn.completed"}', "gpt-5.6-luna") == "gpt-5.6-luna"
+    assert (
+        _codex_used_model(
+            '{"type":"thread.started"}\n{"type":"x","model":"gpt-6-astra"}',
+            "gpt-5.6-luna",
+        )
+        == "gpt-6-astra"
+    )
 
 
 def test_codex_run_names_rejected_model_from_error(
@@ -760,3 +1133,138 @@ def test_check_no_judge_uses_cursor_cli_login(
     assert result.exit_code != 2
     assert result.error is None or "No agent" not in (result.error.get("message") or "")
     assert result.report is not None
+
+
+def test_run_official_login_times_out_returns_message(
+    monkeypatch: pytest.MonkeyPatch
+) -> None:
+    seen: dict[str, object] = {}
+    monkeypatch.setattr("skillgate_ai.harness._resolve_claude_bin", lambda _p: "/bin/claude")
+
+    def fake_inherited(argv, *, timeout=None):
+        seen["argv"] = list(argv)
+        seen["timeout"] = timeout
+        return 124
+
+    monkeypatch.setattr("skillgate_ai.harness._run_inherited", fake_inherited)
+
+    def no_probe(_b):
+        raise AssertionError("probe must not run after a login timeout")
+
+    monkeypatch.setattr("skillgate_ai.harness._probe_claude_login_status", no_probe)
+    result = run_official_login("claude", _cfg())
+    assert result["ok"] is False
+    assert result["installed"] is True
+    message = str(result["message"])
+    assert "timed out" in message
+    assert "skillgate login claude" in message
+    assert seen["argv"] == ["/bin/claude", "auth", "login"]
+    assert seen["timeout"] == 600
+
+
+def test_run_official_login_timeout_env_is_honored(
+    monkeypatch: pytest.MonkeyPatch
+) -> None:
+    seen: dict[str, object] = {}
+    monkeypatch.setattr("skillgate_ai.harness._resolve_claude_bin", lambda _p: "/bin/claude")
+    monkeypatch.setenv("SKILLGATE_LOGIN_TIMEOUT", "45")
+
+    def fake_inherited(argv, *, timeout=None):
+        seen["timeout"] = timeout
+        return 124
+
+    monkeypatch.setattr("skillgate_ai.harness._run_inherited", fake_inherited)
+    monkeypatch.setattr("skillgate_ai.harness._probe_claude_login_status", lambda _b: True)
+    run_official_login("claude", _cfg())
+    assert seen["timeout"] == 45
+
+
+def test_check_model_access_stops_after_first_task(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    import shutil
+
+    from skillgate_ai.demo_files import ensure_demo_pdfs
+    from skillgate_ai.gate import run_check
+
+    pack = tmp_path / "pdf"
+    shutil.copytree(Path(__file__).resolve().parents[1] / "skills" / "pdf", pack)
+    ensure_demo_pdfs(pack / "evals" / "fixtures")
+    invocations = tmp_path / "claude-invocations.txt"
+    fake_claude = tmp_path / "claude"
+    fake_claude.write_text(
+        "#!/usr/bin/env python3\n"
+        "import pathlib, sys\n"
+        f"pathlib.Path({str(invocations)!r}).open('a').write('x')\n"
+        "sys.stderr.write(\"There's an issue with the selected model.\\n\")\n"
+        "sys.exit(1)\n",
+        encoding="utf-8",
+    )
+    fake_claude.chmod(0o755)
+    monkeypatch.setattr("skillgate_ai.harness._claude_ready", lambda _c: True)
+    monkeypatch.setattr("skillgate_ai.harness._resolve_claude_bin", lambda _p: str(fake_claude))
+    monkeypatch.setenv("SKILLGATE_ROOT", str(tmp_path))
+
+    result = run_check(pack, source="cli", root=tmp_path, harness="claude", no_judge=True)
+    assert result.exit_code == 2, result.error
+    assert result.error is not None
+    message = str(result.error.get("message") or "")
+    hint = str(result.error.get("hint") or "")
+    assert "its default model" in message
+    assert "--model sonnet" in hint
+    assert "Fix the command or the script" not in message + hint
+    assert "Paste this description into SKILL.md" not in message + hint
+    assert invocations.read_text(encoding="utf-8") == "x"
+
+
+def test_claude_model_persists_to_run_history_and_cli_summary(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    import shutil
+
+    from skillgate_ai.demo_files import ensure_demo_pdfs
+    from skillgate_ai.engine import SuiteReport, TaskReport
+    from skillgate_ai.gate import run_check
+    from skillgate_ai.history import load_history
+    from skillgate_ai.report import format_cli
+    from skillgate_ai.scorers import Score
+
+    pack = tmp_path / "pdf"
+    shutil.copytree(Path(__file__).resolve().parents[1] / "skills" / "pdf", pack)
+    ensure_demo_pdfs(pack / "evals" / "fixtures")
+    monkeypatch.setattr("skillgate_ai.harness._claude_ready", lambda _c: True)
+    monkeypatch.setattr("skillgate_ai.harness._resolve_claude_bin", lambda _p: "/bin/claude")
+    monkeypatch.setenv("SKILLGATE_ROOT", str(tmp_path))
+
+    def fake_eval(*_args, **_kwargs):
+        return SuiteReport(
+            suite="cases",
+            title="pdf",
+            skill="pdf",
+            harness="claude",
+            sandbox="local",
+            passed=True,
+            tasks=[
+                TaskReport(
+                    task_id="c1",
+                    prompt="do it",
+                    expect_skill="pdf",
+                    passed=True,
+                    scores=[Score(scorer="ok", passed=True, detail="ok")],
+                    selected_skill="pdf",
+                    model="claude-opus-5-5",
+                )
+            ],
+            skill_path=str(pack),
+        )
+
+    monkeypatch.setattr("skillgate_ai.gate.run_eval", fake_eval)
+    result = run_check(pack, source="cli", root=tmp_path, harness="claude", no_judge=True)
+    assert result.exit_code == 0, result.error
+    assert result.report is not None
+    config = result.report.config if isinstance(result.report.config, dict) else {}
+    assert config["model"] == "claude-opus-5-5"
+    rows = load_history(pack, limit=1)
+    assert rows, "expected a persisted run history row"
+    assert rows[-1]["config"]["model"] == "claude-opus-5-5"
+    assert "Opus" in format_cli(result.report)
