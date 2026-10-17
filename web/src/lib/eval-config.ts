@@ -380,7 +380,10 @@ export function customerRunDetails(config?: EvalRunConfig | null): string {
   }
   const showModel =
     userPickedModel(config) ||
-    ((config.harness || "").toLowerCase() === "codex" && Boolean(config.model))
+    (["codex", "claude", "claude-code"].includes(
+      (config.harness || "").toLowerCase()
+    ) &&
+      Boolean(config.model))
   if (showModel) {
     const model = friendlyModelName(config.model)
     if (model) {

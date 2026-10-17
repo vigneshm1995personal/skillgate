@@ -266,6 +266,17 @@ describe("configLabel", () => {
     ).toBe("Codex · GPT-5.6 luna · 240s")
   })
 
+  it("names the Claude model actually used, including the default", () => {
+    expect(
+      customerRunDetails({
+        harness: "claude",
+        model: "claude-opus-5-5",
+        timeout_effective: 240,
+        applied: { model: false },
+      })
+    ).toBe("Claude · Claude Opus 5 5 · 240s")
+  })
+
   it("names a chosen scoring provider on History", () => {
     expect(
       customerConfigLabel({

@@ -6,7 +6,9 @@ import json
 import os
 import re
 import shutil
+import signal
 import subprocess
+import threading
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
@@ -37,6 +39,22 @@ AUTH_NONE = "none"
 
 LOGIN_AGENTS = ("cursor", "codex", "claude")
 
+LOGIN_TIMEOUT_SEC = 600
+LOGIN_TIMEOUT_ENV = "SKILLGATE_LOGIN_TIMEOUT"
+
+
+def _login_timeout_sec() -> float:
+    """Official-login timeout (seconds), overridable via SKILLGATE_LOGIN_TIMEOUT."""
+    raw = os.environ.get(LOGIN_TIMEOUT_ENV, "").strip()
+    if raw:
+        try:
+            value = float(raw)
+        except ValueError:
+            value = LOGIN_TIMEOUT_SEC
+        if value > 0:
+            return value
+    return float(LOGIN_TIMEOUT_SEC)
+
 _AGENT_INSTALL = {
     "cursor": "curl https://cursor.com/install -fsS | bash",
     "codex": "npm install -g @openai/codex",
@@ -55,6 +73,7 @@ class HarnessResult:
     usage: Usage | None = None
     spans: list[dict] | None = None
     auth_mode: str = AUTH_API_KEY
+    model: str | None = None
 
 
 def harness_usage(stdout: str) -> Usage | None:
@@ -352,6 +371,81 @@ def _claude_code_exec_command(
     return command
 
 
+def _claude_used_model(stdout: str) -> str | None:
+    """Model Claude Code actually used, from stream-json output.
+
+    The final ``result`` message carries ``modelUsage`` (keys are model ids);
+    the ``system`` init message carries a top-level ``model`` field as a
+    fallback for runs that never emit a result envelope.
+    """
+    fallback: str | None = None
+    for raw in (stdout or "").splitlines():
+        line = raw.strip()
+        if not line.startswith("{"):
+            continue
+        try:
+            obj = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(obj, dict):
+            continue
+        kind = obj.get("type")
+        if kind == "system" and isinstance(obj.get("model"), str):
+            fallback = str(obj["model"]).strip() or fallback
+        if kind == "result" and isinstance(obj.get("modelUsage"), dict):
+            for model_id in obj["modelUsage"]:
+                if isinstance(model_id, str) and model_id.strip():
+                    return model_id.strip()
+    return fallback
+
+
+def _codex_used_model(stdout: str, default: str | None) -> str | None:
+    """Model Codex actually used: any model id in `--json` output, else the -m flag."""
+    for raw in (stdout or "").splitlines():
+        line = raw.strip()
+        if not line.startswith("{"):
+            continue
+        try:
+            obj = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(obj, dict):
+            continue
+        model_id = obj.get("model") or obj.get("model_id") or obj.get("modelId")
+        if isinstance(model_id, str) and model_id.strip():
+            return model_id.strip()
+    return (default or "").strip() or None
+
+
+_MODEL_ACCESS_ERROR = re.compile(
+    r"(?:"
+    r"there's an issue with the selected model"
+    r"|model not found"
+    r"|does not have access to (?:the )?model"
+    r"|not available on your plan"
+    r"|is not supported when using Codex"
+    r"|model is not supported"
+    r")",
+    re.IGNORECASE,
+)
+
+
+def _claude_model_access_error(stdout: str, stderr: str) -> bool:
+    """True when Claude Code refused the chosen/default model on the first request."""
+    blob = f"{stdout}\n{stderr}"
+    return bool(_MODEL_ACCESS_ERROR.search(blob))
+
+
+def _claude_model_access_message(model: str | None) -> str:
+    named = (model or "").strip()
+    if named:
+        return f"Claude couldn't use the selected model {named!r}."
+    return "Claude couldn't use its default model."
+
+
+_CLAUDE_MODEL_ACCESS_HINT = "Pass --model with an available alias (for example, --model sonnet)."
+
+
 def _jsonl_spans(stdout: str) -> list[dict]:
     """OTLP-shaped spans from the same JSONL that feeds the transcript."""
     return spans_from_jsonl(stdout or "")
@@ -503,6 +597,7 @@ class CodexCliHarness:
             returncode=proc.returncode,
             usage=harness_usage(proc.stdout or ""),
             auth_mode=AUTH_API_KEY if key else AUTH_CLI_LOGIN,
+            model=_codex_used_model(proc.stdout or "", model),
         )
 
 
@@ -510,7 +605,33 @@ class ClaudeCodeHarness:
     """Claude Code CLI (`claude -p`) in the sandbox workspace."""
 
     name = "claude"
-    supported_models = ("claude-sonnet-4-20250514",)
+    # Claude Code model aliases and full ids (code.claude.com/docs/en/model-config).
+    # `default` clears any override; Claude resolves it per plan.
+    supported_models = (
+        "default",
+        "best",
+        "fable",
+        "opus",
+        "sonnet",
+        "haiku",
+        "sonnet[1m]",
+        "opus[1m]",
+        "opusplan",
+        "claude-fable-5-1",
+        "claude-fable-5",
+        "claude-opus-5-5",
+        "claude-opus-5",
+        "claude-opus-4-8",
+        "claude-opus-4-7",
+        "claude-opus-4-6",
+        "claude-sonnet-5-5",
+        "claude-sonnet-5",
+        "claude-sonnet-4-6",
+        "claude-sonnet-4-5",
+        "claude-sonnet-4-20250514",
+        "claude-haiku-5-5",
+        "claude-haiku-4-5",
+    )
 
     def __init__(self, cfg: LLMConfig):
         self.cfg = cfg
@@ -549,6 +670,14 @@ class ClaudeCodeHarness:
         if self.cfg.anthropic_api_key:
             env["ANTHROPIC_API_KEY"] = self.cfg.anthropic_api_key
         proc = sandbox.run(command, env=env, timeout=timeout_sec)
+        requested = (self.cfg.anthropic_model or "").strip() or None
+        if _claude_model_access_error(proc.stdout or "", proc.stderr or ""):
+            raise HarnessError(
+                _claude_model_access_message(requested),
+                hint=_CLAUDE_MODEL_ACCESS_HINT,
+                exit_code=2,
+            )
+        model = _claude_used_model(proc.stdout or "")
         transcript = _cursor_transcript(proc.stdout or "", proc.stderr or "")
         selected = _parse_selected(sandbox.workspace, transcript, skills)
         read_paths = _parse_read_paths(transcript)
@@ -568,6 +697,7 @@ class ClaudeCodeHarness:
             returncode=proc.returncode,
             usage=harness_usage(proc.stdout or ""),
             auth_mode=AUTH_API_KEY if (self.cfg.anthropic_api_key or "").strip() else AUTH_CLI_LOGIN,
+            model=model,
         )
 
 
@@ -799,6 +929,16 @@ _CLAUDE_LOGIN_STATUS_TIMEOUT_SEC = 5
 def _claude_login_status_authenticated(returncode: int, stdout: str, stderr: str) -> bool:
     if returncode != 0:
         return False
+    for blob in (stdout, stderr):
+        raw = (blob or "").strip()
+        if not raw:
+            continue
+        try:
+            payload = json.loads(raw)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(payload, dict) and "loggedIn" in payload:
+            return payload.get("loggedIn") is True
     text = f"{stdout}\n{stderr}".lower()
     if "not logged in" in text or "not authenticated" in text:
         return False
@@ -932,10 +1072,66 @@ def format_harness_status(rows: list[dict[str, str | bool]]) -> str:
     return "\n".join(lines).rstrip() + "\n"
 
 
-def _run_inherited(argv: list[str]) -> int:
-    """Run an official login CLI with the user's terminal (OAuth / browser)."""
-    proc = subprocess.run(argv, check=False)
-    return int(proc.returncode or 0)
+def _terminate_process_group(proc: subprocess.Popen[str]) -> None:
+    """SIGTERM the child's process group, then SIGKILL if it ignores the term."""
+    if proc.poll() is not None:
+        return
+    try:
+        os.killpg(proc.pid, signal.SIGTERM)
+    except (ProcessLookupError, PermissionError, OSError):
+        try:
+            os.kill(proc.pid, signal.SIGTERM)
+        except (ProcessLookupError, PermissionError, OSError):
+            pass
+    try:
+        proc.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)
+        except (ProcessLookupError, PermissionError, OSError):
+            pass
+        try:
+            proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            pass
+
+
+def _run_inherited(argv: list[str], *, timeout: float | None = None) -> int:
+    """Run an official login CLI with the user's terminal (OAuth / browser).
+
+    The child runs in its own session/process group so Ctrl-C, SIGTERM, or a
+    timeout can tear down the whole tree (no orphaned `claude auth login`).
+
+    `signal.signal` raises ValueError outside the main thread, so the SIGTERM
+    forwarder is only installed (and restored) from the main thread; the local
+    UI can start a login from a worker thread.
+    """
+    proc = subprocess.Popen(argv, start_new_session=True)
+    interrupted: dict[str, int | None] = {"sig": None}
+    in_main_thread = threading.current_thread() is threading.main_thread()
+
+    def _on_sigterm(signum: int, frame: object) -> None:
+        del frame
+        interrupted["sig"] = signum
+        _terminate_process_group(proc)
+
+    previous = signal.signal(signal.SIGTERM, _on_sigterm) if in_main_thread else None
+    try:
+        code: int | None
+        try:
+            code = int(proc.wait(timeout=timeout) or 0)
+        except subprocess.TimeoutExpired:
+            _terminate_process_group(proc)
+            code = 124
+        except KeyboardInterrupt:
+            _terminate_process_group(proc)
+            raise
+        if interrupted["sig"] is not None:
+            return 128 + int(interrupted["sig"])
+        return code
+    finally:
+        if in_main_thread:
+            signal.signal(signal.SIGTERM, previous)  # type: ignore[arg-type]
 
 
 def run_official_login(agent: str, cfg: LLMConfig) -> dict[str, str | bool]:
@@ -975,7 +1171,17 @@ def run_official_login(agent: str, cfg: LLMConfig) -> dict[str, str | bool]:
             "command": command,
             "message": f"Not installed. {install}",
         }
-    _run_inherited(argv)
+    code = _run_inherited(argv, timeout=_login_timeout_sec())
+    if code == 124:
+        return {
+            "ok": False,
+            "agent": kind,
+            "installed": True,
+            "status": "installed",
+            "install": install,
+            "command": command,
+            "message": f"{kind} login timed out. Run `{command}` in your terminal.",
+        }
     logged_in = probe(binary)
     return {
         "ok": logged_in,
