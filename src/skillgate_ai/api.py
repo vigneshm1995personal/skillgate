@@ -7,7 +7,7 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
@@ -238,6 +238,52 @@ def _register_core_routes(app: FastAPI) -> None:
         except SkillGateError as exc:
             fail(400, exc.message, hint=exc.hint)
         return {"judge": settings.to_public_dict()}
+
+    @app.get("/api/checks")
+    def list_judge_checks() -> dict[str, Any]:
+        from skillgate_ai.judge_prompt import builtin_prompt_rows
+
+        return {"checks": builtin_prompt_rows()}
+
+    @app.get("/api/checks/preview")
+    def preview_judge_check(
+        id: str = "",
+        type: str = "",
+        ask: str = "",
+        spec: str = "",
+        choice: list[str] = Query(default=[]),
+    ) -> dict[str, Any]:
+        import json
+
+        from skillgate_ai.judge_prompt import preview_extra
+
+        if spec:
+            try:
+                parsed = json.loads(spec)
+            except json.JSONDecodeError:
+                fail(400, "Could not read that check.")
+            if not isinstance(parsed, dict):
+                fail(400, "Could not read that check.")
+            raw = parsed
+        else:
+            raw = {"id": id, "type": type, "ask": ask}
+            if choice:
+                raw["choices"] = [
+                    {"value": item, "pass": index == 0} for index, item in enumerate(choice)
+                ]
+        try:
+            return preview_extra(raw)
+        except SkillGateError as exc:
+            fail(400, exc.message)
+
+    @app.get("/api/checks/{check_id}")
+    def show_judge_check(check_id: str) -> dict[str, Any]:
+        from skillgate_ai.judge_prompt import prompt_for_id
+
+        try:
+            return prompt_for_id(check_id)
+        except SkillGateError as exc:
+            fail(404, exc.message)
 
     @app.post("/api/judge/ping")
     def ping_scoring(request: Request) -> dict[str, Any]:

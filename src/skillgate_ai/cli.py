@@ -931,6 +931,49 @@ def judge_add_question_cmd(
     console.print(ask)
 
 
+checks_app = typer.Typer(
+    add_completion=False,
+    no_args_is_help=True,
+    help="Show the prompt the judge uses for a check.",
+)
+app.add_typer(checks_app, name="checks")
+
+
+@checks_app.command("show")
+def checks_show(
+    check_id: str = typer.Argument(..., help="Built-in id, or one of your checks"),
+    pack: Path | None = typer.Argument(
+        None, help="Skill pack, when the check is one of yours"
+    ),
+) -> None:
+    """Print the prompt the judge uses for this check."""
+    from skillgate_ai.judge_prompt import builtin_prompt_rows, prompt_for_id
+
+    builtin_ids = {row["id"] for row in builtin_prompt_rows()}
+    spec = None
+    if check_id not in builtin_ids:
+        from skillgate_ai.case_pack import load_case_pack, pack_judge_dict
+        from skillgate_ai.judge_spec import resolve_judge_spec
+        from skillgate_ai.project_config import load_project_judge
+
+        try:
+            dest = _resolve_pack_arg(pack)
+            loaded = load_case_pack(dest)
+            spec = resolve_judge_spec(
+                project=load_project_judge(_boot()),
+                pack=pack_judge_dict(loaded),
+            )
+        except SkillGateError as exc:
+            console.print(exc.render())
+            raise typer.Exit(exc.exit_code) from None
+    try:
+        row = prompt_for_id(check_id, spec=spec)
+    except SkillGateError as exc:
+        console.print(exc.render())
+        raise typer.Exit(exc.exit_code) from None
+    typer.echo(row["prompt"])
+
+
 case_app = typer.Typer(
     add_completion=False,
     no_args_is_help=True,

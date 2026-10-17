@@ -49,4 +49,7 @@ READ_ROUTE_CLI: dict[tuple[str, str], str] = {
     ("GET", "/api/settings/keys"): "keys list",
     ("GET", "/api/settings/judge"): "judge provider show",
     ("GET", "/api/login/status"): "login --status",
+    ("GET", "/api/checks"): "checks show",
+    ("GET", "/api/checks/preview"): "checks show",
+    ("GET", "/api/checks/{check_id}"): "checks show",
 }

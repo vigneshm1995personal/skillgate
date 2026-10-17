@@ -44,6 +44,7 @@ export function EvalConfigFields({
   supportedModels,
   supportedModelsMeta,
   defaultTimeoutSec,
+  modelOnly,
 }: {
   value: EvalConfigDraft
   onChange: (next: EvalConfigDraft) => void
@@ -53,6 +54,7 @@ export function EvalConfigFields({
   supportedModels?: Record<string, string[]> | null
   supportedModelsMeta?: SupportedModelsMeta | null
   defaultTimeoutSec?: number | null
+  modelOnly?: boolean
 }) {
   const showReasoning = harnessPref === "codex" || resolvedHarness === "codex"
   const [customPicked, setCustomPicked] = useState(false)
@@ -156,6 +158,8 @@ export function EvalConfigFields({
             <FieldDescription id="eval-model-empty">{emptyHint}</FieldDescription>
           ) : null}
         </Field>
+        {modelOnly ? null : (
+        <>
         <Field data-disabled={disabled || undefined}>
           <FieldLabel htmlFor="eval-timeout">Timeout (seconds)</FieldLabel>
           <Input
@@ -216,6 +220,8 @@ export function EvalConfigFields({
             </ToggleGroup>
           </Field>
         ) : null}
+        </>
+        )}
       </FieldGroup>
     </FieldSet>
   )

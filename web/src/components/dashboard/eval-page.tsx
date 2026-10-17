@@ -16,7 +16,7 @@ import { DatasetViewer } from "@/components/dashboard/dataset-viewer"
 import { GateBadge, PageHeader } from "@/components/dashboard/chrome"
 import { FixtureBindAccordion } from "@/components/dashboard/fixture-bind-accordion"
 import { GatePage } from "@/components/dashboard/gate-page"
-import { RunConfigAccordion } from "@/components/dashboard/run-config-accordion"
+import { AgentSetup, JudgeSection } from "@/components/dashboard/eval-checks-panel"
 import {
   Alert,
   AlertAction,
@@ -61,7 +61,9 @@ import {
 import { useDashboard } from "@/lib/dashboard-provider"
 import { runBelongsToSkill } from "@/lib/eval-row-state"
 import type { RunRecord } from "@/lib/types"
+import { agentSessionLabel } from "@/lib/login-status"
 import { isLocalMode, slotOn } from "@/lib/mode"
+import { agentRunName, runButtonLabel } from "@/lib/run-summary"
 import {
   ASSIST_CHECKS_NOTICE,
   BUNDLED_TEMPLATE_NOTICE,
@@ -240,9 +242,20 @@ export function EvalPage() {
         : startBlocked
           ? startBlockReason || START_NEEDS_UPLOAD
           : undefined
-  const runLabel = running
-    ? `${lastResult?.completed_count ?? 0}/${lastResult?.task_count ?? checks.length} done`
-    : "Run"
+  const runLabel = runButtonLabel(
+    checks.length,
+    agentRunName(harnessPref, resolvedHarness),
+    running
+      ? {
+          done: lastResult?.completed_count ?? 0,
+          total: lastResult?.task_count ?? checks.length,
+        }
+      : null
+  )
+  const signedIn = (status?.harness_auth?.harnesses ?? []).some(
+    (row) => agentSessionLabel(row) === "signed in"
+  )
+  const checksOpen = status && !signedIn ? ["agent"] : []
   const runHelp = !skill
     ? "Next: pick a skill."
     : checks.length === 0
@@ -522,12 +535,39 @@ export function EvalPage() {
         </section>
         </TabsContent>
         <TabsContent value="checks" className="flex flex-col gap-4 pt-4">
-        <section aria-labelledby="eval-step-cases">
+        <Accordion
+          key={status ? (signedIn ? "signed-in" : "signed-out") : "loading"}
+          defaultValue={checksOpen}
+          className="rounded-xl border bg-card px-3"
+        >
+          <AccordionItem value="agent">
+            <AccordionTrigger id="checks-agent">Agent setup</AccordionTrigger>
+            <AccordionContent>
+              <AgentSetup
+                harnessPref={harnessPref}
+                setHarnessPref={setHarnessPref}
+                resolvedHarness={resolvedHarness}
+                evalConfig={evalConfig}
+                setEvalConfig={setEvalConfig}
+                disabled={running || seeding}
+                supportedModels={status?.supported_models}
+                supportedModelsMeta={status?.supported_models_meta}
+                availableHarnesses={status?.available_harnesses}
+                harnesses={status?.harness_auth?.harnesses}
+              />
+            </AccordionContent>
+          </AccordionItem>
+          <AccordionItem value="cases">
+            <AccordionTrigger id="checks-cases">
+              Test cases · {checks.length}
+            </AccordionTrigger>
+            <AccordionContent>
+        <section aria-labelledby="checks-cases">
           <Card>
             <CardHeader>
-              <CardTitle id="eval-step-cases">2. Test cases</CardTitle>
+              <CardTitle id="eval-step-cases">Test cases</CardTitle>
               <CardDescription>
-                Each row is one thing you ask the agent to do. Edit them, then press Run.
+                Each row is one thing you ask the agent to do.
               </CardDescription>
               <CardAction>
                 {skill || checks.length > 0 ? (
@@ -547,18 +587,6 @@ export function EvalPage() {
               </CardAction>
             </CardHeader>
             <CardContent className="flex flex-col gap-3">
-              <RunConfigAccordion
-                harnessPref={harnessPref}
-                setHarnessPref={setHarnessPref}
-                resolvedHarness={resolvedHarness}
-                evalConfig={evalConfig}
-                setEvalConfig={setEvalConfig}
-                disabled={running || seeding}
-                supportedModels={status?.supported_models}
-                supportedModelsMeta={status?.supported_models_meta}
-                availableHarnesses={status?.available_harnesses}
-                defaultTimeoutSec={status?.default_eval_config?.timeout_sec}
-              />
               <FixtureBindAccordion
                 skill={skill}
                 packFiles={skill?.pack_files ?? []}
@@ -870,15 +898,17 @@ export function EvalPage() {
             </CardContent>
           </Card>
         </section>
-
-        <Accordion className="rounded-xl border px-3">
-          <AccordionItem value="checks">
-            <AccordionTrigger id="eval-step-checks">What gets checked</AccordionTrigger>
-            <AccordionContent className="flex flex-col gap-4">
-              <p className="text-sm text-muted-foreground">
-                Every test case is scored with these checks. Add your own questions if you want more.
-              </p>
+            </AccordionContent>
+          </AccordionItem>
+          <AccordionItem value="builtin">
+            <AccordionTrigger id="checks-builtin">Built-in checks</AccordionTrigger>
+            <AccordionContent>
               <BuiltinChecks />
+            </AccordionContent>
+          </AccordionItem>
+          <AccordionItem value="yours">
+            <AccordionTrigger id="checks-yours">Your checks</AccordionTrigger>
+            <AccordionContent>
               <PackScoringExtras
                 packJudge={packJudge}
                 disabled={running || seeding || !skill}
@@ -886,6 +916,15 @@ export function EvalPage() {
               />
             </AccordionContent>
           </AccordionItem>
+          <AccordionItem value="judge">
+            <AccordionTrigger id="checks-judge">Judge</AccordionTrigger>
+            <AccordionContent>
+              <JudgeSection onOpenSettings={() => setStage("settings")} />
+            </AccordionContent>
+          </AccordionItem>
+        </Accordion>
+
+        <Accordion className="rounded-xl border bg-card px-3">
           <AccordionItem value="results">
             <AccordionTrigger id="eval-step-results">Results</AccordionTrigger>
             <AccordionContent>

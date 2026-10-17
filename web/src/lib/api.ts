@@ -207,6 +207,32 @@ export const api = {
       body: JSON.stringify(body),
     }),
   loginStatus: () => request<{ harnesses: AgentAuthRow[] }>("/api/login/status"),
+  judgeChecks: () =>
+    request<{
+      checks: Array<{
+        id: string
+        sentence: string
+        prompt: string
+        builtin: boolean
+        readonly: boolean
+      }>
+    }>("/api/checks"),
+  previewJudgeCheck: (extra: {
+    id: string
+    type: string
+    ask: string
+    choices?: Array<{ value: string; description?: string; pass?: boolean }>
+    levels?: string[]
+  }) => {
+    const params = new URLSearchParams({ spec: JSON.stringify(extra) })
+    return request<{
+      id: string
+      sentence: string
+      prompt: string
+      builtin: boolean
+      readonly: boolean
+    }>(`/api/checks/preview?${params.toString()}`)
+  },
   startLogin: (agent: string) =>
     request<LoginStartPayload>(`/api/login/${encodeURIComponent(agent)}`, {
       method: "POST",

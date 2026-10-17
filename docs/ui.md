@@ -76,6 +76,7 @@ Everything the local UI can do has a CLI command. New API writes must update thi
 | Add a question for every test case | Checks editor → pin | `skillgate judge add-question` (`--choices` for pick one) |
 | Edit Fail vs warn | Checks editor → pin | `skillgate judge set-question` |
 | Remove an extra question | Checks editor → pin | `skillgate judge remove-question` |
+| Show the prompt for a check | Checks tab, expand a check | `skillgate checks show` |
 | Run | `POST /api/runs` | `skillgate check` |
 | Run one check / try-out | `POST /api/runs` (`checks`, `tryout`) | `skillgate check --case` |
 | Skip / stop a run | `POST /api/runs/{run_id}/skip`, `POST /api/runs/{run_id}/kill` | `skillgate check` (Ctrl+C) |
