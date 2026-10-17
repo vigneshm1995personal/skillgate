@@ -23,7 +23,7 @@ from skillgate_ai.catalog import (
     import_from_agent_folders,
 )
 from skillgate_ai.config import get_llm_config, missing_key_error
-from skillgate_ai.deploy import get_adapter
+from skillgate_ai.deploy import get_adapter, require_passing_check
 from skillgate_ai.errors import SkillGateError
 from skillgate_ai.history import append_deploy
 from skillgate_ai.ingest import ingest_skill
@@ -230,9 +230,14 @@ def register_skill_routes(app: FastAPI) -> None:
         if mode == "git" or target == "git":
             fail(404, "Publishing to git isn’t in the local app.")
         skill_path = find_skill(state.root, str(body.get("skill") or ""))
+        loaded = ingest_skill(skill_path, strict=False)
+        require_passing_check(
+            skill_path,
+            name=loaded.name,
+            force=bool(body.get("force")),
+        )
         if not get_llm_config(state.root).has_any_key:
             raise missing_key_error()
-        loaded = ingest_skill(skill_path, strict=False)
         result = get_adapter(target).install(skill=loaded, source=skill_path)
         status = result.get("status") or "installed"
         append_deploy(

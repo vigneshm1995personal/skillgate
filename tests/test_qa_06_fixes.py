@@ -575,6 +575,23 @@ def test_progress_done_task_keeps_expect_skill() -> None:
     assert payload["happened"] != "No skill was picked, as expected."
 
 
+def test_deploy_never_checked_without_key_names_missing_check(
+    tmp_path: Path, monkeypatch
+) -> None:
+    dest = _pdf(tmp_path)
+    monkeypatch.setenv("SKILLGATE_ROOT", str(tmp_path))
+    monkeypatch.chdir(tmp_path)
+    skills_home = tmp_path / "agent-skills"
+    monkeypatch.setenv("SKILLGATE_CURSOR_SKILLS", str(skills_home))
+    result = runner.invoke(app, ["deploy", str(dest), "--target", "cursor"])
+    out = plain_text(result.stdout + result.stderr)
+    assert result.exit_code == 1, out
+    assert "Run the checks first" in out
+    assert "No agent is available" not in out
+    assert "No model key found" not in out
+    assert not (skills_home / "pdf").exists()
+
+
 def test_deploy_refuses_without_key_even_after_green(tmp_path: Path, monkeypatch) -> None:
     dest = _pdf(tmp_path)
     monkeypatch.setenv("SKILLGATE_ROOT", str(tmp_path))

@@ -388,7 +388,7 @@ def check_pack(
         help="Allow a run without a scoring key (exit 0 even when quality is not scored).",
     ),
 ) -> None:
-    """Run pack-local evals/cases.yaml. Exit 0 if green, 1 if red, 2 if no key."""
+    """Run pack-local evals/cases.yaml. Exit 0 if green, 1 if red, 2 if no agent."""
     _run_gate(
         target=pack,
         skill=None,
@@ -471,7 +471,7 @@ def deploy(
     not skip a missing agent.
     """
     from skillgate_ai.config import get_llm_config, missing_key_error
-    from skillgate_ai.deploy import get_adapter
+    from skillgate_ai.deploy import get_adapter, require_passing_check
     from skillgate_ai.history import append_deploy
 
     root = _boot()
@@ -479,9 +479,10 @@ def deploy(
     selected = _parse_targets(target, targets, default="cursor")
     try:
         adapters = [get_adapter(name) for name in selected]
+        loaded = ingest_skill(path)
+        require_passing_check(path, name=loaded.name, force=force)
         if not get_llm_config(root).has_any_key:
             raise missing_key_error()
-        loaded = ingest_skill(path)
         for adapter in adapters:
             result = adapter.install(skill=loaded, source=path, force=force)
             console.print(result["message"])
@@ -1048,6 +1049,7 @@ def ui_cmd(
         raise typer.Exit(exc.exit_code) from None
     except OSError as exc:
         console.print(f"Could not bind {host}:{port}: {exc}")
+        console.print("Stop the other process, or pass --port with a free port.")
         raise typer.Exit(1) from exc
 
 

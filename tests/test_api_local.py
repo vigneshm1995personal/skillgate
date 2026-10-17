@@ -196,6 +196,19 @@ def test_deploy_copies_into_agent_folder(tmp_path: Path, monkeypatch) -> None:
     assert pack.is_dir()
 
 
+def test_deploy_never_checked_without_key_names_missing_check(
+    tmp_path: Path, monkeypatch
+) -> None:
+    _copy_pack(tmp_path)
+    client = _client(tmp_path, monkeypatch)
+    res = client.post("/api/deploy", json={"target": "cursor", "skill": "pdf", "mode": "local"})
+    assert res.status_code == 400, res.text
+    blob = json.dumps(res.json()).lower()
+    assert "run the checks first" in blob
+    assert "no model key found" not in blob
+    assert not (tmp_path / "cursor-skills" / "pdf").exists()
+
+
 def test_deploy_without_key_is_409_even_after_green(tmp_path: Path, monkeypatch) -> None:
     pack = _copy_pack(tmp_path)
     append_eval(pack, run_id="green", passed=True)

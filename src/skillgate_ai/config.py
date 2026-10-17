@@ -260,7 +260,7 @@ NO_KEY_HINT = (
     "or add a matching key with `skillgate keys set` "
     "(CURSOR_API_KEY, CODEX_API_KEY, or ANTHROPIC_API_KEY)."
 )
-UI_NO_KEY_HINT = "Run `skillgate login` or add a key in Settings, then press Run."
+UI_NO_KEY_HINT = "Sign in under Settings, or add a key, then press Run."
 
 
 def missing_key_error(
@@ -278,8 +278,8 @@ def missing_key_error(
         )
     elif for_cursor:
         hint = (
-            "Cursor Agent needs CURSOR_API_KEY in Settings (`skillgate keys set`) "
-            "or a CLI login (`skillgate login cursor`), and the "
+            "Cursor Agent needs `agent login` (`skillgate login cursor`) "
+            "or CURSOR_API_KEY in Settings (`skillgate keys set`), and the "
             "`agent` CLI on your PATH (or set CURSOR_AGENT_BIN)."
         )
     elif for_claude:

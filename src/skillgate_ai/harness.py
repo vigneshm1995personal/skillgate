@@ -202,23 +202,12 @@ class CursorAgentHarness:
             agent_prompt = _cursor_prompt(
                 prompt, skills, pinned_skill=pinned  # type: ignore[arg-type]
             )
-        command = [
+        command = _cursor_exec_command(
             binary,
-            "-p",
-            "--force",
-            "--trust",
-            "--sandbox",
-            "disabled",
-            "--workspace",
-            str(sandbox.workspace),
-            "--output-format",
-            "stream-json",
-            "--stream-partial-output",
-        ]
-        cursor_model = (self.cfg.cursor_model or "").strip()
-        if cursor_model:
-            command.extend(["--model", cursor_model])
-        command.append(agent_prompt)
+            sandbox.workspace,
+            agent_prompt,
+            model=(self.cfg.cursor_model or "").strip() or None,
+        )
         env: dict[str, str] = {"SKILLGATE_TASK": prompt}
         if self.cfg.cursor_api_key:
             env["CURSOR_API_KEY"] = self.cfg.cursor_api_key
@@ -241,8 +230,48 @@ class CursorAgentHarness:
             spans=_jsonl_spans(proc.stdout or ""),
             returncode=proc.returncode,
             usage=harness_usage(proc.stdout or ""),
-            auth_mode=cursor_auth_kind(self.cfg),
+            auth_mode=AUTH_API_KEY if (self.cfg.cursor_api_key or "").strip() else AUTH_CLI_LOGIN,
         )
+
+
+def _cursor_exec_command(
+    binary: str,
+    workspace: Path | str,
+    prompt: str,
+    *,
+    model: str | None = None,
+) -> list[str]:
+    """argv for official Cursor headless CLI (`agent -p --force`)."""
+    command = [
+        binary,
+        "-p",
+        "--force",
+        "--trust",
+        "--sandbox",
+        "disabled",
+        "--workspace",
+        str(workspace),
+        "--output-format",
+        "stream-json",
+        "--stream-partial-output",
+    ]
+    model_id = (model or "").strip()
+    if model_id:
+        command.extend(["--model", model_id])
+    command.append(prompt)
+    return command
+
+
+def _codex_model_flag(model: str | None, *, cli_login: bool) -> str | None:
+    """ChatGPT login only accepts Codex client ids. Omit -m for defaults/slugs."""
+    raw = (model or "").strip()
+    if not raw or raw == "codex-default":
+        return None
+    if raw in CodexCliHarness.supported_models:
+        return raw
+    if cli_login:
+        return None
+    return raw
 
 
 def _codex_exec_command(
@@ -405,7 +434,7 @@ class CodexCliHarness:
             sandbox.workspace,
             agent_prompt,
             reasoning_effort=self.cfg.codex_reasoning_effort,
-            model=self.cfg.codex_model,
+            model=_codex_model_flag(self.cfg.codex_model, cli_login=not bool(key)),
         )
         env: dict[str, str] = {"SKILLGATE_TASK": prompt}
         if key:
@@ -440,7 +469,7 @@ class CodexCliHarness:
             spans=_jsonl_spans(proc.stdout or ""),
             returncode=proc.returncode,
             usage=harness_usage(proc.stdout or ""),
-            auth_mode=codex_auth_kind(self.cfg),
+            auth_mode=AUTH_API_KEY if key else AUTH_CLI_LOGIN,
         )
 
 
@@ -505,7 +534,7 @@ class ClaudeCodeHarness:
             spans=_jsonl_spans(proc.stdout or ""),
             returncode=proc.returncode,
             usage=harness_usage(proc.stdout or ""),
-            auth_mode=claude_auth_kind(self.cfg),
+            auth_mode=AUTH_API_KEY if (self.cfg.anthropic_api_key or "").strip() else AUTH_CLI_LOGIN,
         )
 
 
@@ -668,7 +697,7 @@ def _cursor_login_status_authenticated(returncode: int, stdout: str, stderr: str
     text = f"{stdout}\n{stderr}".lower()
     if "not logged in" in text or "not authenticated" in text:
         return False
-    return "logged in" in text or "authenticated" in text
+    return True
 
 
 def _probe_cursor_login_status(binary: str) -> bool:
@@ -897,10 +926,26 @@ def run_official_login(agent: str, cfg: LLMConfig) -> dict[str, str | bool]:
 
 
 def _resolve_agent_bin(preferred: str) -> str | None:
-    for name in (preferred, "agent", "cursor-agent"):
-        path = shutil.which(name)
-        if path:
-            return path
+    """Find `agent` (official) or `cursor-agent` alias, including ~/.local/bin."""
+    names: list[str] = []
+    if preferred:
+        names.append(preferred)
+    for name in ("agent", "cursor-agent"):
+        if name not in names:
+            names.append(name)
+    for name in names:
+        found = shutil.which(name)
+        if found:
+            return found
+        if _looks_like_bin_path(name):
+            found = _executable_path(Path(name).expanduser())
+            if found:
+                return found
+    home_local = Path.home() / ".local" / "bin"
+    for name in ("agent", "cursor-agent"):
+        found = _executable_path(home_local / name)
+        if found:
+            return found
     return None
 
 

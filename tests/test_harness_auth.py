@@ -7,9 +7,10 @@ import subprocess
 from pathlib import Path
 
 import pytest
+from conftest import plain_text
+from test_judge import _cfg
 from typer.testing import CliRunner
 
-from conftest import plain_text
 from skillgate_ai.cli import app
 from skillgate_ai.config import missing_key_error, no_agent_available_error
 from skillgate_ai.harness import (
@@ -20,26 +21,33 @@ from skillgate_ai.harness import (
     CodexCliHarness,
     CursorAgentHarness,
     _claude_login_status_authenticated,
+    _codex_exec_command,
     _codex_login_status_authenticated,
+    _codex_model_flag,
+    _cursor_exec_command,
     _cursor_login_status_authenticated,
+    _resolve_agent_bin,
+    _run_inherited,
     claude_auth_kind,
     codex_auth_kind,
     cursor_auth_kind,
     harness_auth_status,
     harness_is_startable,
+    has_startable_agent,
     live_harness_or_error,
     run_official_login,
 )
 from skillgate_ai.usage import SUBSCRIPTION_COST_LABEL, combine_task_usage
-from test_judge import _cfg
 
 
 class _FakeSandbox:
     def __init__(self, workspace: Path) -> None:
         self.workspace = workspace
         self.env: dict[str, str] = {}
+        self.command: list[str] = []
 
     def run(self, command, *, env=None, timeout=0, cwd=None):
+        self.command = list(command)
         self.env = dict(env or {})
         return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
 
@@ -397,3 +405,160 @@ def test_combine_task_usage_labels_subscription() -> None:
     assert merged.get("cost_usd") == 0.03
     assert merged.get("tokens_total") == 1120
     assert merged.get("cost_unknown") is not True
+
+
+def test_cursor_status_accepts_authenticated_without_logged_in_word() -> None:
+    assert _cursor_login_status_authenticated(0, "Authenticated\nAccount: you\n", "")
+    assert _cursor_login_status_authenticated(0, "Account: you@example.com\n", "")
+    assert not _cursor_login_status_authenticated(0, "Not authenticated\n", "")
+    assert not _cursor_login_status_authenticated(1, "", "error")
+
+
+def test_resolve_agent_bin_finds_user_local(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    dest = home / ".local" / "bin"
+    dest.mkdir(parents=True)
+    agent = dest / "agent"
+    agent.write_text("#!/bin/sh\n", encoding="utf-8")
+    agent.chmod(0o755)
+    monkeypatch.setattr("skillgate_ai.harness.shutil.which", lambda _name: None)
+    monkeypatch.setattr("skillgate_ai.harness.Path.home", lambda: home)
+    assert _resolve_agent_bin("agent") == str(agent)
+    assert _resolve_agent_bin("cursor-agent") == str(agent)
+
+
+def test_cursor_exec_is_official_headless() -> None:
+    cmd = _cursor_exec_command("/home/me/.local/bin/agent", "/tmp/ws", "do the task")
+    assert cmd[0].endswith("agent")
+    assert "-p" in cmd
+    assert "--force" in cmd
+    assert "--output-format" in cmd
+    fmt = cmd[cmd.index("--output-format") + 1]
+    assert fmt in {"json", "stream-json"}
+    assert "--api-key" not in cmd
+
+
+def test_cursor_cli_login_runs_without_api_key(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    sandbox = _FakeSandbox(tmp_path)
+    _stub_run(monkeypatch)
+    monkeypatch.setattr("skillgate_ai.harness._cursor_session_ok", lambda _c: True)
+    monkeypatch.setattr("skillgate_ai.harness._resolve_agent_bin", lambda _p: "/bin/agent")
+    cfg = _cfg(cursor_api_key=None)
+    assert has_startable_agent(cfg)
+    harness = live_harness_or_error("cursor-agent", cfg)
+    result = harness.run(sandbox, "task", [], timeout_sec=5)
+    assert "-p" in sandbox.command
+    assert "--force" in sandbox.command
+    assert "CURSOR_API_KEY" not in sandbox.env
+    assert "HOME" not in sandbox.env
+    assert result.auth_mode == AUTH_CLI_LOGIN
+
+
+def test_run_inherited_passes_no_open_browser(monkeypatch: pytest.MonkeyPatch) -> None:
+    recorded: dict[str, object] = {}
+
+    def fake_run(argv, **kwargs):
+        recorded["argv"] = list(argv)
+        recorded["kwargs"] = kwargs
+        return subprocess.CompletedProcess(argv, 0)
+
+    monkeypatch.setattr("skillgate_ai.harness.subprocess.run", fake_run)
+    monkeypatch.setenv("NO_OPEN_BROWSER", "1")
+    assert _run_inherited(["/bin/agent", "login"]) == 0
+    env = recorded["kwargs"].get("env")
+    assert env is None or env.get("NO_OPEN_BROWSER") == "1"
+    assert recorded["argv"] == ["/bin/agent", "login"]
+
+
+def test_codex_cli_login_omits_rejected_or_default_model() -> None:
+    assert _codex_model_flag(None, cli_login=True) is None
+    assert _codex_model_flag("", cli_login=True) is None
+    assert _codex_model_flag("codex-default", cli_login=True) is None
+    assert _codex_model_flag("openai/gpt-4o-mini", cli_login=True) is None
+    assert _codex_model_flag("composer-2.5", cli_login=True) is None
+    assert _codex_model_flag("gpt-5.6-sol", cli_login=True) == "gpt-5.6-sol"
+    default_cmd = _codex_exec_command("/bin/codex", "/tmp/ws", "task", model=None)
+    assert "-m" not in default_cmd
+    rejected = _codex_exec_command(
+        "/bin/codex",
+        "/tmp/ws",
+        "task",
+        model=_codex_model_flag("openai/gpt-4o-mini", cli_login=True),
+    )
+    assert "-m" not in rejected
+    accepted = _codex_exec_command(
+        "/bin/codex",
+        "/tmp/ws",
+        "task",
+        model=_codex_model_flag("gpt-5.6-sol", cli_login=True),
+    )
+    assert accepted[accepted.index("-m") + 1] == "gpt-5.6-sol"
+
+
+def test_codex_cli_login_run_omits_gateway_model(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    sandbox = _FakeSandbox(tmp_path / "ws")
+    sandbox.workspace.mkdir()
+    _stub_run(monkeypatch)
+    monkeypatch.setattr("skillgate_ai.harness._codex_ready", lambda _c: True)
+    monkeypatch.setattr("skillgate_ai.harness._resolve_codex_bin", lambda _p: "/bin/codex")
+    CodexCliHarness(_cfg(codex_api_key=None, codex_model="openai/gpt-4o-mini")).run(
+        sandbox, "task", [], timeout_sec=5
+    )
+    assert "-m" not in sandbox.command
+    assert "CODEX_HOME" not in sandbox.env
+
+
+def test_check_no_judge_uses_cursor_cli_login(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    import shutil
+
+    from skillgate_ai.demo_files import ensure_demo_pdfs
+    from skillgate_ai.engine import SuiteReport, TaskReport
+    from skillgate_ai.gate import run_check
+    from skillgate_ai.scorers import Score
+
+    pack = tmp_path / "pdf"
+    shutil.copytree(Path(__file__).resolve().parents[1] / "skills" / "pdf", pack)
+    ensure_demo_pdfs(pack / "evals" / "fixtures")
+    monkeypatch.setattr("skillgate_ai.harness._cursor_session_ok", lambda _c: True)
+    monkeypatch.setattr("skillgate_ai.harness._resolve_agent_bin", lambda _p: "/bin/agent")
+    monkeypatch.setenv("SKILLGATE_ROOT", str(tmp_path))
+    monkeypatch.setenv("CURSOR_AGENT_BIN", "/bin/agent")
+
+    def fake_eval(*_args, **_kwargs):
+        return SuiteReport(
+            suite="cases",
+            title="pdf",
+            skill="pdf",
+            harness="cursor-agent",
+            sandbox="local",
+            passed=True,
+            tasks=[
+                TaskReport(
+                    task_id="c1",
+                    prompt="do it",
+                    expect_skill="pdf",
+                    passed=True,
+                    scores=[Score(scorer="ok", passed=True, detail="ok")],
+                    selected_skill="pdf",
+                )
+            ],
+            skill_path=str(pack),
+        )
+
+    monkeypatch.setattr("skillgate_ai.gate.run_eval", fake_eval)
+    result = run_check(
+        pack,
+        source="cli",
+        root=tmp_path,
+        no_judge=True,
+        harness="cursor-agent",
+    )
+    assert result.exit_code != 2
+    assert result.error is None or "No agent" not in (result.error.get("message") or "")
+    assert result.report is not None

@@ -288,7 +288,7 @@ export function EvalPage() {
                 setKeyBannerDismissed(false)
               }}
             >
-              {status.missing_key_message || "No model key found."}
+              {status.missing_key_message || "No agent is available to run checks."}
             </Button>
           ) : undefined
         }
@@ -297,7 +297,7 @@ export function EvalPage() {
       {status && !status.has_key && !keyBannerDismissed ? (
         <Alert id="missing-key">
           <AlertTitle className="truncate pr-8">
-            {status.missing_key_message || "No model key found."}
+            {status.missing_key_message || "No agent is available to run checks."}
           </AlertTitle>
           <AlertDescription id="missing-key-hint">
             {status.missing_key_hint ||
