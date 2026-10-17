@@ -221,18 +221,20 @@ export function SettingsPage() {
                       Run <code>{row.command}</code> in your terminal, or Sign in here.
                     </FieldDescription>
                   )}
-                  <Button
-                    id={`btn-settings-login-${row.agent}`}
-                    size="sm"
-                    variant="outline"
-                    disabled={loginBusy === row.agent}
-                    onClick={() => void onSignIn(row.agent)}
-                  >
-                    {loginBusy === row.agent ? (
-                      <Spinner data-icon="inline-start" />
-                    ) : null}
-                    Sign in
-                  </Button>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      id={`btn-settings-login-${row.agent}`}
+                      size="sm"
+                      variant="outline"
+                      disabled={loginBusy === row.agent}
+                      onClick={() => void onSignIn(row.agent)}
+                    >
+                      {loginBusy === row.agent ? (
+                        <Spinner data-icon="inline-start" />
+                      ) : null}
+                      Sign in
+                    </Button>
+                  </div>
                 </Field>
               )
             })}
