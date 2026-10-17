@@ -33,26 +33,48 @@ PATH_NOT_AVAILABLE = "Not available. No recorded path."
 
 PASS_LOCK: dict[str, frozenset[str]] = {
     "task_completion": frozenset({"fully completed"}),
-    "correctness": frozenset({"correct"}),
-    "instruction_adherence": frozenset({"fully followed"}),
-    "evidence_action_validity": frozenset({"fully supported", "n/a"}),
+    "correctness": frozenset({"correct", "mostly correct"}),
+    "instruction_adherence": frozenset({"fully followed", "minor deviation"}),
+    "evidence_action_validity": frozenset(
+        {"fully supported", "partially supported", "n/a"}
+    ),
     "result_quality": frozenset({"clear and complete", "mostly good"}),
 }
 
 PASS_NEED_LABEL: dict[str, str] = {
     "task_completion": "Fully completed",
-    "correctness": "Correct",
-    "instruction_adherence": "Fully followed",
-    "evidence_action_validity": "Fully supported or N/A",
+    "correctness": "Correct or Mostly correct",
+    "instruction_adherence": "Fully followed or Minor deviation",
+    "evidence_action_validity": "Fully supported, Partially supported, or N/A",
     "result_quality": "Clear and complete or Mostly good",
 }
+
+OUTCOME_SCORING_NOTES = (
+    "Use workspace_files (collected output contents) and agent_trajectory.command_runs "
+    "(commands plus captured stdout/stderr) as primary evidence. Do not claim tests or "
+    "files were missing when they appear there. "
+    "When workspace_files show the expected deliverable (letter, spreadsheet, export, etc.) "
+    "with correct substance and task_completion is Fully completed, use Minor deviation (or "
+    "Fully followed) for instruction_adherence when the only gap is style, tool choice, or "
+    "cosmetic steps — do not label those Major deviation. Major deviation fails the check. "
+    "Use Fully supported / Partially supported for evidence_action_validity when outputs "
+    "substantiate the result. "
+    "instruction_adherence: Violated and Major deviation fail; only Minor deviation or Fully "
+    "followed pass. "
+    "task_completion: When SKILL.md requires refusing a shortcut, insisting on tests, or "
+    "following a debug process instead of a quick fix, that behavior is Fully completed."
+)
 
 OUTCOME_QUESTIONS: dict[str, dict[str, Any]] = {
     "task_completion": {
         "type": "choice",
         "instructions": "Got the job done?",
         "criteria": {
-            "Fully completed": "The requested work is fully done.",
+            "Fully completed": (
+                "The requested work is fully done, OR the skill correctly followed SKILL.md "
+                "by refusing a shortcut, requiring tests first, or enforcing a required process "
+                "even when the user asked for something faster."
+            ),
             "Partially completed": "Some of the requested work is done but incomplete.",
             "Not completed": "The requested work was not done.",
         },
@@ -64,16 +86,25 @@ OUTCOME_QUESTIONS: dict[str, dict[str, Any]] = {
             "Correct": "The result matches the expected outcome.",
             "Mostly correct": "Core claims are right with minor errors.",
             "Incorrect": "The result is wrong.",
-            "Insufficient evidence": "Not enough evidence to judge correctness.",
+            "Insufficient evidence": (
+                "Not enough evidence in workspace_files, command_runs, or transcript to judge."
+            ),
         },
     },
     "instruction_adherence": {
         "type": "choice",
         "instructions": "Followed the rules?",
         "criteria": {
-            "Fully followed": "Followed the skill and check instructions fully.",
+            "Fully followed": (
+                "Followed the user check and the skill's SKILL.md instructions fully. "
+                "Refusing a shortcut or requiring tests when SKILL.md demands it counts as following."
+            ),
             "Minor deviation": "Small deviations that did not undermine the result.",
-            "Major deviation": "Material deviations from the instructions.",
+            "Major deviation": (
+                "Material deviations from required process or constraints that are not explained "
+                "by a correct deliverable in workspace_files. Do not use when the work is fully "
+                "done and the gap is style or tooling only — use Minor deviation instead."
+            ),
             "Violated": "Clear violations of the rules or constraints.",
         },
     },
@@ -81,7 +112,9 @@ OUTCOME_QUESTIONS: dict[str, dict[str, Any]] = {
         "type": "choice",
         "instructions": "Used the right evidence/actions?",
         "criteria": {
-            "Fully supported": "Claims and actions are backed by real evidence/tools.",
+            "Fully supported": (
+                "Claims and actions are backed by transcript, agent_trajectory, or tool output."
+            ),
             "Partially supported": "Some claims or actions lack support.",
             "Unsupported": "Key claims or actions are unsupported.",
             "N/A": "No evidence/actions were required for this check.",

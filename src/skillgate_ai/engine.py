@@ -130,10 +130,13 @@ class SuiteReport:
             "tokens_out": total("tokens_out"),
             "tokens_total": total("tokens_total"),
             "cost_usd": total("cost_usd", as_float=True),
+            "agent_cost_usd": total("agent_cost_usd", as_float=True),
+            "judge_cost_usd": total("judge_cost_usd", as_float=True),
         }
+        totals = {key: value for key, value in totals.items() if value is not None}
         if totals.get("tokens_total") and totals.get("cost_usd") is None:
             totals["cost_unknown"] = True
-        return totals
+        return totals or None
 
 
 def run_eval(
@@ -230,6 +233,7 @@ def run_eval(
                     timeout_override=timeout_override,
                     control=control,
                     judge=outcome_judge,
+                    run_config=config,
                 )
             )
         finally:
@@ -341,8 +345,11 @@ def _outcome_judge_outputs(task: TaskSpec, artifacts: RunArtifacts) -> list[dict
             present = dest.is_file()
             row: dict[str, Any] = {"path": item.path, "present": present}
             if present:
+                from skillgate_ai.judge_context import enrich_output_row
+
                 sniffed = sniff_output_bytes(dest.read_bytes())
                 row.update(sniffed)
+                row = enrich_output_row(row, dest)
             outputs.append(row)
     return outputs
 
@@ -382,6 +389,8 @@ def _run_outcome_judge(
     skill_root: Path | None = None,
     path: dict[str, Any] | None = None,
     judge: Judge | None = None,
+    spans: list[dict[str, Any]] | None = None,
+    skill_instructions: str | None = None,
 ) -> tuple[
     dict[str, Any] | None,
     str | None,
@@ -411,11 +420,20 @@ def _run_outcome_judge(
             actual_payload = actual_output_state(
                 case.golden.output_path, artifacts.workspace
             )
+    from skillgate_ai.judge_context import build_agent_trajectory, skill_instructions_text
     from skillgate_ai.workspace_outputs import collect_workspace_outputs
 
     outputs = collect_workspace_outputs(task, artifacts.workspace)
     if not outputs:
         outputs = _outcome_judge_outputs(task, artifacts)
+    trajectory = build_agent_trajectory(
+        spans=spans,
+        transcript=result.transcript,
+        path=path,
+        scores=scores,
+        artifacts=outputs,
+    )
+    instructions = skill_instructions_text(skill_root, fallback=skill_instructions)
     judged = outcome.judge(
         task.prompt,
         outputs,
@@ -429,6 +447,8 @@ def _run_outcome_judge(
         workspace=artifacts.workspace,
         skill_root=skill_root,
         spec=spec,
+        skill_instructions=instructions,
+        agent_trajectory=trajectory,
     )
     mismatch = expected_output_mismatch_reason(
         golden=golden_payload if isinstance(golden_payload, dict) else None,
@@ -510,11 +530,21 @@ def _live_verdict(
             return False, extra, stamped
         return det_passed, det_failures, stamped
     if judge.get("status") == "error":
-        failures = [str(item) for item in (judge.get("reasons") or []) if str(item).strip()]
-        if not failures:
-            failures = ["The judge couldn't score this check."]
-        passed, failures = _apply_mismatch(False, failures, mismatch)
-        return passed, failures, stamped
+        reason = str(stamped.get("reason") or "").strip()
+        if not reason:
+            reasons = judge.get("reasons") or []
+            if isinstance(reasons, list) and reasons:
+                reason = str(reasons[0]).strip()
+        if not reason:
+            reason = "Quality was not scored."
+        unscored = {
+            **stamped,
+            "passed": None,
+            "quality_unscored": True,
+            "reason": reason,
+        }
+        failures = list(det_failures) if not det_passed else [reason]
+        return False, failures, unscored
     if judge.get("status") == "skip" or judge.get("passed") is None:
         return det_passed, det_failures, judge
     passed = bool(judge.get("passed"))
@@ -573,6 +603,8 @@ def _maybe_explain_fail(
     """Ask the scorer for a Fail sentence only after the gate verdict."""
     if passed or judged is None or judge is None:
         return judged
+    if judged.get("status") == "error" or judged.get("quality_unscored"):
+        return judged
     why = judge.explain_fail(
         list(failures),
         judged=judged,
@@ -600,6 +632,7 @@ def _run_task(
     timeout_override: int | None = None,
     control: RunControl | None = None,
     judge: Judge | None = None,
+    run_config: dict[str, Any] | None = None,
 ) -> TaskReport:
     timeout = task_timeout_sec(task, spec, timeout_override=timeout_override)
     if control is not None:
@@ -701,6 +734,8 @@ def _run_task(
                     skill_root=skill_root,
                     path={"steps": steps, "errors": errors, "had_path": had_path},
                     judge=judge,
+                    spans=spans,
+                    skill_instructions=skills[0].body if skills else None,
                 )
                 passed, failures, judged = _live_verdict(
                     judged,
@@ -726,6 +761,21 @@ def _run_task(
             else:
                 judged = None
                 passed, failures = det_passed, det_failures
+            from skillgate_ai.usage import combine_task_usage
+
+            cfg_model = (run_config or {}).get("model") if isinstance(run_config, dict) else None
+            judge_block = (run_config or {}).get("judge") if isinstance(run_config, dict) else None
+            judge_model = (
+                str(judge_block.get("model")).strip()
+                if isinstance(judge_block, dict) and judge_block.get("model")
+                else None
+            )
+            task_usage = combine_task_usage(
+                task_usage,
+                judged,
+                agent_model=str(cfg_model).strip() if cfg_model else None,
+                judge_model=judge_model,
+            )
             primary = skills[0] if skills else None
             advice = (
                 advise_task(

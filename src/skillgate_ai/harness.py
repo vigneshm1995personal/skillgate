@@ -170,7 +170,7 @@ class CursorAgentHarness:
         skills: list[Skill],
         timeout_sec: int,
     ) -> HarnessResult:
-        if not self.cfg.cursor_api_key:
+        if not _cursor_ready(self.cfg):
             raise missing_key_error(for_cursor=True)
         binary = _resolve_agent_bin(self.cfg.cursor_agent_bin)
         if binary is None:
@@ -205,10 +205,9 @@ class CursorAgentHarness:
         if cursor_model:
             command.extend(["--model", cursor_model])
         command.append(agent_prompt)
-        env = {
-            "CURSOR_API_KEY": self.cfg.cursor_api_key,
-            "SKILLGATE_TASK": prompt,
-        }
+        env: dict[str, str] = {"SKILLGATE_TASK": prompt}
+        if self.cfg.cursor_api_key:
+            env["CURSOR_API_KEY"] = self.cfg.cursor_api_key
         proc = sandbox.run(command, env=env, timeout=timeout_sec)
         transcript = _cursor_transcript(proc.stdout or "", proc.stderr or "")
         selected = _parse_selected(sandbox.workspace, transcript, skills)
@@ -394,7 +393,12 @@ class CodexCliHarness:
             reasoning_effort=self.cfg.codex_reasoning_effort,
             model=self.cfg.codex_model,
         )
-        env = {"SKILLGATE_TASK": prompt}
+        codex_home = sandbox.workspace / ".skillgate" / "codex-home"
+        codex_home.mkdir(parents=True, exist_ok=True)
+        env: dict[str, str] = {
+            "SKILLGATE_TASK": prompt,
+            "CODEX_HOME": str(codex_home),
+        }
         if key:
             env["CODEX_API_KEY"] = key
         proc = sandbox.run(command, env=env, timeout=timeout_sec)
@@ -496,7 +500,7 @@ def harness_is_startable(harness: Harness, cfg: LLMConfig) -> bool:
     if isinstance(harness, CodexCliHarness):
         return _codex_ready(cfg) and _resolve_codex_bin(cfg.codex_bin) is not None
     if isinstance(harness, CursorAgentHarness):
-        return bool(cfg.cursor_api_key) and _resolve_agent_bin(cfg.cursor_agent_bin) is not None
+        return _cursor_ready(cfg) and _resolve_agent_bin(cfg.cursor_agent_bin) is not None
     if isinstance(harness, ClaudeCodeHarness):
         return bool(cfg.anthropic_api_key) and _resolve_claude_bin(cfg.claude_bin) is not None
     return True
@@ -541,7 +545,7 @@ _AGENT_PRIORITY = ("cursor-agent", "codex", "claude")
 
 def _agent_candidates(cfg: LLMConfig) -> list[tuple[str, Harness]]:
     found: list[tuple[str, Harness]] = []
-    if cfg.cursor_api_key and _resolve_agent_bin(cfg.cursor_agent_bin):
+    if _cursor_ready(cfg) and _resolve_agent_bin(cfg.cursor_agent_bin):
         found.append(("cursor-agent", CursorAgentHarness(cfg)))
     if _codex_ready(cfg) and _resolve_codex_bin(cfg.codex_bin):
         found.append(("codex", CodexCliHarness(cfg)))
@@ -639,6 +643,44 @@ def _codex_session_ok(cfg: LLMConfig) -> bool:
     if binary is None:
         return False
     return _probe_codex_login_status(binary)
+
+
+_CURSOR_LOGIN_STATUS_TIMEOUT_SEC = 5
+
+
+def _cursor_login_status_authenticated(returncode: int, stdout: str, stderr: str) -> bool:
+    if returncode != 0:
+        return False
+    text = f"{stdout}\n{stderr}".lower()
+    if "not logged in" in text or "not authenticated" in text:
+        return False
+    return "logged in" in text or "authenticated" in text
+
+
+def _probe_cursor_login_status(binary: str) -> bool:
+    """Host `cursor-agent status` / `agent status` only. Never read auth files."""
+    try:
+        proc = subprocess.run(
+            [binary, "status"],
+            capture_output=True,
+            text=True,
+            timeout=_CURSOR_LOGIN_STATUS_TIMEOUT_SEC,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    return _cursor_login_status_authenticated(proc.returncode, proc.stdout or "", proc.stderr or "")
+
+
+def _cursor_session_ok(cfg: LLMConfig) -> bool:
+    binary = _resolve_agent_bin(cfg.cursor_agent_bin)
+    if binary is None:
+        return False
+    return _probe_cursor_login_status(binary)
+
+
+def _cursor_ready(cfg: LLMConfig) -> bool:
+    return bool((cfg.cursor_api_key or "").strip()) or _cursor_session_ok(cfg)
 
 
 def _resolve_agent_bin(preferred: str) -> str | None:

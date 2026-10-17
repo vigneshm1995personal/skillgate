@@ -17,7 +17,7 @@ _LOG = logging.getLogger(__name__)
 DEFAULT_BASE_URL = "https://api.openai.com/v1"
 _TRANSIENT = frozenset({429, 502, 503, 504})
 _QUOTA_CODES = frozenset({"insufficient_quota", "credit_balance_exhausted"})
-_RETRY_BACKOFF_SEC = (0.05, 0.1)
+_RETRY_BACKOFF_SEC = (0.5, 1.0, 2.0)
 _MAX_ATTEMPTS = 3
 _SK_TOKEN = re.compile(r"sk-[A-Za-z0-9_*\-]{2,}")
 OUT_OF_CREDITS = (
@@ -72,9 +72,11 @@ def user_message_for_status(
         return f"{label} scoring is not enabled for this key."
     if status == 404:
         return f"{label} has no scoring endpoint for this key."
-    if status == 429 and error_code in _QUOTA_CODES:
+    if status in {402, 429} and error_code in _QUOTA_CODES:
         if who == "OpenAI":
             return OUT_OF_CREDITS
+        return f"{label} is out of credits. Add credits, then try again."
+    if status == 402:
         return f"{label} is out of credits. Add credits, then try again."
     if status == 429:
         return f"{label} rate-limited this request. Wait and retry, or check billing."

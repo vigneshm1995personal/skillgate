@@ -108,7 +108,7 @@ def run_check(
     target: Path,
     *,
     skill: Path | None = None,
-    harness: str = "auto",
+    harness: str | None = None,
     sandbox: str = "local",
     demo: bool = False,
     live: bool = True,
@@ -234,8 +234,9 @@ def _execute_check(
     demo_notice: str | None = None
     started = False
     try:
+        harness_pref = (harness if harness is not None else cfg.harness_pref) or "auto"
         run_cfg = resolve_eval_config(
-            harness_pref=harness,
+            harness_pref=harness_pref,
             incoming={
                 "model": model,
                 "timeout_sec": timeout,
@@ -246,7 +247,7 @@ def _execute_check(
             source=source,
         )
         cfg = apply_eval_config(cfg, run_cfg)
-        resolved = live_harness_or_error(harness, cfg)
+        resolved = live_harness_or_error(harness_pref, cfg)
         run_cfg = stamp_resolved(run_cfg, resolved.name, cfg)
         outcome_judge = resolve_judge(cfg, harness_name=resolved.name)
         run_cfg = with_judge(run_cfg, judge_stamp(outcome_judge))
@@ -372,8 +373,11 @@ def _quality_scoring_was_skipped(report: SuiteReport) -> bool:
         return False
     for task in report.tasks:
         judge = task.judge if isinstance(task.judge, dict) else None
-        if isinstance(judge, dict) and str(judge.get("status") or "") == "skip":
-            if str(judge.get("provider") or "") == "skip":
+        if isinstance(judge, dict):
+            status = str(judge.get("status") or "")
+            if status == "error":
+                return True
+            if status == "skip" and str(judge.get("provider") or "") == "skip":
                 return True
     cfg = report.config if isinstance(report.config, dict) else {}
     stamp = cfg.get("judge") if isinstance(cfg, dict) else None

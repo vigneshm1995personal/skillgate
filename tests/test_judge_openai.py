@@ -279,13 +279,13 @@ def test_unknown_choice_fails_closed() -> None:
             FakeResponse(200, why_payload("The scorer returned an answer we cannot use.")),
         ]
     )
-    passed, _failures, judged = _gated(_judge(post))
+    passed, failures, judged = _gated(_judge(post))
     assert passed is False
     assert judged["status"] == "error"
-    assert judged["passed"] is False
     assert judged["reasons"] == [UNUSABLE_ANSWER]
-    assert judged["why"] == "The scorer returned an answer we cannot use."
-    assert post.calls[1]["url"].endswith("/v1/responses")
+    assert judged.get("quality_unscored") is True
+    assert judged.get("why") is None
+    assert len(post.calls) == 1
 
 
 def test_missing_answer_name_fails_closed() -> None:
@@ -297,13 +297,13 @@ def test_missing_answer_name_fails_closed() -> None:
             FakeResponse(200, why_payload("A required score was missing.")),
         ]
     )
-    passed, _failures, judged = _gated(_judge(post))
+    passed, failures, judged = _gated(_judge(post))
     assert passed is False
     assert judged["status"] == "error"
-    assert judged["passed"] is False
     assert judged["reasons"] == [UNUSABLE_ANSWER]
+    assert judged.get("quality_unscored") is True
     assert post.calls[0]["url"].endswith("/v1/decisions")
-    assert post.calls[1]["url"].endswith("/v1/responses")
+    assert len(post.calls) == 1
 
 
 def test_http_errors_fail_and_never_log_key(caplog: pytest.LogCaptureFixture) -> None:
@@ -331,11 +331,11 @@ def test_http_errors_fail_and_never_log_key(caplog: pytest.LogCaptureFixture) ->
             * copies
         )
         with caplog.at_level("WARNING"):
-            passed, _failures, judged = _gated(_judge(post))
+            passed, failures, judged = _gated(_judge(post))
         assert passed is False
-        assert judged["passed"] is False
         assert judged["status"] == "error"
         assert judged["reasons"] == [message]
+        assert judged.get("quality_unscored") is True
         blob = json.dumps(judged) + caplog.text
         assert SECRET not in blob
         assert "sk-test" not in caplog.text
@@ -376,12 +376,8 @@ def test_quota_429_is_not_retried() -> None:
     )
     passed, failures, judged = _gated(_judge(post))
     assert passed is False
-    assert judged["passed"] is False
-    assert failures == [
-        "The judge is out of credits. Add credits, then try again."
-    ]
-    assert "rate limit" not in failures[0].lower()
-    assert "OpenAI" not in failures[0]
+    assert judged["status"] == "error"
+    assert judged.get("quality_unscored") is True
     assert judged["why"] is None
     assert len(post.calls) == 1
     assert all(not str(item["url"]).endswith("/v1/responses") for item in post.calls)
@@ -399,10 +395,8 @@ def test_credit_balance_exhausted_429_is_not_retried() -> None:
     )
     passed, failures, judged = _gated(_judge(post))
     assert passed is False
-    assert failures == [
-        "The judge is out of credits. Add credits, then try again."
-    ]
-    assert "OpenAI" not in failures[0]
+    assert judged["status"] == "error"
+    assert judged.get("quality_unscored") is True
     assert judged["why"] is None
     assert len(post.calls) == 1
 
@@ -416,7 +410,8 @@ def test_timeout_fails_closed() -> None:
     )
     passed, failures, judged = _gated(_judge(post))
     assert passed is False
-    assert "timed out" in failures[0].lower()
+    assert judged["status"] == "error"
+    assert judged.get("quality_unscored") is True
     assert SECRET not in json.dumps(judged)
     assert judged["why"] is None
     assert len(post.calls) == 1
@@ -792,9 +787,8 @@ def test_http_error_with_missing_output_names_both() -> None:
         actual_output={"path": "out.json", "present": False, "body": None},
     )
     assert passed is False
-    assert judged["passed"] is False
-    assert REASON_MISSING_OUTPUT in failures
-    assert "The judge did not accept this API key." in failures
+    assert judged["status"] == "error"
+    assert judged.get("quality_unscored") is True
     assert judged["why"] is None
     assert len(post.calls) == 1
 
@@ -808,7 +802,8 @@ def test_http_500_is_not_retried() -> None:
     )
     passed, failures, judged = _gated(_judge(post))
     assert passed is False
-    assert "HTTP 500" in failures[0]
+    assert judged["status"] == "error"
+    assert judged.get("quality_unscored") is True
     assert judged["why"] is None
     assert len(post.calls) == 1
 

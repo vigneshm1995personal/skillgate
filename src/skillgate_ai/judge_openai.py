@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 from typing import Any, Mapping, Protocol
 
+from skillgate_ai.judge_context import workspace_files_for_judge
 from skillgate_ai.judge_bank import (
     CHECK_CELL_LABELS,
     CHECK_CELL_ORDER,
@@ -171,15 +172,21 @@ def _user_content(text: str, images: list[dict[str, str]]) -> str | list[dict[st
 
 
 def _state_text(state: Mapping[str, Any]) -> str:
+    artifacts = state.get("artifacts")
     payload = {
         "check_prompt": state.get("check_prompt"),
         "expect_skill": state.get("expect_skill"),
         "selected_skill": state.get("selected_skill"),
+        "skill_instructions": state.get("skill_instructions"),
         "scorer_results": state.get("scorer_results"),
-        "artifacts": _artifacts_without_bodies(state.get("artifacts")),
+        "workspace_files": workspace_files_for_judge(
+            artifacts if isinstance(artifacts, list) else None
+        ),
+        "artifacts": _artifacts_without_bodies(artifacts),
         "golden": _text_blob(state.get("golden")),
         "actual_output": _text_blob(state.get("actual_output")),
         "path": state.get("path"),
+        "agent_trajectory": state.get("agent_trajectory"),
         "transcript_tail": state.get("transcript_tail"),
         "omitted_images": state.get("omitted_images"),
     }
@@ -192,6 +199,9 @@ def _artifacts_without_bodies(raw: Any) -> list[dict[str, Any]]:
     for item in rows:
         if not isinstance(item, Mapping):
             continue
+        snippet = item.get("extracted_text") or item.get("body")
+        if isinstance(snippet, str) and len(snippet) > 4000:
+            snippet = snippet[-4000:]
         out.append(
             {
                 "path": item.get("path"),
@@ -200,6 +210,7 @@ def _artifacts_without_bodies(raw: Any) -> list[dict[str, Any]]:
                 "magic": item.get("magic"),
                 "mime": item.get("mime"),
                 "size": item.get("size"),
+                "extracted_text": snippet,
             }
         )
     return out
@@ -212,6 +223,8 @@ def _text_blob(raw: Any) -> Any:
     data = dict(raw)
     if isinstance(data.get("body"), bytes):
         data["body"] = None
+    if data.get("body") is None and data.get("extracted_text"):
+        data["body"] = data.get("extracted_text")
     return data
 
 
@@ -418,14 +431,17 @@ class DecisionsBackend(_OpenAIPosted):
         if result.get("status") != "ok":
             return result
         data = result["data"]
-        usage = data.get("usage") if isinstance(data.get("usage"), dict) else None
+        from skillgate_ai.usage import normalize_judge_api_usage
+
+        model_name = str(data.get("model") or self.model)
+        usage = normalize_judge_api_usage(data, model=model_name)
         return _finished_answers(
             _normalize_answers(
                 _answers_from_decisions_list(data),
                 include_path=include_path,
                 spec=resolved,
             ),
-            model=str(data.get("model") or self.model),
+            model=model_name,
             usage=usage,
         )
 
@@ -504,10 +520,13 @@ class StructuredOutputsBackend(_OpenAIPosted):
             return {"status": "error", "reason": UNUSABLE_ANSWER, "model": self.model}
         if not isinstance(parsed, Mapping):
             return {"status": "error", "reason": UNUSABLE_ANSWER, "model": self.model}
-        usage = data.get("usage") if isinstance(data.get("usage"), dict) else None
+        from skillgate_ai.usage import normalize_judge_api_usage
+
+        model_name = str(data.get("model") or self.model)
+        usage = normalize_judge_api_usage(data, model=model_name)
         return _finished_answers(
             _normalize_answers(parsed, include_path=include_path, spec=resolved),
-            model=str(data.get("model") or self.model),
+            model=model_name,
             usage=usage,
         )
 
@@ -575,11 +594,13 @@ class OutcomeJudge:
             "check_prompt": goal,
             "expect_skill": kwargs.get("expect_skill"),
             "selected_skill": kwargs.get("selected_skill"),
+            "skill_instructions": kwargs.get("skill_instructions"),
             "scorer_results": scores,
             "artifacts": artifacts,
             "golden": golden,
             "actual_output": actual,
             "path": path,
+            "agent_trajectory": kwargs.get("agent_trajectory"),
             "transcript_tail": _tail(transcript_tail),
             "omitted_images": omitted,
         }

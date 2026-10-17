@@ -278,7 +278,8 @@ def missing_key_error(
     elif for_cursor:
         hint = (
             "Cursor Agent needs CURSOR_API_KEY in Settings (`skillgate keys set`) "
-            "and the `agent` CLI on your PATH (or set CURSOR_AGENT_BIN)."
+            "or a CLI login (`cursor-agent status` / `agent status`), and the "
+            "`agent` CLI on your PATH (or set CURSOR_AGENT_BIN)."
         )
     elif for_claude:
         hint = (

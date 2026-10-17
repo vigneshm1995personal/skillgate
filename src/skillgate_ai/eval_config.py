@@ -18,6 +18,7 @@ from skillgate_ai.config import (
 from skillgate_ai.errors import SkillGateError
 
 SCHEMA = 1
+CODEX_DEFAULT_MODEL_LABEL = "codex-default"
 TIMEOUT_MIN = 1
 TIMEOUT_MAX = 3600
 TEMP_MIN = 0.0
@@ -213,7 +214,7 @@ def stamp_resolved(run: EvalRunConfig, harness_name: str, cfg: LLMConfig) -> Eva
     effort = run.reasoning_effort
     if name == "codex":
         if model is None:
-            model = cfg.codex_model
+            model = (cfg.codex_model or "").strip() or CODEX_DEFAULT_MODEL_LABEL
         if effort is None:
             effort = cfg.codex_reasoning_effort or DEFAULT_CODEX_REASONING_EFFORT
     elif name == "cursor-agent":

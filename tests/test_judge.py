@@ -210,29 +210,31 @@ def test_live_verdict_skip_keeps_det() -> None:
     assert failures == []
 
 
-def test_live_verdict_error_fails_closed() -> None:
+def test_live_verdict_error_is_not_passed_when_det_green() -> None:
     passed, failures, stamped = _live_verdict(
-        {"status": "error", "passed": False, "reasons": ["OpenAI did not accept this API key."]},
+        {"status": "error", "passed": False, "reasons": ["The judge couldn't score this check (HTTP 402)."]},
         "pdf",
         det_passed=True,
         det_failures=[],
     )
     assert passed is False
-    assert "OpenAI did not accept this API key" in failures[0]
-    assert stamped is not None and stamped["passed"] is False
-
-
-def test_live_verdict_error_without_passed_fails_closed() -> None:
-    passed, failures, stamped = _live_verdict(
-        {"status": "error", "reasons": ["OpenAI scoring timed out."]},
-        "pdf",
-        det_passed=True,
-        det_failures=[],
-    )
-    assert passed is False
-    assert failures == ["OpenAI scoring timed out."]
+    assert failures == ["The judge couldn't score this check (HTTP 402)."]
     assert stamped is not None
-    assert stamped.get("reasons") == ["OpenAI scoring timed out."]
+    assert stamped.get("quality_unscored") is True
+    assert stamped.get("passed") is None
+
+
+def test_live_verdict_error_still_fails_when_det_fails() -> None:
+    passed, failures, stamped = _live_verdict(
+        {"status": "error", "reasons": ["The judge scoring timed out."]},
+        "pdf",
+        det_passed=False,
+        det_failures=["Skill didn't trigger"],
+    )
+    assert passed is False
+    assert failures == ["Skill didn't trigger"]
+    assert stamped is not None
+    assert stamped.get("quality_unscored") is True
 
 
 def test_live_verdict_score_no_trigger_extras_can_fail() -> None:
