@@ -58,31 +58,24 @@ export function AppSidebar({
   return (
     <aside
       className={cn(
-        "flex h-full w-60 shrink-0 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground",
+        "flex h-full w-60 shrink-0 flex-col border-r bg-sidebar text-sidebar-foreground",
         className
       )}
     >
-      <div className="sg-ink-bar" />
-      <div className="px-4 py-6">
-        <p className="truncate font-display text-[1.05rem] font-medium tracking-tight">
-          Skill Gate
-        </p>
-        <p className="truncate text-[11px] tracking-[0.08em] text-sidebar-accent-foreground uppercase">
-          Eval · Gate · Deploy
-        </p>
+      <div className="px-4 py-5">
+        <p className="truncate text-sm font-medium tracking-tight">Skill Gate</p>
+        <p className="truncate text-xs text-muted-foreground">Evaluate, Gate, Deploy</p>
       </div>
-      <Separator className="bg-sidebar-border" />
+      <Separator />
       <ScrollArea className="min-h-0 flex-1">
         <div className="flex flex-col gap-0.5 px-2 pt-3">
-          {slotOn(status, "analyticsHome") ? (
-            <NavRow
-              id="tab-home"
-              active={stage === "home"}
-              icon={LayoutDashboardIcon}
-              label="Home"
-              onClick={() => go("home")}
-            />
-          ) : null}
+          <NavRow
+            id="tab-home"
+            active={stage === "home"}
+            icon={LayoutDashboardIcon}
+            label="Home"
+            onClick={() => go("home")}
+          />
           <NavRow
             id="tab-repository"
             active={stage === "repository"}
@@ -154,9 +147,9 @@ export function AppSidebar({
       </ScrollArea>
       <div className="mt-auto flex flex-col gap-3 p-3">
         {skill ? (
-          <div className="rounded-sm border border-sidebar-border bg-sidebar-accent/60 p-3">
+          <div className="rounded-xl border bg-background p-3">
             <p className="text-sm font-medium">{skill.name}</p>
-            <p className="mt-1 text-xs text-sidebar-accent-foreground">
+            <p className="mt-1 text-xs text-muted-foreground">
               {gateRunning || liveGateResult?.status === "running"
                 ? `Evaluating — ${liveGateResult?.completed_count ?? 0}/${liveGateResult?.task_count ?? liveGateResult?.report?.task_count ?? "?"} done`
                 : "Deploy follows this skill’s last gate."}

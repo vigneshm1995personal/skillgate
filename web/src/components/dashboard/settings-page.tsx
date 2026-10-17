@@ -27,7 +27,9 @@ import {
 import { api, ApiError } from "@/lib/api"
 import { useDashboard } from "@/lib/dashboard-provider"
 import { agentSessionLabel } from "@/lib/login-status"
-import { isLocalMode } from "@/lib/mode"
+import { isLocalMode, productMode, slotOn } from "@/lib/mode"
+import { settingsSurface } from "@/slots/resolve"
+import { useSkillGateSlots } from "@/slots/context"
 import type { AgentAuthRow, SettingsKeyId, SettingsKeyPresence } from "@/lib/types"
 
 const FALLBACK_AGENTS: AgentAuthRow[] = [
@@ -83,6 +85,31 @@ function judgePresence(
 }
 
 export function SettingsPage() {
+  const { status } = useDashboard()
+  const slots = useSkillGateSlots()
+  const HostedSettings = slots.Settings
+  const Billing = slots.Billing
+  const billing = Billing && slotOn(status, "billing") ? <Billing /> : null
+  if (
+    settingsSurface(productMode(status), Boolean(HostedSettings)) === "hosted" &&
+    HostedSettings
+  ) {
+    return (
+      <>
+        <HostedSettings />
+        {billing}
+      </>
+    )
+  }
+  return (
+    <>
+      <LocalSettings />
+      {billing}
+    </>
+  )
+}
+
+function LocalSettings() {
   const { status, refreshStatus } = useDashboard()
   const [keys, setKeys] = useState<Record<SettingsKeyId, SettingsKeyPresence> | null>(
     null

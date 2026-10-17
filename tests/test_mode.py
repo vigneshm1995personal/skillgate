@@ -12,7 +12,7 @@ def test_default_mode_is_local(monkeypatch) -> None:
     assert slots["billing"] is False
     assert slots["generateChecks"] is False
     assert slots["gitPublish"] is False
-    assert slots["analyticsHome"] is False
+    assert slots["analyticsHome"] is True
     assert slots["hostedJudge"] is False
 
 

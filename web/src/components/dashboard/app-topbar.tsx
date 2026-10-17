@@ -20,10 +20,10 @@ import { useTheme } from "@/components/theme-provider"
 import { SignOutButton } from "@/components/auth/sign-out-button"
 import { stageTitle } from "@/components/dashboard/chrome"
 import { useDashboard } from "@/lib/dashboard-provider"
-import { slotOn } from "@/lib/mode"
+import { isLocalMode, slotOn } from "@/lib/mode"
 import type { Stage } from "@/lib/types"
 
-const SEARCH_STAGES: Stage[] = ["eval", "deploy", "repository", "settings"]
+const SEARCH_STAGES: Stage[] = ["home", "eval", "deploy", "repository", "settings"]
 
 export function AppTopbar({ onMenuClick }: { onMenuClick?: () => void }) {
   const {
@@ -57,7 +57,7 @@ export function AppTopbar({ onMenuClick }: { onMenuClick?: () => void }) {
       window.matchMedia("(prefers-color-scheme: dark)").matches)
 
   return (
-    <header className="flex h-14 shrink-0 items-center gap-4 border-b border-border/80 bg-card/60 px-6 backdrop-blur-sm">
+    <header className="flex h-14 shrink-0 items-center gap-4 border-b bg-background px-6">
       {onMenuClick ? (
         <Button
           variant="ghost"
@@ -96,11 +96,12 @@ export function AppTopbar({ onMenuClick }: { onMenuClick?: () => void }) {
               deploy: "deploy",
               settings: "settings",
             }
-            if (slotOn(status, "sharedHistory")) {
+            aliases.home = "home"
+            if (isLocalMode(status) || slotOn(status, "sharedHistory")) {
               aliases.history = "history"
             }
-            if (slotOn(status, "analyticsHome")) {
-              aliases.home = "home"
+            if (isLocalMode(status)) {
+              aliases.compare = "compare"
             }
             const match =
               aliases[raw] ||
@@ -127,7 +128,7 @@ export function AppTopbar({ onMenuClick }: { onMenuClick?: () => void }) {
       </div>
       <div className="ml-auto flex items-center gap-1">
         {status?.auth_required ? <SignOutButton /> : null}
-        {slotOn(status, "sharedHistory") ? (
+        {isLocalMode(status) || slotOn(status, "sharedHistory") ? (
         <Tooltip>
           <TooltipTrigger
             render={

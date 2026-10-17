@@ -1,9 +1,16 @@
 {
-  "name": "web",
+  "name": "@skillgate/ui",
   "private": true,
   "version": "0.0.1",
   "packageManager": "pnpm@9.15.9",
   "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./styles.css": "./src/index.css",
+    "./tokens.css": "./src/tokens.css",
+    "./vite": "./host/skillgate-ui-plugin.ts",
+    "./slots": "./src/slots/index.ts"
+  },
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",

@@ -55,7 +55,7 @@ export function DashboardProvider({
   children: ReactNode
   initialStatus?: StatusPayload | null
 }) {
-  const [stage, setStage] = useState<Stage>("repository")
+  const [stage, setStage] = useState<Stage>("home")
   const [evalTab, setEvalTab] = useState<EvalTab>("skill")
   const [repoSkill, setRepoSkill] = useState<string | null>(null)
   const [historyOpen, setHistoryOpen] = useState(false)

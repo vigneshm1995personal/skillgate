@@ -36,7 +36,6 @@ import { GateBadge, PageHeader } from "@/components/dashboard/chrome"
 import { Skeleton } from "@/components/ui/skeleton"
 import { api, ApiError } from "@/lib/api"
 import { useDashboard } from "@/lib/dashboard-provider"
-import { slotOn } from "@/lib/mode"
 import { customerConfigLabel, harnessDisplayName } from "@/lib/eval-config"
 import { skillDetailStatus } from "@/lib/skill-detail-state"
 import { isTryoutRun } from "@/lib/skill-run-state"
@@ -49,7 +48,6 @@ export function SkillDetailPage({ name }: { name: string }) {
     selectSkill,
     setStage,
     openHistoryRun,
-    status,
   } = useDashboard()
   const [detail, setDetail] = useState<SkillDetailPayload | null>(null)
   const [analytics, setAnalytics] = useState<AnalyticsPayload | null>(null)
@@ -82,24 +80,22 @@ export function SkillDetailPage({ name }: { name: string }) {
         }
       }
     })()
-    if (slotOn(status, "analyticsHome")) {
-      void (async () => {
-        try {
-          const skillAnalytics = await api.analytics(name)
-          if (!cancelled) {
-            setAnalytics(skillAnalytics)
-          }
-        } catch {
-          if (!cancelled) {
-            setAnalytics(null)
-          }
+    void (async () => {
+      try {
+        const skillAnalytics = await api.analytics(name)
+        if (!cancelled) {
+          setAnalytics(skillAnalytics)
         }
-      })()
-    }
+      } catch {
+        if (!cancelled) {
+          setAnalytics(null)
+        }
+      }
+    })()
     return () => {
       cancelled = true
     }
-  }, [name, status])
+  }, [name])
 
   const item = detail?.skill
   const view = skillDetailStatus({ skillSettled, error })
@@ -107,25 +103,28 @@ export function SkillDetailPage({ name }: { name: string }) {
   const versions = detail?.versions ?? []
   const runs = detail?.runs ?? []
   const deploys = detail?.deploys ?? []
-  const mosaicRuns = slotOn(status, "analyticsHome")
-    ? analytics?.outcomes && analytics.outcomes.length > 0
+  const fromAnalytics =
+    analytics?.outcomes && analytics.outcomes.length > 0
       ? analytics.outcomes
       : analytics?.recent ?? []
-    : (detail?.runs ?? []).flatMap((run) =>
-        run.id
-          ? [
-              {
-                id: run.id,
-                skill: run.skill,
-                harness: run.harness,
-                passed: run.passed ?? null,
-                status: run.status,
-                gate: run.gate,
-                created_at: run.created_at,
-              },
-            ]
-          : []
-      )
+  const mosaicRuns =
+    fromAnalytics.length > 0
+      ? fromAnalytics
+      : (detail?.runs ?? []).flatMap((run) =>
+          run.id
+            ? [
+                {
+                  id: run.id,
+                  skill: run.skill,
+                  harness: run.harness,
+                  passed: run.passed ?? null,
+                  status: run.status,
+                  gate: run.gate,
+                  created_at: run.created_at,
+                },
+              ]
+            : []
+        )
 
   const openRun = (run: AnalyticsRun) => {
     if (!run.id) {
@@ -155,7 +154,7 @@ export function SkillDetailPage({ name }: { name: string }) {
               }}
             >
               <ArrowLeftIcon data-icon="inline-start" />
-              Skills
+              Repository
             </Button>
             <Button
               id="btn-view-dataset-detail"
@@ -233,7 +232,7 @@ export function SkillDetailPage({ name }: { name: string }) {
           }
         />
         <StatCard
-          label="Runs"
+          label="Evals"
           value={loading ? <Skeleton className="h-6 w-10" /> : String(item?.eval_count ?? runs.length)}
         />
         <StatCard
