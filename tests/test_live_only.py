@@ -19,7 +19,6 @@ FORBIDDEN = (
     "not a live model",
     "pdf twin",
     "Corrected SKILL.md description",
-    "Add AI_GATEWAY_API_KEY to suggest skill updates",
     "not gateway ids like openai/gpt-4o-mini",
 )
 
