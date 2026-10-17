@@ -236,7 +236,7 @@ export function RepositoryPage() {
                 <EmptyMedia variant="icon">
                   <FolderIcon />
                 </EmptyMedia>
-                <EmptyTitle>No skills yet</EmptyTitle>
+                <EmptyTitle>No skills in the repository</EmptyTitle>
                 <EmptyDescription>
                   Connect Cursor, Codex, or Claude, or paste a SKILL.md on Evaluate.
                 </EmptyDescription>

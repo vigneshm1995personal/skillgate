@@ -195,7 +195,7 @@ export function HistoryList() {
                           })
                         }}
                       >
-                        Save as baseline
+                        Pin as baseline
                       </Button>
                     ) : null}
                     {canOpen ? (

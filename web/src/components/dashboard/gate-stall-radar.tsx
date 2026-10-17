@@ -5,36 +5,50 @@ import { Spinner } from "@/components/ui/spinner"
 import type { LiveState } from "@/lib/types"
 
 export function StallRadar({
+  id = "stall-radar",
   live,
+  stalled,
+  elapsedSec,
+  tail,
   evaluating,
   busy,
   peek,
+  skipLabel = "Skip check",
+  killLabel = "Kill run",
+  peekLabel = "Peek last lines",
   onPeek,
   onSkip,
   onKill,
 }: {
+  id?: string
   live?: LiveState | null
+  stalled?: boolean
+  elapsedSec?: number | null
+  tail?: LiveState["tail"]
   evaluating: boolean
   busy: "skip" | "kill" | null
   peek: boolean
+  skipLabel?: string
+  killLabel?: string
+  peekLabel?: string
   onPeek: () => void
   onSkip: () => void
   onKill: () => void
 }) {
-  if (!evaluating || !live?.stalled) {
+  if (!evaluating || !(stalled ?? live?.stalled)) {
     return null
   }
   const reason =
-    live.stall_reason === "repeating"
+    live?.stall_reason === "repeating"
       ? "The run keeps printing the same line."
-      : `No new output for ${Math.round(live.silent_for_sec ?? 0)}s.`
-  const preview = (live.tail ?? [])
+      : `No new output for ${Math.round(live?.silent_for_sec ?? 0)}s.`
+  const preview = (tail ?? live?.tail ?? [])
     .slice(-5)
     .map((line) => line.text)
     .join("\n")
   return (
     <div
-      id="stall-radar"
+      id={id}
       role="status"
       className="flex flex-col gap-2 rounded-xl border border-amber-500/40 bg-amber-500/10 px-3 py-2.5"
     >
@@ -42,7 +56,10 @@ export function StallRadar({
         <AlertTriangleIcon className="mt-0.5 size-4 shrink-0 text-amber-600" />
         <div className="min-w-0 flex-1">
           <p className="text-sm font-medium text-amber-700">
-            Possible stall on {live.task_id}
+            Possible stall on {live?.task_id}
+            {elapsedSec != null ? (
+              <span className="sr-only"> {Math.round(elapsedSec)}s elapsed</span>
+            ) : null}
           </p>
           <p className="text-sm text-amber-700/90">
             {reason} You can skip this check and keep the run going, or kill the
@@ -65,7 +82,7 @@ export function StallRadar({
           onClick={onSkip}
         >
           {busy === "skip" ? <Spinner data-icon="inline-start" /> : null}
-          Skip check
+          {skipLabel}
         </Button>
         <Button
           id="btn-kill-run"
@@ -76,7 +93,7 @@ export function StallRadar({
           onClick={onKill}
         >
           {busy === "kill" ? <Spinner data-icon="inline-start" /> : null}
-          Kill run
+          {killLabel}
         </Button>
         <Button
           id="btn-peek-tail"
@@ -85,7 +102,7 @@ export function StallRadar({
           variant="ghost"
           onClick={onPeek}
         >
-          {peek ? "Hide last lines" : "Peek last lines"}
+          {peek ? "Hide last lines" : peekLabel}
         </Button>
       </div>
     </div>

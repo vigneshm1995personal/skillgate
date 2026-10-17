@@ -100,6 +100,37 @@ export type TaskMetrics = {
 
 export type DeployTarget = "cursor" | "claude" | "codex"
 
+export type HelperDevice = {
+  id: string
+  name: string
+  created_at?: string
+  last_seen_at?: string | null
+  revoked_at?: string | null
+  online?: boolean
+}
+
+export type HelperTargetStatus = "waiting" | "installing" | "installed" | "failed"
+
+export type HelperJobResult = {
+  target: string
+  status?: HelperTargetStatus | string
+  error?: string | null
+}
+
+export type HelperJob = {
+  id: string
+  device_id: string
+  skill_name: string
+  semver?: string | null
+  skill_md_hash?: string
+  targets: string[]
+  status: string
+  error?: string | null
+  created_at?: string
+  updated_at?: string
+  results?: HelperJobResult[]
+}
+
 export type DeployMode = "local" | "git"
 
 export type DeployAttempt = {

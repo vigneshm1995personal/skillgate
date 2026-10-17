@@ -457,10 +457,17 @@ export function GatePage({ embedded = false }: { embedded?: boolean }) {
             className="flex max-w-full min-w-0 flex-col gap-4 overflow-x-clip"
           >
             <StallRadar
+              id="stall-radar"
               live={live}
+              stalled={live?.stalled}
+              elapsedSec={live?.elapsed_sec}
+              tail={live?.tail}
               evaluating={evaluating}
               busy={controlBusy}
               peek={stallPeek}
+              skipLabel="Skip check"
+              killLabel="Kill run"
+              peekLabel="Peek last lines"
               onPeek={() => setStallPeek((value) => !value)}
               onSkip={() => void controlRun("skip")}
               onKill={() => void controlRun("kill")}
@@ -877,7 +884,7 @@ function GateBaselineStamp({
             disabled={busy !== null || isThisBaseline}
             onClick={() => void pin(false)}
           >
-            {isThisBaseline ? "This is the baseline" : "Save as baseline"}
+            {isThisBaseline ? "This is the baseline" : "Pin as baseline"}
           </Button>
           {canFollow ? (
             <Button

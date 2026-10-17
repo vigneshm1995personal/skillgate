@@ -270,7 +270,7 @@ export function gateCoverageLine(
     return "Checks passed — Deploy is unlocked."
   }
   if (reportPassed === true && !isLiveHarness(harness)) {
-    return "Get a passing run to unlock Deploy."
+    return "Demo evals do not unlock Deploy. Run a live check."
   }
   if (reportPassed === true && isLiveHarness(harness)) {
     return (

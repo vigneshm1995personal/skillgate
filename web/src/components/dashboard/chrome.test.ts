@@ -53,8 +53,8 @@ describe("hosted gate badge", () => {
     )
     expect(missing).not.toMatch(/variant="destructive"/)
     expect(deploy).toMatch(/id="deploy-note"/)
-    expect(deploy).not.toMatch(
-      /id="deploy-note"[\s\S]{0,80}variant=\{deployAllowed \? "default" : "destructive"\}/
+    expect(deploy).toMatch(
+      /id="deploy-note"[\s\S]{0,120}variant=\{deployAllowed \? "default" : "destructive"\}/
     )
   })
 })

@@ -370,7 +370,9 @@ function CheckMetrics({
         id={`check-metrics-${index}`}
         className="text-sm text-muted-foreground tabular-nums"
       >
-        {checkUsageLine(usage, metrics)}
+        {checkUsageLine(usage, metrics) === "Not checked"
+          ? "Tokens —"
+          : checkUsageLine(usage, metrics)}
         {deltas.length ? ` · ${deltas.join(" · ")}` : ""}
       </p>
       {over && reason ? (

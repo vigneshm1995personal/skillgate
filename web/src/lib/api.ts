@@ -6,6 +6,8 @@ import type {
   DeployAttempt,
   DeployTarget,
   FixtureBindResponse,
+  HelperDevice,
+  HelperJob,
   GenerateResponse,
   SkillUpdatesPayload,
   HistoryPayload,
@@ -528,6 +530,29 @@ export const api = {
         body: JSON.stringify({ target, skill, mode }),
       }
     ),
+  helper: {
+    createPairingCode: () =>
+      request<{ code: string; expires_at: string }>("/api/helper/pairing-codes", {
+        method: "POST",
+      }),
+    devices: () => request<{ devices: HelperDevice[] }>("/api/helper/devices"),
+    removeDevice: (deviceId: string) =>
+      request<Record<string, never>>(
+        `/api/helper/devices/${encodeURIComponent(deviceId)}`,
+        { method: "DELETE" }
+      ),
+    enqueueJob: (payload: {
+      skill: string
+      device_id: string
+      targets: string[]
+    }) =>
+      request<{ jobs: HelperJob[] }>("/api/helper/jobs", {
+        method: "POST",
+        headers: jsonHeaders,
+        body: JSON.stringify(payload),
+      }),
+    jobs: () => request<{ jobs: HelperJob[] }>("/api/helper/jobs"),
+  },
   startCompareModels: (payload: {
     skill: string
     arms: Array<{

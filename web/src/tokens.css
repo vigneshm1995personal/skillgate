@@ -268,11 +268,11 @@
 }
 
 .eval-result-mark.play {
-  animation: eval-mark-in var(--eval-mark) linear forwards;
+  animation: eval-mark-in 400ms linear forwards;
 }
 
 .eval-result-mark.play path {
-  animation: eval-mark-stroke var(--eval-mark) linear forwards;
+  animation: eval-mark-stroke 400ms linear forwards;
 }
 
 .eval-result-mark.complete {

@@ -72,7 +72,7 @@ export function FixtureBindAccordion({
       : "Sample files are off"
 
   return (
-    <Accordion defaultValue={["fixture-bind"]} id="fixture-bind-accordion">
+    <Accordion defaultValue={[]} id="fixture-bind-accordion">
       <AccordionItem value="fixture-bind" className="rounded-lg border px-2">
         <AccordionTrigger className="py-1.5 hover:no-underline">
           <span className="flex min-w-0 flex-1 items-center gap-2 pr-2">
@@ -145,7 +145,7 @@ export function FixtureBindAccordion({
                   />
                   <FieldContent>
                     <FieldLabel htmlFor="btn-use-pack-fixtures">
-                      Use these files when a test case needs an input
+                      Use pack fixtures for completion checks
                     </FieldLabel>
                     <FieldDescription>
                       Test cases that check a result use these files, unless that
@@ -175,7 +175,7 @@ export function FixtureBindAccordion({
                     onClick={onExpand}
                   >
                     <FolderOpenIcon data-icon="inline-start" />
-                    Make one test case per file
+                    Make cases from folder
                   </Button>
                   <FieldDescription>
                     Uses the same instructions for each sample file. Trigger-only

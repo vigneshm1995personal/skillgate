@@ -717,6 +717,7 @@ export function EvalPage() {
               {startIssues.length > 0 && checks.length > 0 && !seeding ? (
                 <Alert
                   id="start-needs-file"
+                  variant="destructive"
                   tabIndex={-1}
                   aria-labelledby="start-needs-file-title"
                 >
