@@ -60,6 +60,10 @@ def test_check_help_has_no_demo_flag() -> None:
     assert "--live" not in lower
     assert "--key-env" in lower
     assert "SKILLGATE_OPENAI_API_KEY" in help_text
+    assert "cursor" in lower
+    assert "cursor-agent" in lower
+    assert "codex" in lower
+    assert "claude" in lower
 
 
 def test_demo_flag_is_unknown(tmp_path: Path, monkeypatch) -> None:

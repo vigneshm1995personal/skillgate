@@ -13,6 +13,7 @@ from typer.testing import CliRunner
 
 from skillgate_ai.cli import app
 from skillgate_ai.config import missing_key_error, no_agent_available_error
+from skillgate_ai.errors import HarnessError
 from skillgate_ai.harness import (
     AUTH_API_KEY,
     AUTH_CLI_LOGIN,
@@ -24,12 +25,14 @@ from skillgate_ai.harness import (
     _codex_exec_command,
     _codex_login_status_authenticated,
     _codex_model_flag,
+    _codex_rejected_model,
     _cursor_exec_command,
     _cursor_login_status_authenticated,
     _resolve_agent_bin,
     _run_inherited,
     claude_auth_kind,
     codex_auth_kind,
+    codex_chatgpt_model_hint,
     cursor_auth_kind,
     harness_auth_status,
     harness_is_startable,
@@ -472,32 +475,50 @@ def test_run_inherited_passes_no_open_browser(monkeypatch: pytest.MonkeyPatch) -
     assert recorded["argv"] == ["/bin/agent", "login"]
 
 
-def test_codex_cli_login_omits_rejected_or_default_model() -> None:
-    assert _codex_model_flag(None, cli_login=True) is None
-    assert _codex_model_flag("", cli_login=True) is None
-    assert _codex_model_flag("codex-default", cli_login=True) is None
-    assert _codex_model_flag("openai/gpt-4o-mini", cli_login=True) is None
-    assert _codex_model_flag("composer-2.5", cli_login=True) is None
-    assert _codex_model_flag("gpt-5.6-sol", cli_login=True) == "gpt-5.6-sol"
-    default_cmd = _codex_exec_command("/bin/codex", "/tmp/ws", "task", model=None)
-    assert "-m" not in default_cmd
-    rejected = _codex_exec_command(
+def test_codex_cli_login_defaults_to_chatgpt_luna() -> None:
+    assert _codex_model_flag(None, cli_login=True) == "gpt-5.6-luna"
+    assert _codex_model_flag("", cli_login=True) == "gpt-5.6-luna"
+    assert _codex_model_flag("codex-default", cli_login=True) == "gpt-5.6-luna"
+    assert _codex_model_flag("openai/gpt-4o-mini", cli_login=True) == "gpt-5.6-luna"
+    assert _codex_model_flag("gpt-5.6-luna", cli_login=True) == "gpt-5.6-luna"
+    cmd = _codex_exec_command(
         "/bin/codex",
         "/tmp/ws",
         "task",
-        model=_codex_model_flag("openai/gpt-4o-mini", cli_login=True),
+        model=_codex_model_flag(None, cli_login=True),
     )
-    assert "-m" not in rejected
-    accepted = _codex_exec_command(
-        "/bin/codex",
-        "/tmp/ws",
-        "task",
-        model=_codex_model_flag("gpt-5.6-sol", cli_login=True),
-    )
-    assert accepted[accepted.index("-m") + 1] == "gpt-5.6-sol"
+    assert cmd[cmd.index("-m") + 1] == "gpt-5.6-luna"
 
 
-def test_codex_cli_login_run_omits_gateway_model(
+def test_codex_rejected_hint_names_config_and_excludes_rejected() -> None:
+    blob = (
+        "The 'gpt-5.6-sol' model is not supported when using Codex "
+        "with a ChatGPT account. Supported models: gpt-5.6-luna, gpt-5.6-terra"
+    )
+    rejected, accepted = _codex_rejected_model("", blob)
+    assert rejected == "gpt-5.6-sol"
+    assert accepted == ["gpt-5.6-luna", "gpt-5.6-terra"]
+    hint = codex_chatgpt_model_hint(rejected, accepted=accepted)
+    assert "gpt-5.6-sol" not in hint
+    assert "gpt-5.6-luna" in hint
+    assert "~/.codex/config.toml" in hint
+
+
+def test_codex_rejected_live_error_without_supported_list() -> None:
+    blob = (
+        "The 'gpt-5.6-sol' model is not supported when using Codex "
+        "with a ChatGPT account."
+    )
+    rejected, accepted = _codex_rejected_model("", blob)
+    assert rejected == "gpt-5.6-sol"
+    assert accepted == []
+    hint = codex_chatgpt_model_hint(rejected, accepted=accepted)
+    assert "gpt-5.6-sol" not in hint
+    assert "~/.codex/config.toml" in hint
+    assert "gpt-5.6-luna" in hint
+
+
+def test_codex_cli_login_run_passes_luna_when_no_model(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     sandbox = _FakeSandbox(tmp_path / "ws")
@@ -505,11 +526,44 @@ def test_codex_cli_login_run_omits_gateway_model(
     _stub_run(monkeypatch)
     monkeypatch.setattr("skillgate_ai.harness._codex_ready", lambda _c: True)
     monkeypatch.setattr("skillgate_ai.harness._resolve_codex_bin", lambda _p: "/bin/codex")
-    CodexCliHarness(_cfg(codex_api_key=None, codex_model="openai/gpt-4o-mini")).run(
+    CodexCliHarness(_cfg(codex_api_key=None, codex_model=None)).run(
         sandbox, "task", [], timeout_sec=5
     )
-    assert "-m" not in sandbox.command
+    assert sandbox.command[sandbox.command.index("-m") + 1] == "gpt-5.6-luna"
     assert "CODEX_HOME" not in sandbox.env
+
+
+def test_codex_run_names_rejected_model_from_error(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    sandbox = _FakeSandbox(tmp_path / "ws")
+    sandbox.workspace.mkdir()
+
+    def reject(command, *, env=None, timeout=0, cwd=None):
+        sandbox.command = list(command)
+        sandbox.env = dict(env or {})
+        return subprocess.CompletedProcess(
+            command,
+            1,
+            stdout="",
+            stderr=(
+                "The 'gpt-5.6-sol' model is not supported when using Codex "
+                "with a ChatGPT account."
+            ),
+        )
+
+    sandbox.run = reject  # type: ignore[method-assign]
+    _stub_run(monkeypatch)
+    monkeypatch.setattr("skillgate_ai.harness._codex_ready", lambda _c: True)
+    monkeypatch.setattr("skillgate_ai.harness._resolve_codex_bin", lambda _p: "/bin/codex")
+    with pytest.raises(HarnessError) as caught:
+        CodexCliHarness(_cfg(codex_api_key=None, codex_model="gpt-5.6-sol")).run(
+            sandbox, "task", [], timeout_sec=5
+        )
+    assert "gpt-5.6-sol" in caught.value.message
+    hint = caught.value.hint or ""
+    assert "gpt-5.6-sol" not in hint
+    assert "~/.codex/config.toml" in hint
 
 
 def test_check_no_judge_uses_cursor_cli_login(

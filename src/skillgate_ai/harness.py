@@ -262,16 +262,27 @@ def _cursor_exec_command(
     return command
 
 
+CODEX_CHATGPT_DEFAULT = "gpt-5.6-luna"
+_CODEX_REJECTED_MODEL = re.compile(
+    r"The ['\"]([^'\"]+)['\"] model is not supported",
+    re.IGNORECASE,
+)
+_CODEX_SUPPORTED_MODELS = re.compile(
+    r"(?:supported models|accepted)\s*[:=]\s*(.+)",
+    re.IGNORECASE,
+)
+
+
 def _codex_model_flag(model: str | None, *, cli_login: bool) -> str | None:
-    """ChatGPT login only accepts Codex client ids. Omit -m for defaults/slugs."""
+    """ChatGPT login must pass -m so ~/.codex/config.toml cannot inherit."""
     raw = (model or "").strip()
-    if not raw or raw == "codex-default":
-        return None
-    if raw in CodexCliHarness.supported_models:
+    if raw == "codex-default":
+        raw = ""
+    if not cli_login:
+        return raw or None
+    if raw in CodexCliHarness.supported_models or (raw.startswith("gpt-") and "/" not in raw):
         return raw
-    if cli_login:
-        return None
-    return raw
+    return CODEX_CHATGPT_DEFAULT
 
 
 def _codex_exec_command(
@@ -291,8 +302,9 @@ def _codex_exec_command(
     points `-C` at a temp workspace, so implied workspace-write is enough.
 
     Always pass `-c model_reasoning_effort=...` so Mini's ~/.codex/config.toml
-    (often `ultra`) does not make Skill Gate evals inherit that cost. Optional
-    `-m` only when `CODEX_MODEL` is set — never invent a model id.
+    (often `ultra`) does not make Skill Gate evals inherit that cost. ChatGPT
+    login always passes `-m` (default `gpt-5.6-luna`) so config.toml cannot
+    inherit a rejected client model.
 
     `--json` makes stdout JSONL so `turn.completed` carries real token counts.
     Skill selection still rides on `.skillgate/selected.json`; the JSONL rows
@@ -373,17 +385,38 @@ def _cursor_transcript(stdout: str, stderr: str) -> str:
 
 def _codex_rejected_chatgpt_model(stdout: str, stderr: str) -> bool:
     blob = f"{stdout}\n{stderr}"
-    return "is not supported when using Codex" in blob
+    return "is not supported when using Codex" in blob or bool(_CODEX_REJECTED_MODEL.search(blob))
 
 
-def codex_chatgpt_model_hint(model: str | None) -> str:
-    models = ", ".join(CodexCliHarness.supported_models)
-    picked = (model or "").strip()
-    extra = f" `{picked}` is not valid for Codex + ChatGPT login." if picked else ""
+def _codex_rejected_model(stdout: str, stderr: str) -> tuple[str | None, list[str]]:
+    blob = f"{stdout}\n{stderr}"
+    match = _CODEX_REJECTED_MODEL.search(blob)
+    rejected = match.group(1).strip() if match else None
+    accepted: list[str] = []
+    listed = _CODEX_SUPPORTED_MODELS.search(blob)
+    if listed:
+        raw = listed.group(1).strip()
+        for part in re.split(r"[,/]| and ", raw):
+            name = part.strip().strip(".")
+            if name.startswith("gpt-") and name not in accepted:
+                accepted.append(name)
+    return rejected, accepted
+
+
+def codex_chatgpt_model_hint(
+    model: str | None,
+    *,
+    accepted: list[str] | None = None,
+) -> str:
+    rejected = (model or "").strip()
+    catalog = [item for item in (accepted or []) if item and item != rejected]
+    if not catalog:
+        catalog = [item for item in CodexCliHarness.supported_models if item != rejected]
+    models = ", ".join(catalog) if catalog else CODEX_CHATGPT_DEFAULT
     return (
-        f"Pick a Codex model from the list for this harness ({models}) "
-        f"or leave Harness default (no -m).{extra} "
-        "Use a Codex client model id, not a gateway slug."
+        "ChatGPT login rejected that model. "
+        f"Pass --model with a supported id ({models}), "
+        f"or change model in ~/.codex/config.toml."
     )
 
 
@@ -396,7 +429,6 @@ class CodexCliHarness:
     supported_models = (
         "gpt-5.6-luna",
         "gpt-5.6-terra",
-        "gpt-5.6-sol",
         "gpt-6-astra",
     )
 
@@ -429,12 +461,13 @@ class CodexCliHarness:
             agent_prompt = _cursor_prompt(
                 prompt, skills, pinned_skill=pinned  # type: ignore[arg-type]
             )
+        model = _codex_model_flag(self.cfg.codex_model, cli_login=not bool(key))
         command = _codex_exec_command(
             binary,
             sandbox.workspace,
             agent_prompt,
             reasoning_effort=self.cfg.codex_reasoning_effort,
-            model=_codex_model_flag(self.cfg.codex_model, cli_login=not bool(key)),
+            model=model,
         )
         env: dict[str, str] = {"SKILLGATE_TASK": prompt}
         if key:
@@ -446,11 +479,11 @@ class CodexCliHarness:
         proc = sandbox.run(command, env=env, timeout=timeout_sec)
         transcript = _codex_transcript(proc.stdout or "", proc.stderr or "")
         if _codex_rejected_chatgpt_model(proc.stdout or "", proc.stderr or ""):
+            rejected, accepted = _codex_rejected_model(proc.stdout or "", proc.stderr or "")
+            named = rejected or (self.cfg.codex_model or "").strip() or model
             raise HarnessError(
-                f"Codex rejected model {self.cfg.codex_model!r}."
-                if (self.cfg.codex_model or "").strip()
-                else "Codex rejected the selected model.",
-                hint=codex_chatgpt_model_hint(self.cfg.codex_model),
+                f"Codex rejected model {named!r}.",
+                hint=codex_chatgpt_model_hint(named, accepted=accepted),
             )
         selected = _parse_selected(sandbox.workspace, transcript, skills)
         read_paths = _parse_read_paths(transcript)

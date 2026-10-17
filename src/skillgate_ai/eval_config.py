@@ -299,16 +299,9 @@ def is_legacy_run_config(
     if key in {"skip", "demo"}:
         return True
     stored = ""
-    provider = ""
     if isinstance(run, dict):
         stored = str(run.get("label") or "")
-        judge = run.get("judge") if isinstance(run.get("judge"), dict) else {}
-        provider = str(judge.get("provider") or "")
-    elif cfg is not None:
-        judge = cfg.judge or {}
-        provider = str(judge.get("provider") or "")
-    blob = f"{stored} {provider}".lower()
-    return "checker" in blob or provider.lower() == "skip"
+    return "checker" in stored.lower()
 
 
 def friendly_model_name(model: str | None) -> str:

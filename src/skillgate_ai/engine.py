@@ -704,6 +704,9 @@ def _run_task(
             if control is not None and control.skip_requested:
                 ended = True
                 return _skipped_report(task, SKIP_FAILURE)
+            from skillgate_ai.workspace_outputs import persist_harness_answer
+
+            persist_harness_answer(sandbox.workspace, result.stdout or "")
             task_usage: dict[str, Any] | None
             if control is not None:
                 if result.usage is not None:

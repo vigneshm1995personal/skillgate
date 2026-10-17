@@ -6,6 +6,7 @@ import pytest
 
 from skillgate_ai.config import LLMConfig
 from skillgate_ai.eval_config import (
+    OLDER_RUN_LABEL,
     EvalConfigError,
     EvalRunConfig,
     apply_eval_config,
@@ -426,6 +427,18 @@ def test_customer_config_label_is_neutral_judge_copy() -> None:
         }
     )
     assert scrubbed_openai == "Scored by OpenAI"
+
+
+def test_fresh_skip_judge_is_not_older_run() -> None:
+    run = EvalRunConfig(
+        harness="cursor-agent",
+        timeout_effective=300,
+        judge={"provider": "skip", "backend": "skip", "display_name": "Checks"},
+    )
+    details = customer_run_details(run)
+    assert details != OLDER_RUN_LABEL
+    assert "Cursor" in details
+    assert customer_config_label(run) != OLDER_RUN_LABEL
 
 
 def test_from_dict_drops_judge_api_key() -> None:

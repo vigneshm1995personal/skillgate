@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Any
 
@@ -22,6 +23,47 @@ def expected_output_paths(task: TaskSpec) -> list[str]:
                 seen.add(rel)
                 paths.append(rel)
     return paths
+
+
+def harness_final_answer(stdout: str) -> str | None:
+    """Last Codex agent_message or Cursor/Claude `result` text."""
+    last: str | None = None
+    for line in (stdout or "").splitlines():
+        text = line.strip()
+        if not text.startswith("{"):
+            continue
+        try:
+            obj = json.loads(text)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(obj, dict):
+            continue
+        kind = obj.get("type")
+        if kind == "item.completed":
+            item = obj.get("item")
+            if isinstance(item, dict) and item.get("type") == "agent_message":
+                body = str(item.get("text") or "").strip()
+                if body:
+                    last = body
+        elif kind == "result":
+            body = str(obj.get("result") or "").strip()
+            if body:
+                last = body
+    return last
+
+
+def persist_harness_answer(workspace: Path, stdout: str) -> Path | None:
+    """Write Codex/Cursor final text to output/answer.txt when output/ is empty."""
+    output_dir = workspace / "output"
+    if output_dir.is_dir() and any(path.is_file() for path in output_dir.rglob("*")):
+        return None
+    text = harness_final_answer(stdout)
+    if not text:
+        return None
+    dest = output_dir / "answer.txt"
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.write_text(text, encoding="utf-8")
+    return dest
 
 
 def collect_workspace_outputs(task: TaskSpec, workspace: Path) -> list[dict[str, Any]]:

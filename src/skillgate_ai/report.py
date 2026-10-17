@@ -20,6 +20,9 @@ def format_cli(report: SuiteReport) -> str:
     label = customer_run_details(report.config)
     if label:
         lines.append(f"config  {label}")
+    cost = _cost_line(report)
+    if cost:
+        lines.append(cost)
     lines.append("")
     for task in report.tasks:
         mark = "PASS" if task.passed else "FAIL"
@@ -45,6 +48,19 @@ def format_cli(report: SuiteReport) -> str:
             lines.append("Paste this description into SKILL.md:")
             lines.append(report.advice.paste.rstrip())
     return "\n".join(lines)
+
+
+def _cost_line(report: SuiteReport) -> str:
+    usage = report.usage_totals
+    if not usage:
+        return ""
+    label = usage.get("agent_cost_label")
+    if isinstance(label, str) and label.strip():
+        return f"cost   {label.strip()}"
+    amount = usage.get("cost_usd")
+    if amount is not None:
+        return f"cost   ${float(amount):.2f}"
+    return ""
 
 
 def format_github(report: SuiteReport) -> str:
