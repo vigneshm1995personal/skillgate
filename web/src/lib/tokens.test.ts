@@ -165,9 +165,9 @@ describe("status color is marks and badges only", () => {
     expect(mosaic).toMatch(/gray means no evals/)
   })
 
-  it("fills the checking bar with ink, not pass green", () => {
+  it("fills the checking bar with the hosted pass green", () => {
     expect(css).toMatch(
-      /\.eval-check-progress > i \{[\s\S]*?background: var\(--foreground\)/
+      /\.eval-check-progress > i \{[\s\S]*?background: var\(--success\)/
     )
   })
 })

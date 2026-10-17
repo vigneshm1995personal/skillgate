@@ -220,7 +220,7 @@
   display: block;
   height: 100%;
   width: 0;
-  background: var(--foreground);
+  background: var(--success);
   transition: width var(--eval-motion) cubic-bezier(0.22, 1, 0.36, 1);
 }
 
