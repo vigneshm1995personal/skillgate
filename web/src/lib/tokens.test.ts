@@ -4,7 +4,9 @@ import { fileURLToPath } from "node:url"
 import { describe, expect, it } from "vitest"
 
 const dir = dirname(fileURLToPath(import.meta.url))
-const css = readFileSync(join(dir, "../index.css"), "utf8")
+const tokensCss = readFileSync(join(dir, "../tokens.css"), "utf8")
+const indexCss = readFileSync(join(dir, "../index.css"), "utf8")
+const css = `${tokensCss}\n${indexCss}`
 const mosaic = readFileSync(
   join(dir, "../components/dashboard/eval-mosaic.tsx"),
   "utf8"
@@ -14,7 +16,12 @@ const landing = readFileSync(
   "utf8"
 )
 
-const STATUS = new Set(["success", "success-foreground", "destructive"])
+const STATUS = new Set([
+  "success",
+  "success-foreground",
+  "destructive",
+  "sidebar-primary",
+])
 
 function slice(start: string, end?: string) {
   const i = css.indexOf(start)
@@ -44,8 +51,9 @@ const root = tokens(slice(":root {", "\n.dark {"))
 const dark = tokens(slice("\n.dark {", "\n}"))
 
 describe("design tokens", () => {
-  it("does not use the generic purple sidebar accent", () => {
-    expect(css).not.toMatch(/264\.376/)
+  it("uses the hosted radius and sidebar primary", () => {
+    expect(css).toMatch(/264\.376/)
+    expect(css).toMatch(/--radius:\s*0\.75rem/)
   })
 
   it("names pass, fail, and warn as first-class colors", () => {
@@ -54,10 +62,10 @@ describe("design tokens", () => {
     expect(css).toMatch(/--warning:/)
   })
 
-  it("keeps light-mode warning as dark as success so chip text meets AA", () => {
-    expect(root.get("success")).toMatch(/oklch\(0\.[34]/)
-    expect(root.get("warning")).toMatch(/oklch\(0\.[34]/)
-    expect(root.get("warning")).not.toMatch(/oklch\(0\.72/)
+  it("uses the hosted success green and a neutral warning", () => {
+    expect(root.get("success")).toMatch(/oklch\(0\.55 0\.14 155\)/)
+    expect(root.get("warning")).toMatch(/oklch\(0\.50 0 0\)/)
+    expect(parseOklch(root.get("warning") ?? "")?.c).toBe(0)
   })
 
   it("uses Geist as the display face, not a serif", () => {
@@ -69,10 +77,10 @@ describe("design tokens", () => {
 
   it("gives placeholders and muted copy a dedicated AA color", () => {
     expect(css).toMatch(/--placeholder:/)
-    expect(root.get("placeholder")).toMatch(/oklch\(0\.[23]/)
-    expect(dark.get("placeholder")).toMatch(/oklch\(0\.[789]/)
+    expect(root.get("placeholder")).toMatch(/oklch\(0\.50 0 0\)/)
+    expect(dark.get("placeholder")).toMatch(/oklch\(0\.708 0 0\)/)
     const muted = parseOklch(root.get("muted-foreground") ?? "")
-    expect(muted?.l).toBeLessThanOrEqual(0.35)
+    expect(muted?.l).toBe(0.5)
     expect(muted?.c).toBe(0)
   })
 
@@ -91,28 +99,28 @@ describe("design tokens", () => {
     const dbg = parseOklch(dark.get("background") ?? "")
     const dfg = parseOklch(dark.get("foreground") ?? "")
     expect(bg).toEqual({ l: 1, c: 0, h: 0 })
-    expect(fg?.l).toBeLessThanOrEqual(0.2)
+    expect(fg?.l).toBe(0.13)
     expect(fg?.c).toBe(0)
-    expect(dbg?.l).toBeLessThanOrEqual(0.08)
+    expect(dbg?.l).toBe(0.145)
     expect(dbg?.c).toBe(0)
-    expect(dfg?.l).toBeGreaterThanOrEqual(0.95)
+    expect(dfg?.l).toBe(0.985)
     expect(dfg?.c).toBe(0)
   })
 
   it("makes primary buttons black in light and white in dark", () => {
     const p = parseOklch(root.get("primary") ?? "")
     const dp = parseOklch(dark.get("primary") ?? "")
-    expect(p?.l).toBeLessThanOrEqual(0.2)
+    expect(p?.l).toBe(0.13)
     expect(p?.c).toBe(0)
-    expect(dp?.l).toBeGreaterThanOrEqual(0.95)
+    expect(dp?.l).toBe(0.922)
     expect(dp?.c).toBe(0)
   })
 
   it("keeps the sidebar neutral, matching the page", () => {
     expect(parseOklch(root.get("sidebar") ?? "")?.c).toBe(0)
     expect(parseOklch(dark.get("sidebar") ?? "")?.c).toBe(0)
-    expect(parseOklch(root.get("sidebar") ?? "")?.l).toBe(1)
-    expect(parseOklch(dark.get("sidebar") ?? "")?.l).toBeLessThanOrEqual(0.08)
+    expect(parseOklch(root.get("sidebar") ?? "")?.l).toBe(0.985)
+    expect(parseOklch(dark.get("sidebar") ?? "")?.l).toBe(0.205)
   })
 
   it("uses chroma only for pass green and fail red", () => {
@@ -155,16 +163,18 @@ describe("design tokens", () => {
 })
 
 describe("status color is marks and badges only", () => {
-  it("paints the heatmap in grayscale", () => {
-    expect(mosaic).not.toMatch(/bg-success/)
-    expect(mosaic).not.toMatch(/bg-destructive/)
-    expect(mosaic).toMatch(/bg-foreground/)
-    expect(mosaic).toMatch(/gray means no evals/)
+  it("paints the heatmap with pass and fail color", () => {
+    expect(mosaic).toMatch(/bg-success\/35/)
+    expect(mosaic).toMatch(/bg-success\/65/)
+    expect(mosaic).toMatch(/"bg-success"/)
+    expect(mosaic).toMatch(/bg-destructive\/35/)
+    expect(mosaic).toMatch(/bg-destructive\/65/)
+    expect(mosaic).toMatch(/bg-muted/)
   })
 
-  it("fills the checking bar with ink, not pass green", () => {
+  it("fills the checking bar with the hosted pass green", () => {
     expect(css).toMatch(
-      /\.eval-check-progress > i \{[\s\S]*?background: var\(--foreground\)/
+      /\.eval-check-progress > i \{[\s\S]*?background: var\(--success\)/
     )
   })
 })

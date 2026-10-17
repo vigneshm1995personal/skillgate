@@ -20,6 +20,19 @@ import {
   type JudgeBlock,
 } from "@/lib/judge-spec"
 
+export function BuiltinChecks() {
+  return (
+    <ul id="builtin-checks" className="flex flex-col gap-3">
+      {BUILTIN_QUESTIONS.map((question) => (
+        <li key={question.id} className="flex flex-col gap-1">
+          <p className="text-sm font-medium">{question.ask}</p>
+          <p className="text-sm text-muted-foreground">{question.explain}</p>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
 const TYPE_ITEMS = [
   { value: "predicate", label: "Yes/No" },
   { value: "choice", label: "Pick one" },
@@ -47,9 +60,11 @@ export function ScoringQuestions({
   const total = totalQuestionCount(packJudge, checkJudge)
   return (
     <div className="flex flex-col gap-3" id={`scoring-questions-${index}`}>
-      <p className="text-xs font-medium text-muted-foreground">Scoring questions</p>
+      <p className="text-xs font-medium text-muted-foreground">
+        Questions for this test case
+      </p>
       <FieldDescription>
-        Skill Gate always asks the first six. Yours run in the same scoring request.
+        Optional. These run on this test case only, after the checks listed above.
       </FieldDescription>
       <FieldGroup>
         {BUILTIN_QUESTIONS.map((question) => {
@@ -133,7 +148,7 @@ export function ScoringQuestions({
             })
           }}
         >
-          Add scoring question
+          Add a question for this test case
         </Button>
       </div>
     </div>
@@ -152,9 +167,9 @@ export function PackScoringExtras({
   const extras = packJudge?.extra_questions ?? []
   return (
     <div className="flex flex-col gap-2">
-      <p className="text-xs font-medium text-muted-foreground">Skill-wide extras</p>
+      <p className="text-sm font-medium">Your questions for every test case</p>
       <FieldDescription>
-        These questions run on every check in this skill, after Skill Gate’s six.
+        Optional. The judge asks these about every test case, after the checks above.
       </FieldDescription>
       {extras.map((extra, extraIndex) => (
         <ExtraQuestionFields
@@ -210,7 +225,7 @@ export function PackScoringExtras({
             })
           }}
         >
-          Add skill-wide question
+          Add a question for every test case
         </Button>
       </div>
     </div>
@@ -244,7 +259,7 @@ function ExtraQuestionFields({
         />
       </Field>
       <Field data-disabled={disabled || undefined}>
-        <FieldLabel htmlFor={`extra-id-${index}-${extraIndex}`}>Id</FieldLabel>
+        <FieldLabel htmlFor={`extra-id-${index}-${extraIndex}`}>Short name</FieldLabel>
         <Input
           id={`extra-id-${index}-${extraIndex}`}
           value={extra.id}

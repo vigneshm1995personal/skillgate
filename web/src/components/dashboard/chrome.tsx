@@ -17,8 +17,10 @@ export function PageHeader({
 }) {
   return (
     <div className="flex flex-wrap items-start justify-between gap-4">
-      <div className="flex max-w-2xl flex-col gap-3">
-        <h1 className="sg-page-title">{title}</h1>
+      <div className="flex max-w-2xl flex-col gap-2">
+        <h1 className="font-heading text-3xl font-medium tracking-tight text-balance">
+          {title}
+        </h1>
         {description ? (
           <p className="max-w-xl text-base text-pretty text-muted-foreground">
             {description}
@@ -99,10 +101,16 @@ export function GateBadge({
 }) {
   const tone = gateTone(gate, passed)
   if (tone === "green") {
-    return <Badge variant="success">Ready</Badge>
+    return (
+      <Badge variant="secondary" className="font-medium text-success">
+        GREEN
+      </Badge>
+    )
   }
   if (tone === "red") {
-    return <Badge variant="outline">Blocked</Badge>
+    return (
+      <Badge variant="destructive">{gate === "blocked" ? "Blocked" : "RED"}</Badge>
+    )
   }
   return <Badge variant="outline">Pending</Badge>
 }
@@ -136,10 +144,10 @@ export function NavRow({
       id={id}
       onClick={onClick}
       className={cn(
-        "flex w-full items-center gap-2.5 rounded-sm px-3 py-2 text-sm transition-colors",
+        "flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors focus-visible:ring-2 focus-visible:ring-ring",
         active
           ? "bg-sidebar-accent font-medium text-sidebar-accent-foreground"
-          : "text-sidebar-foreground/85 hover:bg-sidebar-accent/80 hover:text-sidebar-foreground"
+          : "text-sidebar-foreground hover:bg-sidebar-accent/70"
       )}
       aria-current={active ? "page" : undefined}
     >
@@ -159,7 +167,7 @@ export function stageTitle(stage: Stage) {
     case "deploy":
       return "Deploy"
     case "repository":
-      return "Skills"
+      return "Skill Repository"
     case "history":
       return "History"
     case "settings":
@@ -179,13 +187,13 @@ export function useGateLabel() {
   }
   const decision = record?.gate_decision || skillHistory?.gate
   if (decision === "cleared") {
-    return "Ready"
+    return "GREEN"
   }
   if (record?.status === "done" && record.report?.passed === true) {
-    return decision === "blocked" ? "Blocked" : "Ready"
+    return decision === "blocked" ? "Blocked" : "GREEN"
   }
   if (record && (record.status === "error" || record.status === "done")) {
-    return "Blocked"
+    return "RED"
   }
   if (skillHistory?.gate === "blocked") {
     return "Blocked"

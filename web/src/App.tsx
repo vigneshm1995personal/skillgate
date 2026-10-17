@@ -16,7 +16,22 @@ import { Alert, AlertTitle } from "@/components/ui/alert"
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet"
 import { api } from "@/lib/api"
 import { DashboardProvider, useDashboard } from "@/lib/dashboard-provider"
+import { useSkillGateSlots } from "@/slots/context"
 import type { AuthMePayload, StatusPayload } from "@/lib/types"
+
+function usePathname(): string {
+  const [pathname, setPathname] = useState(
+    () => (typeof window !== "undefined" ? window.location.pathname : "/") as string
+  )
+
+  useEffect(() => {
+    const onPop = () => setPathname(window.location.pathname)
+    window.addEventListener("popstate", onPop)
+    return () => window.removeEventListener("popstate", onPop)
+  }, [])
+
+  return pathname
+}
 
 function authErrorFromUrl(): string | null {
   if (typeof window === "undefined") {
@@ -78,6 +93,8 @@ function DashboardMain() {
 }
 
 function AuthGate({ children }: { children: ReactNode }) {
+  const slots = useSkillGateSlots()
+  const pathname = usePathname()
   const [ready, setReady] = useState(false)
   const [status, setStatus] = useState<StatusPayload | null>(null)
   const [me, setMe] = useState<AuthMePayload | null>(null)
@@ -102,28 +119,39 @@ function AuthGate({ children }: { children: ReactNode }) {
     })()
   }, [])
 
+  const configured = status?.siwv_configured !== false
+  let screen: ReactNode
   if (!ready) {
-    return (
+    screen = (
       <div className="flex min-h-svh items-center justify-center text-sm text-muted-foreground">
         Loading…
       </div>
     )
-  }
-
-  if (status?.auth_required && !me?.user) {
-    const configured = status.siwv_configured !== false
+  } else if (status?.auth_required && !me?.user) {
     const authError = error || (me?.denied ? "not_allowlisted" : null)
-    if (authError) {
-      return <LoginPage error={authError} configured={configured} />
+    const SignIn = slots.SignIn
+    if (SignIn) {
+      screen = <SignIn error={authError} configured={configured} />
+    } else if (authError) {
+      screen = <LoginPage error={authError} configured={configured} />
+    } else {
+      screen = <LandingPage configured={configured} />
     }
-    return <LandingPage configured={configured} />
+  } else {
+    screen = (
+      <DashboardProvider initialStatus={status}>{children}</DashboardProvider>
+    )
   }
 
-  return (
-    <DashboardProvider initialStatus={status}>
-      {children}
-    </DashboardProvider>
-  )
+  const PublicRoute = slots.PublicRoute
+  if (PublicRoute) {
+    return (
+      <PublicRoute pathname={pathname} configured={configured}>
+        {screen}
+      </PublicRoute>
+    )
+  }
+  return screen
 }
 
 export function App() {

@@ -11,6 +11,7 @@ import {
 import { AddCheckDialog } from "@/components/dashboard/add-check-dialog"
 import { AssistantMarkdown } from "@/components/dashboard/assistant-markdown"
 import { CheckList } from "@/components/dashboard/check-list"
+import { EvalResultMark } from "@/components/dashboard/eval-result-mark"
 import { DatasetViewer } from "@/components/dashboard/dataset-viewer"
 import { GateBadge, PageHeader } from "@/components/dashboard/chrome"
 import { FixtureBindAccordion } from "@/components/dashboard/fixture-bind-accordion"
@@ -35,7 +36,6 @@ import {
   CardAction,
   CardContent,
   CardDescription,
-  CardFooter,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
@@ -54,7 +54,13 @@ import { Spinner } from "@/components/ui/spinner"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
 import { canPinCheck, pinnedCaseCount } from "@/lib/case-pack"
+import {
+  BuiltinChecks,
+  PackScoringExtras,
+} from "@/components/dashboard/scoring-questions"
 import { useDashboard } from "@/lib/dashboard-provider"
+import { runBelongsToSkill } from "@/lib/eval-row-state"
+import type { RunRecord } from "@/lib/types"
 import { isLocalMode, slotOn } from "@/lib/mode"
 import {
   ASSIST_CHECKS_NOTICE,
@@ -66,7 +72,6 @@ import {
   PACK_BANK_NOTICE,
   PACK_FIXTURE_NOTICE,
   PACK_INHERIT_HINT,
-  PASTE_PLACEHOLDER,
   START_NEEDS_UPLOAD,
   STARTER_FROM_DESCRIPTION_NOTICE,
   authenticFixtureDefaults,
@@ -169,13 +174,12 @@ export function EvalPage() {
     setEvalTab,
     running,
     lastResult,
+    skillHistory,
     tryoutResult,
     skill,
     skills,
     checks,
     yaml,
-    paste,
-    setPaste,
     intakeError,
     catalogError,
     refreshSkills,
@@ -187,8 +191,6 @@ export function EvalPage() {
     checksWarning,
     searchQuery,
     selectSkill,
-    pasteSkill,
-    uploadZip,
     updateCheck,
     removeCheck,
     packJudge,
@@ -240,9 +242,18 @@ export function EvalPage() {
           : undefined
   const runLabel = running
     ? `${lastResult?.completed_count ?? 0}/${lastResult?.task_count ?? checks.length} done`
-    : isLocalMode(status)
-      ? "Run"
-      : "Start"
+    : "Run"
+  const runHelp = !skill
+    ? "Next: pick a skill."
+    : checks.length === 0
+      ? "Next: add a test case, then press Run."
+      : !status?.has_key
+        ? "Next: sign in or add a key in Settings, then press Run."
+        : startBlocked
+          ? startBlockReason || "Next: add the missing file, then press Run."
+          : running
+            ? "Running the test cases. Results show up below."
+            : "Press Run. Nothing runs until you do."
   const seedCopy = seedNoticeCopy(checksSource, checksNote)
   const seedingCopy = seedingSpinnerCopy({
     seedingAssist,
@@ -268,11 +279,7 @@ export function EvalPage() {
     <div className="flex flex-col gap-4">
       <PageHeader
         title="Evaluate"
-        description={
-          isLocalMode(status)
-            ? "Pick a skill, edit checks, then press Run. Nothing evaluates until you do."
-            : "Add a skill — we suggest checks next. Edit them before Start."
-        }
+        description="Test a skill on this computer. Pick it, read the test cases, then press Run."
         action={
           status && !status.has_key && keyBannerDismissed ? (
             <Button
@@ -341,8 +348,7 @@ export function EvalPage() {
       ) : null}
 
       <Tabs
-        value={evalTab}
-        defaultValue="skill"
+        value={evalTab === "gate" ? "gate" : evalTab === "skill" ? "skill" : "checks"}
         onValueChange={(value) => {
           if (value === "skill" || value === "checks" || value === "gate") {
             setEvalTab(value)
@@ -354,13 +360,13 @@ export function EvalPage() {
           <TabsTrigger value="checks">Checks</TabsTrigger>
           <TabsTrigger value="gate">Gate</TabsTrigger>
         </TabsList>
-
-        <TabsContent value="skill" className="flex flex-col gap-6 pt-4">
+        <TabsContent value="skill" className="flex flex-col gap-4 pt-4">
+        <section className="flex flex-col gap-4" aria-labelledby="eval-step-skill">
           <Card>
             <CardHeader>
-              <CardTitle>Pick a skill</CardTitle>
+              <CardTitle id="eval-step-skill">1. Pick a skill</CardTitle>
               <CardDescription>
-                Search or reuse a recent skill. Full catalog lives in Skills.
+                Choose the skill to test. You will see the files that belong to it.
               </CardDescription>
               <CardAction>
                 <Button
@@ -504,86 +510,25 @@ export function EvalPage() {
           ) : null}
 
           {skill?.body?.trim() ? (
-            <Card id="eval-skill-md">
-              <CardHeader>
-                <CardTitle>SKILL.md</CardTitle>
-              </CardHeader>
-              <CardContent className="text-sm leading-relaxed">
-                <AssistantMarkdown text={skill.body} />
-              </CardContent>
-            </Card>
+            <Accordion className="rounded-xl border px-3">
+              <AccordionItem value="skill-md">
+                <AccordionTrigger id="eval-skill-md">SKILL.md</AccordionTrigger>
+                <AccordionContent className="text-sm leading-relaxed">
+                  <AssistantMarkdown text={skill.body} />
+                </AccordionContent>
+              </AccordionItem>
+            </Accordion>
           ) : null}
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Bring a skill</CardTitle>
-              <CardDescription>Paste SKILL.md or drop a zip.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <FieldGroup>
-                <Field>
-                  <FieldLabel htmlFor="paste">Paste SKILL.md</FieldLabel>
-                  <Textarea
-                    id="paste"
-                    rows={8}
-                    spellCheck={false}
-                    placeholder={PASTE_PLACEHOLDER}
-                    value={paste}
-                    onChange={(event) => setPaste(event.target.value)}
-                    className="field-sizing-fixed max-h-56 min-h-40"
-                  />
-                </Field>
-                {intakeError ? (
-                  <Alert id="intake-error">
-                    <AlertTitle>Could not use that skill</AlertTitle>
-                    <AlertDescription>
-                      <pre className="font-sans text-sm whitespace-pre-wrap">
-                        {intakeError}
-                      </pre>
-                    </AlertDescription>
-                  </Alert>
-                ) : null}
-              </FieldGroup>
-            </CardContent>
-            <CardFooter className="flex flex-wrap gap-2">
-              <Button
-                id="btn-paste"
-                size="lg"
-                disabled={running || seeding}
-                onClick={() => void pasteSkill()}
-              >
-                {seeding ? <Spinner data-icon="inline-start" /> : null}
-                Use this skill
-              </Button>
-              <Button
-                variant="outline"
-                disabled={running || seeding}
-                render={<label htmlFor="zip" />}
-              >
-                <FileArchiveIcon data-icon="inline-start" />
-                Drop a .zip of the skill folder
-              </Button>
-              <input
-                id="zip"
-                type="file"
-                accept=".zip,.md"
-                className="sr-only"
-                onChange={(event) => {
-                  const file = event.target.files?.[0]
-                  if (file) {
-                    void uploadZip(file)
-                  }
-                  event.target.value = ""
-                }}
-              />
-            </CardFooter>
-          </Card>
+        </section>
         </TabsContent>
-
-        <TabsContent value="checks" className="pt-4">
+        <TabsContent value="checks" className="flex flex-col gap-4 pt-4">
+        <section aria-labelledby="eval-step-cases">
           <Card>
             <CardHeader>
-              <CardTitle>Checks we’ll run</CardTitle>
+              <CardTitle id="eval-step-cases">2. Test cases</CardTitle>
+              <CardDescription>
+                Each row is one thing you ask the agent to do. Edit them, then press Run.
+              </CardDescription>
               <CardAction>
                 {skill || checks.length > 0 ? (
                   <div className="flex flex-wrap gap-2">
@@ -597,38 +542,11 @@ export function EvalPage() {
                       <PlusIcon data-icon="inline-start" />
                       Add a check
                     </Button>
-                    {checks.length > 0 ? (
-                      <Button
-                        size="sm"
-                        disabled={
-                          running ||
-                          seeding ||
-                          !skill ||
-                          checks.length === 0 ||
-                          startBlocked ||
-                          !status?.has_key
-                        }
-                        title={startTitle}
-                        onClick={() => void startEvaluations()}
-                      >
-                        {running ? <Spinner data-icon="inline-start" /> : null}
-                        {runLabel}
-                      </Button>
-                    ) : null}
                   </div>
                 ) : null}
               </CardAction>
             </CardHeader>
             <CardContent className="flex flex-col gap-3">
-              {skill ? (
-                <p className="text-sm text-muted-foreground">
-                  Evaluating{" "}
-                  <span className="font-medium text-foreground">
-                    {skill.name}
-                  </span>
-                  {skill.semver ? ` · v${skill.semver}` : ""}.
-                </p>
-              ) : null}
               <RunConfigAccordion
                 harnessPref={harnessPref}
                 setHarnessPref={setHarnessPref}
@@ -652,6 +570,21 @@ export function EvalPage() {
                 onGlobChange={setFixtureGlob}
                 onExpand={() => void expandPackFixtures()}
               />
+              {!skill ? (
+                <Empty>
+                  <EmptyHeader>
+                    <EmptyTitle>No skill yet</EmptyTitle>
+                    <EmptyDescription>
+                      Pick a skill above to load its test cases.
+                    </EmptyDescription>
+                  </EmptyHeader>
+                  <EmptyContent>
+                    <Button onClick={() => document.getElementById("eval-step-skill")?.scrollIntoView()}>
+                      Pick a skill
+                    </Button>
+                  </EmptyContent>
+                </Empty>
+              ) : null}
               {skill ? (
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
                   {checksSource === "pack" && checks.length > 0 && !seeding ? (
@@ -725,6 +658,7 @@ export function EvalPage() {
               {startIssues.length > 0 && checks.length > 0 && !seeding ? (
                 <Alert
                   id="start-needs-file"
+                  variant="destructive"
                   tabIndex={-1}
                   aria-labelledby="start-needs-file-title"
                 >
@@ -855,6 +789,7 @@ export function EvalPage() {
                     onSkill={applySkill}
                     onPin={(index) => void pinCheckAt(index)}
                     onRunCheck={(check) => void runThisCheck(check)}
+                    showPackQuestions={false}
                   />
                 </ScrollArea>
               )}
@@ -933,31 +868,62 @@ export function EvalPage() {
               </Accordion>
               ) : null}
             </CardContent>
-            {checks.length > 0 ? (
-            <CardFooter>
-              <Button
-                id="btn-run"
-                size="lg"
-                className="w-full"
-                disabled={
-                  running ||
-                  seeding ||
-                  !skill ||
-                  checks.length === 0 ||
-                  startBlocked ||
-                  !status?.has_key
-                }
-                title={startTitle}
-                onClick={() => void startEvaluations()}
-              >
-                {running ? <Spinner data-icon="inline-start" /> : null}
-                {runLabel}
-              </Button>
-            </CardFooter>
-            ) : null}
           </Card>
-        </TabsContent>
+        </section>
 
+        <Accordion className="rounded-xl border px-3">
+          <AccordionItem value="checks">
+            <AccordionTrigger id="eval-step-checks">What gets checked</AccordionTrigger>
+            <AccordionContent className="flex flex-col gap-4">
+              <p className="text-sm text-muted-foreground">
+                Every test case is scored with these checks. Add your own questions if you want more.
+              </p>
+              <BuiltinChecks />
+              <PackScoringExtras
+                packJudge={packJudge}
+                disabled={running || seeding || !skill}
+                onPackJudge={setPackJudge}
+              />
+            </AccordionContent>
+          </AccordionItem>
+          <AccordionItem value="results">
+            <AccordionTrigger id="eval-step-results">Results</AccordionTrigger>
+            <AccordionContent>
+              <EvalResults
+                skillName={skill?.name}
+                running={running}
+                lastResult={lastResult}
+                historyRun={skillHistory?.last_run ?? null}
+              />
+            </AccordionContent>
+          </AccordionItem>
+        </Accordion>
+
+        <div className="flex flex-col gap-2">
+          <p id="run-help" className="text-sm text-muted-foreground">
+            {runHelp}
+          </p>
+          <Button
+            id="btn-run"
+            size="lg"
+            className="w-full"
+            disabled={
+              running ||
+              seeding ||
+              !skill ||
+              checks.length === 0 ||
+              startBlocked ||
+              !status?.has_key
+            }
+            title={startTitle}
+            aria-describedby="run-help"
+            onClick={() => void startEvaluations()}
+          >
+            {running ? <Spinner data-icon="inline-start" /> : null}
+            {runLabel}
+          </Button>
+        </div>
+        </TabsContent>
         <TabsContent value="gate" className="pt-4">
           <GatePage embedded />
         </TabsContent>
@@ -971,5 +937,80 @@ export function EvalPage() {
         />
       ) : null}
     </div>
+  )
+}
+
+function EvalResults({
+  skillName,
+  running,
+  lastResult,
+  historyRun,
+}: {
+  skillName?: string | null
+  running: boolean
+  lastResult: RunRecord | null
+  historyRun: RunRecord | null
+}) {
+  const live =
+    lastResult && runBelongsToSkill(lastResult, skillName) ? lastResult : null
+  const stored =
+    historyRun && runBelongsToSkill(historyRun, skillName) ? historyRun : null
+  const run =
+    live && (running || live.status === "running" || live.status === "done" || live.status === "error")
+      ? live
+      : stored
+  const tasks = run?.report?.tasks ?? []
+  const passed = run?.passed === true || run?.report?.passed === true
+  const failed = run?.passed === false || run?.report?.passed === false
+  const busy = Boolean(run && (running || run.status === "running") && live)
+  return (
+    <Card id="eval-results">
+      <CardHeader>
+        <CardTitle id="eval-step-results">5. Results</CardTitle>
+        <CardDescription>
+          Passed checks use a green mark. Failed checks use a red mark.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        {!run || (!busy && !passed && !failed && tasks.length === 0) ? (
+          <Empty>
+            <EmptyHeader>
+              <EmptyTitle>No results yet</EmptyTitle>
+              <EmptyDescription>
+                Press Run. This stays empty until a test finishes.
+              </EmptyDescription>
+            </EmptyHeader>
+          </Empty>
+        ) : (
+          <div className="flex flex-col gap-4">
+            {busy ? (
+              <p className="text-sm font-medium">Running the test cases.</p>
+            ) : (
+              <div className="flex items-center gap-3">
+                <EvalResultMark
+                  kind={passed ? "pass" : "fail"}
+                  mode="complete"
+                />
+                <p className={passed ? "text-sm font-medium text-success" : "text-sm font-medium text-destructive"}>
+                  {passed ? "Passed" : "Failed"}
+                </p>
+              </div>
+            )}
+            {tasks.length > 0 ? (
+              <ul className="flex flex-col gap-2">
+                {tasks.map((task) => (
+                  <li key={task.id || task.prompt} className="flex items-baseline gap-2 text-sm">
+                    <span className={task.passed ? "text-success" : "text-destructive"}>
+                      {task.passed ? "Passed" : "Failed"}
+                    </span>
+                    <span className="min-w-0 text-pretty">{task.prompt || task.id}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+          </div>
+        )}
+      </CardContent>
+    </Card>
   )
 }

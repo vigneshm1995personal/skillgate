@@ -17,8 +17,8 @@ describe("stampBadgeProps", () => {
 })
 
 describe("stageTitle", () => {
-  it("calls the skills list Skills, not Skill Repository", () => {
-    expect(stageTitle("repository")).toBe("Skills")
+  it("calls the skills list Skill Repository, matching the hosted shell", () => {
+    expect(stageTitle("repository")).toBe("Skill Repository")
   })
 })
 
@@ -26,20 +26,22 @@ describe("sidebar header", () => {
   it("keeps Skill Gate text without the logo mark", () => {
     const sidebar = readFileSync(join(dir, "app-sidebar.tsx"), "utf8")
     expect(sidebar).toMatch(/Skill Gate/)
-    expect(sidebar).toMatch(/Eval · Gate · Deploy/)
+    expect(sidebar).toMatch(/Evaluate, Gate, Deploy/)
     expect(sidebar).not.toMatch(/skill-gate-mark/)
+    expect(sidebar).not.toMatch(/sg-ink-bar/)
   })
 })
 
-describe("black and white status", () => {
-  it("keeps the Blocked badge monochrome", () => {
+describe("hosted gate badge", () => {
+  it("uses the hosted GREEN and RED badges", () => {
     const chrome = readFileSync(join(dir, "chrome.tsx"), "utf8")
     const badge = chrome.slice(
       chrome.indexOf("export function GateBadge"),
       chrome.indexOf("export function SectionLabel")
     )
-    expect(badge).toMatch(/Blocked/)
-    expect(badge).not.toMatch(/variant="destructive"/)
+    expect(badge).toMatch(/GREEN/)
+    expect(badge).toMatch(/RED/)
+    expect(badge).toMatch(/variant="destructive"/)
   })
 
   it("keeps missing-key and deploy Blocked banners monochrome", () => {
@@ -51,8 +53,8 @@ describe("black and white status", () => {
     )
     expect(missing).not.toMatch(/variant="destructive"/)
     expect(deploy).toMatch(/id="deploy-note"/)
-    expect(deploy).not.toMatch(
-      /id="deploy-note"[\s\S]{0,80}variant=\{deployAllowed \? "default" : "destructive"\}/
+    expect(deploy).toMatch(
+      /id="deploy-note"[\s\S]{0,120}variant=\{deployAllowed \? "default" : "destructive"\}/
     )
   })
 })

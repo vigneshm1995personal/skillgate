@@ -1,14 +1,10 @@
 import { useEffect, useRef, useState, type ReactNode } from "react"
 
-import {
-  CHECKING_MIN_MS,
-  EVAL_MOTION_MS,
-  initialHoldPhase,
-  resultHoldPlan,
-} from "@/lib/eval-result-hold"
+import { initialHoldPhase, resultHoldPlan } from "@/lib/eval-result-hold"
 import type { SuiteResultKind } from "@/lib/eval-row-state"
 
-export { CHECKING_MIN_MS, EVAL_MOTION_MS }
+export const CHECKING_MIN_MS = 700
+export const EVAL_MOTION_MS = 350
 
 export type EvalResultTarget = Exclude<SuiteResultKind, "idle">
 export type EvalMarkMode = "idle" | "play" | "complete"

@@ -55,7 +55,7 @@ export function DashboardProvider({
   children: ReactNode
   initialStatus?: StatusPayload | null
 }) {
-  const [stage, setStage] = useState<Stage>("repository")
+  const [stage, setStage] = useState<Stage>("home")
   const [evalTab, setEvalTab] = useState<EvalTab>("skill")
   const [repoSkill, setRepoSkill] = useState<string | null>(null)
   const [historyOpen, setHistoryOpen] = useState(false)
@@ -342,53 +342,6 @@ export function DashboardProvider({
     setRepoSkill(name ?? null)
     setStage("repository")
   }, [])
-
-  const pasteSkill = useCallback(async () => {
-    setIntakeError("")
-    setSeeding(true)
-    setSeedingAssist(false)
-    try {
-      const data = await api.paste(paste)
-      await refreshSkills()
-      await selectSkill(data.absolute || data.id, {
-        tab: "checks",
-        fallbackSkill: data,
-      })
-    } catch (err) {
-      const error = asApiError(err)
-      setSeeding(false)
-      setSeedingAssist(false)
-      setEvalTab("skill")
-      setIntakeError(
-        error.hint ? `${error.message}\n${error.hint}` : error.message
-      )
-    }
-  }, [paste, refreshSkills, selectSkill])
-
-  const uploadZip = useCallback(
-    async (file: File) => {
-      setIntakeError("")
-      setSeeding(true)
-      setSeedingAssist(false)
-      try {
-        const data = await api.upload(file)
-        await refreshSkills()
-        await selectSkill(data.absolute || data.id, {
-          tab: "checks",
-          fallbackSkill: data,
-        })
-      } catch (err) {
-        const error = asApiError(err)
-        setSeeding(false)
-        setSeedingAssist(false)
-        setEvalTab("skill")
-        setIntakeError(
-          error.hint ? `${error.message}\n${error.hint}` : error.message
-        )
-      }
-    },
-    [refreshSkills, selectSkill]
-  )
 
   const addCheck = useCallback((draft?: Partial<Check>) => {
     const contains = (draft?.contains ?? "").trim()
@@ -814,8 +767,6 @@ export function DashboardProvider({
       selectSkill,
       openHistoryRun,
       openRepository,
-      pasteSkill,
-      uploadZip,
       addCheck,
       updateCheck,
       removeCheck,
@@ -884,7 +835,6 @@ export function DashboardProvider({
       openHistoryRun,
       openRepository,
       paste,
-      pasteSkill,
       pinBaseline,
       pinCheckAt,
       pinDatasetChecks,
@@ -912,7 +862,6 @@ export function DashboardProvider({
       suggestByRunId,
       suggestError,
       updateCheck,
-      uploadZip,
       yaml,
       removeCheck,
       packJudge,

@@ -54,6 +54,7 @@ export function CheckList({
   onRunCheck,
   packJudge,
   onPackJudge,
+  showPackQuestions = true,
 }: {
   checks: Check[]
   running: boolean
@@ -69,12 +70,13 @@ export function CheckList({
   onRunCheck?: (check: Check) => void
   packJudge?: Check["judge"]
   onPackJudge?: (next: Check["judge"]) => void
+  showPackQuestions?: boolean
 }) {
   const hasKey = Boolean(useDashboard().status?.has_key)
   const skillName = skill?.name
   return (
     <div id="check-list" className="flex flex-col gap-3">
-      {onPackJudge ? (
+      {showPackQuestions && onPackJudge ? (
         <div className="flex flex-col gap-3 rounded-xl border p-4">
           <PackScoringExtras
             packJudge={packJudge}
@@ -368,7 +370,9 @@ function CheckMetrics({
         id={`check-metrics-${index}`}
         className="text-sm text-muted-foreground tabular-nums"
       >
-        {checkUsageLine(usage, metrics)}
+        {checkUsageLine(usage, metrics) === "Not checked"
+          ? "Tokens —"
+          : checkUsageLine(usage, metrics)}
         {deltas.length ? ` · ${deltas.join(" · ")}` : ""}
       </p>
       {over && reason ? (

@@ -71,7 +71,7 @@ export function HomePage() {
     <div className="flex flex-col gap-8">
       <PageHeader
         title="Home"
-        description="Where the workspace stands: runs, gate outcomes, deployments, and spend."
+        description="Where the workspace stands: eval runs, gate outcomes, deployments, and eval spend."
         action={
           <>
             <Button
@@ -94,7 +94,7 @@ export function HomePage() {
         <div className="flex flex-col gap-4">
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <KpiCard
-              label="Runs"
+              label="Eval runs"
               value={String(totals.runs)}
               hint={`${totals.runs_7d} in 7d · ${totals.runs_30d} in 30d`}
             />
@@ -123,7 +123,7 @@ export function HomePage() {
               }
             />
             <KpiCard
-              label="Spend"
+              label="Eval spend"
               value={formatCost(usage.cost_usd) ?? "—"}
               hint={
                 <>
@@ -187,7 +187,7 @@ export function HomePage() {
                   <TableHeader>
                     <TableRow>
                       <TableHead className="pl-6">Skill</TableHead>
-                      <TableHead>Agent</TableHead>
+                      <TableHead>Harness</TableHead>
                       <TableHead>Result</TableHead>
                       <TableHead className="pr-6 text-right">When</TableHead>
                     </TableRow>
@@ -199,7 +199,14 @@ export function HomePage() {
                         <TableRow
                           key={run.id ?? `${run.skill}-${index}`}
                           className={canOpen ? "cursor-pointer" : undefined}
+                          tabIndex={canOpen ? 0 : undefined}
                           onClick={() => openRun(run)}
+                          onKeyDown={(event) => {
+                            if (!canOpen || event.key !== "Enter") {
+                              return
+                            }
+                            openRun(run)
+                          }}
                         >
                           <TableCell className="pl-6 font-medium">
                             {run.skill || "—"}
@@ -298,11 +305,13 @@ function DeployRow({ deploy }: { deploy: AnalyticsDeploy }) {
 
 function ResultBadge({ run }: { run: AnalyticsRun }) {
   if (run.status === "error") {
-    return <Badge variant="outline">Error</Badge>
+    return <Badge variant="destructive">Error</Badge>
   }
   if (run.passed) {
     return (
-      <Badge variant="success">Pass</Badge>
+      <Badge variant="secondary" className="font-medium text-success">
+        Pass
+      </Badge>
     )
   }
   return <Badge variant="destructive">Fail</Badge>

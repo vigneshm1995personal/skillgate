@@ -32,6 +32,9 @@ _SKIP_DIR_NAMES = {".git", "__pycache__", ".skillgate", "node_modules"}
 _SKIP_FILE_NAMES = {".ds_store", "thumbs.db"}
 _SAFE_NAME = re.compile(r"[^A-Za-z0-9._-]+")
 IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".gif", ".webp"}
+PDF_DEMO_FIXTURE_NAMES = frozenset(
+    {"alpha.pdf", "beta.pdf", "hello.pdf", "invoice.pdf", "notes.pdf"}
+)
 # Underscore/hyphen count as separators so receipt_image.txt is a photo stand-in.
 _UNSYNTHESIZABLE = re.compile(
     r"(?:^|[^a-z0-9])(photo|photos|image|images|png|jpe?g|screenshot|scan|scans)(?:[^a-z0-9]|$)",
@@ -120,7 +123,7 @@ def relevant_eval_fixtures(
         elif len(data) < 1:
             continue
         found.append({"src": rel, "dest": Path(rel).name, "bytes": len(data)})
-    return found
+    return _without_leaked_pdf_demo(root, found)
 
 
 def _glob_match(rel: str, pattern: str) -> bool:
@@ -382,6 +385,48 @@ def implied_fixture_name(text: str) -> str:
     return "sample.txt"
 
 
+def _is_pdf_example_dir(root: Path) -> bool:
+    return root.name in {"pdf", "pdf-sabotaged"}
+
+
+def _without_leaked_pdf_demo(root: Path, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Drop the pdf example's five fixtures when they show up on another skill."""
+    if _is_pdf_example_dir(root):
+        return rows
+    names = {Path(str(row.get("src") or "")).name for row in rows}
+    if not PDF_DEMO_FIXTURE_NAMES <= names:
+        return rows
+    return [
+        row
+        for row in rows
+        if Path(str(row.get("src") or "")).name not in PDF_DEMO_FIXTURE_NAMES
+    ]
+
+
+def _inside_other_skill(path: Path, skill_root: Path) -> bool:
+    resolved = path.resolve()
+    root = skill_root.resolve()
+    try:
+        resolved.relative_to(root)
+        return False
+    except ValueError:
+        pass
+    for parent in resolved.parents:
+        if parent == root:
+            return False
+        if (parent / "SKILL.md").is_file():
+            return True
+    return False
+
+
+def _accept_input_file(candidate: Path | None, skill_root: Path | None) -> Path | None:
+    if candidate is None or not candidate.is_file():
+        return None
+    if skill_root is not None and _inside_other_skill(candidate, skill_root):
+        return None
+    return candidate
+
+
 def resolve_input_file(
     rel: str,
     *,
@@ -395,20 +440,23 @@ def resolve_input_file(
         return None
     path = Path(raw)
     if path.is_absolute() and path.is_file():
-        return path
+        accepted = _accept_input_file(path, skill_root)
+        if accepted is not None:
+            return accepted
     if skill_root is not None:
         candidate = _path_under_skill(skill_root, raw)
-        if candidate is not None and candidate.is_file():
-            return candidate
+        accepted = _accept_input_file(candidate, skill_root)
+        if accepted is not None:
+            return accepted
     if root is None:
         return None
     suite = suite_dir or root / "evals"
     for base in (root, suite, suite.parent):
         candidate = (base / path).resolve()
-        if candidate.is_file():
-            return candidate
-    fallback = (root / path).resolve()
-    return fallback if fallback.is_file() else None
+        accepted = _accept_input_file(candidate, skill_root)
+        if accepted is not None:
+            return accepted
+    return _accept_input_file((root / path).resolve(), skill_root)
 
 
 def file_copy_from_rel(rel: str) -> dict[str, str]:

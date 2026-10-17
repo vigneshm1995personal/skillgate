@@ -14,6 +14,7 @@ CLOUD = "cloud"
 Mode = Literal["local", "cloud"]
 
 # Hidden in local (not locked). Names match the React slot checks.
+# Home is a core screen in both modes, so analyticsHome stays on.
 LOCAL_SLOTS: dict[str, bool] = {
     "signIn": False,
     "billing": False,
@@ -24,7 +25,7 @@ LOCAL_SLOTS: dict[str, bool] = {
     "generateChecks": False,
     "gitPublish": False,
     "suggestUpdates": False,
-    "analyticsHome": False,
+    "analyticsHome": True,
 }
 
 CLOUD_SLOTS: dict[str, bool] = {key: True for key in LOCAL_SLOTS}

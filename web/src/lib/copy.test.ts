@@ -10,9 +10,6 @@ const CUSTOMER_DENY = [
   "Cursor Agent harness",
   "Browse all in Repository",
   "browse all in Repository",
-  "Skill Repository",
-  "Eval spend",
-  "Eval runs",
   "Config changed",
   "Start Evaluations",
   "pack hash",
@@ -94,7 +91,15 @@ describe("settings footer", () => {
     expect(src).toMatch(/signed in/)
     expect(src).toMatch(/not signed in/)
     expect(src).toMatch(/Judge key \(optional\)/)
+    expect(src).toMatch(/Any OpenAI-compatible endpoint/)
     expect(src).toMatch(/Skip it to run without the judge/)
+    expect(src).toMatch(/htmlFor="settings-judge-base-url"/)
+    expect(src).toMatch(/Base URL/)
+    expect(src).toMatch(/https:\/\/openrouter\.ai\/api\/v1/)
+    expect(src).toMatch(/htmlFor="settings-judge-model"/)
+    expect(src).toMatch(/>API key</)
+    expect(src).toMatch(/btn-settings-test-judge/)
+    expect(src).toMatch(/api\.pingJudge/)
     expect(src).toMatch(/api\.loginStatus/)
     expect(src).toMatch(/api\.startLogin/)
     expect(src).toMatch(/Sign in/)

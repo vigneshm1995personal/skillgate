@@ -39,7 +39,6 @@ export function RunConfigAccordion({
   availableHarnesses?: string[] | null
 }) {
   const claudeReady = (availableHarnesses || []).includes("claude")
-
   const summary = draftConfigSummary(harnessPref, evalConfig, resolvedHarness)
 
   return (
@@ -88,19 +87,11 @@ export function RunConfigAccordion({
                 }}
                 disabled={disabled}
               >
-                <ToggleGroupItem value="auto">Auto</ToggleGroupItem>
+                <ToggleGroupItem value="auto">Choose for me</ToggleGroupItem>
                 <ToggleGroupItem value="cursor-agent">Cursor</ToggleGroupItem>
                 <ToggleGroupItem value="codex">Codex</ToggleGroupItem>
-                <ToggleGroupItem
-                  value="claude"
-                  disabled={!claudeReady}
-                  title={
-                    claudeReady
-                      ? "Claude Code"
-                      : "Add a key or run skillgate login claude"
-                  }
-                >
-                  {claudeReady ? "Claude" : "Claude · Coming next"}
+                <ToggleGroupItem value="claude" disabled={!claudeReady}>
+                  Claude
                 </ToggleGroupItem>
               </ToggleGroup>
             </Field>

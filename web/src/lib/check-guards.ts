@@ -95,18 +95,77 @@ export function authenticFixtureCopies(
   }))
 }
 
+const PDF_DEMO_NAMES = [
+  "alpha.pdf",
+  "beta.pdf",
+  "hello.pdf",
+  "invoice.pdf",
+  "notes.pdf",
+] as const
+
+function fileBaseName(path: string): string {
+  const parts = path.split(/[/\\]/).filter(Boolean)
+  return parts[parts.length - 1] || path
+}
+
+export function isPdfExampleSkill(
+  skill: Pick<SkillPayload, "slug" | "id" | "absolute" | "path"> | null
+): boolean {
+  const folder = (skill?.absolute || skill?.path || "")
+    .split(/[/\\]/)
+    .filter(Boolean)
+    .pop()
+  return [skill?.slug, skill?.id, folder].some(
+    (value) => value === "pdf" || value === "pdf-sabotaged"
+  )
+}
+
+export function leakedPdfDemoNames(
+  skill: SkillPayload | null,
+  packFiles?: PackFile[] | null
+): string[] {
+  if (!skill || isPdfExampleSkill(skill)) {
+    return []
+  }
+  const names = new Set<string>()
+  for (const item of skill.fixture_defaults ?? []) {
+    names.add(fileBaseName(item.src))
+  }
+  for (const item of datasetPackFiles(packFiles ?? skill.pack_files)) {
+    names.add(fileBaseName(item.path))
+  }
+  if (!PDF_DEMO_NAMES.every((name) => names.has(name))) {
+    return []
+  }
+  return [...PDF_DEMO_NAMES]
+}
+
+function omitLeakedPdfDemo(
+  skill: SkillPayload | null,
+  files: PackFile[],
+  packFiles?: PackFile[] | null
+): PackFile[] {
+  const leaked = new Set(leakedPdfDemoNames(skill, packFiles))
+  if (!leaked.size) {
+    return files
+  }
+  return files.filter((item) => !leaked.has(fileBaseName(item.path)))
+}
+
 export function authenticFixtureDefaults(
   skill: SkillPayload | null,
   packFiles?: PackFile[] | null
 ): PackFile[] {
-  const defaults = skill?.fixture_defaults
-  if (defaults?.length) {
-    return defaults.map((item) => ({
-      path: item.src,
-      bytes: item.bytes,
-    }))
+  const pack = datasetPackFiles(packFiles ?? skill?.pack_files)
+  const fromDefaults = (skill?.fixture_defaults ?? []).map((item) => ({
+    path: item.src,
+    bytes: item.bytes,
+  }))
+  const ownDefaults = omitLeakedPdfDemo(skill, fromDefaults, packFiles)
+  if (ownDefaults.length) {
+    return ownDefaults
   }
-  return datasetPackFiles(packFiles ?? skill?.pack_files)
+  return omitLeakedPdfDemo(skill, pack, packFiles)
 }
 
 export function startBlockedByNeedsUpload(
@@ -308,12 +367,3 @@ export function needsFixtureNotice(
       hasRealFixture(check.files)
   )
 }
-
-export const PASTE_PLACEHOLDER = `---
-name: my-skill
-description: Extract text from PDFs and merge documents. Use when the user mentions a .pdf file, invoices, or combining files.
----
-
-# Steps
-1. Read the input files
-2. Write the result under output/`
