@@ -22,9 +22,9 @@ This is a **local process**, not hosted `serve`. Default bind is `127.0.0.1:8765
 
 **Compare** (sidebar tab) has CLI equivalents: `skillgate compare models` (arms via `--arm 'Label:codex'`, spend cap via `--max-spend-usd`), `skillgate compare versions --run …`, `skillgate compare list`, `skillgate compare show`, and `skillgate compare cancel` while a job is running.
 
-**Skills list first.** Import from `~/.cursor/skills`, `~/.codex/skills`, and `~/.claude/skills`, or use packs under `skills/`. Open a skill to read `SKILL.md`, edit checks, then **press Run**. Nothing evaluates until you press it. Run is disabled until `skillgate login` or a key is available (Settings → Sign in). Results use the same drawn mark, Result | Check | What happened, and five answers.
+**Skills list first.** Import from `~/.cursor/skills`, `~/.codex/skills`, and `~/.claude/skills`, or use packs under `skills/`. Open a skill to read `SKILL.md`, edit checks, then **press Run**. Nothing evaluates until you press it. Run is disabled until `skillgate login` (Settings → Sign in). An optional judge key in Settings scores checks; skip it to run without the judge. Results use the same drawn mark, Result | Check | What happened, and five answers.
 
-**Deploy** copies a green-gated skill (skill files only, not `evals/`) into those same agent folders. Install stays disabled without an agent (`skillgate login` or Settings / `skillgate keys set`), even after a passing check. Keys live in this project’s `.skillgate/keys`, or CI/Docker can set `SKILLGATE_*` (always read). `skillgate check` still exits 0, 1, or 2 with no account.
+**Deploy** copies a green-gated skill (skill files only, not `evals/`) into those same agent folders. Install stays disabled without an agent (`skillgate login` or Settings → Sign in), even after a passing check. The optional judge key lives in this project’s `.skillgate/keys`, or CI/Docker can set `SKILLGATE_*` (always read). `skillgate check` still exits 0, 1, or 2 with no account.
 
 The result panel names who scored the run in plain words (`Scored by the judge`, or `Scored by OpenAI` / `Jev` / `AWS` / `Other` if you picked a provider in Settings, or `Checks scored this run.`). Checking → slide → drawn Passed/Failed is unchanged.
 
@@ -57,8 +57,8 @@ Everything the local UI can do has a CLI command. New API writes must update thi
 
 | UI action | API | CLI |
 | --- | --- | --- |
-| Save a key | `PUT /api/settings/keys/{name}` | `skillgate keys set` |
-| Clear a key | `DELETE /api/settings/keys/{name}` | `skillgate keys clear` |
+| Save a judge key (optional) | `PUT /api/settings/keys/{name}` | `skillgate keys set` |
+| Clear a judge key | `DELETE /api/settings/keys/{name}` | `skillgate keys clear` |
 | List keys | `GET /api/settings/keys` | `skillgate keys list` |
 | Pick who scores | `PUT /api/settings/judge` | `skillgate judge provider set` |
 | Test scoring | `POST /api/judge/ping` | `skillgate judge provider test` |
@@ -87,5 +87,5 @@ Everything the local UI can do has a CLI command. New API writes must update thi
 | Compare versions | `POST /api/compare/versions` | `skillgate compare versions` |
 | Cancel compare | `POST /api/compare/{compare_id}/cancel` | `skillgate compare cancel` |
 | Deploy | `POST /api/deploy` | `skillgate deploy` |
-| Sign in | `POST /api/login/{agent}` | `skillgate login` |
+| Sign in | `POST /api/login/{agent}` | `skillgate login` (`cursor` / `codex` / `claude`) |
 | Agent status | `GET /api/login/status` | `skillgate login --status` |

@@ -63,20 +63,13 @@ export function AppSidebar({
       )}
     >
       <div className="sg-ink-bar" />
-      <div className="flex items-center gap-2.5 px-4 py-6">
-        <img
-          alt=""
-          src="/skill-gate-mark.png"
-          className="size-8 shrink-0 rounded-sm object-contain ring-1 ring-foreground/20"
-        />
-        <div className="min-w-0">
-          <p className="truncate font-display text-[1.05rem] font-medium tracking-tight">
-            Skill Gate
-          </p>
-          <p className="truncate text-[11px] tracking-[0.08em] text-sidebar-accent-foreground uppercase">
-            Eval · Gate · Deploy
-          </p>
-        </div>
+      <div className="px-4 py-6">
+        <p className="truncate font-display text-[1.05rem] font-medium tracking-tight">
+          Skill Gate
+        </p>
+        <p className="truncate text-[11px] tracking-[0.08em] text-sidebar-accent-foreground uppercase">
+          Eval · Gate · Deploy
+        </p>
       </div>
       <Separator className="bg-sidebar-border" />
       <ScrollArea className="min-h-0 flex-1">
