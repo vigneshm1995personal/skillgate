@@ -25,7 +25,7 @@ import {
   FieldSet,
 } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
-import { authenticFixtureDefaults } from "@/lib/check-guards"
+import { authenticFixtureDefaults, leakedPdfDemoNames } from "@/lib/check-guards"
 import type { Check, PackFile, SkillPayload } from "@/lib/types"
 
 function fileParts(path: string) {
@@ -59,23 +59,24 @@ export function FixtureBindAccordion({
   onExpand: () => void
 }) {
   const dataset = authenticFixtureDefaults(skill, packFiles)
-  const needsUpload = checks.some((check) => check.needs_upload)
-  if (!skill || (!dataset.length && !needsUpload)) {
+  const ignored = leakedPdfDemoNames(skill, packFiles)
+  if (!skill) {
     return null
   }
-  const names = dataset.map((item) => item.path.split("/").pop() || item.path)
   const summary = !dataset.length
-    ? "Add a sample file to this skill to bind completion checks"
+    ? ignored.length
+      ? "No sample files for this skill"
+      : "No sample files yet"
     : inherit
-      ? names.join(", ")
-      : `Not using skill files: ${names.join(", ")}`
+      ? `${dataset.length} sample file${dataset.length === 1 ? "" : "s"}`
+      : "Sample files are off"
 
   return (
-    <Accordion defaultValue={[]} id="fixture-bind-accordion">
+    <Accordion defaultValue={["fixture-bind"]} id="fixture-bind-accordion">
       <AccordionItem value="fixture-bind" className="rounded-lg border px-2">
         <AccordionTrigger className="py-1.5 hover:no-underline">
           <span className="flex min-w-0 flex-1 items-center gap-2 pr-2">
-            <span className="sr-only">Skill files </span>
+            <span className="text-sm font-medium text-foreground">Sample files</span>
             <span
               id="fixture-bind-summary"
               title={summary}
@@ -86,9 +87,21 @@ export function FixtureBindAccordion({
           </span>
         </AccordionTrigger>
         <AccordionContent>
+          <p className="mb-3 text-sm text-muted-foreground">
+            These are the files in this skill that a test case can read.
+            {checks.length
+              ? ` ${checks.length} test case${checks.length === 1 ? "" : "s"} can use them.`
+              : ""}
+          </p>
+          {ignored.length ? (
+            <p id="ignored-pdf-demo" className="mb-3 text-sm text-muted-foreground">
+              Ignored the PDF example files found in this folder ({ignored.join(", ")}).
+              They are not this skill’s samples.
+            </p>
+          ) : null}
           {dataset.length ? (
             <FieldSet>
-              <FieldLegend className="sr-only">Skill files</FieldLegend>
+              <FieldLegend className="sr-only">Sample files</FieldLegend>
               <FieldGroup className="gap-4">
                 <ul
                   id="pack-fixture-chips"
@@ -132,17 +145,16 @@ export function FixtureBindAccordion({
                   />
                   <FieldContent>
                     <FieldLabel htmlFor="btn-use-pack-fixtures">
-                      Use this skill’s files for completion checks
+                      Use these files when a test case needs an input
                     </FieldLabel>
                     <FieldDescription>
-                      Completion rows inherit these files unless a row already
-                      picked its own. Trigger and should-not-trigger rows stay
-                      file-free.
+                      Test cases that check a result use these files, unless that
+                      case already picked its own. Trigger-only cases stay file-free.
                     </FieldDescription>
                   </FieldContent>
                 </Field>
                 <Field data-disabled={disabled || undefined}>
-                  <FieldLabel htmlFor="fixture-glob">Which files</FieldLabel>
+                  <FieldLabel htmlFor="fixture-glob">Only files matching</FieldLabel>
                   <Input
                     id="fixture-glob"
                     value={glob}
@@ -163,11 +175,11 @@ export function FixtureBindAccordion({
                     onClick={onExpand}
                   >
                     <FolderOpenIcon data-icon="inline-start" />
-                    Make cases from folder
+                    Make one test case per file
                   </Button>
                   <FieldDescription>
-                    One prompt template times each file. Existing completion
-                    rows are replaced; trigger and negative rows stay.
+                    Uses the same instructions for each sample file. Trigger-only
+                    cases stay as they are.
                   </FieldDescription>
                 </Field>
               </FieldGroup>
@@ -175,12 +187,10 @@ export function FixtureBindAccordion({
           ) : (
             <Empty className="border-0 px-1 py-3">
               <EmptyHeader>
-                <EmptyTitle className="text-pretty">
-                  Add a sample file to this skill to bind completion checks
-                </EmptyTitle>
+                <EmptyTitle className="text-pretty">No sample files yet</EmptyTitle>
                 <EmptyDescription className="text-pretty">
-                  Upload a real file into this skill folder. Completion checks
-                  inherit it here, not as a per-row attach.
+                  Add a file to this skill’s folder if a test case needs an input.
+                  A test case that is only a prompt can still run.
                 </EmptyDescription>
               </EmptyHeader>
             </Empty>

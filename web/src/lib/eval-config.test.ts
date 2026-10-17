@@ -12,6 +12,7 @@ import {
   unsupportedModelHint,
   draftConfigSummary,
   harnessDisplayName,
+  plainRunSetup,
   knownModelsForHarness,
   modelSelectValue,
   modelsForHarness,
@@ -166,6 +167,21 @@ describe("configLabel", () => {
   it("does not alias a removed demo harness to Auto", () => {
     expect(harnessDisplayName("demo")).not.toBe("Auto")
     expect(configLabel({ harness: "demo" })).not.toBe("Auto")
+  })
+
+  it("describes the agent in a sentence, not Auto · Cursor", () => {
+    expect(plainRunSetup("auto", { model: "", timeoutSec: "" }, "cursor-agent")).toBe(
+      "Choose for me. Signed in with Cursor. Model: the agent's default."
+    )
+    expect(plainRunSetup("auto", { model: "", timeoutSec: "" })).toBe(
+      "Choose for me. Model: the agent's default."
+    )
+    expect(plainRunSetup("codex", { model: "gpt-5.6-luna", timeoutSec: "240" })).toBe(
+      "Codex. Model: gpt-5.6-luna. Time limit 240 seconds."
+    )
+    expect(plainRunSetup("auto", { model: "", timeoutSec: "" }, "cursor-agent")).not.toMatch(
+      /Auto ·/
+    )
   })
 
   it("shows Auto on a fresh project, not Auto · Cursor", () => {

@@ -218,6 +218,38 @@ export function draftConfigSummary(
   return parts.join(" · ")
 }
 
+/** Sentence for the Evaluate screen. History labels stay in draftConfigSummary. */
+export function plainRunSetup(
+  pref: string,
+  draft: Pick<EvalConfigDraft, "model" | "timeoutSec">,
+  resolvedHarness?: string
+): string {
+  let agent = "Choose for me."
+  if (pref === "cursor-agent") {
+    agent = "Cursor."
+  } else if (pref === "codex") {
+    agent = "Codex."
+  } else if (pref === "claude") {
+    agent = "Claude."
+  } else if (
+    resolvedHarness === "cursor-agent" ||
+    resolvedHarness === "codex" ||
+    resolvedHarness === "claude"
+  ) {
+    agent = `Choose for me. Signed in with ${harnessDisplayName(resolvedHarness)}.`
+  }
+  const modelRaw = draft.model.trim()
+  const model =
+    !modelRaw ||
+    modelRaw === MODEL_CUSTOM_VALUE ||
+    modelRaw === MODEL_DEFAULT_VALUE
+      ? "the agent's default"
+      : modelRaw
+  const timeout = draft.timeoutSec.trim()
+  const time = timeout ? ` Time limit ${timeout} seconds.` : ""
+  return `${agent} Model: ${model}.${time}`
+}
+
 function collapseDuplicateTimeout(label: string): string {
   const parts = label.split(/\s*·\s*/).map((part) => part.trim()).filter(Boolean)
   const out: string[] = []
