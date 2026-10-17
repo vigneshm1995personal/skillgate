@@ -27,6 +27,11 @@ def resolve_user_path(target: str | Path, root: Path | None = None) -> Path:
         rooted = Path(root) / path
         if rooted.exists():
             return rooted.resolve()
+        # Workspace layout: `skillgate check pdf` → `skills/pdf` when present.
+        if len(path.parts) == 1 and not path.is_absolute():
+            skill_pack = Path(root) / "skills" / path
+            if (skill_pack / "SKILL.md").is_file():
+                return skill_pack.resolve()
     return cwd_hit.resolve()
 
 
