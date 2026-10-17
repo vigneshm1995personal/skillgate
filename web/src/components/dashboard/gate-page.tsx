@@ -141,7 +141,8 @@ export function GatePage({ embedded = false }: { embedded?: boolean }) {
     customerRunDetails(runConfig) || (harnessName !== "—" ? harnessName : "")
   const modelRaw = runConfig?.model || scopedResult?.model || ""
   const modelValue =
-    userPickedModel(runConfig) || (rawHarness === "codex" && modelRaw)
+    userPickedModel(runConfig) ||
+    (["codex", "claude", "claude-code"].includes(rawHarness) && modelRaw)
       ? friendlyModelName(modelRaw) || modelRaw || "—"
       : "—"
   const timeoutValue =

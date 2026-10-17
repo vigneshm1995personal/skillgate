@@ -120,7 +120,7 @@ def collect_workspace_outputs(task: TaskSpec, workspace: Path) -> list[dict[str,
             sniffed = sniff_output_bytes(dest.read_bytes())
             row.update(sniffed)
             if sniffed.get("kind") != "bytes":
-                row["body"] = read_capped_text(dest)
+                row["body"] = read_capped_text(dest, limit=None)
             row = enrich_output_row(row, dest)
         else:
             row["size"] = 0

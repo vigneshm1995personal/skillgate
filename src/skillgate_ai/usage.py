@@ -54,7 +54,20 @@ _MODEL_USD_PER_MILLION: dict[str, tuple[float, float]] = {
     "composer-2.5": (1.25, 10.00),
     "composer-2.5-fast": (0.50, 4.00),
     "codex-default": (1.25, 10.00),
+    "claude-fable-5-1": (10.00, 50.00),
+    "claude-fable-5": (10.00, 50.00),
+    "claude-opus-5-5": (4.00, 20.00),
+    "claude-opus-5": (5.00, 25.00),
+    "claude-opus-4-8": (5.00, 25.00),
+    "claude-opus-4-7": (5.00, 25.00),
+    "claude-opus-4-6": (5.00, 25.00),
+    "claude-sonnet-5-5": (2.00, 10.00),
+    "claude-sonnet-5": (2.00, 10.00),
+    "claude-sonnet-4-6": (3.00, 15.00),
+    "claude-sonnet-4-5": (3.00, 15.00),
     "claude-sonnet-4-20250514": (3.00, 15.00),
+    "claude-haiku-5-5": (0.10, 0.50),
+    "claude-haiku-4-5": (1.00, 5.00),
 }
 
 SUBSCRIPTION_COST_LABEL = "subscription (not metered)"
@@ -170,10 +183,14 @@ def estimate_usage_cost_usd(model: str | None, usage: Usage | None) -> float | N
         return None
     prices = _MODEL_USD_PER_MILLION.get(key)
     if prices is None:
+        best: tuple[str, tuple[float, float]] | None = None
         for name, rate in _MODEL_USD_PER_MILLION.items():
-            if key.startswith(name) or name.startswith(key):
-                prices = rate
-                break
+            if (key.startswith(name) or name.startswith(key)) and (
+                best is None or len(name) > len(best[0])
+            ):
+                best = (name, rate)
+        if best is not None:
+            prices = best[1]
     if prices is None:
         return None
     tin = int(usage.tokens_in or 0)
@@ -320,6 +337,8 @@ def render_stream_line(raw: str) -> str | None:
         return None
     if kind == "item.completed":
         return _render_codex_item(obj.get("item"))
+    if kind == "user":
+        return _render_claude_tool_results(obj)
     if kind in _CURSOR_BOOKKEEPING:
         # Cursor init/user echo/final result: no human line (usage still parsed
         # by `parse_usage_line`, which runs before this render in the sink).
@@ -469,12 +488,68 @@ def _render_cursor_assistant(message: Any) -> str | None:
     parts = message.get("content")
     if not isinstance(parts, list):
         return None
-    texts = [
-        str(part.get("text") or "").strip()
-        for part in parts
-        if isinstance(part, dict) and part.get("type") == "text"
-    ]
-    return "\n".join(text for text in texts if text) or None
+    lines: list[str] = []
+    for part in parts:
+        if not isinstance(part, dict):
+            continue
+        if part.get("type") == "text":
+            text = str(part.get("text") or "").strip()
+            if text:
+                lines.append(text)
+        elif part.get("type") == "tool_use":
+            command = _claude_tool_command(part)
+            if command:
+                lines.append(f"$ {command}")
+    return "\n".join(lines) or None
+
+
+def _claude_tool_command(part: dict[str, Any]) -> str:
+    name = str(part.get("name") or "tool").strip() or "tool"
+    args = part.get("input") if isinstance(part.get("input"), dict) else {}
+    detail = ""
+    for key in ("command", "cmd", "script", "file_path", "path", "pattern", "query"):
+        value = args.get(key) if isinstance(args, dict) else None
+        if isinstance(value, str) and value.strip():
+            detail = value.strip()
+            break
+    if name.lower() in {"bash", "shell", "run"} and detail:
+        return detail
+    return f"{name} {detail}".strip()
+
+
+def _render_claude_tool_results(obj: dict[str, Any]) -> str | None:
+    message = obj.get("message")
+    parts = message.get("content") if isinstance(message, dict) else None
+    if not isinstance(parts, list):
+        return None
+    lines: list[str] = []
+    for part in parts:
+        if not isinstance(part, dict) or part.get("type") != "tool_result":
+            continue
+        text = _claude_tool_result_text(part.get("content"))
+        if text:
+            lines.append(text[:2500])
+    return "\n".join(lines) or None
+
+
+def _claude_tool_result_text(raw: Any) -> str:
+    if isinstance(raw, str):
+        return raw.strip()
+    if isinstance(raw, list):
+        bits: list[str] = []
+        for item in raw:
+            if isinstance(item, str) and item.strip():
+                bits.append(item.strip())
+            elif isinstance(item, dict):
+                text = item.get("text") or item.get("content")
+                if isinstance(text, str) and text.strip():
+                    bits.append(text.strip())
+        return "\n".join(bits)
+    if isinstance(raw, dict):
+        text = raw.get("text") or raw.get("content") or raw.get("stdout")
+        if isinstance(text, str):
+            return text.strip()
+    return ""
 
 
 def _render_cursor_tool_call(obj: dict[str, Any]) -> str | None:

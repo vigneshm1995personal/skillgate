@@ -658,24 +658,39 @@ def checks_fingerprint(checks: list[dict[str, Any]], *, skill: str) -> str:
     return pack_fingerprint(CasePack(schema_version=1, skill=skill, cases=cases))
 
 
-def golden_state(golden: CaseGolden | None, skill_root: Path) -> dict[str, Any] | None:
+def golden_state(
+    golden: CaseGolden | None,
+    skill_root: Path,
+    *,
+    contains: list[str] | None = None,
+) -> dict[str, Any] | None:
     if golden is None:
         return None
     path = skill_root / golden.path
+    needles = [str(item).strip() for item in (contains or []) if str(item).strip()]
     if golden.kind == "bytes":
-        return {
+        payload: dict[str, Any] = {
             "path": golden.path,
             "output_path": golden.output_path,
             "kind": golden.kind,
             "body": None,
             "note": "binary golden; compare path presence only",
         }
-    return {
-        "path": golden.path,
-        "output_path": golden.output_path,
-        "kind": golden.kind,
-        "body": read_capped_text(path) or "",
-    }
+    else:
+        payload = {
+            "path": golden.path,
+            "output_path": golden.output_path,
+            "kind": golden.kind,
+            "body": read_capped_text(path) or "",
+        }
+    if needles:
+        payload["match"] = "contains"
+        payload["contains"] = needles
+        payload["note"] = (
+            "Required substring — the actual output must include this text; "
+            "it does not need to equal the whole file."
+        )
+    return payload
 
 
 def actual_output_state(

@@ -471,3 +471,33 @@ def test_from_dict_drops_judge_api_key() -> None:
     assert restored.judge is not None
     assert "api_key" not in restored.judge
     assert "sk-leak" not in str(restored.to_dict())
+
+
+def test_claude_default_model_is_not_stamped() -> None:
+    cfg = _llm_config(anthropic_model="")
+    run = stamp_resolved(
+        resolve_eval_config(harness_pref="claude", incoming={}, cfg=cfg, source="cli"),
+        "claude",
+        cfg,
+    )
+    assert run.model is None
+    assert run.applied["model"] is False
+
+
+def test_claude_env_model_is_stamped() -> None:
+    cfg = _llm_config(anthropic_model="sonnet")
+    run = stamp_resolved(
+        resolve_eval_config(harness_pref="claude", incoming={}, cfg=cfg, source="cli"),
+        "claude",
+        cfg,
+    )
+    assert run.model == "sonnet"
+    assert run.applied["model"] is False
+
+
+def test_customer_run_details_names_claude_model() -> None:
+    details = customer_run_details(
+        EvalRunConfig(harness="claude", model="claude-opus-5-5", timeout_effective=240)
+    )
+    assert "Claude" in details
+    assert "Opus" in details

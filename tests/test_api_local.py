@@ -10,7 +10,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from skillgate_ai.api import create_app
-from skillgate_ai.api_payloads import history_row_to_run, local_gate
+from skillgate_ai.api_payloads import history_row_to_run, local_gate, scrub_config
 from skillgate_ai.demo_files import ensure_demo_pdfs
 from skillgate_ai.history import append_eval
 from skillgate_ai.skill_md import write_skill_md
@@ -543,6 +543,30 @@ def test_browser_api_scrubs_provider_model_names(tmp_path: Path, monkeypatch) ->
     assert other_run["config"]["judge"]["display_name"] == "Other"
     assert "provider" not in other_run["config"]["judge"]
     assert other_run["config_label"] == "Scored by Other"
+
+
+def test_scrub_config_keeps_live_agent_model(tmp_path: Path, monkeypatch) -> None:
+    del tmp_path, monkeypatch
+    live = scrub_config(
+        {
+            "harness": "claude",
+            "model": "claude-opus-5-5",
+            "applied": {"model": False},
+            "judge": {
+                "provider": "openai",
+                "backend": "decisions",
+                "display_name": "OpenAI (your key)",
+                "model": "gpt-6-luna",
+            },
+        }
+    )
+    assert live["model"] == "claude-opus-5-5"
+    assert "gpt-6-luna" not in json.dumps(live)
+    assert "model" not in live["judge"]
+    assert "provider" not in live["judge"]
+
+    legacy = scrub_config({"harness": "llm", "model": "openai/gpt-4o-mini"})
+    assert "model" not in legacy
 
 
 def test_browser_api_keeps_couldnt_score_copy(tmp_path: Path, monkeypatch) -> None:

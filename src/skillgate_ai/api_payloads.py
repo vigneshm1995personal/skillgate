@@ -82,6 +82,9 @@ _BROWSER_DROP = frozenset(
     {"config_label_raw", "check_kind", "provider", "backend", "via_gateway"}
 )
 
+# Live agent harnesses whose run model is a public id (not a provider secret).
+LIVE_AGENT_HARNESSES = frozenset({"cursor-agent", "codex", "claude", "claude-code"})
+
 
 def _scrub_judge(judge: dict[str, Any]) -> dict[str, Any]:
     out: dict[str, Any] = {}
@@ -95,8 +98,13 @@ def _scrub_judge(judge: dict[str, Any]) -> dict[str, Any]:
 
 def _scrub_config(item: dict[str, Any]) -> dict[str, Any]:
     out: dict[str, Any] = {}
+    keep_model = (str(item.get("harness") or "").strip().lower()) in LIVE_AGENT_HARNESSES
     for key, value in item.items():
-        if key in _BROWSER_DROP or key == "model":
+        if key in _BROWSER_DROP:
+            continue
+        if key == "model":
+            if keep_model:
+                out[key] = _scrub_browser(value)
             continue
         if key == "judge" and isinstance(value, dict):
             out[key] = _scrub_judge(value)
@@ -109,6 +117,13 @@ def _scrub_config(item: dict[str, Any]) -> dict[str, Any]:
         out[key] = _scrub_browser(value)
     out["label"] = customer_config_label(item)
     return out
+
+
+def scrub_config(config: dict[str, Any] | None) -> dict[str, Any] | None:
+    """Scrub a run config for on-disk history. Keeps the live agent model name."""
+    if config is None:
+        return None
+    return _scrub_config(copy.deepcopy(config))
 
 
 def _scrub_browser(value: Any) -> Any:
@@ -127,6 +142,9 @@ def _scrub_browser(value: Any) -> Any:
             out[key] = _scrub_config(item)
             continue
         if key == "model" and isinstance(item, str):
+            harness = str(value.get("harness") or "").strip().lower()
+            if "arm_id" in value or harness in LIVE_AGENT_HARNESSES:
+                out[key] = item
             continue
         out[key] = _scrub_browser(item)
     if "scored_by" in out and isinstance(out["scored_by"], str):

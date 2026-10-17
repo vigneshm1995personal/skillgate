@@ -217,7 +217,7 @@ function LocalSettings() {
       />
       <Card>
         <CardHeader>
-          <CardTitle>Model keys</CardTitle>
+          <CardTitle>Agents</CardTitle>
           <CardDescription>
             Sign in with Cursor, Codex, or Claude Code. Same as{" "}
             <code>skillgate login</code>.
@@ -306,7 +306,7 @@ function LocalSettings() {
                   type="password"
                   autoComplete="off"
                   value={judgeDraft}
-                  placeholder={presence.set ? "Set — paste to replace" : "Paste key"}
+                  placeholder={presence.set ? "Set — enter a replacement" : "Optional"}
                   onChange={(event) => setJudgeDraft(event.target.value)}
                 />
                 <div className="flex flex-wrap gap-2">

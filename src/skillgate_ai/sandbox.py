@@ -331,19 +331,25 @@ def with_running_python(command: list[str]) -> list[str]:
     return list(command)
 
 
+def _is_secret_env(name: str) -> bool:
+    from skillgate_ai.keys import PROVIDER_KEY_NAMES, SKILLGATE_KEY_ENV
+
+    blocked = set(PROVIDER_KEY_NAMES)
+    blocked.update(SKILLGATE_KEY_ENV.values())
+    blocked.update(
+        {
+            "CODEX_ACCESS_TOKEN",
+            "SKILLGATE_SECRETS_KEY",
+        }
+    )
+    if name in blocked:
+        return True
+    return name.startswith("SKILLGATE_") and name.endswith("_API_KEY")
+
+
 def _sandbox_env(extra: dict[str, str] | None) -> dict[str, str]:
     # Do not leak API keys into the skill sandbox.
-    blocked = {
-        "CURSOR_API_KEY",
-        "CODEX_API_KEY",
-        "CODEX_ACCESS_TOKEN",
-        "AI_GATEWAY_API_KEY",
-        "ANTHROPIC_API_KEY",
-        "SKILLGATE_SECRETS_KEY",
-        "AWS_SECRET_ACCESS_KEY",
-        "AWS_SESSION_TOKEN",
-    }
-    env = {k: v for k, v in os.environ.items() if k not in blocked}
+    env = {k: v for k, v in os.environ.items() if not _is_secret_env(k)}
     env["PYTHONDONTWRITEBYTECODE"] = "1"
     env["PYTHONUNBUFFERED"] = "1"
     if extra:
