@@ -255,6 +255,17 @@ describe("configLabel", () => {
     ).toBe("Cursor · GPT-4.1 · 300s")
   })
 
+  it("names the Codex model actually used, including the default", () => {
+    expect(
+      customerRunDetails({
+        harness: "codex",
+        model: "gpt-5.6-luna",
+        timeout_effective: 240,
+        applied: { model: false },
+      })
+    ).toBe("Codex · GPT-5.6 luna · 240s")
+  })
+
   it("names a chosen scoring provider on History", () => {
     expect(
       customerConfigLabel({

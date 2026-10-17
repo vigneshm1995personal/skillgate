@@ -68,6 +68,13 @@ def _no_live_keys(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("SKILLGATE_JUDGE_WHY", raising=False)
 
 
+@pytest.fixture(autouse=True)
+def _isolate_codex_home(tmp_path_factory: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Never let pytest inherit or write the developer's ~/.codex/config.toml."""
+    isolated = tmp_path_factory.mktemp("codex-home")
+    monkeypatch.setenv("CODEX_HOME", str(isolated))
+
+
 def enable_cursor_agent(monkeypatch: pytest.MonkeyPatch, root: Path | None = None) -> None:
     if root is not None:
         monkeypatch.setenv("SKILLGATE_ROOT", str(root))

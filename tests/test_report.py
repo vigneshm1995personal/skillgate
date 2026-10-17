@@ -259,6 +259,23 @@ def test_format_cli_fresh_skip_judge_is_not_older_run() -> None:
     assert "Cursor" in text
 
 
+def test_format_cli_names_codex_default_model() -> None:
+    report = _report(
+        harness="codex",
+        config={
+            "harness": "codex",
+            "model": "gpt-5.6-luna",
+            "timeout_effective": 240,
+            "applied": {"model": False},
+        },
+        tasks=[_task(judge=None)],
+    )
+    text = format_cli(report)
+    assert "Codex" in text
+    assert "luna" in text.lower()
+    assert "Older run" not in text
+
+
 def test_format_cli_shows_subscription_or_dollar_cost() -> None:
     sub = _report(
         harness="cursor-agent",

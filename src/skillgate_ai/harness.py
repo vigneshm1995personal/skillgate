@@ -470,13 +470,13 @@ class CodexCliHarness:
             model=model,
         )
         env: dict[str, str] = {"SKILLGATE_TASK": prompt}
-        if key:
-            # Isolated home only when using a key so we never touch ~/.codex/auth.json.
-            codex_home = sandbox.workspace / ".skillgate" / "codex-home"
-            codex_home.mkdir(parents=True, exist_ok=True)
-            env["CODEX_HOME"] = str(codex_home)
-            env["CODEX_API_KEY"] = key
-        proc = sandbox.run(command, env=env, timeout=timeout_sec)
+        home_env = _prepare_codex_env(sandbox.workspace, api_key=key)
+        env.update(home_env)
+        try:
+            proc = sandbox.run(command, env=env, timeout=timeout_sec)
+        finally:
+            if not key:
+                _restore_codex_auth(Path(home_env["CODEX_HOME"]))
         transcript = _codex_transcript(proc.stdout or "", proc.stderr or "")
         if _codex_rejected_chatgpt_model(proc.stdout or "", proc.stderr or ""):
             rejected, accepted = _codex_rejected_model(proc.stdout or "", proc.stderr or "")
@@ -680,6 +680,40 @@ def auto_live_harness_name(cfg: LLMConfig) -> str:
 
 def _codex_auth_key(cfg: LLMConfig) -> str | None:
     return cfg.codex_api_key
+
+
+def _prepare_codex_env(workspace: Path, *, api_key: str | None) -> dict[str, str]:
+    """Throwaway CODEX_HOME so exec cannot write ~/.codex/config.toml."""
+    home = workspace / ".skillgate" / "codex-home"
+    home.mkdir(parents=True, exist_ok=True)
+    env = {"CODEX_HOME": str(home)}
+    if api_key:
+        env["CODEX_API_KEY"] = api_key
+        return env
+    _symlink_codex_auth(home)
+    return env
+
+
+def _symlink_codex_auth(temp_home: Path) -> None:
+    dest = temp_home / "auth.json"
+    if dest.exists() or dest.is_symlink():
+        dest.unlink()
+    src = Path.home() / ".codex" / "auth.json"
+    try:
+        if src.exists() or src.is_symlink():
+            dest.symlink_to(src)
+    except OSError:
+        return
+
+
+def _restore_codex_auth(temp_home: Path) -> None:
+    """If Codex rotated auth.json over the symlink, put the file back without reading it."""
+    dest = temp_home / "auth.json"
+    if dest.is_symlink() or not dest.is_file():
+        return
+    src = Path.home() / ".codex" / "auth.json"
+    src.parent.mkdir(parents=True, exist_ok=True)
+    os.replace(dest, src)
 
 
 _CODEX_LOGIN_STATUS_TIMEOUT_SEC = 5

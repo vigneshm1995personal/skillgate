@@ -15,6 +15,7 @@ from skillgate_ai.config import (
     LLMConfig,
     normalize_codex_reasoning_effort,
 )
+from skillgate_ai.harness import CODEX_CHATGPT_DEFAULT
 from skillgate_ai.errors import SkillGateError
 
 SCHEMA = 1
@@ -214,7 +215,9 @@ def stamp_resolved(run: EvalRunConfig, harness_name: str, cfg: LLMConfig) -> Eva
     effort = run.reasoning_effort
     if name == "codex":
         if model is None:
-            model = (cfg.codex_model or "").strip() or CODEX_DEFAULT_MODEL_LABEL
+            model = (cfg.codex_model or "").strip() or None
+        if not model or model == CODEX_DEFAULT_MODEL_LABEL:
+            model = CODEX_CHATGPT_DEFAULT
         if effort is None:
             effort = cfg.codex_reasoning_effort or DEFAULT_CODEX_REASONING_EFFORT
     elif name == "cursor-agent":
@@ -387,7 +390,10 @@ def customer_run_details(
     name = harness_display_name(cfg.harness or harness, cfg.harness)
     if name:
         parts.append(name)
-    if (cfg.applied or {}).get("model"):
+    show_model = bool((cfg.applied or {}).get("model")) or (
+        (cfg.harness or "").strip().lower() == "codex" and bool(cfg.model)
+    )
+    if show_model:
         model = friendly_model_name(cfg.model)
         if model:
             parts.append(model)

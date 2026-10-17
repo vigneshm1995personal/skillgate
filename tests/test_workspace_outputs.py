@@ -27,6 +27,27 @@ def test_harness_final_answer_from_cursor_result() -> None:
     assert harness_final_answer(stdout) == "Hello from Cursor"
 
 
+def test_harness_final_answer_strips_cursor_narration() -> None:
+    stdout = (
+        '{"type":"assistant","message":{"content":[{"type":"text","text":'
+        '"I\'ll read the skill first…"}]}}\n'
+        '{"type":"tool_call","subtype":"started"}\n'
+        '{"type":"assistant","message":{"content":[{"type":"text","text":'
+        '"The PDF says hello."}]}}\n'
+        '{"type":"result","result":"I\'ll read the skill first…\\nThe PDF says hello."}\n'
+    )
+    assert harness_final_answer(stdout) == "The PDF says hello."
+
+
+def test_persist_cursor_answer_omits_narration(tmp_path: Path) -> None:
+    stdout = (
+        '{"type":"result","result":"I\'ll read the skill first…\\n\\nDone: 42"}\n'
+    )
+    dest = persist_harness_answer(tmp_path, stdout)
+    assert dest is not None
+    assert dest.read_text(encoding="utf-8") == "Done: 42"
+
+
 def test_persist_does_not_overwrite_existing_output(tmp_path: Path) -> None:
     existing = tmp_path / "output" / "extracted.txt"
     existing.parent.mkdir(parents=True)

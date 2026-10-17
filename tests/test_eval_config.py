@@ -429,6 +429,21 @@ def test_customer_config_label_is_neutral_judge_copy() -> None:
     assert scrubbed_openai == "Scored by OpenAI"
 
 
+def test_codex_default_model_is_stamped_and_named() -> None:
+    cfg = _llm_config(codex_model=None)
+    run = stamp_resolved(
+        resolve_eval_config(harness_pref="codex", incoming={}, cfg=cfg, source="cli"),
+        "codex",
+        cfg,
+    )
+    assert run.model == "gpt-5.6-luna"
+    details = customer_run_details(replace(run, timeout_effective=240))
+    assert "Codex" in details
+    assert "luna" in details.lower()
+    payload = run.to_dict()
+    assert payload["model"] == "gpt-5.6-luna"
+
+
 def test_fresh_skip_judge_is_not_older_run() -> None:
     run = EvalRunConfig(
         harness="cursor-agent",
