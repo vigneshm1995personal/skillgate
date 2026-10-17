@@ -445,6 +445,7 @@ def _run_outcome_judge(
         path=path,
         scores=scores,
         artifacts=outputs,
+        command_log=result.stdout or None,
     )
     instructions = skill_instructions_text(skill_root, fallback=skill_instructions)
     judged = outcome.judge(

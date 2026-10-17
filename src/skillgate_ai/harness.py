@@ -11,7 +11,7 @@ import subprocess
 import threading
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Protocol
+from typing import Any, Protocol
 
 from skillgate_ai.config import (
     DEFAULT_CODEX_REASONING_EFFORT,
@@ -393,10 +393,29 @@ def _claude_used_model(stdout: str) -> str | None:
         if kind == "system" and isinstance(obj.get("model"), str):
             fallback = str(obj["model"]).strip() or fallback
         if kind == "result" and isinstance(obj.get("modelUsage"), dict):
-            for model_id in obj["modelUsage"]:
-                if isinstance(model_id, str) and model_id.strip():
-                    return model_id.strip()
+            chosen = _busiest_model_usage(obj["modelUsage"])
+            if chosen:
+                return chosen
     return fallback
+
+
+def _busiest_model_usage(model_usage: dict[str, Any]) -> str | None:
+    """Model id that did the work. A side model listed first must not win."""
+    best_id: str | None = None
+    best_tokens = -1
+    for model_id, stats in model_usage.items():
+        if not isinstance(model_id, str) or not model_id.strip():
+            continue
+        tokens = 0
+        if isinstance(stats, dict):
+            for key in ("outputTokens", "output_tokens", "inputTokens", "input_tokens"):
+                value = stats.get(key)
+                if isinstance(value, (int, float)) and not isinstance(value, bool):
+                    tokens += int(value)
+        if tokens > best_tokens:
+            best_tokens = tokens
+            best_id = model_id.strip()
+    return best_id
 
 
 def _codex_used_model(stdout: str, default: str | None) -> str | None:

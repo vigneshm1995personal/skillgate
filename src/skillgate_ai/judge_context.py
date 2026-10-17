@@ -117,7 +117,7 @@ def parse_command_runs(transcript: str) -> list[dict[str, Any]]:
             continue
         if kind in {"assistant", "user", "tool_use", "tool_result"}:
             _ingest_claude_stream_event(runs, pending, obj)
-    return runs[:30]
+    return _trim_command_runs(runs)
 
 
 def _claude_message_parts(obj: dict[str, Any]) -> list[dict[str, Any]]:
@@ -204,6 +204,33 @@ def _ingest_claude_stream_event(
         )
 
 
+def _is_shell_evidence(run: dict[str, Any]) -> bool:
+    tool = str(run.get("tool") or "").strip().lower()
+    if tool in {"bash", "shell", "run"}:
+        return True
+    command = str(run.get("command") or "")
+    output = str(run.get("output") or "")
+    if _TEST_LINE_RE.search(command) or _PYTEST_RESULT_RE.search(output):
+        return True
+    return not tool and bool(command)
+
+
+def _trim_command_runs(runs: list[dict[str, Any]], *, limit: int = 30) -> list[dict[str, Any]]:
+    """Keep shell/test evidence when a long trajectory would drop the last pytest."""
+    if len(runs) <= limit:
+        return runs
+    kept = list(runs)
+    index = 0
+    while len(kept) > limit and index < len(kept):
+        if _is_shell_evidence(kept[index]):
+            index += 1
+        else:
+            kept.pop(index)
+    if len(kept) > limit:
+        return kept[-limit:]
+    return kept
+
+
 def _append_command_run(runs: list[dict[str, Any]], item: dict[str, Any]) -> None:
     command = str(item.get("command") or "").strip()
     output = ""
@@ -238,6 +265,7 @@ def build_agent_trajectory(
     path: dict[str, Any] | None,
     scores: list[Score] | list[dict[str, Any]] | None,
     artifacts: list[dict[str, Any]] | None = None,
+    command_log: str | None = None,
 ) -> dict[str, Any]:
     records = list(spans or [])
     if not any(str(span.get("name") or "").startswith(("tool.", "skill.")) for span in records):
@@ -258,7 +286,9 @@ def build_agent_trajectory(
                 "file": attrs.get("file.path"),
             }
         )
-    command_runs = parse_command_runs(transcript)
+    command_runs = parse_command_runs(command_log if command_log else transcript)
+    if command_log and not command_runs:
+        command_runs = parse_command_runs(transcript)
     test_mentions: list[str] = []
     for line in (transcript or "").splitlines():
         if _TEST_LINE_RE.search(line) or _PYTEST_RESULT_RE.search(line):

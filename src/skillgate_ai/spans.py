@@ -252,6 +252,70 @@ def _set_string_attr(span: dict[str, Any], key: str, value: str) -> None:
     attrs.append({"key": key, "value": {"stringValue": value}})
 
 
+def _claude_tool_spans(
+    obj: dict[str, Any], *, trace_id: str, parent: str, t_ns: int
+) -> list[dict[str, Any]]:
+    """Claude Code stream-json tool_use blocks (Bash and others) as tool spans."""
+    parts: list[dict[str, Any]] = []
+    if obj.get("type") == "tool_use":
+        parts = [obj]
+    else:
+        message = obj.get("message")
+        content = message.get("content") if isinstance(message, dict) else None
+        if isinstance(content, list):
+            parts = [
+                part
+                for part in content
+                if isinstance(part, dict) and part.get("type") == "tool_use"
+            ]
+    spans: list[dict[str, Any]] = []
+    for part in parts:
+        name = str(part.get("name") or "tool").strip() or "tool"
+        args = part.get("input") if isinstance(part.get("input"), dict) else {}
+        summary = ""
+        path = ""
+        for key in ("command", "cmd", "script", "file_path", "path", "pattern", "query"):
+            value = args.get(key) if isinstance(args, dict) else None
+            if isinstance(value, str) and value.strip():
+                summary = value.strip()
+                if key in {"path", "file_path"}:
+                    path = value.strip()
+                break
+        tool = name.lower()
+        if tool in {"bash", "shell", "run"}:
+            span_name = "tool.shell"
+        elif tool in {"read", "readfile", "read_file"}:
+            span_name = "tool.read"
+        elif tool in {"write", "edit", "searchreplace", "applypatch"}:
+            span_name = "tool.write"
+        elif tool in {"glob", "grep", "rg", "search"}:
+            span_name = "tool.search"
+        else:
+            span_name = f"tool.{tool}"
+        if tool not in {"bash", "shell", "run"} and summary:
+            summary = f"{name} {summary}".strip()
+        attrs: dict[str, Any] = {
+            "gen_ai.operation.name": "execute_tool",
+            "gen_ai.tool.name": tool,
+        }
+        if summary:
+            attrs["gen_ai.tool.call.arguments"] = summary[:500]
+        if path:
+            attrs["file.path"] = path
+            attrs["file.name"] = _basename(path)
+        spans.append(
+            make_span(
+                name=span_name,
+                trace_id=trace_id,
+                parent_span_id=parent,
+                start_ns=t_ns,
+                end_ns=t_ns,
+                attributes=attrs,
+            )
+        )
+    return spans
+
+
 def spans_from_jsonl(stdout: str, *, trace_id: str | None = None) -> list[dict[str, Any]]:
     """Map Codex/Cursor JSONL stdout into OTLP-shaped spans (order preserved)."""
     tid = trace_id or _id(16)
@@ -284,6 +348,7 @@ def spans_from_jsonl(stdout: str, *, trace_id: str | None = None) -> list[dict[s
         kind = obj.get("type")
         span: dict[str, Any] | None = None
         pending_open_assistant = False
+        extra: list[dict[str, Any]] = []
         if kind == "tool_call":
             span = _cursor_tool_span(obj, trace_id=tid, parent=root_id, t_ns=tick)
         elif kind == "item.completed":
@@ -310,7 +375,10 @@ def spans_from_jsonl(stdout: str, *, trace_id: str | None = None) -> list[dict[s
                         "error.message": msg[:400],
                     },
                 )
+        elif kind in {"user", "tool_use"}:
+            extra = _claude_tool_spans(obj, trace_id=tid, parent=root_id, t_ns=tick)
         elif kind == "assistant":
+            extra = _claude_tool_spans(obj, trace_id=tid, parent=root_id, t_ns=tick)
             # Cursor --stream-partial-output emits one assistant event per token.
             # Coalesce consecutive partial deltas into one growing gen_ai.assistant
             # span; open a new Assistant step only after a tool (or other) step.
@@ -356,10 +424,12 @@ def spans_from_jsonl(stdout: str, *, trace_id: str | None = None) -> list[dict[s
                 )
                 open_assistant_idx = None
                 pending_open_assistant = False
-        if kind == "tool_call" or kind == "item.completed":
+        if kind == "tool_call" or kind == "item.completed" or extra:
             # Next assistant (partial or complete) starts a new step.
             open_assistant_idx = None
             pending_open_assistant = False
+        if extra:
+            spans.extend(extra)
         if span is not None:
             spans.append(span)
             if pending_open_assistant:

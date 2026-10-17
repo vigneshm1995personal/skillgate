@@ -102,6 +102,187 @@ def test_parse_command_runs_from_claude_stream_json() -> None:
     assert "def slugify" in (read.get("output") or "")
 
 
+def _claude_bash_jsonl() -> str:
+    return "\n".join(
+        [
+            json.dumps({"type": "system", "subtype": "init", "model": "claude-sonnet-5-5"}),
+            json.dumps(
+                {
+                    "type": "assistant",
+                    "message": {
+                        "role": "assistant",
+                        "content": [
+                            {
+                                "type": "tool_use",
+                                "id": "toolu_bash",
+                                "name": "Bash",
+                                "input": {"command": "pytest -q output/test_slugify.py"},
+                            }
+                        ],
+                    },
+                }
+            ),
+            json.dumps(
+                {
+                    "type": "user",
+                    "message": {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "tool_result",
+                                "tool_use_id": "toolu_bash",
+                                "content": "1 passed in 0.12s",
+                            }
+                        ],
+                    },
+                }
+            ),
+            json.dumps(
+                {
+                    "type": "result",
+                    "subtype": "success",
+                    "result": "done",
+                    "modelUsage": {"claude-sonnet-5-5": {"inputTokens": 3, "outputTokens": 2}},
+                }
+            ),
+        ]
+    )
+
+
+def test_live_judge_uses_raw_stdout_when_transcript_drops_tool_json(tmp_path: Path) -> None:
+    """The saved transcript is rendered text. Command evidence has to come from stdout."""
+    from skillgate_ai.engine import _run_outcome_judge
+    from skillgate_ai.harness import HarnessResult, _jsonl_transcript
+    from skillgate_ai.judge import SkipJudge
+    from skillgate_ai.metrics import count_path_steps
+    from skillgate_ai.scorers import RunArtifacts, TriggerEvidence
+    from skillgate_ai.spans import spans_from_jsonl
+    from skillgate_ai.suite import TaskSpec
+
+    raw = _claude_bash_jsonl()
+    rendered = _jsonl_transcript(raw, "")
+    assert "tool_use" not in rendered
+    assert "pytest -q output/test_slugify.py" in rendered
+    assert "1 passed in 0.12s" in rendered
+    spans = spans_from_jsonl(raw)
+    steps, _errors, had_path = count_path_steps(spans, rendered)
+    assert had_path is True
+    assert steps >= 1
+    captured: dict[str, object] = {}
+
+    class _Capture(SkipJudge):
+        def judge(self, goal, artifacts, transcript_tail, **kwargs):
+            captured["trajectory"] = kwargs.get("agent_trajectory")
+            return super().judge(goal, artifacts, transcript_tail, **kwargs)
+
+    _run_outcome_judge(
+        TaskSpec(id="tdd", prompt="Write tests first", expect_skill="slug", scorers=[]),
+        RunArtifacts(
+            workspace=tmp_path,
+            trigger=TriggerEvidence(selected_skill="slug", read_paths=[], transcript=rendered),
+            stdout=raw,
+            stderr="",
+        ),
+        HarnessResult(
+            trigger=TriggerEvidence(selected_skill="slug", read_paths=[], transcript=rendered),
+            stdout=raw,
+            transcript=rendered,
+            spans=spans,
+        ),
+        [],
+        "claude",
+        path={"steps": steps, "errors": 0, "had_path": had_path},
+        judge=_Capture(),
+        spans=spans,
+    )
+    trajectory = captured["trajectory"]
+    assert isinstance(trajectory, dict)
+    bash = next(
+        run
+        for run in trajectory["command_runs"]
+        if "pytest" in str(run.get("command") or "")
+    )
+    assert "passed" in (bash.get("output") or "").lower()
+
+
+def test_parse_command_runs_keeps_late_pytest_past_the_cap() -> None:
+    lines = []
+    for index in range(40):
+        lines.append(
+            json.dumps(
+                {
+                    "type": "assistant",
+                    "message": {
+                        "content": [
+                            {
+                                "type": "tool_use",
+                                "id": f"toolu_read_{index}",
+                                "name": "Read",
+                                "input": {"file_path": f"notes/{index}.md"},
+                            }
+                        ]
+                    },
+                }
+            )
+        )
+    lines.append(
+        json.dumps(
+            {
+                "type": "assistant",
+                "message": {
+                    "content": [
+                        {
+                            "type": "tool_use",
+                            "id": "toolu_pytest",
+                            "name": "Bash",
+                            "input": {"command": "pytest -q"},
+                        }
+                    ]
+                },
+            }
+        )
+    )
+    lines.append(
+        json.dumps(
+            {
+                "type": "user",
+                "message": {
+                    "content": [
+                        {
+                            "type": "tool_result",
+                            "tool_use_id": "toolu_pytest",
+                            "content": "3 passed",
+                        }
+                    ]
+                },
+            }
+        )
+    )
+    runs = parse_command_runs("\n".join(lines))
+    assert any("pytest" in str(run.get("command") or "") for run in runs)
+    assert any("3 passed" in str(run.get("output") or "") for run in runs)
+
+
+def test_claude_used_model_prefers_the_busiest_model_usage_key() -> None:
+    from skillgate_ai.harness import _claude_used_model
+
+    stdout = "\n".join(
+        [
+            json.dumps({"type": "system", "model": "sonnet"}),
+            json.dumps(
+                {
+                    "type": "result",
+                    "modelUsage": {
+                        "claude-haiku-4-5": {"inputTokens": 10, "outputTokens": 1},
+                        "claude-sonnet-5-5": {"inputTokens": 20, "outputTokens": 400},
+                    },
+                }
+            ),
+        ]
+    )
+    assert _claude_used_model(stdout) == "claude-sonnet-5-5"
+
+
 def test_with_model_keeps_requested_alias() -> None:
     run = EvalRunConfig(harness="claude", model="sonnet", requested_model="sonnet")
     updated = with_model(run, "claude-sonnet-5-5")
