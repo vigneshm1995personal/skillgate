@@ -593,29 +593,6 @@ export function EvalPage() {
         </section>
         </TabsContent>
         <TabsContent value="checks" className="flex flex-col gap-4 pt-4">
-        <RunConfigAccordion
-          harnessPref={harnessPref}
-          setHarnessPref={setHarnessPref}
-          resolvedHarness={resolvedHarness}
-          evalConfig={evalConfig}
-          setEvalConfig={setEvalConfig}
-          disabled={running || seeding}
-          supportedModels={status?.supported_models}
-          supportedModelsMeta={status?.supported_models_meta}
-          availableHarnesses={status?.available_harnesses}
-          defaultTimeoutSec={status?.default_eval_config?.timeout_sec}
-        />
-        <FixtureBindAccordion
-          skill={skill}
-          packFiles={skill?.pack_files ?? []}
-          checks={checks}
-          inherit={fixtureInherit}
-          glob={fixtureGlob}
-          disabled={running || seeding}
-          onInheritChange={(next) => void bindPackFixtures(next)}
-          onGlobChange={setFixtureGlob}
-          onExpand={() => void expandPackFixtures()}
-        />
         <section aria-labelledby="eval-step-cases">
           <Card>
             <CardHeader>
@@ -641,6 +618,29 @@ export function EvalPage() {
               </CardAction>
             </CardHeader>
             <CardContent className="flex flex-col gap-3">
+              <RunConfigAccordion
+                harnessPref={harnessPref}
+                setHarnessPref={setHarnessPref}
+                resolvedHarness={resolvedHarness}
+                evalConfig={evalConfig}
+                setEvalConfig={setEvalConfig}
+                disabled={running || seeding}
+                supportedModels={status?.supported_models}
+                supportedModelsMeta={status?.supported_models_meta}
+                availableHarnesses={status?.available_harnesses}
+                defaultTimeoutSec={status?.default_eval_config?.timeout_sec}
+              />
+              <FixtureBindAccordion
+                skill={skill}
+                packFiles={skill?.pack_files ?? []}
+                checks={checks}
+                inherit={fixtureInherit}
+                glob={fixtureGlob}
+                disabled={running || seeding}
+                onInheritChange={(next) => void bindPackFixtures(next)}
+                onGlobChange={setFixtureGlob}
+                onExpand={() => void expandPackFixtures()}
+              />
               {!skill ? (
                 <Empty>
                   <EmptyHeader>
