@@ -70,6 +70,116 @@ def version() -> None:
     console.print(__version__)
 
 
+def _print_agent_status(*, json_out: bool) -> None:
+    from skillgate_ai.config import get_llm_config
+    from skillgate_ai.harness import format_harness_status, harness_auth_status
+
+    rows = harness_auth_status(get_llm_config(_boot()))
+    if json_out:
+        _emit_json({"harnesses": rows})
+        return
+    console.print(format_harness_status(rows))
+
+
+def _login_targets(agent: str | None) -> list[str]:
+    from skillgate_ai.config import get_llm_config
+    from skillgate_ai.harness import harness_auth_status, normalize_login_agent
+
+    if agent:
+        kind = normalize_login_agent(agent)
+        if kind is None:
+            raise typer.BadParameter("Use cursor, claude, or codex.")
+        return [kind]
+    rows = harness_auth_status(get_llm_config(_boot()))
+    missing = [
+        str(row["agent"])
+        for row in rows
+        if row["installed"] and row["auth"] == "none"
+    ]
+    if missing:
+        if _stdin_is_tty() and len(missing) > 1:
+            names = ", ".join(missing)
+            picked = typer.prompt(
+                f"Sign in ({names}, or all)",
+                default="all",
+            ).strip().lower()
+            if picked in {"all", "*", "missing"}:
+                return missing
+            kind = normalize_login_agent(picked)
+            if kind is None:
+                raise typer.BadParameter("Use cursor, claude, codex, or all.")
+            return [kind]
+        return missing
+    return []
+
+
+@app.command()
+def login(
+    agent: str | None = typer.Argument(
+        None, help="cursor | claude | codex. Omit to sign in missing agents."
+    ),
+    status: bool = typer.Option(
+        False, "--status", help="Show installed / logged in / API key / none."
+    ),
+    json_out: bool = typer.Option(False, "--json", help="Machine JSON"),
+) -> None:
+    """Sign in with Cursor, Codex, or Claude Code using that agent's official login."""
+    from skillgate_ai.config import get_llm_config
+    from skillgate_ai.harness import (
+        format_harness_status,
+        harness_auth_status,
+        run_official_login,
+    )
+
+    root = _boot()
+    if status:
+        _print_agent_status(json_out=json_out)
+        raise typer.Exit()
+    try:
+        targets = _login_targets(agent)
+    except typer.BadParameter as exc:
+        console.print(str(exc))
+        raise typer.Exit(2) from None
+    if not targets:
+        rows = harness_auth_status(get_llm_config(root))
+        installed = [row for row in rows if row["installed"]]
+        if json_out:
+            _emit_json({"harnesses": rows, "signed_in": []})
+        elif not installed:
+            console.print(format_harness_status(rows))
+        else:
+            console.print("All installed agents already have a key or CLI login.")
+            console.print(format_harness_status(rows))
+        raise typer.Exit(0 if installed else 2)
+    cfg = get_llm_config(root)
+    results = [run_official_login(name, cfg) for name in targets]
+    if json_out:
+        _emit_json({"results": results, "harnesses": harness_auth_status(cfg)})
+        if any(not item.get("installed") for item in results):
+            raise typer.Exit(2)
+        raise typer.Exit(0 if all(item.get("ok") for item in results) else 1)
+    code = 0
+    for item in results:
+        if not item.get("installed"):
+            console.print(f"{item.get('agent')}: not installed.")
+            console.print(str(item.get("install") or ""))
+            code = max(code, 2)
+            continue
+        console.print(str(item.get("message") or ""))
+        if not item.get("ok"):
+            code = max(code, 1)
+    console.print(format_harness_status(harness_auth_status(cfg)))
+    raise typer.Exit(code)
+
+
+@app.command()
+def doctor(
+    json_out: bool = typer.Option(False, "--json", help="Machine JSON"),
+) -> None:
+    """Show whether Cursor, Codex, and Claude Code are installed and signed in."""
+    _print_agent_status(json_out=json_out)
+
+
 @app.command()
 def ingest(
     skill: Path = typer.Argument(..., help="Path to a skill folder containing SKILL.md"),
@@ -355,10 +465,10 @@ def deploy(
 ) -> None:
     """Copy a skill pack into a local agent skills directory.
 
-    Refuses unless this pack already has a passing check and a model key is set
-    (vault, Settings, or SKILLGATE_*). Does not run check. Copies skill files
-    only (not evals/). --force only overrides a red latest check; it does not
-    skip a missing key.
+    Refuses unless this pack already has a passing check and an agent is
+    available (API key or `skillgate login`). Does not run check. Copies skill
+    files only (not evals/). --force only overrides a red latest check; it does
+    not skip a missing agent.
     """
     from skillgate_ai.config import get_llm_config, missing_key_error
     from skillgate_ai.deploy import get_adapter
@@ -911,7 +1021,7 @@ def ui_cmd(
     open_browser: bool = typer.Option(False, "--open", help="Open the loopback URL in a browser"),
     no_browser: bool = typer.Option(False, "--no-browser", help="Do not open a browser"),
 ) -> None:
-    """Local React UI. No account. Run needs a key in Settings."""
+    """Local React UI. No account. Run needs an agent (`skillgate login` or a key)."""
     from skillgate_ai.server import serve_ui
 
     if port < 1 or port > 65535:

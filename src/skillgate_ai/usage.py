@@ -57,6 +57,8 @@ _MODEL_USD_PER_MILLION: dict[str, tuple[float, float]] = {
     "claude-sonnet-4-20250514": (3.00, 15.00),
 }
 
+SUBSCRIPTION_COST_LABEL = "subscription (not metered)"
+
 _COST_KEYS = (
     "cost_usd",
     "total_cost_usd",
@@ -230,6 +232,7 @@ def combine_task_usage(
     *,
     agent_model: str | None = None,
     judge_model: str | None = None,
+    agent_subscription: bool = False,
 ) -> dict[str, Any] | None:
     """Merge harness usage with the judge call's usage for check results."""
     agent_u = usage_from_mapping(agent)
@@ -237,7 +240,14 @@ def combine_task_usage(
     judge_u = usage_from_mapping(judge_raw)
     if agent_u is None and judge_u is None:
         return agent
-    if agent_u is not None and agent_u.cost_usd is None:
+    if agent_subscription and agent_u is not None:
+        agent_u = Usage(
+            tokens_in=agent_u.tokens_in,
+            tokens_out=agent_u.tokens_out,
+            tokens_total=agent_u.tokens_total,
+            cost_usd=None,
+        )
+    elif agent_u is not None and agent_u.cost_usd is None:
         est = estimate_usage_cost_usd(agent_model, agent_u)
         if est is not None:
             agent_u = Usage(
@@ -285,7 +295,9 @@ def combine_task_usage(
         or out.get("tokens_in") is not None
         or out.get("tokens_out") is not None
     )
-    if tokens_seen and total_cost is None:
+    if agent_subscription:
+        out["agent_cost_label"] = SUBSCRIPTION_COST_LABEL
+    if tokens_seen and total_cost is None and not agent_subscription:
         out["cost_unknown"] = True
     elif total_cost is not None:
         out.pop("cost_unknown", None)

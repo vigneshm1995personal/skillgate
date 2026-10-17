@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 
 import {
   checkUsageLine,
+  costMetricDisplay,
   pathEfficiencySoftRow,
   pathOpenedCaption,
 } from "./metrics-label"
@@ -21,6 +22,17 @@ describe("checkUsageLine", () => {
         { path: { steps: 3, had_path: true } }
       )
     ).toMatch(/1\.2k tok/)
+  })
+})
+
+describe("subscription cost", () => {
+  it("labels agent cost instead of inventing dollars", () => {
+    const shown = costMetricDisplay({
+      tokens_total: 1200,
+      agent_cost_label: "subscription (not metered)",
+    })
+    expect(shown.value).toBe("subscription (not metered)")
+    expect(shown.recorded).toBe(true)
   })
 })
 

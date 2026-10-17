@@ -22,16 +22,16 @@ This is a **local process**, not hosted `serve`. Default bind is `127.0.0.1:8765
 
 **Compare** (sidebar tab) has CLI equivalents: `skillgate compare models` (arms via `--arm 'Label:codex'`, spend cap via `--max-spend-usd`), `skillgate compare versions --run …`, `skillgate compare list`, `skillgate compare show`, and `skillgate compare cancel` while a job is running.
 
-**Skills list first.** Import from `~/.cursor/skills`, `~/.codex/skills`, and `~/.claude/skills`, or use packs under `skills/`. Open a skill to read `SKILL.md`, edit checks, then **press Run**. Nothing evaluates until you press it. Run is disabled until a key is in Settings. Results use the same drawn mark, Result | Check | What happened, and five answers.
+**Skills list first.** Import from `~/.cursor/skills`, `~/.codex/skills`, and `~/.claude/skills`, or use packs under `skills/`. Open a skill to read `SKILL.md`, edit checks, then **press Run**. Nothing evaluates until you press it. Run is disabled until `skillgate login` or a key is available (Settings → Sign in). Results use the same drawn mark, Result | Check | What happened, and five answers.
 
-**Deploy** copies a green-gated skill (skill files only, not `evals/`) into those same agent folders. Install stays disabled without a model key (Settings / `skillgate keys set`), even after a passing check. Keys live in this project’s `.skillgate/keys`, or CI/Docker can set `SKILLGATE_*` (always read). `skillgate check` still exits 0, 1, or 2 with no account.
+**Deploy** copies a green-gated skill (skill files only, not `evals/`) into those same agent folders. Install stays disabled without an agent (`skillgate login` or Settings / `skillgate keys set`), even after a passing check. Keys live in this project’s `.skillgate/keys`, or CI/Docker can set `SKILLGATE_*` (always read). `skillgate check` still exits 0, 1, or 2 with no account.
 
 The result panel names who scored the run in plain words (`Scored by the judge`, or `Scored by OpenAI` / `Jev` / `AWS` / `Other` if you picked a provider in Settings, or `Checks scored this run.`). Checking → slide → drawn Passed/Failed is unchanged.
 
 ## Intentional red path
 
 1. On the picker, open the muted **See a failing check** card (`skills/pdf-sabotaged`).
-2. Press Run (needs a key) → Failed, exit 1, description paste (PDF-shaped, not grocery/dinner).
+2. Press Run (needs `skillgate login` or a key) → Failed, exit 1, description paste (PDF-shaped, not grocery/dinner).
 3. Apply the paste on **this same pack**, then re-run → Passed, exit 0.
 
 CI still uses `skillgate check`; the UI calls the same `run_check` engine.
@@ -87,3 +87,5 @@ Everything the local UI can do has a CLI command. New API writes must update thi
 | Compare versions | `POST /api/compare/versions` | `skillgate compare versions` |
 | Cancel compare | `POST /api/compare/{compare_id}/cancel` | `skillgate compare cancel` |
 | Deploy | `POST /api/deploy` | `skillgate deploy` |
+| Sign in | `POST /api/login/{agent}` | `skillgate login` |
+| Agent status | `GET /api/login/status` | `skillgate login --status` |

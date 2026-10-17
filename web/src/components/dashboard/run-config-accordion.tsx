@@ -94,7 +94,11 @@ export function RunConfigAccordion({
                 <ToggleGroupItem
                   value="claude"
                   disabled={!claudeReady}
-                  title={claudeReady ? "Claude Code" : "Set ANTHROPIC_API_KEY"}
+                  title={
+                    claudeReady
+                      ? "Claude Code"
+                      : "Add a key or run skillgate login claude"
+                  }
                 >
                   {claudeReady ? "Claude" : "Claude · Coming next"}
                 </ToggleGroupItem>

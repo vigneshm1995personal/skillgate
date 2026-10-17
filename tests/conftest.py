@@ -41,6 +41,8 @@ def _no_live_keys(monkeypatch: pytest.MonkeyPatch) -> None:
 
     reset_key_env_bindings()
     monkeypatch.setattr("skillgate_ai.harness._codex_session_ok", lambda cfg: False)
+    monkeypatch.setattr("skillgate_ai.harness._cursor_session_ok", lambda cfg: False)
+    monkeypatch.setattr("skillgate_ai.harness._claude_session_ok", lambda cfg: False)
     monkeypatch.setenv("AI_GATEWAY_API_KEY", "")
     monkeypatch.setenv("CURSOR_API_KEY", "")
     monkeypatch.setenv("CODEX_API_KEY", "")

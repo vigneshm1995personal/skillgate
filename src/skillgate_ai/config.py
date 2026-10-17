@@ -256,10 +256,11 @@ def _env_temperature() -> float:
 
 NO_KEY_MESSAGE = "No agent is available to run checks."
 NO_KEY_HINT = (
-    "Install Cursor Agent, Codex CLI, or Claude Code, then add a matching key with "
-    "`skillgate keys set` (CURSOR_API_KEY, CODEX_API_KEY, or ANTHROPIC_API_KEY)."
+    "Install Cursor, Codex, or Claude Code, then run `skillgate login` "
+    "or add a matching key with `skillgate keys set` "
+    "(CURSOR_API_KEY, CODEX_API_KEY, or ANTHROPIC_API_KEY)."
 )
-UI_NO_KEY_HINT = "Set up an agent and key in Settings, then press Run."
+UI_NO_KEY_HINT = "Run `skillgate login` or add a key in Settings, then press Run."
 
 
 def missing_key_error(
@@ -273,18 +274,19 @@ def missing_key_error(
     if for_codex:
         hint = (
             "Codex CLI needs a key in Settings (`skillgate keys set`) "
-            "or a ChatGPT login (`codex login`)."
+            "or a CLI login (`skillgate login codex`)."
         )
     elif for_cursor:
         hint = (
             "Cursor Agent needs CURSOR_API_KEY in Settings (`skillgate keys set`) "
-            "or a CLI login (`cursor-agent status` / `agent status`), and the "
+            "or a CLI login (`skillgate login cursor`), and the "
             "`agent` CLI on your PATH (or set CURSOR_AGENT_BIN)."
         )
     elif for_claude:
         hint = (
             "Claude Code needs ANTHROPIC_API_KEY in Settings (`skillgate keys set`) "
-            "and the `claude` CLI on your PATH (or set CLAUDE_BIN)."
+            "or a CLI login (`skillgate login claude`), and the "
+            "`claude` CLI on your PATH (or set CLAUDE_BIN)."
         )
     else:
         hint = NO_KEY_HINT

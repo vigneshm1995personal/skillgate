@@ -35,7 +35,7 @@ import {
 import { api, ApiError } from "@/lib/api"
 import { useDashboard } from "@/lib/dashboard-provider"
 import { isLocalMode } from "@/lib/mode"
-import type { SettingsKeyId, SettingsKeyPresence } from "@/lib/types"
+import type { AgentAuthRow, SettingsKeyId, SettingsKeyPresence } from "@/lib/types"
 
 const KEY_ROWS: Array<{
   name: SettingsKeyId
@@ -122,6 +122,7 @@ export function SettingsPage() {
   const [baseUrl, setBaseUrl] = useState("")
   const [pingBusy, setPingBusy] = useState(false)
   const [providerBusy, setProviderBusy] = useState(false)
+  const [loginBusy, setLoginBusy] = useState<string | null>(null)
 
   const load = async () => {
     try {
@@ -241,6 +242,27 @@ export function SettingsPage() {
   }
 
   const qaOpen = status?.auth_open_reason === "qa"
+  const agents = status?.harness_auth?.harnesses ?? []
+
+  const onSignIn = async (agent: string) => {
+    setLoginBusy(agent)
+    try {
+      const data = await api.startLogin(agent)
+      if (data.command && navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(data.command)
+      }
+      toast.add({
+        title: data.message,
+        type: data.installed ? "success" : "error",
+      })
+      await refreshStatus()
+    } catch (err) {
+      const message = err instanceof ApiError ? err.message : "Could not start Sign in."
+      toast.add({ title: message, type: "error" })
+    } finally {
+      setLoginBusy(null)
+    }
+  }
 
   return (
     <div className="flex flex-col gap-6">
@@ -252,6 +274,81 @@ export function SettingsPage() {
             : "Bring your own model keys. Skill Gate stores them encrypted for this user and uses them instead of server env when present."
         }
       />
+      <Card>
+        <CardHeader>
+          <CardTitle>Agents</CardTitle>
+          <CardDescription>
+            Sign in with Cursor, Codex, or Claude Code. Same as{" "}
+            <code>skillgate login</code>. A key is optional.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <FieldGroup>
+            {(agents.length
+              ? agents
+              : ([
+                  {
+                    name: "Cursor",
+                    agent: "cursor",
+                    status: "none",
+                    installed: false,
+                    install: "curl https://cursor.com/install -fsS | bash",
+                    command: "skillgate login cursor",
+                  },
+                  {
+                    name: "Codex",
+                    agent: "codex",
+                    status: "none",
+                    installed: false,
+                    install: "npm install -g @openai/codex",
+                    command: "skillgate login codex",
+                  },
+                  {
+                    name: "Claude Code",
+                    agent: "claude",
+                    status: "none",
+                    installed: false,
+                    install: "npm install -g @anthropic-ai/claude-code",
+                    command: "skillgate login claude",
+                  },
+                ] as AgentAuthRow[])
+            ).map((row) => (
+              <Field key={row.agent} orientation="vertical">
+                <div className="flex flex-wrap items-center gap-2">
+                  <FieldLabel>{row.name}</FieldLabel>
+                  <Badge
+                    id={`settings-login-${row.agent}-state`}
+                    variant={row.status === "none" ? "outline" : "secondary"}
+                  >
+                    {row.status}
+                  </Badge>
+                </div>
+                {!row.installed ? (
+                  <FieldDescription>
+                    Not installed. {row.install}
+                  </FieldDescription>
+                ) : (
+                  <FieldDescription>
+                    Run <code>{row.command}</code> in your terminal.
+                  </FieldDescription>
+                )}
+                <Button
+                  id={`btn-settings-login-${row.agent}`}
+                  size="sm"
+                  variant="outline"
+                  disabled={loginBusy === row.agent}
+                  onClick={() => void onSignIn(row.agent)}
+                >
+                  {loginBusy === row.agent ? (
+                    <Spinner data-icon="inline-start" />
+                  ) : null}
+                  Sign in
+                </Button>
+              </Field>
+            ))}
+          </FieldGroup>
+        </CardContent>
+      </Card>
       <Card>
         <CardHeader>
           <CardTitle>Model keys</CardTitle>

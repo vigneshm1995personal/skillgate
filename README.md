@@ -1,6 +1,6 @@
 # skillgate-ai
 
-Apache-2.0 local gate for [Agent Skills](https://agentskills.io): **one pack on disk** plus `skillgate check` exiting **0, 1, or 2**. No Skill Gate account. Every check is a live model run with a key you set in Skill Gate.
+Apache-2.0 local gate for [Agent Skills](https://agentskills.io): **one pack on disk** plus `skillgate check` exiting **0, 1, or 2**. No Skill Gate account. Every check is a live run of Cursor, Codex, or Claude Code using `skillgate login` or a key you set.
 
 Requires **Python 3.11+**. Install from PyPI:
 
@@ -15,14 +15,14 @@ pip install skillgate-ai
 ```bash
 python3 -m venv .venv && source .venv/bin/activate
 pip install skillgate-ai
-skillgate keys set OPENAI_API_KEY   # hidden prompt; or pipe stdin. Or paste in Settings (`skillgate ui`)
+skillgate login                     # Cursor, Codex, or Claude Code (or: skillgate keys set)
 skillgate example pdf
 skillgate check pdf
 ```
 
 From a clone of this repo, `pip install -e .` works the same once the virtualenv is on Python 3.11+.
 
-Optional local UI (same engine, no account): `skillgate ui` → http://127.0.0.1:8765. See [`docs/ui.md`](docs/ui.md). Docker still runs `skillgate check /pack` (exit 2 until a key is mounted). Everything the UI can do has a CLI command.
+Optional local UI (same engine, no account): `skillgate ui` → http://127.0.0.1:8765. See [`docs/ui.md`](docs/ui.md). Docker still runs `skillgate check /pack` (exit 2 until a key is mounted). Everything the UI can do has a CLI command (`skillgate login` for Sign in).
 
 - **Bring your own judge** — pick OpenAI, Jev, AWS, or Other in Settings (`skillgate judge provider set`). Skill Gate does not ship a scorer account. See [`docs/judge.md`](docs/judge.md).
 - **Custom scoring questions** — add extras on top of Skill Gate’s six (`skillgate judge add-question`). Built-ins stay.
@@ -34,7 +34,7 @@ skillgate example pdf-sabotaged
 skillgate check pdf-sabotaged --expect-fail   # exit 0 after a live red run
 ```
 
-`skillgate deploy pdf` copies **only the skill files** (not `evals/`) into Cursor, Claude, or Codex **only if** this pack already has a passing check **and a model key is set**. It does not run check for you. Without a key, Deploy/Install stay blocked (CLI, API, and UI) even after a green check.
+`skillgate deploy pdf` copies **only the skill files** (not `evals/`) into Cursor, Claude, or Codex **only if** this pack already has a passing check **and an agent is available** (`skillgate login` or a key). It does not run check for you. Without an agent, Deploy/Install stay blocked (CLI, API, and UI) even after a green check.
 
 ```bash
 skillgate check pdf

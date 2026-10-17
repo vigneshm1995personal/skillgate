@@ -191,6 +191,7 @@ export type Usage = {
   cost_usd?: number | null
   agent_cost_usd?: number | null
   judge_cost_usd?: number | null
+  agent_cost_label?: string | null
   cost_unknown?: boolean
 }
 
@@ -644,6 +645,28 @@ export type FeatureSlots = {
   analyticsHome?: boolean
 }
 
+export type AgentAuthRow = {
+  name: string
+  kind: string
+  agent: string
+  installed: boolean
+  auth: "api_key" | "cli_login" | "none" | string
+  status: string
+  install: string
+  command: string
+}
+
+export type LoginStartPayload = {
+  agent: string
+  installed: boolean
+  install: string
+  command: string
+  auth: string
+  status: string
+  needs_terminal: boolean
+  message: string
+}
+
 export type StatusPayload = {
   version: string
   build?: string | null
@@ -695,6 +718,7 @@ export type StatusPayload = {
     has_codex_api_key?: boolean
     has_anthropic_api_key?: boolean
     selected_provider?: string
+    harnesses?: AgentAuthRow[]
   }
   skills_dir_exists?: boolean
   skills_dir_count?: number

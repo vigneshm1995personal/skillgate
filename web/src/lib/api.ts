@@ -13,6 +13,8 @@ import type {
   PromoteDraft,
   RunControlResponse,
   RunRecord,
+  AgentAuthRow,
+  LoginStartPayload,
   SettingsKeyId,
   SettingsKeysPayload,
   SkillDetailPayload,
@@ -201,6 +203,13 @@ export const api = {
       method: "PUT",
       headers: jsonHeaders,
       body: JSON.stringify(body),
+    }),
+  loginStatus: () => request<{ harnesses: AgentAuthRow[] }>("/api/login/status"),
+  startLogin: (agent: string) =>
+    request<LoginStartPayload>(`/api/login/${encodeURIComponent(agent)}`, {
+      method: "POST",
+      headers: jsonHeaders,
+      body: "{}",
     }),
   pingJudge: () =>
     request<{ ok: boolean; message: string }>("/api/judge/ping", {
