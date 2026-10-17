@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from skillgate_ai.engine import _live_verdict
-from skillgate_ai.eval_config import CODEX_DEFAULT_MODEL_LABEL, stamp_resolved, resolve_eval_config
+from skillgate_ai.eval_config import stamp_resolved, resolve_eval_config
 from skillgate_ai.gate import run_check
 from skillgate_ai.harness import (
     CodexCliHarness,
@@ -120,7 +120,7 @@ def test_stamp_resolved_codex_default_model_label() -> None:
         "codex",
         cfg,
     )
-    assert run.model == CODEX_DEFAULT_MODEL_LABEL
+    assert run.model == "gpt-5.6-luna"
 
 
 def test_judge_pass_lock_partially_supported_passes_major_deviation_fails() -> None:

@@ -4,6 +4,7 @@ from skillgate_ai.engine import SuiteReport, TaskReport
 from skillgate_ai.judge_openai import OUT_OF_CREDITS
 from skillgate_ai.report import format_cli, format_github, report_to_dict, scored_by_line
 from skillgate_ai.scorers import Score
+from skillgate_ai.usage import SUBSCRIPTION_COST_LABEL
 
 
 def _task(*, judge: dict | None, passed: bool = True, task_id: str = "t1") -> TaskReport:
@@ -241,6 +242,64 @@ def test_check_answers_from_builtin_scores() -> None:
     assert row["check_kind"] == "builtin"
     assert row["check_answers"][0]["label"] == "Task completed"
     assert row["check_answers"][0]["answer"].startswith("Yes")
+
+
+def test_format_cli_fresh_skip_judge_is_not_older_run() -> None:
+    report = _report(
+        harness="cursor-agent",
+        config={
+            "harness": "cursor-agent",
+            "timeout_effective": 300,
+            "judge": {"provider": "skip", "backend": "skip", "display_name": "Checks"},
+        },
+        tasks=[_task(judge={"status": "skip", "provider": "skip"})],
+    )
+    text = format_cli(report)
+    assert "Older run (before live-only checks)" not in text
+    assert "Cursor" in text
+
+
+def test_format_cli_names_codex_default_model() -> None:
+    report = _report(
+        harness="codex",
+        config={
+            "harness": "codex",
+            "model": "gpt-5.6-luna",
+            "timeout_effective": 240,
+            "applied": {"model": False},
+        },
+        tasks=[_task(judge=None)],
+    )
+    text = format_cli(report)
+    assert "Codex" in text
+    assert "luna" in text.lower()
+    assert "Older run" not in text
+
+
+def test_format_cli_shows_subscription_or_dollar_cost() -> None:
+    sub = _report(
+        harness="cursor-agent",
+        config={"harness": "cursor-agent"},
+        tasks=[
+            _task(
+                judge=None,
+            )
+        ],
+    )
+    sub.tasks[0].usage = {
+        "tokens_total": 100,
+        "agent_cost_label": SUBSCRIPTION_COST_LABEL,
+    }
+    text = format_cli(sub)
+    assert SUBSCRIPTION_COST_LABEL in text
+    paid = _report(
+        harness="cursor-agent",
+        config={"harness": "cursor-agent"},
+        tasks=[_task(judge=None)],
+    )
+    paid.tasks[0].usage = {"tokens_total": 100, "cost_usd": 0.42}
+    dollars = format_cli(paid)
+    assert "$0.42" in dollars or "$0.420" in dollars
 
 
 def test_report_json_includes_scored_by() -> None:

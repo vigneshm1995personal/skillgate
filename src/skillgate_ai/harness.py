@@ -31,6 +31,19 @@ from skillgate_ai.usage import (
 )
 
 
+AUTH_API_KEY = "api_key"
+AUTH_CLI_LOGIN = "cli_login"
+AUTH_NONE = "none"
+
+LOGIN_AGENTS = ("cursor", "codex", "claude")
+
+_AGENT_INSTALL = {
+    "cursor": "curl https://cursor.com/install -fsS | bash",
+    "codex": "npm install -g @openai/codex",
+    "claude": "npm install -g @anthropic-ai/claude-code",
+}
+
+
 @dataclass
 class HarnessResult:
     trigger: TriggerEvidence
@@ -41,6 +54,7 @@ class HarnessResult:
     returncode: int | None = None
     usage: Usage | None = None
     spans: list[dict] | None = None
+    auth_mode: str = AUTH_API_KEY
 
 
 def harness_usage(stdout: str) -> Usage | None:
@@ -177,8 +191,8 @@ class CursorAgentHarness:
             raise HarnessError(
                 "Cursor Agent CLI was not found (`agent` / `cursor-agent`).",
                 hint=(
-                    "Install Cursor Agent (https://cursor.com/docs/cli/using) "
-                    "or set CURSOR_AGENT_BIN, and add CURSOR_API_KEY in Settings."
+                    f"Install Cursor with `{_AGENT_INSTALL['cursor']}`, "
+                    "or set CURSOR_AGENT_BIN, then run `skillgate login cursor`."
                 ),
             )
         pinned = _read_selection(sandbox.workspace)
@@ -188,23 +202,12 @@ class CursorAgentHarness:
             agent_prompt = _cursor_prompt(
                 prompt, skills, pinned_skill=pinned  # type: ignore[arg-type]
             )
-        command = [
+        command = _cursor_exec_command(
             binary,
-            "-p",
-            "--force",
-            "--trust",
-            "--sandbox",
-            "disabled",
-            "--workspace",
-            str(sandbox.workspace),
-            "--output-format",
-            "stream-json",
-            "--stream-partial-output",
-        ]
-        cursor_model = (self.cfg.cursor_model or "").strip()
-        if cursor_model:
-            command.extend(["--model", cursor_model])
-        command.append(agent_prompt)
+            sandbox.workspace,
+            agent_prompt,
+            model=(self.cfg.cursor_model or "").strip() or None,
+        )
         env: dict[str, str] = {"SKILLGATE_TASK": prompt}
         if self.cfg.cursor_api_key:
             env["CURSOR_API_KEY"] = self.cfg.cursor_api_key
@@ -227,7 +230,59 @@ class CursorAgentHarness:
             spans=_jsonl_spans(proc.stdout or ""),
             returncode=proc.returncode,
             usage=harness_usage(proc.stdout or ""),
+            auth_mode=AUTH_API_KEY if (self.cfg.cursor_api_key or "").strip() else AUTH_CLI_LOGIN,
         )
+
+
+def _cursor_exec_command(
+    binary: str,
+    workspace: Path | str,
+    prompt: str,
+    *,
+    model: str | None = None,
+) -> list[str]:
+    """argv for official Cursor headless CLI (`agent -p --force`)."""
+    command = [
+        binary,
+        "-p",
+        "--force",
+        "--trust",
+        "--sandbox",
+        "disabled",
+        "--workspace",
+        str(workspace),
+        "--output-format",
+        "stream-json",
+        "--stream-partial-output",
+    ]
+    model_id = (model or "").strip()
+    if model_id:
+        command.extend(["--model", model_id])
+    command.append(prompt)
+    return command
+
+
+CODEX_CHATGPT_DEFAULT = "gpt-5.6-luna"
+_CODEX_REJECTED_MODEL = re.compile(
+    r"The ['\"]([^'\"]+)['\"] model is not supported",
+    re.IGNORECASE,
+)
+_CODEX_SUPPORTED_MODELS = re.compile(
+    r"(?:supported models|accepted)\s*[:=]\s*(.+)",
+    re.IGNORECASE,
+)
+
+
+def _codex_model_flag(model: str | None, *, cli_login: bool) -> str | None:
+    """ChatGPT login must pass -m so ~/.codex/config.toml cannot inherit."""
+    raw = (model or "").strip()
+    if raw == "codex-default":
+        raw = ""
+    if not cli_login:
+        return raw or None
+    if raw in CodexCliHarness.supported_models or (raw.startswith("gpt-") and "/" not in raw):
+        return raw
+    return CODEX_CHATGPT_DEFAULT
 
 
 def _codex_exec_command(
@@ -247,8 +302,9 @@ def _codex_exec_command(
     points `-C` at a temp workspace, so implied workspace-write is enough.
 
     Always pass `-c model_reasoning_effort=...` so Mini's ~/.codex/config.toml
-    (often `ultra`) does not make Skill Gate evals inherit that cost. Optional
-    `-m` only when `CODEX_MODEL` is set — never invent a model id.
+    (often `ultra`) does not make Skill Gate evals inherit that cost. ChatGPT
+    login always passes `-m` (default `gpt-5.6-luna`) so config.toml cannot
+    inherit a rejected client model.
 
     `--json` makes stdout JSONL so `turn.completed` carries real token counts.
     Skill selection still rides on `.skillgate/selected.json`; the JSONL rows
@@ -329,17 +385,38 @@ def _cursor_transcript(stdout: str, stderr: str) -> str:
 
 def _codex_rejected_chatgpt_model(stdout: str, stderr: str) -> bool:
     blob = f"{stdout}\n{stderr}"
-    return "is not supported when using Codex" in blob
+    return "is not supported when using Codex" in blob or bool(_CODEX_REJECTED_MODEL.search(blob))
 
 
-def codex_chatgpt_model_hint(model: str | None) -> str:
-    models = ", ".join(CodexCliHarness.supported_models)
-    picked = (model or "").strip()
-    extra = f" `{picked}` is not valid for Codex + ChatGPT login." if picked else ""
+def _codex_rejected_model(stdout: str, stderr: str) -> tuple[str | None, list[str]]:
+    blob = f"{stdout}\n{stderr}"
+    match = _CODEX_REJECTED_MODEL.search(blob)
+    rejected = match.group(1).strip() if match else None
+    accepted: list[str] = []
+    listed = _CODEX_SUPPORTED_MODELS.search(blob)
+    if listed:
+        raw = listed.group(1).strip()
+        for part in re.split(r"[,/]| and ", raw):
+            name = part.strip().strip(".")
+            if name.startswith("gpt-") and name not in accepted:
+                accepted.append(name)
+    return rejected, accepted
+
+
+def codex_chatgpt_model_hint(
+    model: str | None,
+    *,
+    accepted: list[str] | None = None,
+) -> str:
+    rejected = (model or "").strip()
+    catalog = [item for item in (accepted or []) if item and item != rejected]
+    if not catalog:
+        catalog = [item for item in CodexCliHarness.supported_models if item != rejected]
+    models = ", ".join(catalog) if catalog else CODEX_CHATGPT_DEFAULT
     return (
-        f"Pick a Codex model from the list for this harness ({models}) "
-        f"or leave Harness default (no -m).{extra} "
-        "Use a Codex client model id, not a gateway slug."
+        "ChatGPT login rejected that model. "
+        f"Pass --model with a supported id ({models}), "
+        f"or change model in ~/.codex/config.toml."
     )
 
 
@@ -352,7 +429,6 @@ class CodexCliHarness:
     supported_models = (
         "gpt-5.6-luna",
         "gpt-5.6-terra",
-        "gpt-5.6-sol",
         "gpt-6-astra",
     )
 
@@ -374,9 +450,8 @@ class CodexCliHarness:
             raise HarnessError(
                 "Codex CLI was not found (`codex`).",
                 hint=(
-                    "Install Codex CLI (https://developers.openai.com/codex/cli) "
-                    "or set CODEX_BIN. Set CODEX_API_KEY or OPENAI_API_KEY, "
-                    "or run `codex login`."
+                    f"Install Codex with `{_AGENT_INSTALL['codex']}`, "
+                    "or set CODEX_BIN, then run `skillgate login codex`."
                 ),
             )
         pinned = _read_selection(sandbox.workspace)
@@ -386,29 +461,29 @@ class CodexCliHarness:
             agent_prompt = _cursor_prompt(
                 prompt, skills, pinned_skill=pinned  # type: ignore[arg-type]
             )
+        model = _codex_model_flag(self.cfg.codex_model, cli_login=not bool(key))
         command = _codex_exec_command(
             binary,
             sandbox.workspace,
             agent_prompt,
             reasoning_effort=self.cfg.codex_reasoning_effort,
-            model=self.cfg.codex_model,
+            model=model,
         )
-        codex_home = sandbox.workspace / ".skillgate" / "codex-home"
-        codex_home.mkdir(parents=True, exist_ok=True)
-        env: dict[str, str] = {
-            "SKILLGATE_TASK": prompt,
-            "CODEX_HOME": str(codex_home),
-        }
-        if key:
-            env["CODEX_API_KEY"] = key
-        proc = sandbox.run(command, env=env, timeout=timeout_sec)
+        env: dict[str, str] = {"SKILLGATE_TASK": prompt}
+        home_env = _prepare_codex_env(sandbox.workspace, api_key=key)
+        env.update(home_env)
+        try:
+            proc = sandbox.run(command, env=env, timeout=timeout_sec)
+        finally:
+            if not key:
+                _restore_codex_auth(Path(home_env["CODEX_HOME"]))
         transcript = _codex_transcript(proc.stdout or "", proc.stderr or "")
         if _codex_rejected_chatgpt_model(proc.stdout or "", proc.stderr or ""):
+            rejected, accepted = _codex_rejected_model(proc.stdout or "", proc.stderr or "")
+            named = rejected or (self.cfg.codex_model or "").strip() or model
             raise HarnessError(
-                f"Codex rejected model {self.cfg.codex_model!r}."
-                if (self.cfg.codex_model or "").strip()
-                else "Codex rejected the selected model.",
-                hint=codex_chatgpt_model_hint(self.cfg.codex_model),
+                f"Codex rejected model {named!r}.",
+                hint=codex_chatgpt_model_hint(named, accepted=accepted),
             )
         selected = _parse_selected(sandbox.workspace, transcript, skills)
         read_paths = _parse_read_paths(transcript)
@@ -427,6 +502,7 @@ class CodexCliHarness:
             spans=_jsonl_spans(proc.stdout or ""),
             returncode=proc.returncode,
             usage=harness_usage(proc.stdout or ""),
+            auth_mode=AUTH_API_KEY if key else AUTH_CLI_LOGIN,
         )
 
 
@@ -446,15 +522,15 @@ class ClaudeCodeHarness:
         skills: list[Skill],
         timeout_sec: int,
     ) -> HarnessResult:
-        if not self.cfg.anthropic_api_key:
+        if not _claude_ready(self.cfg):
             raise missing_key_error(for_claude=True)
         binary = _resolve_claude_bin(self.cfg.claude_bin)
         if binary is None:
             raise HarnessError(
                 "Claude Code CLI was not found (`claude`).",
                 hint=(
-                    "Install Claude Code (https://code.claude.com/docs/en/cli) "
-                    "or set CLAUDE_BIN, and add ANTHROPIC_API_KEY in Settings."
+                    f"Install Claude Code with `{_AGENT_INSTALL['claude']}`, "
+                    "or set CLAUDE_BIN, then run `skillgate login claude`."
                 ),
             )
         pinned = _read_selection(sandbox.workspace)
@@ -469,10 +545,9 @@ class ClaudeCodeHarness:
             agent_prompt,
             model=(self.cfg.anthropic_model or "").strip() or None,
         )
-        env = {
-            "ANTHROPIC_API_KEY": self.cfg.anthropic_api_key,
-            "SKILLGATE_TASK": prompt,
-        }
+        env: dict[str, str] = {"SKILLGATE_TASK": prompt}
+        if self.cfg.anthropic_api_key:
+            env["ANTHROPIC_API_KEY"] = self.cfg.anthropic_api_key
         proc = sandbox.run(command, env=env, timeout=timeout_sec)
         transcript = _cursor_transcript(proc.stdout or "", proc.stderr or "")
         selected = _parse_selected(sandbox.workspace, transcript, skills)
@@ -492,17 +567,18 @@ class ClaudeCodeHarness:
             spans=_jsonl_spans(proc.stdout or ""),
             returncode=proc.returncode,
             usage=harness_usage(proc.stdout or ""),
+            auth_mode=AUTH_API_KEY if (self.cfg.anthropic_api_key or "").strip() else AUTH_CLI_LOGIN,
         )
 
 
 def harness_is_startable(harness: Harness, cfg: LLMConfig) -> bool:
-    """True when this harness can spawn (CLI on PATH / key present)."""
+    """True when this harness can spawn (CLI on PATH / key or CLI login)."""
     if isinstance(harness, CodexCliHarness):
         return _codex_ready(cfg) and _resolve_codex_bin(cfg.codex_bin) is not None
     if isinstance(harness, CursorAgentHarness):
         return _cursor_ready(cfg) and _resolve_agent_bin(cfg.cursor_agent_bin) is not None
     if isinstance(harness, ClaudeCodeHarness):
-        return bool(cfg.anthropic_api_key) and _resolve_claude_bin(cfg.claude_bin) is not None
+        return _claude_ready(cfg) and _resolve_claude_bin(cfg.claude_bin) is not None
     return True
 
 
@@ -549,7 +625,7 @@ def _agent_candidates(cfg: LLMConfig) -> list[tuple[str, Harness]]:
         found.append(("cursor-agent", CursorAgentHarness(cfg)))
     if _codex_ready(cfg) and _resolve_codex_bin(cfg.codex_bin):
         found.append(("codex", CodexCliHarness(cfg)))
-    if cfg.anthropic_api_key and _resolve_claude_bin(cfg.claude_bin):
+    if _claude_ready(cfg) and _resolve_claude_bin(cfg.claude_bin):
         found.append(("claude", ClaudeCodeHarness(cfg)))
     order = {name: index for index, name in enumerate(_AGENT_PRIORITY)}
     found.sort(key=lambda item: order.get(item[0], 99))
@@ -606,6 +682,40 @@ def _codex_auth_key(cfg: LLMConfig) -> str | None:
     return cfg.codex_api_key
 
 
+def _prepare_codex_env(workspace: Path, *, api_key: str | None) -> dict[str, str]:
+    """Throwaway CODEX_HOME so exec cannot write ~/.codex/config.toml."""
+    home = workspace / ".skillgate" / "codex-home"
+    home.mkdir(parents=True, exist_ok=True)
+    env = {"CODEX_HOME": str(home)}
+    if api_key:
+        env["CODEX_API_KEY"] = api_key
+        return env
+    _symlink_codex_auth(home)
+    return env
+
+
+def _symlink_codex_auth(temp_home: Path) -> None:
+    dest = temp_home / "auth.json"
+    if dest.exists() or dest.is_symlink():
+        dest.unlink()
+    src = Path.home() / ".codex" / "auth.json"
+    try:
+        if src.exists() or src.is_symlink():
+            dest.symlink_to(src)
+    except OSError:
+        return
+
+
+def _restore_codex_auth(temp_home: Path) -> None:
+    """If Codex rotated auth.json over the symlink, put the file back without reading it."""
+    dest = temp_home / "auth.json"
+    if dest.is_symlink() or not dest.is_file():
+        return
+    src = Path.home() / ".codex" / "auth.json"
+    src.parent.mkdir(parents=True, exist_ok=True)
+    os.replace(dest, src)
+
+
 _CODEX_LOGIN_STATUS_TIMEOUT_SEC = 5
 
 
@@ -654,7 +764,7 @@ def _cursor_login_status_authenticated(returncode: int, stdout: str, stderr: str
     text = f"{stdout}\n{stderr}".lower()
     if "not logged in" in text or "not authenticated" in text:
         return False
-    return "logged in" in text or "authenticated" in text
+    return True
 
 
 def _probe_cursor_login_status(binary: str) -> bool:
@@ -680,14 +790,229 @@ def _cursor_session_ok(cfg: LLMConfig) -> bool:
 
 
 def _cursor_ready(cfg: LLMConfig) -> bool:
-    return bool((cfg.cursor_api_key or "").strip()) or _cursor_session_ok(cfg)
+    return cursor_auth_kind(cfg) != AUTH_NONE
+
+
+_CLAUDE_LOGIN_STATUS_TIMEOUT_SEC = 5
+
+
+def _claude_login_status_authenticated(returncode: int, stdout: str, stderr: str) -> bool:
+    if returncode != 0:
+        return False
+    text = f"{stdout}\n{stderr}".lower()
+    if "not logged in" in text or "not authenticated" in text:
+        return False
+    return "logged in" in text or "authenticated" in text
+
+
+def _probe_claude_login_status(binary: str) -> bool:
+    """Host `claude auth status` only. Never read auth files."""
+    try:
+        proc = subprocess.run(
+            [binary, "auth", "status"],
+            capture_output=True,
+            text=True,
+            timeout=_CLAUDE_LOGIN_STATUS_TIMEOUT_SEC,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    return _claude_login_status_authenticated(proc.returncode, proc.stdout or "", proc.stderr or "")
+
+
+def _claude_session_ok(cfg: LLMConfig) -> bool:
+    binary = _resolve_claude_bin(cfg.claude_bin)
+    if binary is None:
+        return False
+    return _probe_claude_login_status(binary)
+
+
+def _claude_ready(cfg: LLMConfig) -> bool:
+    return claude_auth_kind(cfg) != AUTH_NONE
+
+
+def cursor_auth_kind(cfg: LLMConfig) -> str:
+    if (cfg.cursor_api_key or "").strip():
+        return AUTH_API_KEY
+    if _cursor_session_ok(cfg):
+        return AUTH_CLI_LOGIN
+    return AUTH_NONE
+
+
+def codex_auth_kind(cfg: LLMConfig) -> str:
+    if _codex_auth_key(cfg):
+        return AUTH_API_KEY
+    if _codex_session_ok(cfg):
+        return AUTH_CLI_LOGIN
+    return AUTH_NONE
+
+
+def claude_auth_kind(cfg: LLMConfig) -> str:
+    if (cfg.anthropic_api_key or "").strip():
+        return AUTH_API_KEY
+    if _claude_session_ok(cfg):
+        return AUTH_CLI_LOGIN
+    return AUTH_NONE
+
+
+def _display_status(*, installed: bool, auth: str) -> str:
+    if auth == AUTH_API_KEY:
+        return "API key"
+    if auth == AUTH_CLI_LOGIN:
+        return "logged in"
+    if installed:
+        return "installed"
+    return "none"
+
+
+def normalize_login_agent(raw: str | None) -> str | None:
+    name = (raw or "").strip().lower()
+    if name in {"cursor", "cursor-agent", "agent"}:
+        return "cursor"
+    if name == "codex":
+        return "codex"
+    if name in {"claude", "claude-code"}:
+        return "claude"
+    return None
+
+
+def harness_auth_status(cfg: LLMConfig) -> list[dict[str, str | bool]]:
+    """Per-agent install + auth. Never includes secrets."""
+    rows: list[tuple[str, str, str, str | None, str]] = [
+        (
+            "Cursor",
+            "cursor-agent",
+            "cursor",
+            _resolve_agent_bin(cfg.cursor_agent_bin),
+            cursor_auth_kind(cfg),
+        ),
+        (
+            "Codex",
+            "codex",
+            "codex",
+            _resolve_codex_bin(cfg.codex_bin),
+            codex_auth_kind(cfg),
+        ),
+        (
+            "Claude Code",
+            "claude",
+            "claude",
+            _resolve_claude_bin(cfg.claude_bin),
+            claude_auth_kind(cfg),
+        ),
+    ]
+    out: list[dict[str, str | bool]] = []
+    for name, kind, agent, binary, auth in rows:
+        installed = binary is not None
+        out.append(
+            {
+                "name": name,
+                "kind": kind,
+                "agent": agent,
+                "installed": installed,
+                "auth": auth,
+                "status": _display_status(installed=installed, auth=auth),
+                "install": _AGENT_INSTALL[agent],
+                "command": f"skillgate login {agent}",
+            }
+        )
+    return out
+
+
+def format_harness_status(rows: list[dict[str, str | bool]]) -> str:
+    lines: list[str] = []
+    for row in rows:
+        lines.append(str(row["name"]))
+        lines.append(f"  status     {row['status']}")
+        if not row["installed"]:
+            lines.append(f"  install    {row['install']}")
+        elif row["auth"] == AUTH_NONE:
+            lines.append(f"  login      {row['command']}")
+        lines.append("")
+    return "\n".join(lines).rstrip() + "\n"
+
+
+def _run_inherited(argv: list[str]) -> int:
+    """Run an official login CLI with the user's terminal (OAuth / browser)."""
+    proc = subprocess.run(argv, check=False)
+    return int(proc.returncode or 0)
+
+
+def run_official_login(agent: str, cfg: LLMConfig) -> dict[str, str | bool]:
+    """Start the agent's official login, then verify with a status probe."""
+    kind = normalize_login_agent(agent)
+    if kind is None:
+        return {
+            "ok": False,
+            "agent": (agent or "").strip() or "unknown",
+            "installed": False,
+            "status": "none",
+            "install": "",
+            "command": "skillgate login",
+            "message": "Use cursor, claude, or codex.",
+        }
+    if kind == "cursor":
+        binary = _resolve_agent_bin(cfg.cursor_agent_bin)
+        argv = [binary, "login"] if binary else []
+        probe = _probe_cursor_login_status
+    elif kind == "codex":
+        binary = _resolve_codex_bin(cfg.codex_bin)
+        argv = [binary, "login"] if binary else []
+        probe = _probe_codex_login_status
+    else:
+        binary = _resolve_claude_bin(cfg.claude_bin)
+        argv = [binary, "auth", "login"] if binary else []
+        probe = _probe_claude_login_status
+    install = _AGENT_INSTALL[kind]
+    command = f"skillgate login {kind}"
+    if binary is None:
+        return {
+            "ok": False,
+            "agent": kind,
+            "installed": False,
+            "status": "none",
+            "install": install,
+            "command": command,
+            "message": f"Not installed. {install}",
+        }
+    _run_inherited(argv)
+    logged_in = probe(binary)
+    return {
+        "ok": logged_in,
+        "agent": kind,
+        "installed": True,
+        "status": "logged in" if logged_in else "installed",
+        "install": install,
+        "command": command,
+        "message": (
+            f"{kind} is logged in."
+            if logged_in
+            else f"{kind} login did not complete. Run `{command}` in your terminal."
+        ),
+    }
 
 
 def _resolve_agent_bin(preferred: str) -> str | None:
-    for name in (preferred, "agent", "cursor-agent"):
-        path = shutil.which(name)
-        if path:
-            return path
+    """Find `agent` (official) or `cursor-agent` alias, including ~/.local/bin."""
+    names: list[str] = []
+    if preferred:
+        names.append(preferred)
+    for name in ("agent", "cursor-agent"):
+        if name not in names:
+            names.append(name)
+    for name in names:
+        found = shutil.which(name)
+        if found:
+            return found
+        if _looks_like_bin_path(name):
+            found = _executable_path(Path(name).expanduser())
+            if found:
+                return found
+    home_local = Path.home() / ".local" / "bin"
+    for name in ("agent", "cursor-agent"):
+        found = _executable_path(home_local / name)
+        if found:
+            return found
     return None
 
 

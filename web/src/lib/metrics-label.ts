@@ -36,6 +36,12 @@ export function formatCost(value?: number | null) {
 
 /** Total cost with optional scoring breakdown when the judge reported dollars. */
 export function formatCostWithScoring(usage?: Usage | null) {
+  if (usage?.agent_cost_label) {
+    const scoring = formatCost(usage.judge_cost_usd)
+    return scoring
+      ? `${usage.agent_cost_label} (${scoring} scoring)`
+      : usage.agent_cost_label
+  }
   const total = formatCost(usage?.cost_usd)
   const scoring = formatCost(usage?.judge_cost_usd)
   if (total && scoring) {
@@ -127,6 +133,9 @@ export function pathMetricDisplay(
 /** Suite Cost cell. Uses harness cost_usd only — Never invents dollars from tokens. */
 export function costMetricDisplay(usage?: Usage | null): MetricDisplay {
   const cost = formatCostWithScoring(usage)
+  if (usage?.agent_cost_label) {
+    return { value: cost || usage.agent_cost_label, hint: "", recorded: true }
+  }
   if (cost) {
     return { value: cost, hint: "", recorded: true }
   }

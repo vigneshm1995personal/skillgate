@@ -64,6 +64,22 @@ def ui_build_id() -> str:
         return ""
 
 
+def _harness_auth_rows(cfg) -> list[dict[str, Any]]:
+    from skillgate_ai.harness import harness_auth_status
+
+    return harness_auth_status(cfg)
+
+
+def _harness_auth_payload(cfg) -> dict[str, Any]:
+    return {
+        "has_cursor_api_key": bool(cfg.cursor_api_key),
+        "has_codex_api_key": bool(cfg.codex_api_key),
+        "has_anthropic_api_key": bool(cfg.anthropic_api_key),
+        "selected_provider": cfg.default_harness,
+        "harnesses": _harness_auth_rows(cfg),
+    }
+
+
 def create_app(*, root: Path | None = None, pack: Path | None = None) -> FastAPI:
     del pack
     workspace = (root or project_root()).expanduser().resolve()
@@ -127,12 +143,7 @@ def _register_core_routes(app: FastAPI) -> None:
             "auth_open_reason": None,
             "ci": {"url": "", "badge": "", "workflow": ""},
             "deploy": deploy_status(),
-            "harness_auth": {
-                "has_cursor_api_key": bool(cfg.cursor_api_key),
-                "has_codex_api_key": bool(cfg.codex_api_key),
-                "has_anthropic_api_key": bool(cfg.anthropic_api_key),
-                "selected_provider": cfg.default_harness,
-            },
+            "harness_auth": _harness_auth_payload(cfg),
             "skills_dir_exists": (state.root / "skills").is_dir(),
             "skills_dir_count": len(skills),
             "catalog_error": None,
@@ -158,6 +169,44 @@ def _register_core_routes(app: FastAPI) -> None:
             fail(400, "API keys cannot contain line breaks.")
         set_vault_key(state.root, vault_name, value)
         return {"keys": keys_payload(state)}
+
+    @app.get("/api/login/status")
+    def login_status(request: Request) -> dict[str, Any]:
+        state = state_of(request)
+        load_env(state.root)
+        cfg = get_llm_config(state.root)
+        return {"harnesses": _harness_auth_rows(cfg)}
+
+    @app.post("/api/login/{agent}")
+    def start_login(agent: str, request: Request) -> dict[str, Any]:
+        from skillgate_ai.harness import harness_auth_status, normalize_login_agent
+
+        state = state_of(request)
+        load_env(state.root)
+        kind = normalize_login_agent(agent)
+        if kind is None:
+            fail(400, "Use cursor, claude, or codex.")
+        cfg = get_llm_config(state.root)
+        # Browser requests cannot inherit a TTY. Point at the CLI login.
+        rows = harness_auth_status(cfg)
+        row = next((item for item in rows if item["agent"] == kind), None)
+        installed = bool(row and row["installed"])
+        install = str((row or {}).get("install") or "")
+        command = f"skillgate login {kind}"
+        return {
+            "agent": kind,
+            "installed": installed,
+            "install": install,
+            "command": command,
+            "auth": (row or {}).get("auth") or "none",
+            "status": (row or {}).get("status") or "none",
+            "needs_terminal": True,
+            "message": (
+                f"Not installed. {install}"
+                if not installed
+                else f"Run `{command}` in your terminal to finish Sign in."
+            ),
+        }
 
     @app.delete("/api/settings/keys/{name}")
     def clear_key(name: str, request: Request) -> dict[str, Any]:

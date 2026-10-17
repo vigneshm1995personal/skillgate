@@ -378,7 +378,10 @@ export function customerRunDetails(config?: EvalRunConfig | null): string {
   if (harness) {
     parts.push(harness)
   }
-  if (userPickedModel(config)) {
+  const showModel =
+    userPickedModel(config) ||
+    ((config.harness || "").toLowerCase() === "codex" && Boolean(config.model))
+  if (showModel) {
     const model = friendlyModelName(config.model)
     if (model) {
       parts.push(model)

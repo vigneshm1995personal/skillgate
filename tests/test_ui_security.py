@@ -100,6 +100,7 @@ def test_ui_busy_port_is_friendly_before_url(tmp_path: Path, monkeypatch) -> Non
         out = plain_text(result.stdout + result.stderr)
         assert result.exit_code != 0, out
         assert "in use" in out.lower()
+        assert "--port" in out
         assert "at http" not in out.lower()
         assert "Skill Gate UI (local, no account) at" not in out
         assert "Traceback" not in out

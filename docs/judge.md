@@ -4,7 +4,7 @@ Optional. Live checks still run with Cursor, Codex, Claude, or OpenAI. **Scoring
 
 ## What you get
 
-When a scoring key is set and you run a live check (`skillgate check`, or Run in the local UI), Skill Gate asks the same fixed questions on each live task. The check Passes only when those answers meet the bar (job done, correct, followed the rules, and so on). Every check still needs a live model key; without one, `skillgate check` exits 2. Scoring is optional. File-exists / contains / page-count scorers grade the live run when:
+When a scoring key is set and you run a live check (`skillgate check`, or Run in the local UI), Skill Gate asks the same fixed questions on each live task. The check Passes only when those answers meet the bar (job done, correct, followed the rules, and so on). Every check still needs a signed-in agent (`skillgate login`) or a key; without one, `skillgate check` exits 2. Scoring is optional. File-exists / contains / page-count scorers grade the live run when:
 
 - there is no scoring key in Settings (a Cursor or Codex key still runs the check)
 - you set `SKILLGATE_JUDGE=skip`
@@ -48,7 +48,7 @@ If the scorer is not very sure about a Pass, the check still Passes. You will se
 ```yaml
 - uses: actions/setup-python@v5
   with: { python-version: "3.12" }
-- run: pip install skillgate-ai==0.6.1
+- run: pip install skillgate-ai==0.7.0
 - run: skillgate check . --key-env OPENAI_API_KEY
   env:
     OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}

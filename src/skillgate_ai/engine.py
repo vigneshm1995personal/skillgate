@@ -134,8 +134,18 @@ class SuiteReport:
             "judge_cost_usd": total("judge_cost_usd", as_float=True),
         }
         totals = {key: value for key, value in totals.items() if value is not None}
+        labels = {
+            row.get("agent_cost_label")
+            for row in rows
+            if row.get("agent_cost_label")
+        }
+        if len(labels) == 1:
+            totals["agent_cost_label"] = next(iter(labels))
         if totals.get("tokens_total") and totals.get("cost_usd") is None:
-            totals["cost_unknown"] = True
+            if totals.get("agent_cost_label"):
+                pass
+            else:
+                totals["cost_unknown"] = True
         return totals or None
 
 
@@ -694,6 +704,9 @@ def _run_task(
             if control is not None and control.skip_requested:
                 ended = True
                 return _skipped_report(task, SKIP_FAILURE)
+            from skillgate_ai.workspace_outputs import persist_harness_answer
+
+            persist_harness_answer(sandbox.workspace, result.stdout or "")
             task_usage: dict[str, Any] | None
             if control is not None:
                 if result.usage is not None:
@@ -770,11 +783,14 @@ def _run_task(
                 if isinstance(judge_block, dict) and judge_block.get("model")
                 else None
             )
+            from skillgate_ai.harness import AUTH_CLI_LOGIN
+
             task_usage = combine_task_usage(
                 task_usage,
                 judged,
                 agent_model=str(cfg_model).strip() if cfg_model else None,
                 judge_model=judge_model,
+                agent_subscription=getattr(result, "auth_mode", None) == AUTH_CLI_LOGIN,
             )
             primary = skills[0] if skills else None
             advice = (

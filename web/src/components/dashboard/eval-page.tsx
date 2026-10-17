@@ -288,7 +288,7 @@ export function EvalPage() {
                 setKeyBannerDismissed(false)
               }}
             >
-              {status.missing_key_message || "No model key found."}
+              {status.missing_key_message || "No agent is available to run checks."}
             </Button>
           ) : undefined
         }
@@ -297,13 +297,13 @@ export function EvalPage() {
       {status && !status.has_key && !keyBannerDismissed ? (
         <Alert id="missing-key">
           <AlertTitle className="truncate pr-8">
-            {status.missing_key_message || "No model key found."}
+            {status.missing_key_message || "No agent is available to run checks."}
           </AlertTitle>
           <AlertDescription id="missing-key-hint">
             {status.missing_key_hint ||
               (isLocalMode(status)
-                ? "Add a key in Settings, then press Run."
-                : "Add a key in Settings to run live. Start needs a key.")}{" "}
+                ? "Run skillgate login or add a key in Settings, then press Run."
+                : "Run skillgate login or add a key in Settings to run live.")}{" "}
             <Button
               id="btn-open-settings"
               variant="link"
@@ -335,8 +335,8 @@ export function EvalPage() {
         <p id="missing-key-hint" className="sr-only">
           {status.missing_key_hint ||
             (isLocalMode(status)
-              ? "Add a key in Settings, then press Run."
-              : "Add a key in Settings to run live. Start needs a key.")}
+              ? "Run skillgate login or add a key in Settings, then press Run."
+              : "Run skillgate login or add a key in Settings to run live.")}
         </p>
       ) : null}
 

@@ -1,6 +1,6 @@
 # 10-minute quickstart (no account)
 
-Skill Gate’s public CLI is a **local gate**. You do not sign up and you do not need a Skill Gate account. Every check is a live model run with a key you set in Skill Gate.
+Skill Gate’s public CLI is a **local gate**. You do not sign up and you do not need a Skill Gate account. Every check is a live run of Cursor, Codex, or Claude Code after `skillgate login` or a key you set.
 
 Requires **Python 3.11+**.
 
@@ -10,7 +10,7 @@ Requires **Python 3.11+**.
 python3 -m venv .venv
 source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install skillgate-ai
-skillgate version           # 0.6.1
+skillgate version           # 0.7.0
 ```
 
 (`pip install skillgate` is a different product.) From a clone of this repo you can use `pip install -e .` instead.
@@ -19,10 +19,12 @@ Skill scripts run with that same Python — install the skill’s own packages t
 
 ## Keys, then the pdf example
 
-Skill Gate does not read `OPENAI_API_KEY` from the shell unless you pass `--key-env`. Set a key explicitly (vault, Settings, or the `SKILLGATE_*` CI/Docker prefix):
+Sign in with the agent CLI (subscription login) or set a key. Skill Gate does not read `OPENAI_API_KEY` from the shell unless you pass `--key-env`. CI and Docker still use a key (vault, Settings, or the `SKILLGATE_*` prefix):
 
 ```bash
-skillgate keys set OPENAI_API_KEY
+skillgate login                  # cursor | claude | codex; omit to sign in missing agents
+skillgate login --status         # installed / logged in / API key / none
+# or a key: skillgate keys set OPENAI_API_KEY
 # hidden prompt; or pipe stdin: printf '%s\n' "$OPENAI_API_KEY" | skillgate keys set OPENAI_API_KEY
 # or paste in Settings (`skillgate ui`)
 skillgate example pdf
@@ -45,11 +47,11 @@ skillgate check pdf-sabotaged --expect-fail
 echo $?    # 0
 ```
 
-Live scoring is optional — pick OpenAI, Jev, AWS, or Other in Settings. See [judge.md](https://github.com/vigneshm1995personal/skillgate/blob/main/docs/judge.md). Every check is a live model run; without a key, `skillgate check` exits 2. Default results say “Scored by the judge” unless you picked a provider.
+Live scoring is optional — pick OpenAI, Jev, AWS, or Other in Settings. See [judge.md](https://github.com/vigneshm1995personal/skillgate/blob/main/docs/judge.md). Every check is a live agent run; without `skillgate login` or a key, `skillgate check` exits 2. Default results say “Scored by the judge” unless you picked a provider.
 
 ## Deploy (after a green check)
 
-`skillgate deploy` copies **only the skill files** (not `evals/`) into Cursor, Claude, or Codex. It refuses unless this pack already has a passing check **and a model key is set** (vault, Settings, or `SKILLGATE_*`). It does not run check for you. Without a key, Deploy stays blocked even after a green check; the pointer is Settings / `skillgate keys set`.
+`skillgate deploy` copies **only the skill files** (not `evals/`) into Cursor, Claude, or Codex. It refuses unless this pack already has a passing check **and an agent is available** (`skillgate login`, vault, Settings, or `SKILLGATE_*`). It does not run check for you. Without an agent, Deploy stays blocked even after a green check; the pointer is `skillgate login` or Settings / `skillgate keys set`.
 
 ```bash
 skillgate check pdf
@@ -64,7 +66,7 @@ skillgate deploy pdf --targets cursor,codex
 skillgate ui                 # http://127.0.0.1:8765 — no account
 ```
 
-Same `run_check` engine as the CLI. Run is disabled until a key is in Settings. See [ui.md](https://github.com/vigneshm1995personal/skillgate/blob/main/docs/ui.md). The Docker image still runs `skillgate check /pack`; do not treat the UI as `serve`.
+Same `run_check` engine as the CLI. Run is disabled until `skillgate login` or a key is available. See [ui.md](https://github.com/vigneshm1995personal/skillgate/blob/main/docs/ui.md). The Docker image still runs `skillgate check /pack`; do not treat the UI as `serve`.
 
 ## Docker (optional)
 
@@ -88,7 +90,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: { python-version: "3.12" }
-      - run: pip install skillgate-ai==0.6.1
+      - run: pip install skillgate-ai==0.7.0
       - run: skillgate check . --key-env OPENAI_API_KEY
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}

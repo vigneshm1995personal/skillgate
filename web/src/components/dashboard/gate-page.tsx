@@ -140,9 +140,10 @@ export function GatePage({ embedded = false }: { embedded?: boolean }) {
   const stampLine =
     customerRunDetails(runConfig) || (harnessName !== "—" ? harnessName : "")
   const modelRaw = runConfig?.model || scopedResult?.model || ""
-  const modelValue = userPickedModel(runConfig)
-    ? friendlyModelName(modelRaw) || modelRaw || "—"
-    : "—"
+  const modelValue =
+    userPickedModel(runConfig) || (rawHarness === "codex" && modelRaw)
+      ? friendlyModelName(modelRaw) || modelRaw || "—"
+      : "—"
   const timeoutValue =
     runConfig?.timeout_effective ??
     runConfig?.timeout_sec ??
