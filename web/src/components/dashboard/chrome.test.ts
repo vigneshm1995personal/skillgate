@@ -22,6 +22,15 @@ describe("stageTitle", () => {
   })
 })
 
+describe("sidebar header", () => {
+  it("keeps Skill Gate text without the logo mark", () => {
+    const sidebar = readFileSync(join(dir, "app-sidebar.tsx"), "utf8")
+    expect(sidebar).toMatch(/Skill Gate/)
+    expect(sidebar).toMatch(/Eval · Gate · Deploy/)
+    expect(sidebar).not.toMatch(/skill-gate-mark/)
+  })
+})
+
 describe("black and white status", () => {
   it("keeps the Blocked badge monochrome", () => {
     const chrome = readFileSync(join(dir, "chrome.tsx"), "utf8")

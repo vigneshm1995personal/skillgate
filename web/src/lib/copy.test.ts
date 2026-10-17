@@ -86,12 +86,36 @@ describe("settings footer", () => {
     expect(src).toMatch(/status\?\.build/)
   })
 
-  it("names Jev as a scoring provider the user can pick", () => {
+  it("shows agent sign-in and an optional judge key, not provider key fields", () => {
     const src = readFileSync(
       join(componentsRoot, "dashboard/settings-page.tsx"),
       "utf8"
     )
-    expect(src).toMatch(/label: "Jev"/)
+    expect(src).toMatch(/signed in/)
+    expect(src).toMatch(/not signed in/)
+    expect(src).toMatch(/Judge key \(optional\)/)
+    expect(src).toMatch(/Skip it to run without the judge/)
+    expect(src).toMatch(/api\.loginStatus/)
+    expect(src).toMatch(/api\.startLogin/)
+    expect(src).toMatch(/Sign in/)
+    expect(src.match(/type="password"/g) ?? []).toHaveLength(1)
+    expect(src).not.toMatch(/Model keys/)
+    expect(src).not.toMatch(/Keys stay on this machine/)
+    expect(src).not.toMatch(/Runs live checks/)
+    expect(src).not.toMatch(/Paste key/)
+    expect(src).not.toMatch(/Claude \/ Anthropic/)
+    expect(src).not.toMatch(/settings-cursor-input/)
+    expect(src).not.toMatch(/settings-codex-input/)
+    expect(src).not.toMatch(/settings-openai-input/)
+    expect(src).not.toMatch(/settings-anthropic-input/)
+    expect(src).not.toMatch(/CURSOR_API_KEY/)
+    expect(src).not.toMatch(/CODEX_API_KEY/)
+    expect(src).not.toMatch(/ANTHROPIC_API_KEY/)
+    expect(src).not.toMatch(/label: "OpenAI"/)
+    expect(src).not.toMatch(/label: "Anthropic"/)
+    expect(src).not.toMatch(/label: "Jev"/)
+    expect(src).not.toMatch(/AI Gateway/)
+    expect(src).not.toMatch(/Scoring provider/)
     expect(src).not.toMatch(/Decisions/)
     expect(src).not.toMatch(/Bedrock/)
   })

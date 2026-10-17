@@ -665,6 +665,7 @@ export type LoginStartPayload = {
   status: string
   needs_terminal: boolean
   message: string
+  ok?: boolean
 }
 
 export type StatusPayload = {

@@ -54,6 +54,10 @@ def test_parity_table_is_in_docs() -> None:
     assert "UI / CLI parity" in text
     for command in sorted(set(WRITE_ROUTE_CLI.values())):
         assert command in text, command
+    for command in sorted(set(READ_ROUTE_CLI.values())):
+        assert command in text, command
+    assert "login --status" in text
+    assert "skillgate login" in text
     assert "skillgate history" in text
     assert "case list" in text
     assert "case remove" in text
@@ -62,3 +66,47 @@ def test_parity_table_is_in_docs() -> None:
     assert "history show" in text
     assert "import --only" in text
     assert "--choices" in text
+
+
+_SETTINGS_TSX = (
+    Path(__file__).resolve().parents[1] / "web" / "src" / "components" / "dashboard" / "settings-page.tsx"
+)
+_WEB_STATIC = Path(__file__).resolve().parents[1] / "src" / "skillgate_ai" / "web_static"
+_OLD_KEY_COPY = (
+    "Model keys",
+    "Keys stay on this machine",
+    "Runs live checks",
+    "Paste key",
+    "Claude / Anthropic",
+    "settings-cursor-input",
+    "settings-codex-input",
+    "settings-openai-input",
+    "settings-anthropic-input",
+    "CURSOR_API_KEY",
+    "CODEX_API_KEY",
+    "ANTHROPIC_API_KEY",
+    "AI Gateway",
+)
+
+
+def test_settings_screen_has_no_provider_key_fields() -> None:
+    text = _SETTINGS_TSX.read_text(encoding="utf-8")
+    for phrase in _OLD_KEY_COPY:
+        assert phrase not in text, phrase
+    assert text.count('type="password"') == 1
+    assert "signed in" in text
+    assert "not signed in" in text
+    assert "Judge key (optional)" in text
+    assert "Skip it to run without the judge" in text
+    bundles = list((_WEB_STATIC / "assets").glob("index-*.js"))
+    assert bundles, "packaged UI bundle is missing"
+    bundled = "\n".join(path.read_text(encoding="utf-8") for path in bundles)
+    for phrase in (
+        "Model keys",
+        "Keys stay on this machine",
+        "Runs live checks",
+        "Paste key",
+        "Claude / Anthropic",
+        "AI Gateway",
+    ):
+        assert phrase not in bundled, phrase
