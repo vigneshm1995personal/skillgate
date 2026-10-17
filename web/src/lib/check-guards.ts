@@ -367,12 +367,3 @@ export function needsFixtureNotice(
       hasRealFixture(check.files)
   )
 }
-
-export const PASTE_PLACEHOLDER = `---
-name: my-skill
-description: Extract text from PDFs and merge documents. Use when the user mentions a .pdf file, invoices, or combining files.
----
-
-# Steps
-1. Read the input files
-2. Write the result under output/`

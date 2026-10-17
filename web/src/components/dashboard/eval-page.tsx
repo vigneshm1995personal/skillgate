@@ -36,7 +36,6 @@ import {
   CardAction,
   CardContent,
   CardDescription,
-  CardFooter,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
@@ -73,7 +72,6 @@ import {
   PACK_BANK_NOTICE,
   PACK_FIXTURE_NOTICE,
   PACK_INHERIT_HINT,
-  PASTE_PLACEHOLDER,
   START_NEEDS_UPLOAD,
   STARTER_FROM_DESCRIPTION_NOTICE,
   authenticFixtureDefaults,
@@ -182,8 +180,6 @@ export function EvalPage() {
     skills,
     checks,
     yaml,
-    paste,
-    setPaste,
     intakeError,
     catalogError,
     refreshSkills,
@@ -195,8 +191,6 @@ export function EvalPage() {
     checksWarning,
     searchQuery,
     selectSkill,
-    pasteSkill,
-    uploadZip,
     updateCheck,
     removeCheck,
     packJudge,
@@ -525,71 +519,6 @@ export function EvalPage() {
               </AccordionItem>
             </Accordion>
           ) : null}
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Bring a skill</CardTitle>
-              <CardDescription>Paste SKILL.md or drop a zip.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <FieldGroup>
-                <Field>
-                  <FieldLabel htmlFor="paste">Paste SKILL.md</FieldLabel>
-                  <Textarea
-                    id="paste"
-                    rows={8}
-                    spellCheck={false}
-                    placeholder={PASTE_PLACEHOLDER}
-                    value={paste}
-                    onChange={(event) => setPaste(event.target.value)}
-                    className="field-sizing-fixed max-h-56 min-h-40"
-                  />
-                </Field>
-                {intakeError ? (
-                  <Alert id="intake-error">
-                    <AlertTitle>Could not use that skill</AlertTitle>
-                    <AlertDescription>
-                      <pre className="font-sans text-sm whitespace-pre-wrap">
-                        {intakeError}
-                      </pre>
-                    </AlertDescription>
-                  </Alert>
-                ) : null}
-              </FieldGroup>
-            </CardContent>
-            <CardFooter className="flex flex-wrap gap-2">
-              <Button
-                id="btn-paste"
-                size="lg"
-                disabled={running || seeding}
-                onClick={() => void pasteSkill()}
-              >
-                {seeding ? <Spinner data-icon="inline-start" /> : null}
-                Use this skill
-              </Button>
-              <Button
-                variant="outline"
-                disabled={running || seeding}
-                render={<label htmlFor="zip" />}
-              >
-                <FileArchiveIcon data-icon="inline-start" />
-                Drop a .zip of the skill folder
-              </Button>
-              <input
-                id="zip"
-                type="file"
-                accept=".zip,.md"
-                className="sr-only"
-                onChange={(event) => {
-                  const file = event.target.files?.[0]
-                  if (file) {
-                    void uploadZip(file)
-                  }
-                  event.target.value = ""
-                }}
-              />
-            </CardFooter>
-          </Card>
         </section>
         </TabsContent>
         <TabsContent value="checks" className="flex flex-col gap-4 pt-4">
