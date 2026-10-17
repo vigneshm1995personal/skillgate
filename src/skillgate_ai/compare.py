@@ -97,6 +97,22 @@ def parse_arm_file(path: Path, *, arm_id: str, index: int) -> CompareArmSpec:
     )
 
 
+def _resolved_arm_model(report: dict[str, Any], requested: str | None) -> str | None:
+    cfg = report.get("config")
+    if isinstance(cfg, dict):
+        resolved = _blank(cfg.get("model"))
+        if resolved:
+            return resolved
+    tasks = report.get("tasks")
+    if isinstance(tasks, list):
+        for task in tasks:
+            if isinstance(task, dict):
+                resolved = _blank(task.get("model"))
+                if resolved:
+                    return resolved
+    return _blank(requested)
+
+
 def _blank(value: Any) -> str | None:
     if value is None:
         return None
@@ -321,6 +337,10 @@ def scrub_compare_payload(payload: dict[str, Any]) -> dict[str, Any]:
             continue
         cfg = arm.get("config")
         if isinstance(cfg, dict):
+            if arm.get("model") is None:
+                harness = str(cfg.get("harness") or "").strip().lower()
+                if harness in {"cursor-agent", "codex", "claude", "claude-code"}:
+                    arm["model"] = _blank(cfg.get("model"))
             cfg.pop("model", None)
             cfg.pop("config_label_raw", None)
             cfg.pop("judge", None)
@@ -538,6 +558,8 @@ def _run_models_compare(
                     "task_count": task_count,
                     "usage": usage,
                     "duration_sec": duration_sec,
+                    "model": _resolved_arm_model(report, spec.model),
+                    "requested_model": spec.model,
                     "config": report.get("config"),
                     "task_by_id": tasks,
                 }

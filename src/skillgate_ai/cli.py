@@ -122,12 +122,18 @@ def login(
         False, "--status", help="Show installed / logged in / API key / none."
     ),
     json_out: bool = typer.Option(False, "--json", help="Machine JSON"),
+    force: bool = typer.Option(
+        False, "--force", help="Run the official login even if already signed in."
+    ),
 ) -> None:
     """Sign in with Cursor, Codex, or Claude Code using that agent's official login."""
     from skillgate_ai.config import get_llm_config
     from skillgate_ai.harness import (
+        AUTH_CLI_LOGIN,
+        claude_auth_kind,
         format_harness_status,
         harness_auth_status,
+        normalize_login_agent,
         run_official_login,
     )
 
@@ -152,6 +158,30 @@ def login(
             console.print(format_harness_status(rows))
         raise typer.Exit(0 if installed else 2)
     cfg = get_llm_config(root)
+    if (
+        agent
+        and not force
+        and normalize_login_agent(agent) == "claude"
+        and claude_auth_kind(cfg) == AUTH_CLI_LOGIN
+    ):
+        if json_out:
+            _emit_json(
+                {
+                    "results": [
+                        {
+                            "agent": "claude",
+                            "ok": True,
+                            "installed": True,
+                            "status": "logged in",
+                            "message": "Claude Code is already signed in",
+                        }
+                    ],
+                    "harnesses": harness_auth_status(cfg),
+                }
+            )
+        else:
+            console.print("Claude Code is already signed in")
+        raise typer.Exit(0)
     results = [run_official_login(name, cfg) for name in targets]
     if json_out:
         _emit_json({"results": results, "harnesses": harness_auth_status(cfg)})

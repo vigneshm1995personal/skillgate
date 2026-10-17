@@ -25,6 +25,7 @@ from skillgate_ai.eval_config import (
     resolve_eval_config,
     stamp_resolved,
     with_judge,
+    with_model,
     with_timeout_effective,
 )
 from skillgate_ai.harness import is_live_harness, live_harness_or_error
@@ -68,7 +69,7 @@ def persist_eval(
 ) -> None:
     if pack_root is None or not pack_root.is_dir():
         return
-    from skillgate_ai.api_payloads import scrub_browser_payload
+    from skillgate_ai.api_payloads import scrub_browser_payload, scrub_config
 
     cfg = config.to_dict() if isinstance(config, EvalRunConfig) else config
     is_tryout = tryout or bool((report or {}).get("tryout"))
@@ -78,7 +79,7 @@ def persist_eval(
         passed=passed,
         report=scrub_browser_payload(report) if report else None,
         error=error,
-        config=scrub_browser_payload(cfg) if cfg else None,
+        config=scrub_config(cfg) if cfg else None,
         tryout=is_tryout,
         gate_moved=gate_moved,
     )
@@ -278,6 +279,9 @@ def _execute_check(
                 strict_ingest=source == "cli",
             )
             run_cfg = with_timeout_effective(run_cfg, report.timeout_effective)
+            agent_model = next((t.model for t in report.tasks if t.model), None)
+            if agent_model:
+                run_cfg = with_model(run_cfg, agent_model)
             report.config = run_cfg.to_dict()
             set_eval_passed(report.passed)
             log_eval_finished(

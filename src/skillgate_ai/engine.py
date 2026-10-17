@@ -45,6 +45,7 @@ class TaskReport:
     judge: dict[str, Any] | None = None
     spans: list[dict[str, Any]] | None = None
     metrics: dict[str, Any] | None = None
+    model: str | None = None
 
     def failed_scorers(self) -> list[Score]:
         return [s for s in self.scores if not s.passed]
@@ -426,7 +427,9 @@ def _run_outcome_judge(
         case = case_for_task(pack, task.id)
         spec = _resolve_task_spec(skill_root, pack, case)
         if case is not None and case.golden is not None:
-            golden_payload = golden_state(case.golden, skill_root)
+            golden_payload = golden_state(
+                case.golden, skill_root, contains=case.contains
+            )
             actual_payload = actual_output_state(
                 case.golden.output_path, artifacts.workspace
             )
@@ -442,6 +445,7 @@ def _run_outcome_judge(
         path=path,
         scores=scores,
         artifacts=outputs,
+        command_log=result.stdout or None,
     )
     instructions = skill_instructions_text(skill_root, fallback=skill_instructions)
     judged = outcome.judge(
@@ -785,10 +789,12 @@ def _run_task(
             )
             from skillgate_ai.harness import AUTH_CLI_LOGIN
 
+            used_model = (result.model or "").strip() or None
+            agent_model = used_model or (str(cfg_model).strip() if cfg_model else None)
             task_usage = combine_task_usage(
                 task_usage,
                 judged,
-                agent_model=str(cfg_model).strip() if cfg_model else None,
+                agent_model=agent_model,
                 judge_model=judge_model,
                 agent_subscription=getattr(result, "auth_mode", None) == AUTH_CLI_LOGIN,
             )
@@ -840,6 +846,7 @@ def _run_task(
                 usage=task_usage,
                 judge=judged,
                 metrics=metrics,
+                model=result.model,
             )
     finally:
         if control is not None:

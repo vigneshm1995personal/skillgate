@@ -74,6 +74,7 @@ def workspace_files_for_judge(artifacts: list[dict[str, Any]] | None) -> list[di
 
 def parse_command_runs(transcript: str) -> list[dict[str, Any]]:
     runs: list[dict[str, Any]] = []
+    pending: dict[str, dict[str, Any]] = {}
     for line in (transcript or "").splitlines():
         text = line.strip()
         if not text.startswith("{"):
@@ -113,7 +114,121 @@ def parse_command_runs(transcript: str) -> list[dict[str, Any]]:
                                 ],
                             }
                         )
-    return runs[:30]
+            continue
+        if kind in {"assistant", "user", "tool_use", "tool_result"}:
+            _ingest_claude_stream_event(runs, pending, obj)
+    return _trim_command_runs(runs)
+
+
+def _claude_message_parts(obj: dict[str, Any]) -> list[dict[str, Any]]:
+    if obj.get("type") in {"tool_use", "tool_result"}:
+        return [obj]
+    message = obj.get("message")
+    if not isinstance(message, dict):
+        return []
+    parts = message.get("content")
+    if isinstance(parts, list):
+        return [part for part in parts if isinstance(part, dict)]
+    return []
+
+
+def _claude_tool_command(part: dict[str, Any]) -> str:
+    name = str(part.get("name") or "tool").strip() or "tool"
+    args = part.get("input") or part.get("args") or part.get("arguments")
+    if not isinstance(args, dict):
+        args = {}
+    detail = ""
+    for key in ("command", "cmd", "script", "file_path", "path", "pattern", "query"):
+        value = args.get(key)
+        if isinstance(value, str) and value.strip():
+            detail = value.strip()
+            break
+    if name.lower() in {"bash", "shell", "run"} and detail:
+        return detail
+    return f"{name} {detail}".strip()
+
+
+def _claude_tool_output(part: dict[str, Any]) -> str:
+    raw = part.get("content")
+    if isinstance(raw, str):
+        return raw.strip()
+    if isinstance(raw, list):
+        bits: list[str] = []
+        for item in raw:
+            if isinstance(item, str) and item.strip():
+                bits.append(item.strip())
+            elif isinstance(item, dict):
+                text = item.get("text") or item.get("content")
+                if isinstance(text, str) and text.strip():
+                    bits.append(text.strip())
+        return "\n".join(bits)
+    for key in ("output", "result", "stdout"):
+        value = part.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return ""
+
+
+def _ingest_claude_stream_event(
+    runs: list[dict[str, Any]],
+    pending: dict[str, dict[str, Any]],
+    obj: dict[str, Any],
+) -> None:
+    for part in _claude_message_parts(obj):
+        kind = part.get("type")
+        if kind == "tool_use":
+            command = _claude_tool_command(part)
+            call_id = str(part.get("id") or "").strip()
+            row = {
+                "command": command[:500],
+                "output": None,
+                "tool": str(part.get("name") or "").strip() or None,
+            }
+            if call_id:
+                pending[call_id] = row
+            runs.append(row)
+            continue
+        if kind != "tool_result":
+            continue
+        output = _claude_tool_output(part)
+        call_id = str(part.get("tool_use_id") or part.get("id") or "").strip()
+        row = pending.pop(call_id, None) if call_id else None
+        if row is not None:
+            row["output"] = output[:_COMMAND_OUTPUT_CAP] if output else None
+            continue
+        runs.append(
+            {
+                "command": "",
+                "output": output[:_COMMAND_OUTPUT_CAP] if output else None,
+            }
+        )
+
+
+def _is_shell_evidence(run: dict[str, Any]) -> bool:
+    tool = str(run.get("tool") or "").strip().lower()
+    if tool in {"bash", "shell", "run"}:
+        return True
+    command = str(run.get("command") or "")
+    output = str(run.get("output") or "")
+    if _TEST_LINE_RE.search(command) or _PYTEST_RESULT_RE.search(output):
+        return True
+    return not tool and bool(command)
+
+
+def _trim_command_runs(runs: list[dict[str, Any]], *, limit: int = 30) -> list[dict[str, Any]]:
+    """Keep shell/test evidence when a long trajectory would drop the last pytest."""
+    if len(runs) <= limit:
+        return runs
+    kept = list(runs)
+    index = 0
+    while len(kept) > limit and index < len(kept):
+        if _is_shell_evidence(kept[index]):
+            index += 1
+        else:
+            kept.pop(index)
+    if len(kept) > limit:
+        return kept[-limit:]
+    return kept
 
 
 def _append_command_run(runs: list[dict[str, Any]], item: dict[str, Any]) -> None:
@@ -150,6 +265,7 @@ def build_agent_trajectory(
     path: dict[str, Any] | None,
     scores: list[Score] | list[dict[str, Any]] | None,
     artifacts: list[dict[str, Any]] | None = None,
+    command_log: str | None = None,
 ) -> dict[str, Any]:
     records = list(spans or [])
     if not any(str(span.get("name") or "").startswith(("tool.", "skill.")) for span in records):
@@ -170,7 +286,9 @@ def build_agent_trajectory(
                 "file": attrs.get("file.path"),
             }
         )
-    command_runs = parse_command_runs(transcript)
+    command_runs = parse_command_runs(command_log if command_log else transcript)
+    if command_log and not command_runs:
+        command_runs = parse_command_runs(transcript)
     test_mentions: list[str] = []
     for line in (transcript or "").splitlines():
         if _TEST_LINE_RE.search(line) or _PYTEST_RESULT_RE.search(line):
