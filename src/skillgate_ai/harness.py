@@ -799,6 +799,16 @@ _CLAUDE_LOGIN_STATUS_TIMEOUT_SEC = 5
 def _claude_login_status_authenticated(returncode: int, stdout: str, stderr: str) -> bool:
     if returncode != 0:
         return False
+    for blob in (stdout, stderr):
+        raw = (blob or "").strip()
+        if not raw:
+            continue
+        try:
+            payload = json.loads(raw)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(payload, dict) and "loggedIn" in payload:
+            return payload.get("loggedIn") is True
     text = f"{stdout}\n{stderr}".lower()
     if "not logged in" in text or "not authenticated" in text:
         return False

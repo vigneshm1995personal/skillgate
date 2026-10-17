@@ -99,6 +99,42 @@ def test_key_wins_over_cli_login(monkeypatch: pytest.MonkeyPatch) -> None:
     assert claude_auth_kind(_cfg(anthropic_api_key="ant-test")) == AUTH_API_KEY
 
 
+# Claude Code 2.1.302 `claude auth status` JSON (subscription login). Email is
+# fixture data only; parsers and login results must never echo it.
+_CLAUDE_AUTH_STATUS_LOGGED_IN = {
+    "analyticsDisabled": False,
+    "apiProvider": "firstParty",
+    "authMethod": "claude.ai",
+    "configDirectory": "/tmp/skillgate-test-home/.claude",
+    "email": "user@example.com",
+    "loggedIn": True,
+    "orgId": "org-test-id",
+    "orgName": "Example Org",
+    "projectsDirectory": "/tmp/skillgate-test-home/.claude/projects",
+    "subscriptionType": "pro",
+}
+_CLAUDE_AUTH_STATUS_LOGGED_OUT = {
+    "analyticsDisabled": False,
+    "apiProvider": "firstParty",
+    "authMethod": "none",
+    "configDirectory": "/tmp/skillgate-test-home/.claude",
+    "email": None,
+    "loggedIn": False,
+    "orgId": None,
+    "orgName": None,
+    "projectsDirectory": "/tmp/skillgate-test-home/.claude/projects",
+    "subscriptionType": None,
+}
+
+
+def _isolate_home(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: home))
+    return home
+
+
 def test_login_status_parsers() -> None:
     assert _cursor_login_status_authenticated(0, "Logged in as user\n", "")
     assert not _cursor_login_status_authenticated(1, "Logged in", "")
@@ -110,6 +146,45 @@ def test_login_status_parsers() -> None:
     assert not _claude_login_status_authenticated(1, "Logged in", "")
     assert not _claude_login_status_authenticated(0, "Not logged in", "")
     assert not _claude_login_status_authenticated(0, "Not authenticated", "")
+
+
+def test_claude_auth_status_json_logged_in() -> None:
+    stdout = json.dumps(_CLAUDE_AUTH_STATUS_LOGGED_IN, indent=2) + "\n"
+    assert "logged in" not in stdout.lower()
+    assert _claude_login_status_authenticated(0, stdout, "")
+    assert not _claude_login_status_authenticated(1, stdout, "")
+
+
+def test_claude_auth_status_json_logged_out() -> None:
+    stdout = json.dumps(_CLAUDE_AUTH_STATUS_LOGGED_OUT, indent=2) + "\n"
+    assert not _claude_login_status_authenticated(0, stdout, "")
+    assert not _claude_login_status_authenticated(1, stdout, "")
+
+
+def test_login_claude_succeeds_when_auth_status_json_logged_in(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    home = _isolate_home(monkeypatch, tmp_path)
+    monkeypatch.setattr("skillgate_ai.harness._resolve_claude_bin", lambda _p: "/bin/claude")
+    monkeypatch.setattr("skillgate_ai.harness._run_inherited", lambda _argv: 0)
+
+    def fake_run(argv, **_kwargs):
+        assert argv[:3] == ["/bin/claude", "auth", "status"]
+        return subprocess.CompletedProcess(
+            argv,
+            0,
+            stdout=json.dumps(_CLAUDE_AUTH_STATUS_LOGGED_IN, indent=2) + "\n",
+            stderr="",
+        )
+
+    monkeypatch.setattr("skillgate_ai.harness.subprocess.run", fake_run)
+    result = run_official_login("claude", _cfg(anthropic_api_key=None))
+    assert result["ok"] is True
+    assert result["status"] == "logged in"
+    blob = json.dumps(result)
+    assert "user@example.com" not in blob
+    assert "token" not in blob.lower()
+    assert list(home.iterdir()) == []
 
 
 def test_auto_picks_claude_when_cli_logged_in(monkeypatch: pytest.MonkeyPatch) -> None:
