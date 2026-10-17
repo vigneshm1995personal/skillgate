@@ -1,18 +1,14 @@
-import { createRequire } from "node:module"
 import path from "node:path"
+import { fileURLToPath } from "node:url"
 
-const require = createRequire(import.meta.url)
+const uiRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 
 /** Resolve `@/` inside `@skillgate/ui` to that package's src. */
 export function skillgateUiPlugin() {
-  let uiSrc = ""
+  const uiSrc = path.join(uiRoot, "src")
   return {
     name: "skillgate-ui-alias",
     enforce: "pre",
-    configResolved() {
-      const pkg = require.resolve("@skillgate/ui/package.json")
-      uiSrc = path.join(path.dirname(pkg), "src")
-    },
     async resolveId(source, importer) {
       if (!source.startsWith("@/") || !importer || !uiSrc) {
         return null
