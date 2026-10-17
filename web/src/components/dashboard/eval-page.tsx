@@ -590,20 +590,32 @@ export function EvalPage() {
               />
             </CardFooter>
           </Card>
-          <FixtureBindAccordion
-            skill={skill}
-            packFiles={skill?.pack_files ?? []}
-            checks={checks}
-            inherit={fixtureInherit}
-            glob={fixtureGlob}
-            disabled={running || seeding}
-            onInheritChange={(next) => void bindPackFixtures(next)}
-            onGlobChange={setFixtureGlob}
-            onExpand={() => void expandPackFixtures()}
-          />
         </section>
         </TabsContent>
         <TabsContent value="checks" className="flex flex-col gap-4 pt-4">
+        <RunConfigAccordion
+          harnessPref={harnessPref}
+          setHarnessPref={setHarnessPref}
+          resolvedHarness={resolvedHarness}
+          evalConfig={evalConfig}
+          setEvalConfig={setEvalConfig}
+          disabled={running || seeding}
+          supportedModels={status?.supported_models}
+          supportedModelsMeta={status?.supported_models_meta}
+          availableHarnesses={status?.available_harnesses}
+          defaultTimeoutSec={status?.default_eval_config?.timeout_sec}
+        />
+        <FixtureBindAccordion
+          skill={skill}
+          packFiles={skill?.pack_files ?? []}
+          checks={checks}
+          inherit={fixtureInherit}
+          glob={fixtureGlob}
+          disabled={running || seeding}
+          onInheritChange={(next) => void bindPackFixtures(next)}
+          onGlobChange={setFixtureGlob}
+          onExpand={() => void expandPackFixtures()}
+        />
         <section aria-labelledby="eval-step-cases">
           <Card>
             <CardHeader>
@@ -942,23 +954,6 @@ export function EvalPage() {
                 packJudge={packJudge}
                 disabled={running || seeding || !skill}
                 onPackJudge={setPackJudge}
-              />
-            </AccordionContent>
-          </AccordionItem>
-          <AccordionItem value="agent">
-            <AccordionTrigger id="eval-step-agent">Agent and model</AccordionTrigger>
-            <AccordionContent>
-              <RunConfigAccordion
-                harnessPref={harnessPref}
-                setHarnessPref={setHarnessPref}
-                resolvedHarness={resolvedHarness}
-                evalConfig={evalConfig}
-                setEvalConfig={setEvalConfig}
-                disabled={running || seeding}
-                supportedModels={status?.supported_models}
-                supportedModelsMeta={status?.supported_models_meta}
-                availableHarnesses={status?.available_harnesses}
-                defaultTimeoutSec={status?.default_eval_config?.timeout_sec}
               />
             </AccordionContent>
           </AccordionItem>

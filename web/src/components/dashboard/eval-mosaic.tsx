@@ -13,11 +13,11 @@ type Level = "empty" | "pass-1" | "pass-2" | "pass-3" | "fail-1" | "fail-2"
 
 const LEVEL_CELL: Record<Level, string> = {
   empty: "bg-muted",
-  "pass-1": "bg-foreground/20",
-  "pass-2": "bg-foreground/50",
-  "pass-3": "bg-foreground",
-  "fail-1": "bg-foreground/30",
-  "fail-2": "bg-foreground/80",
+  "pass-1": "bg-success/35",
+  "pass-2": "bg-success/65",
+  "pass-3": "bg-success",
+  "fail-1": "bg-destructive/35",
+  "fail-2": "bg-destructive/65",
 }
 
 const CELL =
@@ -256,7 +256,7 @@ export function MosaicLegend() {
   return (
     <div
       role="img"
-      aria-label="Legend: gray means no evals; lighter to stronger ink means more of that day's runs passed; darker ink means most runs failed"
+      aria-label="Legend: muted means no evals; lighter to stronger green means more of that day's runs passed; red means most runs failed"
       className="flex items-center justify-end gap-3 text-xs text-muted-foreground"
     >
       <span className="flex items-center gap-1.5">

@@ -163,11 +163,13 @@ describe("design tokens", () => {
 })
 
 describe("status color is marks and badges only", () => {
-  it("paints the heatmap in grayscale", () => {
-    expect(mosaic).not.toMatch(/bg-success/)
-    expect(mosaic).not.toMatch(/bg-destructive/)
-    expect(mosaic).toMatch(/bg-foreground/)
-    expect(mosaic).toMatch(/gray means no evals/)
+  it("paints the heatmap with pass and fail color", () => {
+    expect(mosaic).toMatch(/bg-success\/35/)
+    expect(mosaic).toMatch(/bg-success\/65/)
+    expect(mosaic).toMatch(/"bg-success"/)
+    expect(mosaic).toMatch(/bg-destructive\/35/)
+    expect(mosaic).toMatch(/bg-destructive\/65/)
+    expect(mosaic).toMatch(/bg-muted/)
   })
 
   it("fills the checking bar with the hosted pass green", () => {
