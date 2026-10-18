@@ -277,7 +277,7 @@ def skill_payload(state: AppState, path: Path) -> dict[str, Any]:
         "last_eval_at": last.get("ts") if last else None,
         "eval_count": len(hist),
         "deploy_count": len(deploys),
-        "version_count": 0,
+        "version_count": len(skill_version_rows(path)),
         "last_run": last_run,
         "last_deploy": last_deploy,
         "pack_files": files,
@@ -288,6 +288,23 @@ def skill_payload(state: AppState, path: Path) -> dict[str, Any]:
         "default_output_path": "output/result.txt",
         "has_dataset": skill_has_dataset(path),
     }
+
+
+def skill_version_rows(path: Path) -> list[dict[str, Any]]:
+    """Versions Compare can use for this skill: one row per git ref."""
+    from skillgate_ai.compare_git import list_skill_git_versions
+
+    rows: list[dict[str, Any]] = []
+    for index, item in enumerate(list_skill_git_versions(path)):
+        rows.append(
+            {
+                "id": index + 1,
+                "semver": item["ref"],
+                "created_at": item["created_at"] or None,
+                "skill_md_hash": item["ref"],
+            }
+        )
+    return rows
 
 
 def history_payload(state: AppState, skill_path: Path) -> dict[str, Any]:
@@ -333,7 +350,7 @@ def history_payload(state: AppState, skill_path: Path) -> dict[str, Any]:
         "gate": gate or "pending",
         "last_run": last_run,
         "last_deploy": last_deploy,
-        "versions": [],
+        "versions": skill_version_rows(skill_path),
         "runs": runs,
         "deploys": list(reversed(deploys)),
         "timeline": timeline,

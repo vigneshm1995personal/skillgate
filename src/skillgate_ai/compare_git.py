@@ -21,6 +21,39 @@ from skillgate_ai.compare import (
 from skillgate_ai.history import append_compare
 
 
+def list_skill_git_versions(pack: Path) -> list[dict[str, str]]:
+    """Commits that changed this skill, newest first.
+
+    Compare offers these same refs. A pack outside git has none.
+    """
+    try:
+        root = find_git_root(pack)
+    except CompareError:
+        return []
+    try:
+        rel = pack.resolve().relative_to(root.resolve())
+    except ValueError:
+        return []
+    spec = "." if str(rel) in {"", "."} else str(rel)
+    try:
+        out = subprocess.run(
+            ["git", "-C", str(root), "log", "-5", "--format=%h%x09%cI", "--", spec],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except (OSError, subprocess.CalledProcessError):
+        return []
+    rows: list[dict[str, str]] = []
+    for line in out.stdout.splitlines():
+        ref, sep, when = line.partition("\t")
+        ref = ref.strip()
+        if not ref:
+            continue
+        rows.append({"ref": ref, "created_at": when.strip() if sep else ""})
+    return rows
+
+
 def find_git_root(pack: Path) -> Path:
     pack = pack.resolve()
     try:

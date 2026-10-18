@@ -179,6 +179,19 @@ def register_pack_commands(app: typer.Typer, case_app: typer.Typer, judge_app: t
             date_bit = f"  {date}" if date else ""
             console.print(f"{row.get('run_id')}  {gate}{counts}{date_bit}  {who}")
 
+    def _print_skill_versions(pack: Path) -> None:
+        from skillgate_ai.compare_git import list_skill_git_versions
+
+        versions = list_skill_git_versions(pack)
+        console.print("Versions")
+        if not versions:
+            console.print("No versions recorded yet.")
+            return
+        for item in versions:
+            when = str(item.get("created_at") or "")[:10]
+            date_bit = f"  {when}" if when else ""
+            console.print(f"{item['ref']}{date_bit}")
+
     @history_app.callback(invoke_without_command=True)
     def history_cmd(
         ctx: typer.Context,
@@ -202,6 +215,7 @@ def register_pack_commands(app: typer.Typer, case_app: typer.Typer, judge_app: t
             _emit_json(rows)
             return
         _print_history_rows(rows)
+        _print_skill_versions(dest)
 
     @history_app.command("show")
     def history_show(
