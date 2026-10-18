@@ -64,18 +64,18 @@ def test_release_yml_example_tag_is_current() -> None:
     assert "v0.4.2" in text or "v0.5.0" in text or "v0.5.1" in text or "v0.6.0" in text
 
 
-def test_package_and_docs_pin_075() -> None:
+def test_package_and_docs_pin_077() -> None:
     pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
     init = (ROOT / "src" / "skillgate_ai" / "__init__.py").read_text(encoding="utf-8")
     readme = README.read_text(encoding="utf-8")
     quickstart = QUICKSTART.read_text(encoding="utf-8")
     judge = (ROOT / "docs" / "judge.md").read_text(encoding="utf-8")
-    assert 'version = "0.7.5"' in pyproject
-    assert '__version__ = "0.7.5"' in init
+    assert 'version = "0.7.7"' in pyproject
+    assert '__version__ = "0.7.7"' in init
     assert "pip install skillgate-ai" in readme
-    assert "0.7.5" in readme
-    assert "skillgate-ai==0.7.5" in quickstart
-    assert "skillgate-ai==0.7.5" in judge
+    assert "0.7.7" in readme
+    assert "skillgate-ai==0.7.7" in quickstart
+    assert "skillgate-ai==0.7.7" in judge
     assert "# 10-minute" in quickstart
 
 
@@ -90,6 +90,36 @@ def test_deploy_docs_require_a_check_first() -> None:
     lines = readme.splitlines()
     assert "skillgate check pdf" not in lines
     assert "skillgate deploy pdf" not in lines
+
+
+def test_quickstart_installs_dataset_examples_and_shows_pass_and_fail() -> None:
+    text = QUICKSTART.read_text(encoding="utf-8")
+    readme = README.read_text(encoding="utf-8")
+    for blob in (text, readme):
+        assert "skillgate examples install" in blob
+        assert "skillgate check skills/json-response" in blob
+        assert "skillgate check skills/json-response-sabotaged" in blob
+    assert "skillgate examples list" in text
+    assert "Run 3 cases" in text
+    assert "Examples" in text
+    guide = (ROOT / "docs" / "writing-a-dataset.md").read_text(encoding="utf-8")
+    assert "docs/writing-a-dataset.md" in readme
+    assert "https://www.skill-gate-ai.app/docs/writing-a-dataset" in readme
+    for phrase in (
+        "schema: 1",
+        "should_trigger: false",
+        "not specified",
+        "3 to 6",
+        "skillgate case list skills/json-response",
+        "skillgate ingest skills/json-response",
+        "Left N existing file(s) in place.",
+        "json-response-sabotaged",
+        "readme-writer",
+        "log-summarizer",
+        "sql-writer",
+        "receipt-extractor",
+    ):
+        assert phrase in guide, phrase
 
 
 def test_quickstart_uses_example_and_keys() -> None:

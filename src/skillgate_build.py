@@ -31,7 +31,16 @@ DEFAULT_DEST = SRC / "skillgate_ai" / "web_static"
 DEFAULT_WEB_DIST = ROOT / "web" / "dist"
 DEFAULT_WEB_DIR = ROOT / "web"
 DEFAULT_EXAMPLES_DEST = SRC / "skillgate_ai" / "examples"
-EXAMPLE_NAMES = ("pdf", "pdf-sabotaged")
+EXAMPLE_NAMES = (
+    "pdf",
+    "pdf-sabotaged",
+    "json-response",
+    "json-response-sabotaged",
+    "readme-writer",
+    "log-summarizer",
+    "sql-writer",
+    "receipt-extractor",
+)
 
 
 def web_tree_present(web_dir: Path = DEFAULT_WEB_DIR) -> bool:

@@ -1,0 +1,39 @@
+schema: 1
+skill: sql-writer
+cases:
+  - id: open-orders
+    status: pinned
+    prompt: Using schema.sql, write a SQL query that returns id and total for open orders. Save output/query.sql.
+    should_trigger: true
+    input:
+      files:
+        - src: evals/fixtures/schema.sql
+          dest: schema.sql
+    golden:
+      output_path: output/query.sql
+      path: evals/goldens/open-orders.sql
+      kind: text
+    contains:
+      - SELECT id, total
+      - status = 'open'
+  - id: edge-unknown-column
+    status: pinned
+    prompt: Using schema.sql, write a SQL query that returns customer_email from orders. Do not invent a column the schema does not list. Save output/query.sql.
+    should_trigger: true
+    input:
+      files:
+        - src: evals/fixtures/schema.sql
+          dest: schema.sql
+    golden:
+      output_path: output/query.sql
+      path: evals/goldens/edge-unknown-column.sql
+      kind: text
+    contains:
+      - missing from schema.sql
+  - id: no-trigger-unrelated
+    status: pinned
+    prompt: Flatten a JSON API response to id and status.
+    should_trigger: false
+    input:
+      files: []
+    golden: null

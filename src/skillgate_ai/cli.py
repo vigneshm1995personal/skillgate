@@ -782,6 +782,51 @@ def example_cmd(
     console.print(f"Wrote {written}")
 
 
+examples_app = typer.Typer(
+    add_completion=False,
+    no_args_is_help=True,
+    help="List and install example skills that ship with a dataset.",
+)
+app.add_typer(examples_app, name="examples")
+
+
+@examples_app.command("list")
+def examples_list_cmd() -> None:
+    """List example skills you can install."""
+    from skillgate_ai.examples import list_examples
+
+    _boot()
+    for row in list_examples():
+        console.print(f"{row['name']}\t{row['description']}")
+
+
+@examples_app.command("install")
+def examples_install_cmd(
+    name: str | None = typer.Argument(
+        None, help="One example. Omit to install every dataset example."
+    ),
+    dest: Path | None = typer.Option(
+        None, "--dest", help="Skills folder (default: ./skills)"
+    ),
+) -> None:
+    """Copy example skills into the skills folder. Existing files stay as they are."""
+    from skillgate_ai.examples import install_examples
+    from skillgate_ai.paths import config_root_for
+
+    root = _boot()
+    target = (dest or (config_root_for(Path.cwd()) / "skills")).expanduser().resolve()
+    try:
+        result = install_examples(target, [name] if name else None)
+    except SkillGateError as exc:
+        console.print(exc.render())
+        raise typer.Exit(exc.exit_code) from None
+    for row in result["installed"]:
+        console.print(f"Installed {row['name']} ({row['files']} files) → {row['path']}")
+    skipped = result["skipped"]
+    if skipped:
+        console.print(f"Left {len(skipped)} existing file(s) in place.")
+
+
 judge_app = typer.Typer(
     add_completion=False,
     no_args_is_help=True,

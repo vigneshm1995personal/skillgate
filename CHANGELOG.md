@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.7.7
+
+- `skillgate examples list` and `skillgate examples install` copy dataset examples into `skills/`. Files already there stay as they are.
+- Example skills: `json-response`, `json-response-sabotaged`, `readme-writer`, `log-summarizer`, `sql-writer`, and `receipt-extractor`. Each has fixtures, expected outputs, and an unrelated case. `json-response-sabotaged` fails the JSON checks.
+- Skill Repository in the local UI lists those examples and installs them with the same skip rule.
+- A short Writing a dataset section in the README points at `docs/writing-a-dataset.md`.
+
 ## 0.7.5
 
 - Checks is split into agent setup, test cases, built-in checks, your checks, and the decision model. One Run sits at the bottom. Open a check to read the prompt the judge uses.

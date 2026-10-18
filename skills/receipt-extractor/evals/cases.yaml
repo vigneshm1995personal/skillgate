@@ -1,0 +1,41 @@
+schema: 1
+skill: receipt-extractor
+cases:
+  - id: extract-total
+    status: pinned
+    prompt: Extract the merchant, date, and total from harbor-receipt.txt. Save output/receipt.json.
+    should_trigger: true
+    input:
+      files:
+        - src: evals/fixtures/harbor-receipt.txt
+          dest: harbor-receipt.txt
+    golden:
+      output_path: output/receipt.json
+      path: evals/goldens/extract-total.json
+      kind: json
+    contains:
+      - Harbor Paper Co.
+      - "18.40"
+      - "2026-03-14"
+  - id: edge-missing-total
+    status: pinned
+    prompt: Extract the merchant, date, and total from receipt-no-total.txt. If there is no total, do not guess a number. Save output/receipt.json.
+    should_trigger: true
+    input:
+      files:
+        - src: evals/fixtures/receipt-no-total.txt
+          dest: receipt-no-total.txt
+    golden:
+      output_path: output/receipt.json
+      path: evals/goldens/edge-missing-total.json
+      kind: json
+    contains:
+      - "null"
+      - Harbor Paper Co.
+  - id: no-trigger-unrelated
+    status: pinned
+    prompt: Write a SQL query for open orders.
+    should_trigger: false
+    input:
+      files: []
+    golden: null

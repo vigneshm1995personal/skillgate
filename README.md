@@ -28,11 +28,20 @@ In an empty directory:
 
 ```bash
 pip install skillgate-ai
-skillgate example pdf
-skillgate check skills/pdf
+skillgate examples install
+skillgate check skills/json-response
+skillgate check skills/json-response-sabotaged
 ```
 
-`skillgate example pdf` writes `skills/pdf`. The check exits 2 until an agent is available and a decision model is selected. Use `skillgate login` or `skillgate keys set` for the agent, and `skillgate judge provider set` for the decision model. These commands match release 0.7.5.
+`skillgate examples install` writes six skills under `skills/`. Files already in that folder stay as they are. `skills/json-response` exits 0 when the live run is green. `skills/json-response-sabotaged` exits 1: the JSON checks fail, and the unrelated check can pass. Both checks exit 2 until an agent is available and a decision model is selected. Use `skillgate login` or `skillgate keys set` for the agent, and `skillgate judge provider set` for the decision model. These commands match release 0.7.7.
+
+The same steps in the local UI:
+
+```bash
+skillgate ui
+```
+
+Open http://127.0.0.1:8765. Click **Skills**. On Skill Repository, click **Examples**, then **Install**. The toast reads `Installed 6 examples (47 files).` Open `json-response`, click **Evaluate this skill**, then **Run**. The button reads `Run 3 cases`. Until you sign in or add a key, the line above it is `Next: sign in or add a key in Settings, then press Run.` Repeat for `json-response-sabotaged` to see the failing checks.
 
 ## Features
 
@@ -50,6 +59,11 @@ skillgate check skills/pdf
 From the quickstart directory:
 
 ```bash
+skillgate examples list
+skillgate examples install json-response
+skillgate check skills/json-response --case flatten-orders
+skillgate check skills/json-response-sabotaged --expect-fail
+skillgate example pdf
 skillgate check skills/pdf
 skillgate ingest skills/pdf
 skillgate example pdf-sabotaged
@@ -69,6 +83,22 @@ Create a workspace and a skill:
 skillgate init
 skillgate new notes-helper
 ```
+
+## Writing a dataset
+
+A dataset is `evals/cases.yaml` plus small files in `evals/fixtures/` and expected files in `evals/goldens/`. The folder name, the `name` in `SKILL.md`, and `skill` in `cases.yaml` are the same string. Start with 3 to 6 pinned cases: one behavior, one edge, and one unrelated prompt (`should_trigger: false`). Keep the expected sentence out of the prompt. The examples do this: `json-response` flattens an API body, `readme-writer` turns a brief into a README, `log-summarizer` counts errors, `sql-writer` writes a query from a schema, and `receipt-extractor` reads a fictional receipt. `json-response-sabotaged` uses the same JSON cases and fails them.
+
+Check a dataset on disk, then run it:
+
+```bash
+skillgate ingest skills/json-response
+skillgate case list skills/json-response
+skillgate check skills/json-response
+```
+
+In the UI, open the skill from Skill Repository and click **Evaluate this skill**, then **Run**.
+
+The full guide, with a copy-paste pack and the mistakes that reject a dataset, is [Writing a dataset](docs/writing-a-dataset.md). The same page is on the docs site: [Writing a dataset](https://www.skill-gate-ai.app/docs/writing-a-dataset).
 
 ## Docker
 

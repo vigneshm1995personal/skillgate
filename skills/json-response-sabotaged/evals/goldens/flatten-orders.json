@@ -1,0 +1,12 @@
+[
+  {
+    "id": "A-100",
+    "status": "open",
+    "total": 12.5
+  },
+  {
+    "id": "A-101",
+    "status": "paid",
+    "total": 4
+  }
+]

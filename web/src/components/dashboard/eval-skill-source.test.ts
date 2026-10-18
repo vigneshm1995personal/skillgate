@@ -38,5 +38,8 @@ describe("Evaluate skill tab", () => {
       "Pick a skill on Evaluate. It lists skills from your agent folders."
     expect(repo).toContain(listed)
     expect(listed).not.toMatch(/Cursor|Codex|Claude/)
+    expect(repo).toContain('id="btn-examples"')
+    expect(repo).toContain('id="btn-install-examples"')
+    expect(repo).toContain('"Install"')
   })
 })

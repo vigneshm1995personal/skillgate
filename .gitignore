@@ -17,6 +17,7 @@ build/
 uploads/
 *.log
 !docs/proof/*.log
+!skills/**/evals/fixtures/*.log
 .DS_Store
 
 # Pack-local history (keep .gitkeep)

@@ -21,10 +21,12 @@ from skillgate_ai.catalog import (
     catalog_entries,
     find_skill,
     import_from_agent_folders,
+    workspace_skills_root,
 )
 from skillgate_ai.config import get_llm_config, missing_key_error
 from skillgate_ai.deploy import get_adapter, require_passing_check
 from skillgate_ai.errors import SkillGateError
+from skillgate_ai.examples import install_examples, list_examples
 from skillgate_ai.history import append_deploy
 from skillgate_ai.ingest import ingest_skill
 from skillgate_ai.pack import (
@@ -82,6 +84,31 @@ def _listed_skills(state: Any) -> list[dict[str, Any]]:
 
 
 def register_skill_routes(app: FastAPI) -> None:
+    @app.get("/api/examples")
+    def list_dataset_examples() -> dict[str, Any]:
+        return {"examples": list_examples()}
+
+    @app.post("/api/examples/install")
+    async def install_dataset_examples(request: Request) -> dict[str, Any]:
+        state = state_of(request)
+        body: dict[str, Any] = {}
+        if request.headers.get("content-length") not in {None, "0"}:
+            parsed = await request.json()
+            if isinstance(parsed, dict):
+                body = parsed
+        raw_names = body.get("names")
+        name = str(body.get("name") or "").strip()
+        names: list[str] | None
+        if isinstance(raw_names, list) and raw_names:
+            names = [str(item).strip() for item in raw_names if str(item).strip()]
+        elif name:
+            names = [name]
+        else:
+            names = None
+        result = install_examples(workspace_skills_root(state.root), names)
+        result["skills"] = _listed_skills(state)
+        return result
+
     @app.get("/api/skills")
     def list_skills(request: Request) -> dict[str, Any]:
         state = state_of(request)
