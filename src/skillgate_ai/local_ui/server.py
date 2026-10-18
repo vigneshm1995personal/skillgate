@@ -11,7 +11,7 @@ from urllib.parse import unquote, urlparse
 
 from skillgate_ai.local_ui.api import UiState, handle
 
-STATIC_NAMES = {"index.html", "app.js", "app.css"}
+STATIC_NAMES = {"index.html", "app.js", "app.css", "favicon.svg"}
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 
 
@@ -26,7 +26,12 @@ def _static_bytes(name: str) -> tuple[bytes, str] | None:
     if not path.is_file():
         return None
     suffix = path.suffix.lower()
-    types = {".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8"}
+    types = {
+        ".html": "text/html; charset=utf-8",
+        ".js": "text/javascript; charset=utf-8",
+        ".css": "text/css; charset=utf-8",
+        ".svg": "image/svg+xml",
+    }
     return path.read_bytes(), types.get(suffix, "application/octet-stream")
 
 

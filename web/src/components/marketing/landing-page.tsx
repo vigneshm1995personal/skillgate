@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react"
 
 import { SignInWithVercelButton } from "@/components/auth/sign-in-with-vercel"
+import { SgMark } from "@/components/brand/sg-mark"
 
 import styles from "./landing-page.module.css"
 
@@ -74,7 +75,10 @@ export function LandingPage({ configured }: { configured?: boolean }) {
   return (
     <div className={styles.root}>
       <nav className={styles.nav}>
-        <div className={styles.logo}>Skill Gate</div>
+        <div className={styles.logo}>
+          <SgMark className={styles.mark} />
+          Skill Gate
+        </div>
         <div className={styles.navLinks}>
           {signInGhost}
           {getStartedOrNull}
