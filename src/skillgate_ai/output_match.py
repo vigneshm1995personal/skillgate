@@ -48,6 +48,8 @@ def expected_output_mismatch_reason(
             magic = item.get("magic")
             break
     if present is False:
+        if isinstance(golden, dict) and golden.get("output_optional"):
+            return None
         return REASON_MISSING_OUTPUT
     if kind == "bytes" or (isinstance(magic, str) and magic in _BINARY_MAGICS):
         if magic in (None, "jpeg", "nul"):

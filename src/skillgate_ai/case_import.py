@@ -274,6 +274,8 @@ def _dict_from_flat_row(row: dict[str, Any]) -> dict[str, Any]:
             out["contains"] = text
         elif norm in {"output", "output_path"}:
             out["output_path"] = text
+        elif norm == "output_optional":
+            out["output_optional"] = _parse_bool(text)
         elif norm in {"input", "input_text", "fixture", "src"}:
             out.setdefault("files", [])
             if isinstance(out["files"], list):

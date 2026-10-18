@@ -954,6 +954,11 @@ def case_add_cmd(
     ),
     no_trigger: bool = typer.Option(False, "--no-trigger", help="This check should not run the skill"),
     force: bool = typer.Option(False, "--force", help="Replace a check that already uses this id"),
+    output_optional: bool = typer.Option(
+        False,
+        "--output-optional",
+        help="Accept a missing or empty output file. Expected stays reference text.",
+    ),
 ) -> None:
     """Add a check to this skill's Dataset."""
     from skillgate_ai.pack_edit import add_pack_case
@@ -969,6 +974,7 @@ def case_add_cmd(
             should_trigger=not no_trigger,
             inputs=[str(path) for path in inputs] if inputs else None,
             force=force,
+            output_optional=output_optional,
         )
     except SkillGateError as exc:
         console.print(exc.render())

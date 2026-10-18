@@ -60,6 +60,12 @@ export function expectedWithoutTargetWarning(
   return noTriggerOutputWarning(check)
 }
 
+export function outputOptionalNote(
+  check: Pick<Check, "output_optional">
+): string | null {
+  return check.output_optional ? "A missing or empty file is accepted." : null
+}
+
 export function expectedFieldValue(
   check: Pick<Check, "contains" | "golden_path">
 ): string {

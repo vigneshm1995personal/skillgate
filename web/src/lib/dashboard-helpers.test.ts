@@ -75,7 +75,32 @@ describe("collectChecksForRun", () => {
     expect(payload[0].golden_kind).toBe("bytes")
     expect(payload[0].output_path).toBe("output/merged.pdf")
     expect(payload[0].id).toBe("merge-alpha-beta")
+    expect(payload[0].output_optional).toBe(false)
     expect(payload[1].should_trigger).toBe(false)
+  })
+
+  it("keeps an optional output flag on the run payload", () => {
+    const payload = collectChecksForRun(
+      [
+        {
+          id: "rh-split",
+          prompt: "Keep the prompt.",
+          should_trigger: true,
+          output_path: "changes.diff",
+          contains:
+            "The agent leaves tests/ unchanged and asks which behavior product wants.",
+          output_optional: true,
+        },
+      ],
+      {
+        id: "demo",
+        name: "demo",
+        slug: "demo",
+        absolute: "/tmp/skills/demo",
+      }
+    )
+    expect(payload[0].output_optional).toBe(true)
+    expect(payload[0].contains).toContain("leaves tests/ unchanged")
   })
 })
 

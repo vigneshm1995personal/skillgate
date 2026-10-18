@@ -127,6 +127,7 @@ export function collectChecksForRun(
       needs_upload: Boolean(check.needs_upload),
       golden_path: goldenPath,
       golden_kind: check.golden_kind || null,
+      output_optional: check.output_optional === true,
     }
   })
 }

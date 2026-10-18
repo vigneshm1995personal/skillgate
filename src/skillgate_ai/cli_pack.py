@@ -9,6 +9,12 @@ import typer
 from skillgate_ai.errors import SkillGateError
 
 
+def _output_optional_flag(value: str | None) -> bool | None:
+    if value is None:
+        return None
+    return value.strip().lower() in {"1", "true", "yes", "y"}
+
+
 def register_pack_commands(app: typer.Typer, case_app: typer.Typer, judge_app: typer.Typer) -> None:
     from skillgate_ai.cli import _boot, _resolve_pack_arg, console
 
@@ -313,10 +319,16 @@ def register_pack_commands(app: typer.Typer, case_app: typer.Typer, judge_app: t
         prompt: str | None = typer.Option(None, "--prompt"),
         expected: str | None = typer.Option(None, "--expected"),
         output_path: str | None = typer.Option(None, "--output"),
+        output_optional: str | None = typer.Option(
+            None,
+            "--output-optional",
+            help="true accepts a missing or empty output file and keeps Expected as reference text",
+        ),
     ) -> None:
         """Edit a saved check."""
         from skillgate_ai.pack_edit import edit_pack_case
 
+        optional_flag = _output_optional_flag(output_optional)
         try:
             dest = _resolve_pack_arg(pack)
             edit_pack_case(
@@ -325,6 +337,7 @@ def register_pack_commands(app: typer.Typer, case_app: typer.Typer, judge_app: t
                 prompt=prompt,
                 expected=expected,
                 output_path=output_path,
+                output_optional=optional_flag,
             )
         except SkillGateError as exc:
             console.print(exc.render())
