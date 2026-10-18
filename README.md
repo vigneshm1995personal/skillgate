@@ -19,7 +19,7 @@
 skillgate checks an agent skill that lives in a folder on your machine. A pack is `SKILL.md` plus `evals/`. `skillgate check` exits 0 when the run passes, 1 when it fails, and 2 when it cannot run. Live checks are scored only by a decision model you select. Requires Python 3.11+. The package name is `skillgate-ai` (`pip install skillgate` is a different project).
 
 <p align="center">
-  <img alt="Local UI showing a passed check" src="docs/screenshots/after-evaluate-gate-light.png" width="880">
+  <img alt="Local UI on the pdf example, before a live check" src="docs/screenshots/readme-hero-light.png" width="880">
 </p>
 
 ## Quickstart
