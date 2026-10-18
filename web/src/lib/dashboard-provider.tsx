@@ -359,6 +359,7 @@ export function DashboardProvider({
         files: draft?.files || [],
         needs_upload: Boolean(draft?.needs_upload),
         golden_path: draft?.golden_path ?? null,
+        output_optional: draft?.output_optional === true,
         bank_status: draft?.bank_status ?? "draft",
       },
     ])
@@ -577,9 +578,9 @@ export function DashboardProvider({
     await runNow({
       skill: skill.absolute || skill.id,
       checks: checkList,
-      live: Boolean(status?.has_key),
+      live: true,
     })
-  }, [bindPackFixtures, collectChecks, fixtureInherit, runNow, skill, status?.has_key])
+  }, [bindPackFixtures, collectChecks, fixtureInherit, runNow, skill])
 
   const runAfterPossiblePaste = useCallback(async () => {
     setIntakeError("")
@@ -614,7 +615,7 @@ export function DashboardProvider({
       await runNow({
         skill: skillId,
         checks: checkList,
-        live: Boolean(status?.has_key),
+        live: true,
       })
     } catch (err) {
       const error = asApiError(err)
@@ -633,7 +634,6 @@ export function DashboardProvider({
     resolvedHarness,
     runNow,
     skill,
-    status?.has_key,
   ])
 
   const installTo = useCallback(

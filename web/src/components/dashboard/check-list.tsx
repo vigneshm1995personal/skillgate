@@ -17,6 +17,7 @@ import {
   isPinnedCheck,
   expectedWithoutTargetWarning,
   noTriggerOutputWarning,
+  outputOptionalNote,
   showsExpectedOutputFields,
 } from "@/lib/case-pack"
 import { useDashboard } from "@/lib/dashboard-provider"
@@ -93,6 +94,7 @@ export function CheckList({
         const overBudget = task?.metrics?.status === "fail"
         const ignoredOutput = noTriggerOutputWarning(check)
         const expectedOrphan = expectedWithoutTargetWarning(check)
+        const optionalOutput = outputOptionalNote(check)
         return (
           <div
             key={check.id ?? index}
@@ -237,6 +239,29 @@ export function CheckList({
                       }
                     />
                   </Field>
+                  <Field
+                    orientation="horizontal"
+                    data-disabled={running || undefined}
+                  >
+                    <Checkbox
+                      id={`check-output-optional-${index}`}
+                      checked={check.output_optional === true}
+                      disabled={running || Boolean(check.locked)}
+                      onCheckedChange={(checked) =>
+                        updateCheck(index, {
+                          output_optional: checked === true,
+                        })
+                      }
+                    />
+                    <FieldLabel htmlFor={`check-output-optional-${index}`}>
+                      Output file is optional
+                    </FieldLabel>
+                  </Field>
+                  {optionalOutput ? (
+                    <FieldDescription id={`check-output-note-${index}`}>
+                      {optionalOutput}
+                    </FieldDescription>
+                  ) : null}
                   {expectedOrphan ? (
                     <p className="text-sm text-muted-foreground">{expectedOrphan}</p>
                   ) : null}

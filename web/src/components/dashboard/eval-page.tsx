@@ -425,7 +425,7 @@ export function EvalPage() {
                     </EmptyMedia>
                     <EmptyTitle>No skills yet</EmptyTitle>
                     <EmptyDescription>
-                      No skills in your Cursor, Codex, or Claude Code folders yet.
+                      Skills from your agent folders are listed here. Add a folder under skills/ if none show up.
                     </EmptyDescription>
                   </EmptyHeader>
                 </Empty>

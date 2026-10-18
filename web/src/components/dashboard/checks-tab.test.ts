@@ -30,7 +30,11 @@ describe("Checks tab", () => {
     }
     expect(page).toMatch(/Agent setup/)
     expect(page).toMatch(/Test cases/)
+    expect(page).toMatch(/<CheckList/)
     expect(page).toMatch(/Built-in checks/)
+    const cases = source("check-list.tsx")
+    expect(cases).toMatch(/Output file is optional/)
+    expect(cases).toMatch(/outputOptionalNote/)
     expect(page).toMatch(/Your checks/)
     expect(page).toMatch(/runButtonLabel/)
     expect(page).not.toMatch(/Bring a skill/)

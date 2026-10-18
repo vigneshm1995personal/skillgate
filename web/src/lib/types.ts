@@ -71,6 +71,7 @@ export type Check = {
   input?: string | null
   golden_path?: string | null
   golden_kind?: "json" | "text" | "bytes" | null
+  output_optional?: boolean | null
   bank_status?: "pinned" | "draft" | null
   budgets?: CaseBudgets | null
   locked?: boolean

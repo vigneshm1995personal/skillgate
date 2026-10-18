@@ -73,7 +73,7 @@ Working directory is the skill pack. Exit 1 fails the job. No account. Needs Pyt
 ```yaml
 - uses: actions/setup-python@v5
   with: { python-version: "3.12" }
-- run: pip install skillgate-ai==0.7.2
+- run: pip install skillgate-ai==0.7.4
 - run: skillgate check . --key-env OPENAI_API_KEY
   env:
     OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
