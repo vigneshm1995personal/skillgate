@@ -321,9 +321,12 @@ export function useEvalSession(opts: EvalSessionOpts) {
       }
       let startedId: string | null = null
       try {
-        const live = liveFlag === true
+        if (liveFlag !== true) {
+          throw new Error("Start Evaluations is live-only.")
+        }
         const payload = {
-          live,
+          live: true,
+          demo: false,
           harness: harnessPref,
           skill: skillId || skill?.absolute || skill?.id,
           suite: null as string | null,
@@ -403,11 +406,11 @@ export function useEvalSession(opts: EvalSessionOpts) {
       await runNow({
         skill: skill?.absolute || skill?.id,
         checks: [check],
-        live: Boolean(status?.has_key),
+        live: true,
         tryout: true,
       })
     },
-    [runNow, skill, status?.has_key]
+    [runNow, skill]
   )
 
   const openHistoryRun = useCallback(

@@ -421,7 +421,7 @@ export function EvalPage() {
                     </EmptyMedia>
                     <EmptyTitle>No skills yet</EmptyTitle>
                     <EmptyDescription>
-                      Paste a SKILL.md below, or add a folder under skills/.
+                      Skills from your agent folders are listed here. Add a folder under skills/ if none show up.
                     </EmptyDescription>
                   </EmptyHeader>
                 </Empty>
