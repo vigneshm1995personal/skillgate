@@ -42,6 +42,17 @@ import { isTryoutRun } from "@/lib/skill-run-state"
 import { absoluteTime, relativeTime } from "@/lib/time"
 import type { AnalyticsPayload, AnalyticsRun, SkillDetailPayload } from "@/lib/types"
 
+function versionLabel(semver?: string): string {
+  const name = (semver || "").trim()
+  if (!name) {
+    return "—"
+  }
+  if (/^\d+\.\d+/.test(name)) {
+    return `v${name}`
+  }
+  return name
+}
+
 export function SkillDetailPage({ name }: { name: string }) {
   const {
     openRepository,
@@ -437,7 +448,7 @@ export function SkillDetailPage({ name }: { name: string }) {
                   <TableBody>
                     {versions.map((version) => (
                       <TableRow key={`${version.skill_md_hash}-${version.id}`}>
-                        <TableCell>v{version.semver}</TableCell>
+                        <TableCell>{versionLabel(version.semver)}</TableCell>
                         <TableCell
                           className="text-muted-foreground tabular-nums whitespace-nowrap"
                           title={absoluteTime(version.created_at)}

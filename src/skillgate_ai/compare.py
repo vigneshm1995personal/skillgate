@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import copy
 import json
-import subprocess
 import time
 import uuid
 from dataclasses import dataclass
@@ -659,21 +658,9 @@ def preflight_versions_compare(
 
 
 def _git_ref_picker_suggestions(pack: Path) -> list[str]:
-    try:
-        from skillgate_ai.compare_git import find_git_root
+    from skillgate_ai.compare_git import list_skill_git_versions
 
-        root = find_git_root(pack)
-    except CompareError:
-        return []
-    try:
-        out = subprocess.check_output(
-            ["git", "-C", str(root), "log", "-5", "--format=%h"],
-            text=True,
-        )
-    except (OSError, subprocess.CalledProcessError):
-        return ["HEAD~1", "HEAD"]
-    refs = [line.strip() for line in out.splitlines() if line.strip()]
-    return refs[:5] if refs else ["HEAD~1", "HEAD"]
+    return [row["ref"] for row in list_skill_git_versions(pack)]
 
 
 def _versions_dry_run_payload(
