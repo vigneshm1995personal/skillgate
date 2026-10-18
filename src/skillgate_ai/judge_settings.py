@@ -16,6 +16,33 @@ from skillgate_ai.paths import project_root
 JUDGE_FILENAME = "judge"
 PROVIDER_IDS = ("auto", "openai", "jev", "aws", "compatible")
 CHOSEN_IDS = frozenset({"openai", "jev", "aws", "compatible"})
+# Chat and reasoning models. The Checks tab must not offer these.
+CHAT_PROVIDER_IDS = frozenset({"aws", "compatible"})
+# Labels stay free of vendor names. Clef is listed so it appears when the
+# engine allowlist gains that id (the 0.7.3 provider removal).
+_DECISION_JUDGE_COPY: dict[str, dict[str, Any]] = {
+    "openai": {
+        "label": "Decision model",
+        "detail": "Picks one answer for each check.",
+        "needs_endpoint": False,
+    },
+    "jev": {
+        "label": "Fast decision model",
+        "detail": (
+            "Picks one answer for each built-in check. "
+            "Add a base URL and a key in Settings if this is not set up yet."
+        ),
+        "needs_endpoint": True,
+    },
+    "clef": {
+        "label": "Alternate decision model",
+        "detail": (
+            "Picks one answer for each check. "
+            "Add a base URL and a key in Settings if this is not set up yet."
+        ),
+        "needs_endpoint": True,
+    },
+}
 _ENV_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 
@@ -43,6 +70,23 @@ class JudgeProviderSettings:
         if self.key_env:
             payload["key_env"] = list(self.key_env)
         return payload
+
+
+def decision_judges() -> list[dict[str, Any]]:
+    """System 1 decision models the engine still accepts.
+
+    Chat and reasoning ids are omitted. An id dropped from ``PROVIDER_IDS``
+    disappears here, so the UI does not offer a judge the engine removed.
+    """
+    rows: list[dict[str, Any]] = []
+    for provider_id in PROVIDER_IDS:
+        if provider_id == "auto" or provider_id in CHAT_PROVIDER_IDS:
+            continue
+        copy = _DECISION_JUDGE_COPY.get(provider_id)
+        if copy is None:
+            continue
+        rows.append({"id": provider_id, **copy})
+    return rows
 
 
 def judge_settings_path(root: str | Path | None = None) -> Path:

@@ -185,6 +185,7 @@ export const api = {
         region: string | null
         model: string | null
         base_url: string | null
+        key_env?: string[]
       }
     }>("/api/settings/judge"),
   setSettingsJudge: (body: {
@@ -192,6 +193,7 @@ export const api = {
     region?: string | null
     model?: string | null
     base_url?: string | null
+    key_env?: string[] | null
   }) =>
     request<{
       judge: {
@@ -200,12 +202,45 @@ export const api = {
         region: string | null
         model: string | null
         base_url: string | null
+        key_env?: string[]
       }
     }>("/api/settings/judge", {
       method: "PUT",
       headers: jsonHeaders,
       body: JSON.stringify(body),
     }),
+  listChecks: (skill?: string | null) => {
+    const query = skill ? `?skill=${encodeURIComponent(skill)}` : ""
+    return request<{
+      checks: Array<{ id: string; label: string; builtin: boolean; prompt: string }>
+    }>(`/api/checks${query}`)
+  },
+  previewCheck: (question: {
+    id: string
+    type: string
+    ask: string
+    on_fail?: string
+    choices?: Array<{ value: string; description?: string; pass?: boolean }>
+    levels?: string[]
+    pass_if?: { gte?: number }
+  }) =>
+    request<{ id: string; label: string; builtin: boolean; prompt: string }>(
+      "/api/checks/preview",
+      {
+        method: "POST",
+        headers: jsonHeaders,
+        body: JSON.stringify({ question }),
+      }
+    ),
+  decisionJudges: () =>
+    request<{
+      judges: Array<{
+        id: string
+        label: string
+        detail: string
+        needs_endpoint: boolean
+      }>
+    }>("/api/settings/judges"),
   loginStatus: () => request<{ harnesses: AgentAuthRow[] }>("/api/login/status"),
   startLogin: (agent: string) =>
     request<LoginStartPayload>(`/api/login/${encodeURIComponent(agent)}`, {

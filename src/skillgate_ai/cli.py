@@ -795,6 +795,13 @@ judge_provider_app = typer.Typer(
 app.add_typer(judge_app, name="judge")
 judge_app.add_typer(judge_provider_app, name="provider")
 
+checks_app = typer.Typer(
+    add_completion=False,
+    no_args_is_help=True,
+    help="Show the judge prompt for a built-in or custom check.",
+)
+app.add_typer(checks_app, name="checks")
+
 
 def _resolve_pack_arg(pack: Path | None) -> Path:
     root = _boot()
@@ -818,6 +825,25 @@ def _resolve_pack_arg(pack: Path | None) -> Path:
             exit_code=2,
         )
     return dest
+
+
+@checks_app.command("show")
+def checks_show_cmd(
+    check_id: str = typer.Argument(..., help="Built-in or custom check id"),
+    pack: Path | None = typer.Option(None, "--pack", help="Skill pack for a custom check"),
+) -> None:
+    """Print the judge prompt for this check."""
+    from skillgate_ai.checks_show import prompt_for_id
+
+    try:
+        dest = _resolve_pack_arg(pack) if pack is not None else None
+        row = prompt_for_id(check_id, pack=dest)
+    except SkillGateError as exc:
+        console.print(exc.render(), markup=False)
+        raise typer.Exit(exc.exit_code) from None
+    sys.stdout.write(row["prompt"])
+    if not str(row["prompt"]).endswith("\n"):
+        sys.stdout.write("\n")
 
 
 @judge_app.command("show")

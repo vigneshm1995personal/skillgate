@@ -25,6 +25,7 @@ from skillgate_ai.api_runs import register_run_routes
 from skillgate_ai.api_shims import register_hosted_shims
 from skillgate_ai.api_skills import register_skill_routes
 from skillgate_ai.catalog import catalog_entries
+from skillgate_ai.checks_show import register_check_routes
 from skillgate_ai.config import (
     UI_NO_KEY_HINT,
     get_llm_config,
@@ -110,6 +111,7 @@ def create_app(*, root: Path | None = None, pack: Path | None = None) -> FastAPI
         )
 
     _register_core_routes(app)
+    register_check_routes(app)
     register_skill_routes(app)
     register_eval_routes(app)
     register_run_routes(app)
@@ -237,6 +239,9 @@ def _register_core_routes(app: FastAPI) -> None:
 
         state = state_of(request)
         body = await request.json() or {}
+        if not isinstance(body, dict):
+            body = {}
+        key_env = {"key_env": body.get("key_env")} if "key_env" in body else {}
         try:
             settings = save_judge_settings(
                 state.root,
@@ -245,6 +250,7 @@ def _register_core_routes(app: FastAPI) -> None:
                 model=body.get("model"),
                 base_url=body.get("base_url"),
                 decisions_path=body.get("decisions_path"),
+                **key_env,
             )
         except SkillGateError as exc:
             fail(400, exc.message, hint=exc.hint)

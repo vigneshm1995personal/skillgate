@@ -191,6 +191,8 @@ export type SkillPayload = {
   fixture_defaults?: Array<{ src: string; dest: string; bytes?: number }>
   default_output_path?: string | null
   has_dataset?: boolean
+  source?: string
+  source_label?: string
 }
 
 export const DEFAULT_OUTPUT_PATH = "output/result.txt"
