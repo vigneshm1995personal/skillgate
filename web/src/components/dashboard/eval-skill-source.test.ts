@@ -24,4 +24,19 @@ describe("Evaluate skill tab", () => {
     )
     expect(provider).not.toMatch(/pasteSkill|uploadZip/)
   })
+
+  it("describes the skill list without paste or provider names", () => {
+    const page = source("eval-page.tsx")
+    expect(page).not.toMatch(/Paste a SKILL\.md below/)
+    expect(page).toContain(
+      "Skills from your agent folders are listed here. Add a folder under skills/ if none show up."
+    )
+
+    const repo = readFileSync(join(here, "repository-page.tsx"), "utf8")
+    expect(repo).not.toMatch(/paste a SKILL\.md on Evaluate/)
+    const listed =
+      "Pick a skill on Evaluate. It lists skills from your agent folders."
+    expect(repo).toContain(listed)
+    expect(listed).not.toMatch(/Cursor|Codex|Claude/)
+  })
 })

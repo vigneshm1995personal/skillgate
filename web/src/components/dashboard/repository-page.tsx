@@ -198,7 +198,7 @@ export function RepositoryPage() {
               ? `${visible.length} of ${skills.length} skills${query ? " matching search" : ""}. Use ⌘K to filter.`
               : catalogError
                 ? catalogError.message
-                : "Connect Cursor, Codex, or Claude, or paste a SKILL.md on Evaluate."}
+                : "Pick a skill on Evaluate. It lists skills from your agent folders."}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -238,7 +238,7 @@ export function RepositoryPage() {
                 </EmptyMedia>
                 <EmptyTitle>No skills in the repository</EmptyTitle>
                 <EmptyDescription>
-                  Connect Cursor, Codex, or Claude, or paste a SKILL.md on Evaluate.
+                  Pick a skill on Evaluate. It lists skills from your agent folders.
                 </EmptyDescription>
               </EmptyHeader>
               <EmptyContent>
