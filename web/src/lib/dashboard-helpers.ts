@@ -1,3 +1,4 @@
+import { agentLabel } from "@/lib/agent-label"
 import { ApiError } from "@/lib/api"
 import { skillOutputPath } from "@/lib/types"
 import type { Check, SkillPayload } from "@/lib/types"
@@ -77,9 +78,9 @@ export function uniqueCheckId(base: string, current: Check[]): string {
 
 export function deployLabel(target?: string | null) {
   const labels: Record<string, string> = {
-    cursor: "Cursor",
-    claude: "Claude",
-    codex: "Codex",
+    cursor: agentLabel("cursor"),
+    claude: agentLabel("claude"),
+    codex: agentLabel("codex"),
     git: "git",
   }
   if (!target) {

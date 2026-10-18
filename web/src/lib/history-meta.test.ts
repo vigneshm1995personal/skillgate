@@ -13,14 +13,14 @@ describe("historyMeta", () => {
     ).not.toBe("Auto")
   })
 
-  it("capitalizes Install to Cursor", () => {
+  it("names the install target without a vendor", () => {
     expect(
       historyMeta({
         kind: "deploy",
         skill: "pdf",
         target: "cursor",
       }).config
-    ).toBe("Install to Cursor")
+    ).toBe("Install to Editor agent")
   })
 
   it("shows Scored by the judge, not gateway plumbing or the task model", () => {

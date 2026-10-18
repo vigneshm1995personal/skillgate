@@ -11,7 +11,7 @@ describe("runButtonLabel", () => {
         total: 4,
         agent: "claude",
       })
-    ).toBe("Run 4 cases on Claude Code")
+    ).toBe("Run 4 cases on Code agent")
     expect(
       runButtonLabel({
         running: false,
@@ -19,7 +19,7 @@ describe("runButtonLabel", () => {
         total: 1,
         agent: "cursor-agent",
       })
-    ).toBe("Run 1 case on Cursor")
+    ).toBe("Run 1 case on Editor agent")
   })
 
   it("counts finished cases while a run is in progress", () => {
@@ -30,7 +30,7 @@ describe("runButtonLabel", () => {
         total: 4,
         agent: "codex",
       })
-    ).toBe("2 of 4 done on Codex")
+    ).toBe("2 of 4 done on Terminal agent")
   })
 
   it("omits the agent when none is picked", () => {

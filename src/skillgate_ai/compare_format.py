@@ -31,7 +31,7 @@ def format_compare_cli(payload: dict[str, Any]) -> str:
     if fp:
         lines.append(f"Dataset fingerprint  {fp[:12]}…")
     lines.append("")
-    arm_width = 28 if status == "dry_run" else 12
+    arm_width = 42 if status == "dry_run" else 12
     header = ["", *[_arm_column_title(a, status=status) for a in arms]]
     lines.append(_row_to_line(header, arm_col_width=arm_width))
     summary_labels = ["Checks", "Tokens", "Cost", "Latency"]

@@ -141,7 +141,7 @@ def parse_reasoning_effort(value: Any) -> str | None:
     raw = str(value).strip().lower()
     if raw in CODEX_REASONING_EFFORTS:
         return raw
-    raise EvalConfigError("Codex reasoning effort must be low, medium, high, or ultra.")
+    raise EvalConfigError("Reasoning effort must be low, medium, high, or ultra.")
 
 
 def applied_knobs(harness: str, *, model: str | None) -> dict[str, bool]:
@@ -281,25 +281,16 @@ def config_fingerprint(run: EvalRunConfig | None) -> str | None:
 
 
 def harness_display_name(pref: str | None, resolved: str | None = None) -> str:
+    from skillgate_ai.config import agent_label
+
     key = (pref or resolved or "").strip().lower()
     if key == "auto":
-        labels = {
-            "codex": "Codex",
-            "claude": "Claude",
-            "cursor-agent": "Cursor",
-        }
         resolved_key = (resolved or "").strip().lower()
-        label = labels.get(resolved_key)
-        if label:
-            return f"Auto · {label}"
+        if resolved_key in {"codex", "claude", "cursor-agent", "claude-code"}:
+            return f"Auto · {agent_label(resolved_key)}"
         return "Auto"
-    names = {
-        "cursor-agent": "Cursor",
-        "codex": "Codex",
-        "claude": "Claude",
-    }
-    if key in names:
-        return names[key]
+    if key in {"cursor-agent", "cursor", "codex", "claude", "claude-code"}:
+        return agent_label(key)
     return (pref or resolved or "Auto").strip() or "Auto"
 
 
@@ -324,6 +315,8 @@ def friendly_model_name(model: str | None) -> str:
     if not raw:
         return ""
     slug = raw.rsplit("/", 1)[-1]
+    if re.match(r"^(claude|cursor|codex|openai|anthropic|gemini)([-_]|$)", slug, flags=re.IGNORECASE):
+        return slug
     match = re.match(r"^gpt-(.+)$", slug, flags=re.IGNORECASE)
     if match:
         ver, *tail = match.group(1).split("-")

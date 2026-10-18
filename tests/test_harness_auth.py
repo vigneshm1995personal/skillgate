@@ -524,7 +524,7 @@ def test_harness_auth_status_shape(monkeypatch: pytest.MonkeyPatch) -> None:
     assert by_kind["codex"]["status"] == "none"
     assert "npm install -g @openai/codex" in by_kind["codex"]["install"]
     assert by_kind["claude"]["status"] == "API key"
-    assert by_kind["claude"]["name"] == "Claude Code"
+    assert by_kind["claude"]["name"] == "Code agent"
     blob = json.dumps(rows)
     assert "sk-" not in blob
     assert "ant-test" not in blob
@@ -648,7 +648,7 @@ def test_login_claude_short_circuits_when_signed_in(
     result = runner.invoke(app, ["login", "claude"])
     out = plain_text(result.stdout + result.stderr)
     assert result.exit_code == 0, out
-    assert out.strip() == "Claude Code is already signed in"
+    assert out.strip() == "Code agent is already signed in"
     assert called == []
 
 
@@ -1313,4 +1313,6 @@ def test_claude_model_persists_to_run_history_and_cli_summary(
     rows = load_history(pack, limit=1)
     assert rows, "expected a persisted run history row"
     assert rows[-1]["config"]["model"] == "claude-opus-5-5"
-    assert "Opus" in format_cli(result.report)
+    summary = format_cli(result.report)
+    assert "Code agent" in summary
+    assert "claude-opus-5-5" in summary

@@ -957,7 +957,7 @@ def test_login_status_lists_agents_without_touching_home(
     assert res.status_code == 200, res.text
     harnesses = res.json()["harnesses"]
     assert [row["agent"] for row in harnesses] == ["cursor", "codex", "claude"]
-    assert [row["name"] for row in harnesses] == ["Cursor", "Codex", "Claude Code"]
+    assert [row["name"] for row in harnesses] == ["Editor agent", "Terminal agent", "Code agent"]
     for row in harnesses:
         assert row["auth"] in {"none", "cli_login", "api_key"}
         assert "status" in row

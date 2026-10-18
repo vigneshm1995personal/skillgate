@@ -37,9 +37,9 @@ from skillgate_ai.pack import (
 
 _PICKER_SOURCE_LABELS = {
     "workspace": "This project",
-    "cursor": "Cursor",
-    "codex": "Codex",
-    "claude": "Claude Code",
+    "cursor": "Editor agent",
+    "codex": "Terminal agent",
+    "claude": "Code agent",
 }
 
 

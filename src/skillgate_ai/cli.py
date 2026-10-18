@@ -126,7 +126,7 @@ def login(
         False, "--force", help="Run the official login even if already signed in."
     ),
 ) -> None:
-    """Sign in with Cursor, Codex, or Claude Code using that agent's official login."""
+    """Sign in with an agent using that agent's official login."""
     from skillgate_ai.config import get_llm_config
     from skillgate_ai.harness import (
         AUTH_CLI_LOGIN,
@@ -161,8 +161,8 @@ def login(
     cfg = get_llm_config(root)
     signed_in_kind = normalize_login_agent(agent) if agent else None
     already_signed_in = {
-        "claude": ("claude", claude_auth_kind, "Claude Code is already signed in"),
-        "cursor": ("cursor", cursor_auth_kind, "Cursor is already signed in"),
+        "claude": ("claude", claude_auth_kind, "Code agent is already signed in"),
+        "cursor": ("cursor", cursor_auth_kind, "Editor agent is already signed in"),
     }
     if signed_in_kind in already_signed_in and not force:
         name, auth_kind, message = already_signed_in[signed_in_kind]
@@ -209,7 +209,7 @@ def login(
 def doctor(
     json_out: bool = typer.Option(False, "--json", help="Machine JSON"),
 ) -> None:
-    """Show whether Cursor, Codex, and Claude Code are installed and signed in."""
+    """Show whether agents are installed and signed in."""
     _print_agent_status(json_out=json_out)
 
 
@@ -411,7 +411,7 @@ def check_pack(
     timeout: int | None = typer.Option(None, "--timeout", help="Per-task timeout seconds"),
     temperature: float | None = typer.Option(None, "--temperature", help="Temperature (0–2)"),
     reasoning_effort: str | None = typer.Option(
-        None, "--reasoning-effort", help="Codex reasoning: low | medium | high | ultra"
+        None, "--reasoning-effort", help="Reasoning effort: low | medium | high | ultra"
     ),
     key_env: list[str] | None = typer.Option(None, "--key-env", help=_KEY_ENV_HELP),
     case_id: str | None = typer.Option(None, "--case", help="Run this check only (try-out)"),
@@ -457,7 +457,7 @@ def run_suite(
     timeout: int | None = typer.Option(None, "--timeout", help="Per-task timeout seconds"),
     temperature: float | None = typer.Option(None, "--temperature", help="Temperature (0–2)"),
     reasoning_effort: str | None = typer.Option(
-        None, "--reasoning-effort", help="Codex reasoning: low | medium | high | ultra"
+        None, "--reasoning-effort", help="Reasoning effort: low | medium | high | ultra"
     ),
     key_env: list[str] | None = typer.Option(None, "--key-env", help=_KEY_ENV_HELP),
 ) -> None:

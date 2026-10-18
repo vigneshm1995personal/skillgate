@@ -240,7 +240,7 @@ def test_roundtrip_dict() -> None:
 def test_config_label_includes_harness_and_timeout() -> None:
     run = EvalRunConfig(harness="codex", model="gpt-test", timeout_effective=300, reasoning_effort="medium")
     label = config_label(run)
-    assert "Codex" in label
+    assert "Terminal agent" in label
     assert "GPT-test" in label
     assert "300s" in label
     assert "medium" in label
@@ -248,7 +248,7 @@ def test_config_label_includes_harness_and_timeout() -> None:
 
 def test_config_label_does_not_say_demo() -> None:
     label = config_label(EvalRunConfig(harness="cursor-agent", timeout_effective=12))
-    assert "Cursor" in label
+    assert "Editor agent" in label
     assert "demo" not in label.lower()
     assert "Built-in checker" not in label
 
@@ -265,7 +265,7 @@ def test_auto_without_a_key_does_not_claim_cursor() -> None:
     assert auto_live_harness_name(cfg) == "auto"
     assert harness_display_name("auto") == "Auto"
     assert "Cursor" not in harness_display_name("auto")
-    assert harness_display_name("auto", "cursor-agent") == "Auto · Cursor"
+    assert harness_display_name("auto", "cursor-agent") == "Auto · Editor agent"
 
 
 def test_attach_stamped_config_replaces_auto_request() -> None:
@@ -295,7 +295,7 @@ def test_config_label_shows_cursor_model() -> None:
         cfg,
     )
     label = config_label(run)
-    assert label.startswith("Cursor")
+    assert label.startswith("Editor agent")
 
 
 def test_fingerprint_ignores_scoring_provider() -> None:
@@ -440,7 +440,7 @@ def test_codex_default_model_is_stamped_and_named() -> None:
     )
     assert run.model == "gpt-5.6-luna"
     details = customer_run_details(replace(run, timeout_effective=240))
-    assert "Codex" in details
+    assert "Terminal agent" in details
     assert "luna" in details.lower()
     payload = run.to_dict()
     assert payload["model"] == "gpt-5.6-luna"
@@ -454,7 +454,7 @@ def test_fresh_skip_judge_is_not_older_run() -> None:
     )
     details = customer_run_details(run)
     assert details != OLDER_RUN_LABEL
-    assert "Cursor" in details
+    assert "Editor agent" in details
     assert customer_config_label(run) != OLDER_RUN_LABEL
 
 
@@ -501,5 +501,5 @@ def test_customer_run_details_names_claude_model() -> None:
     details = customer_run_details(
         EvalRunConfig(harness="claude", model="claude-opus-5-5", timeout_effective=240)
     )
-    assert "Claude" in details
-    assert "Opus" in details
+    assert "Code agent" in details
+    assert "claude-opus-5-5" in details

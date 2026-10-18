@@ -32,6 +32,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
+import { agentLabel } from "@/lib/agent-label"
 import { api, ApiError } from "@/lib/api"
 import { useDashboard } from "@/lib/dashboard-provider"
 import { agentSessionLabel } from "@/lib/login-status"
@@ -42,33 +43,33 @@ import type { AgentAuthRow, SettingsKeyId, SettingsKeyPresence } from "@/lib/typ
 
 const FALLBACK_AGENTS: AgentAuthRow[] = [
   {
-    name: "Cursor",
+    name: agentLabel("cursor"),
     kind: "cursor-agent",
     agent: "cursor",
     status: "none",
     auth: "none",
     installed: false,
-    install: "curl https://cursor.com/install -fsS | bash",
+    install: "Install this agent's CLI, then sign in.",
     command: "skillgate login cursor",
   },
   {
-    name: "Codex",
+    name: agentLabel("codex"),
     kind: "codex",
     agent: "codex",
     status: "none",
     auth: "none",
     installed: false,
-    install: "npm install -g @openai/codex",
+    install: "Install this agent's CLI, then sign in.",
     command: "skillgate login codex",
   },
   {
-    name: "Claude Code",
+    name: agentLabel("claude"),
     kind: "claude",
     agent: "claude",
     status: "none",
     auth: "none",
     installed: false,
-    install: "npm install -g @anthropic-ai/claude-code",
+    install: "Install this agent's CLI, then sign in.",
     command: "skillgate login claude",
   },
 ]
@@ -301,13 +302,13 @@ function LocalSettings() {
     <div className="flex flex-col gap-6">
       <PageHeader
         title="Settings"
-        description="Sign in with Cursor, Codex, or Claude Code. Pick a decision model before a live check."
+        description="Sign in with an agent. Pick a decision model before a live check."
       />
       <Card>
         <CardHeader>
           <CardTitle>Agents</CardTitle>
           <CardDescription>
-            Sign in with Cursor, Codex, or Claude Code. Same as{" "}
+            Sign in with an agent. Same as{" "}
             <code>skillgate login</code>.
           </CardDescription>
         </CardHeader>
@@ -330,7 +331,7 @@ function LocalSettings() {
                     </Badge>
                   </div>
                   {!row.installed ? (
-                    <FieldDescription>Not installed. {row.install}</FieldDescription>
+                    <FieldDescription>Not installed. Install this agent's CLI, then sign in.</FieldDescription>
                   ) : (
                     <FieldDescription>
                       Run <code>{row.command}</code> in your terminal, or Sign in here.

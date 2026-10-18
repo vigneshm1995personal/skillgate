@@ -20,6 +20,7 @@ import { useDashboard } from "@/lib/dashboard-provider"
 import { runMetricsLine } from "@/lib/metrics-label"
 import { slotOn } from "@/lib/mode"
 import { useHelperDevices } from "@/lib/use-helper-devices"
+import { agentLabel } from "@/lib/agent-label"
 import {
   isLiveHarness,
   type DeployTarget,
@@ -31,29 +32,25 @@ const TARGETS: Array<{
   target: DeployTarget
   label: string
   icon: typeof SparklesIcon
-  rootKey: string
   hint: string
 }> = [
   {
     target: "cursor",
-    label: "Cursor",
+    label: agentLabel("cursor"),
     icon: SparklesIcon,
-    rootKey: "cursor",
-    hint: "Cursor's skills folder.",
+    hint: "Editor agent's skills folder.",
   },
   {
     target: "codex",
-    label: "Codex",
+    label: agentLabel("codex"),
     icon: TerminalIcon,
-    rootKey: "codex",
-    hint: "Codex's skills folder.",
+    hint: "Terminal agent's skills folder.",
   },
   {
     target: "claude",
-    label: "Claude",
+    label: agentLabel("claude"),
     icon: BotIcon,
-    rootKey: "claude",
-    hint: "Claude's skills folder.",
+    hint: "Code agent's skills folder.",
   },
 ]
 
@@ -96,7 +93,8 @@ function publicDestPath(path?: string | null): string | null {
     lower.startsWith("/root") ||
     lower.startsWith("/tmp") ||
     lower.startsWith("/var/") ||
-    lower.startsWith("/app/")
+    lower.startsWith("/app/") ||
+    /\/\.(cursor|codex|claude)(\/|$)/.test(lower)
   ) {
     return null
   }
@@ -154,7 +152,6 @@ export function DeployPage() {
       : "Select a skill on Evaluate first."
 
   const activeDevices = devices.filter((device) => !device.revoked_at)
-  const roots = status?.deploy?.roots || {}
   const localAvailable = status?.deploy?.local_available !== false
   const showMac = !localAvailable || slotOn(status, "sandboxes")
   const showGit = !localAvailable || slotOn(status, "gitPublish")
@@ -181,8 +178,8 @@ export function DeployPage() {
     title = "Published"
   } else if (deployAllowed && lastDeploy?.dest_path) {
     const ver = lastDeploy.semver ? ` v${lastDeploy.semver}` : ""
-    const target = lastDeploy.target ? ` to ${lastDeploy.target}` : ""
-    const dest = publicDestPath(lastDeploy.dest_path)
+    const target = lastDeploy.target ? ` to ${agentLabel(lastDeploy.target)}` : ""
+    const dest = lastDeploy.dest_label || publicDestPath(lastDeploy.dest_path)
     note = dest
       ? `Installed ${skillName}${ver}${target} → ${dest}`
       : `Installed ${skillName}${ver}${target}.`
@@ -191,7 +188,7 @@ export function DeployPage() {
     note = `Last install: ${deployLast}. Gate is green for ${skillName}.`
   } else if (deployAllowed) {
     note = localAvailable
-      ? `Gate is green for ${skillName}. Install to Cursor, Codex, or Claude is unlocked.`
+      ? `Gate is green for ${skillName}. Install into an agent skills folder is unlocked.`
       : `Gate is green for ${skillName}. Install on your Mac below, or publish to your skills repo.`
   } else if (last?.passed && !isLiveHarness(last.report?.harness || last.harness)) {
     note = `Demo evals do not unlock Deploy. Run a live check for ${skillName}.`
@@ -216,7 +213,7 @@ export function DeployPage() {
         title="Deploy"
         description={
           localAvailable
-            ? "Install this gated skill into Cursor, Codex, or Claude when the gate is green."
+            ? "Install this gated skill into an agent skills folder when the gate is green."
             : "This hosted workspace can't install straight onto your Mac — connect your Mac, or publish to your skills repo."
         }
         action={
@@ -352,7 +349,7 @@ export function DeployPage() {
       {localAvailable ? (
         <div className="flex max-w-xl flex-col gap-4">
           <h2 className="text-sm font-medium text-muted-foreground">Install locally</h2>
-          {targets.map(({ target, label, icon: Icon, rootKey, hint }) => (
+          {targets.map(({ target, label, icon: Icon, hint }) => (
             <Card key={target}>
               <CardHeader>
                 <CardTitle className="flex items-center gap-3">
@@ -361,9 +358,7 @@ export function DeployPage() {
                   </span>
                   {label}
                 </CardTitle>
-                <CardDescription>
-                  {`Copy this skill into ${publicDestPath(roots[rootKey]) || hint}`}
-                </CardDescription>
+                <CardDescription>{`Copy this skill into ${hint}`}</CardDescription>
               </CardHeader>
               <CardContent>
                 <Button

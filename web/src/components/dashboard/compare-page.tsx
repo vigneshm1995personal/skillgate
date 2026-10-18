@@ -44,6 +44,7 @@ import {
 } from "@/lib/eval-config"
 import { useDashboard } from "@/lib/dashboard-provider"
 import { api } from "@/lib/api"
+import { agentLabel } from "@/lib/agent-label"
 import { resolvedHarnessName } from "@/lib/types"
 
 type CompareHarnessPref = "auto" | "cursor-agent" | "codex" | "claude"
@@ -56,9 +57,9 @@ type ArmDraft = {
 
 const HARNESS_OPTS: { value: CompareHarnessPref; label: string }[] = [
   { value: "auto", label: "Auto" },
-  { value: "cursor-agent", label: "Cursor" },
-  { value: "codex", label: "Codex" },
-  { value: "claude", label: "Claude" },
+  { value: "cursor-agent", label: agentLabel("cursor-agent") },
+  { value: "codex", label: agentLabel("codex") },
+  { value: "claude", label: agentLabel("claude") },
 ]
 
 export function ComparePage() {

@@ -106,12 +106,12 @@ describe("collectChecksForRun", () => {
 
 describe("deployLabel / installedNote", () => {
   it("capitalizes install targets", () => {
-    expect(deployLabel("cursor")).toBe("Cursor")
+    expect(deployLabel("cursor")).toBe("Editor agent")
     expect(installedNote("pdf", { target: "cursor" })).toBe(
-      "Installed pdf to Cursor."
+      "Installed pdf to Editor agent."
     )
     expect(installedNote("pdf", { semver: "1.0.0", target: "cursor" })).toBe(
-      "Installed pdf v1.0.0 to Cursor."
+      "Installed pdf v1.0.0 to Editor agent."
     )
   })
 })

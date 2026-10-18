@@ -141,7 +141,7 @@ export function HomePage() {
               <CardHeader>
                 <CardTitle>Recent deploys</CardTitle>
                 <CardDescription>
-                  Latest install attempts into Cursor, Claude, or Codex.
+                  Latest installs into an agent skills folder.
                 </CardDescription>
               </CardHeader>
               <CardContent className="px-0">
