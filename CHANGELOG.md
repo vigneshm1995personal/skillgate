@@ -1,9 +1,11 @@
 # Changelog
 
-## Unreleased
+## 0.7.5
 
+- Checks is split into agent setup, test cases, built-in checks, your checks, and the decision model. One Run sits at the bottom. Open a check to read the prompt the judge uses.
 - Score live checks only with a decision model. Chat and Responses judges are removed, including auto selection and fallbacks. A live check with no decision model fails and asks you to pick one.
 - Another System 1 endpoint can register on the same decision-model interface.
+- The skill page Versions card counts and lists the same git refs as `skillgate compare versions`. `skillgate history` prints that list. Unrelated commits in the repo are not versions.
 - Skip `.pydeps`, `pydeps`, and `__pypackages__` when collecting workspace files for a check.
 
 ## 0.7.4

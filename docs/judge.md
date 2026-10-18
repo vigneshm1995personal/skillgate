@@ -46,7 +46,7 @@ If the scorer is not very sure about a pass, the check still passes. You will se
 ```yaml
 - uses: actions/setup-python@v5
   with: { python-version: "3.12" }
-- run: pip install skillgate-ai==0.7.4
+- run: pip install skillgate-ai==0.7.5
 - run: skillgate check . --key-env DECISION_MODEL_API_KEY
   env:
     DECISION_MODEL_API_KEY: ${{ secrets.DECISION_MODEL_API_KEY }}
