@@ -57,8 +57,12 @@ def _iter_skill_dirs(parent: Path) -> list[Path]:
     return found
 
 
-def catalog_entries(root: Path) -> list[dict[str, Any]]:
-    """Skills in this project only. Agent folders are a Connect source, not the list."""
+def catalog_entries(root: Path, *, include_agents: bool = False) -> list[dict[str, Any]]:
+    """Skills in this project.
+
+    Agent folders stay out unless ``include_agents`` is set. Evaluate uses
+    that flag. A workspace copy wins when the slug matches.
+    """
     root = root.expanduser().resolve()
     entries: list[dict[str, Any]] = []
     seen: set[Path] = set()
@@ -101,7 +105,38 @@ def catalog_entries(root: Path) -> list[dict[str, Any]]:
             add(child, "workspace")
     for child in _iter_skill_dirs(skills_root):
         add(child, "workspace")
+    if include_agents:
+        for source, getter in SOURCE_ROOTS:
+            if getter is None:
+                continue
+            try:
+                parent = getter()
+            except OSError:
+                continue
+            for child in _iter_skill_dirs(parent):
+                loaded = ingest_skill(child, strict=False)
+                slug = loaded.name or folder_slug(child)
+                if slug in names_seen:
+                    continue
+                add(child, source)
     return entries
+
+
+def _immediate_agent_skill(path: Path) -> bool:
+    """True when ``path`` is a direct child of a Cursor, Codex, or Claude skills folder."""
+    if not path.is_dir() or not (path / "SKILL.md").is_file():
+        return False
+    parent = path.parent
+    for _source, getter in SOURCE_ROOTS:
+        if getter is None:
+            continue
+        try:
+            root = getter().resolve()
+        except OSError:
+            continue
+        if parent == root:
+            return True
+    return False
 
 
 def safe_skill_folder_name(name: str) -> str:
@@ -136,6 +171,8 @@ def find_skill(root: Path, name: str) -> Path:
     looks_like_path = supplied.is_absolute() or "/" in text or "\\" in text or ".." in text
     if looks_like_path:
         resolved = supplied.resolve() if supplied.is_absolute() else (root / text).resolve()
+        if _immediate_agent_skill(resolved):
+            return resolved
         if not is_under_root(resolved, root):
             raise SkillGateError("That path is outside this project.")
         if (resolved / "SKILL.md").is_file():
@@ -144,7 +181,7 @@ def find_skill(root: Path, name: str) -> Path:
         workspace = workspace_skills_root(root) / text
         if (workspace / "SKILL.md").is_file():
             return workspace.resolve()
-    for entry in catalog_entries(root):
+    for entry in catalog_entries(root, include_agents=True):
         if (
             entry["name"] == text
             or entry["id"] == text

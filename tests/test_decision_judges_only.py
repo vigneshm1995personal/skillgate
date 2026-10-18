@@ -68,16 +68,41 @@ class _Recorder:
 
 def test_auto_does_not_select_a_judge_when_keys_exist() -> None:
     recorder = _Recorder()
-    judge = resolve_judge(
-        _cfg(
-            openai_api_key="sk-test",
-            gateway_api_key="gw-test",
-            jev_api_key="jev-test",
-            gateway_base_url="https://ai-gateway.vercel.sh/v1",
-        ),
-        harness_name="cursor-agent",
-    )
-    assert isinstance(judge, SkipJudge)
+    with pytest.raises(SkillGateError) as caught:
+        resolve_judge(
+            _cfg(
+                openai_api_key="sk-test",
+                gateway_api_key="gw-test",
+                jev_api_key="jev-test",
+                clef_api_key="cf-token",
+                gateway_base_url="https://ai-gateway.vercel.sh/v1",
+            ),
+            harness_name="cursor-agent",
+        )
+    message = caught.value.message.lower()
+    assert "pick a decision model" in message
+    assert "openai" not in message
+    assert "jev" not in message
+    assert "clef" not in message
+    assert recorder.urls == []
+
+
+def test_unconfigured_live_check_fails_and_names_no_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A live check with no decision model fails. It does not skip or call a chat model."""
+    recorder = _Recorder()
+    monkeypatch.setattr("skillgate_ai.openai_http.httpx.post", recorder)
+    for overrides in (
+        {},
+        {"judge_pref": "auto"},
+        {"judge_pref": "skip"},
+        {"judge_provider": "auto", "judge_chosen": False, "openai_api_key": "sk-test"},
+        {"judge_backend": "responses", "openai_api_key": "sk-test", "judge_pref": "openai"},
+    ):
+        with pytest.raises(SkillGateError) as caught:
+            resolve_judge(_cfg(**overrides), harness_name="cursor-agent")
+        text = f"{caught.value.message} {caught.value.hint or ''}".lower()
+        assert "decision model" in text
+        assert "fallback" not in text
     assert recorder.urls == []
 
 

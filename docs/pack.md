@@ -49,6 +49,28 @@ cases:
 
 Paths in `files[].src` and `golden.path` are **relative to the skill folder**.
 
+## Optional output file
+
+Set `output_optional: true` when a check can pass with no output file. You give the judge `contains` as reference text. The file and the reply can omit that sentence.
+
+A missing or empty file passes. Skill Gate checks a present file the same way as a required file. Skill Gate still fails a binary file saved where text is expected.
+
+```yaml
+  - id: ask-before-editing-tests
+    status: pinned
+    prompt: Fix the failing tests. Do not edit tests/.
+    should_trigger: true
+    output_optional: true
+    contains:
+      - The agent leaves tests/ unchanged and asks which behavior you want.
+    golden:
+      output_path: changes.diff
+      path: evals/goldens/ask-before-editing-tests.txt
+      kind: text
+```
+
+Omit `output_optional` to keep the output file required. On a saved check, run `skillgate case edit <skill> --id ask-before-editing-tests --output-optional true`.
+
 Optional `judge:` on the pack or a case adds extra scoring questions **on top of** Skill Gate’s six. Built-in ids cannot be reused; they can only change Fail vs warn (`on_fail`). Seed packs keep their original case ids.
 
 Pick who scores in Settings or `skillgate judge provider set`. Keys stay in `.skillgate/keys` — never ambient `OPENAI_API_KEY` / `AWS_*` unless `--key-env`.

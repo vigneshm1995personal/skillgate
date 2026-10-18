@@ -96,9 +96,11 @@ def test_settings_screen_has_no_provider_key_fields() -> None:
     assert text.count('type="password"') == 1
     assert "signed in" in text
     assert "not signed in" in text
-    assert "Decision model (optional)" in text
-    assert "File checks only" in text
-    assert 'label: "Decision model"' in text
+    assert "Decision model" in text
+    assert "Not selected" in text
+    assert "Pick a decision model before running a live check." in text
+    assert "File checks only" not in text
+    assert "Decision model (optional)" not in text
     assert "OpenAI Decisions" not in text
     assert 'label: "Jev"' not in text
     assert 'label: "Clef"' not in text
@@ -119,7 +121,9 @@ def test_settings_screen_has_no_provider_key_fields() -> None:
         "Skip it to run without the judge",
     ):
         assert phrase not in bundled, phrase
-    assert "File checks only" in bundled
+    assert "File checks only" not in bundled
+    assert "Not selected" in bundled
+    assert "Pick a decision model before running a live check." in bundled
     assert "Decision model" in bundled
     # One historical rewrite remains so old couldn't-score lines do not show a provider.
     assert bundled.count("OpenAI Decisions") == 1

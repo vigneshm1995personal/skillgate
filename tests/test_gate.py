@@ -172,9 +172,10 @@ def test_run_check_exit_2_without_judge_threads_no_judge_flag(
     monkeypatch.setattr("skillgate_ai.gate.run_eval", fake_run_eval)
 
     result = run_check(dest, source="test", root=tmp_path)
-    assert result.report is not None
-    assert result.report.passed is True
+    assert result.report is None
     assert result.exit_code == 2
+    assert result.error is not None
+    assert "Pick a decision model" in (result.error.get("message") or "")
 
     opted_out = run_check(dest, source="test", root=tmp_path, no_judge=True)
     assert opted_out.report is not None

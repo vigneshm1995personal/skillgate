@@ -8,7 +8,7 @@ from skillgate_ai.config import (
     DEFAULT_JUDGE_MODEL,
     LLMConfig,
 )
-from skillgate_ai.errors import MissingLLMKeyError
+from skillgate_ai.errors import MissingLLMKeyError, SkillGateError
 from skillgate_ai.engine import _live_verdict, _maybe_explain_fail
 from skillgate_ai.output_match import REASON_MISSING_OUTPUT
 from skillgate_ai.judge import SkipJudge, judge_stamp, resolve_judge
@@ -47,22 +47,26 @@ def test_skip_judge_does_not_pass_or_fail() -> None:
     assert judged["display_name"] == "Checks"
 
 
-def test_resolve_judge_auto_skips_without_key() -> None:
-    judge = resolve_judge(_cfg(), harness_name="cursor-agent")
-    assert isinstance(judge, SkipJudge)
+def test_resolve_judge_auto_asks_for_a_decision_model() -> None:
+    with pytest.raises(SkillGateError) as caught:
+        resolve_judge(_cfg(), harness_name="cursor-agent")
+    assert "Pick a decision model" in caught.value.message
+    assert caught.value.exit_code == 2
 
 
-def test_resolve_judge_auto_openai_on_live() -> None:
-    judge = resolve_judge(_cfg(openai_api_key="sk-test"), harness_name="cursor-agent")
-    assert isinstance(judge, SkipJudge)
+def test_resolve_judge_auto_does_not_use_a_saved_key() -> None:
+    with pytest.raises(SkillGateError) as caught:
+        resolve_judge(_cfg(openai_api_key="sk-test"), harness_name="cursor-agent")
+    assert "Pick a decision model" in caught.value.message
 
 
-def test_resolve_judge_skip_override() -> None:
-    judge = resolve_judge(
-        _cfg(openai_api_key="sk-test", judge_pref="skip"),
-        harness_name="cursor-agent",
-    )
-    assert isinstance(judge, SkipJudge)
+def test_resolve_judge_skip_is_not_a_live_judge() -> None:
+    with pytest.raises(SkillGateError) as caught:
+        resolve_judge(
+            _cfg(openai_api_key="sk-test", judge_pref="skip"),
+            harness_name="cursor-agent",
+        )
+    assert "Pick a decision model" in caught.value.message
 
 
 def test_resolve_judge_demo_always_skips() -> None:
@@ -107,14 +111,15 @@ def test_resolve_judge_openai_pref_ignores_gateway_key() -> None:
 
 
 def test_gateway_key_does_not_select_a_judge() -> None:
-    judge = resolve_judge(
-        _cfg(
-            gateway_api_key="gw-test",
-            gateway_base_url="https://ai-gateway.vercel.sh/v1",
-        ),
-        harness_name="cursor-agent",
-    )
-    assert isinstance(judge, SkipJudge)
+    with pytest.raises(SkillGateError) as caught:
+        resolve_judge(
+            _cfg(
+                gateway_api_key="gw-test",
+                gateway_base_url="https://ai-gateway.vercel.sh/v1",
+            ),
+            harness_name="cursor-agent",
+        )
+    assert "Pick a decision model" in caught.value.message
 
 
 def test_openai_key_keeps_judge_on_openai_decisions() -> None:
@@ -154,15 +159,16 @@ def test_default_scoring_uses_decisions_not_the_task_model() -> None:
     assert direct.backend.model == DEFAULT_JUDGE_MODEL
     assert direct.backend.model != DEFAULT_GATEWAY_MODEL
 
-    gateway = resolve_judge(
-        _cfg(
-            gateway_api_key="gw-test",
-            gateway_base_url="https://ai-gateway.vercel.sh/v1",
-            gateway_model=DEFAULT_GATEWAY_MODEL,
-        ),
-        harness_name="cursor-agent",
-    )
-    assert isinstance(gateway, SkipJudge)
+    with pytest.raises(SkillGateError) as caught:
+        resolve_judge(
+            _cfg(
+                gateway_api_key="gw-test",
+                gateway_base_url="https://ai-gateway.vercel.sh/v1",
+                gateway_model=DEFAULT_GATEWAY_MODEL,
+            ),
+            harness_name="cursor-agent",
+        )
+    assert "Pick a decision model" in caught.value.message
 
 
 def test_judge_stamp_has_no_secret() -> None:
@@ -180,8 +186,8 @@ def test_judge_stamp_has_no_secret() -> None:
     assert stamp["model"] == "gpt-6-luna"
 
 
-def test_gateway_key_stamp_stays_on_file_checks() -> None:
-    stamp = judge_stamp(
+def test_gateway_key_does_not_stamp_a_judge() -> None:
+    with pytest.raises(SkillGateError) as caught:
         resolve_judge(
             _cfg(
                 gateway_api_key="gw-test",
@@ -189,10 +195,9 @@ def test_gateway_key_stamp_stays_on_file_checks() -> None:
             ),
             harness_name="cursor-agent",
         )
-    )
-    assert stamp["provider"] == "skip"
-    assert stamp["backend"] == "skip"
-    assert "gw-test" not in str(stamp)
+    assert "Pick a decision model" in caught.value.message
+    assert "gw-test" not in caught.value.message
+    assert "fallback" not in caught.value.message.lower()
 
 
 def test_judge_stamp_uses_decisions_backend_model() -> None:

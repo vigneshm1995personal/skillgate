@@ -16,7 +16,9 @@ import { DatasetViewer } from "@/components/dashboard/dataset-viewer"
 import { GateBadge, PageHeader } from "@/components/dashboard/chrome"
 import { FixtureBindAccordion } from "@/components/dashboard/fixture-bind-accordion"
 import { GatePage } from "@/components/dashboard/gate-page"
-import { RunConfigAccordion } from "@/components/dashboard/run-config-accordion"
+import { AgentSetup } from "@/components/dashboard/agent-setup"
+import { BuiltInChecks } from "@/components/dashboard/check-prompts"
+import { JudgeSection } from "@/components/dashboard/judge-section"
 import {
   Alert,
   AlertAction,
@@ -54,10 +56,8 @@ import { Spinner } from "@/components/ui/spinner"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
 import { canPinCheck, pinnedCaseCount } from "@/lib/case-pack"
-import {
-  BuiltinChecks,
-  PackScoringExtras,
-} from "@/components/dashboard/scoring-questions"
+import { PackScoringExtras } from "@/components/dashboard/scoring-questions"
+import { runButtonLabel } from "@/lib/run-label"
 import { useDashboard } from "@/lib/dashboard-provider"
 import { runBelongsToSkill } from "@/lib/eval-row-state"
 import type { RunRecord } from "@/lib/types"
@@ -240,9 +240,13 @@ export function EvalPage() {
         : startBlocked
           ? startBlockReason || START_NEEDS_UPLOAD
           : undefined
-  const runLabel = running
-    ? `${lastResult?.completed_count ?? 0}/${lastResult?.task_count ?? checks.length} done`
-    : "Run"
+  const runAgent = harnessPref === "auto" ? resolvedHarness : harnessPref
+  const runLabel = runButtonLabel({
+    running,
+    completed: lastResult?.completed_count ?? 0,
+    total: running ? (lastResult?.task_count ?? checks.length) : checks.length,
+    agent: runAgent,
+  })
   const runHelp = !skill
     ? "Next: pick a skill."
     : checks.length === 0
@@ -364,9 +368,9 @@ export function EvalPage() {
         <section className="flex flex-col gap-4" aria-labelledby="eval-step-skill">
           <Card>
             <CardHeader>
-              <CardTitle id="eval-step-skill">1. Pick a skill</CardTitle>
+              <CardTitle id="eval-step-skill">Pick a skill</CardTitle>
               <CardDescription>
-                Choose the skill to test. You will see the files that belong to it.
+                Choose a skill from your Cursor, Codex, or Claude Code folder.
               </CardDescription>
               <CardAction>
                 <Button
@@ -438,6 +442,11 @@ export function EvalPage() {
                     <span className="min-w-0 flex-1 truncate text-sm font-medium">
                       {item.name}
                     </span>
+                    {item.source_label ? (
+                      <span className="shrink-0 text-xs text-muted-foreground">
+                        {item.source_label}
+                      </span>
+                    ) : null}
                     {item.warning ? (
                       <Badge variant="outline">Needs attention</Badge>
                     ) : null}
@@ -522,10 +531,33 @@ export function EvalPage() {
         </section>
         </TabsContent>
         <TabsContent value="checks" className="flex flex-col gap-4 pt-4">
-        <section aria-labelledby="eval-step-cases">
+        <section className="scroll-mt-16" aria-labelledby="eval-step-agent">
           <Card>
             <CardHeader>
-              <CardTitle id="eval-step-cases">2. Test cases</CardTitle>
+              <CardTitle id="eval-step-agent">Agent setup</CardTitle>
+              <CardDescription>
+                Pick Cursor, Codex, or Claude Code, then the model.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <AgentSetup
+                harnessPref={harnessPref}
+                setHarnessPref={setHarnessPref}
+                resolvedHarness={resolvedHarness}
+                evalConfig={evalConfig}
+                setEvalConfig={setEvalConfig}
+                disabled={running || seeding}
+                supportedModels={status?.supported_models}
+                supportedModelsMeta={status?.supported_models_meta}
+                defaultTimeoutSec={status?.default_eval_config?.timeout_sec}
+              />
+            </CardContent>
+          </Card>
+        </section>
+        <section className="scroll-mt-16" aria-labelledby="eval-step-cases">
+          <Card>
+            <CardHeader>
+              <CardTitle id="eval-step-cases">Test cases</CardTitle>
               <CardDescription>
                 Each row is one thing you ask the agent to do. Edit them, then press Run.
               </CardDescription>
@@ -547,18 +579,6 @@ export function EvalPage() {
               </CardAction>
             </CardHeader>
             <CardContent className="flex flex-col gap-3">
-              <RunConfigAccordion
-                harnessPref={harnessPref}
-                setHarnessPref={setHarnessPref}
-                resolvedHarness={resolvedHarness}
-                evalConfig={evalConfig}
-                setEvalConfig={setEvalConfig}
-                disabled={running || seeding}
-                supportedModels={status?.supported_models}
-                supportedModelsMeta={status?.supported_models_meta}
-                availableHarnesses={status?.available_harnesses}
-                defaultTimeoutSec={status?.default_eval_config?.timeout_sec}
-              />
               <FixtureBindAccordion
                 skill={skill}
                 packFiles={skill?.pack_files ?? []}
@@ -871,33 +891,46 @@ export function EvalPage() {
           </Card>
         </section>
 
-        <Accordion className="rounded-xl border px-3">
-          <AccordionItem value="checks">
-            <AccordionTrigger id="eval-step-checks">What gets checked</AccordionTrigger>
-            <AccordionContent className="flex flex-col gap-4">
-              <p className="text-sm text-muted-foreground">
-                Every test case is scored with these checks. Add your own questions if you want more.
-              </p>
-              <BuiltinChecks />
-              <PackScoringExtras
-                packJudge={packJudge}
-                disabled={running || seeding || !skill}
-                onPackJudge={setPackJudge}
-              />
-            </AccordionContent>
-          </AccordionItem>
-          <AccordionItem value="results">
-            <AccordionTrigger id="eval-step-results">Results</AccordionTrigger>
-            <AccordionContent>
-              <EvalResults
-                skillName={skill?.name}
-                running={running}
-                lastResult={lastResult}
-                historyRun={skillHistory?.last_run ?? null}
-              />
-            </AccordionContent>
-          </AccordionItem>
-        </Accordion>
+        <Card className="scroll-mt-16">
+          <CardHeader>
+            <CardTitle id="eval-step-builtins">Built-in checks</CardTitle>
+            <CardDescription>
+              Open a check to read the prompt the judge uses.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <BuiltInChecks skill={skill?.absolute || skill?.id} />
+          </CardContent>
+        </Card>
+
+        <Card className="scroll-mt-16">
+          <CardHeader>
+            <CardTitle id="eval-step-yours">Your checks</CardTitle>
+            <CardDescription>
+              Custom rules for every test case. Add one, or edit one you already saved.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <PackScoringExtras
+              packJudge={packJudge}
+              disabled={running || seeding || !skill}
+              onPackJudge={setPackJudge}
+              hideHeading
+            />
+          </CardContent>
+        </Card>
+
+        <Card className="scroll-mt-16">
+          <CardHeader>
+            <CardTitle id="eval-step-judge">Judge</CardTitle>
+            <CardDescription>
+              Decision models only. Pick one, or leave this unset.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <JudgeSection disabled={running || seeding} />
+          </CardContent>
+        </Card>
 
         <div className="flex flex-col gap-2">
           <p id="run-help" className="text-sm text-muted-foreground">
@@ -923,6 +956,12 @@ export function EvalPage() {
             {runLabel}
           </Button>
         </div>
+        <EvalResults
+          skillName={skill?.name}
+          running={running}
+          lastResult={lastResult}
+          historyRun={skillHistory?.last_run ?? null}
+        />
         </TabsContent>
         <TabsContent value="gate" className="pt-4">
           <GatePage embedded />
@@ -966,7 +1005,7 @@ function EvalResults({
   return (
     <Card id="eval-results">
       <CardHeader>
-        <CardTitle id="eval-step-results">5. Results</CardTitle>
+        <CardTitle id="eval-step-results">Results</CardTitle>
         <CardDescription>
           Passed checks use a green mark. Failed checks use a red mark.
         </CardDescription>

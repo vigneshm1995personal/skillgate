@@ -17,6 +17,40 @@ JUDGE_FILENAME = "judge"
 REMOVED_IDS = frozenset({"other", "compatible", "aws", "unknown"})
 _ACCOUNT_ID = re.compile(r"^[A-Za-z0-9]+$")
 _ENV_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+_PREFERRED_DECISION_IDS = ("openai", "jev", "clef")
+# Labels stay free of vendor names. An id the engine drops disappears here.
+_DECISION_JUDGE_COPY: dict[str, dict[str, Any]] = {
+    "openai": {
+        "label": "Decision model",
+        "detail": "Picks one answer for each check.",
+        "needs_endpoint": False,
+        "key_name": "OPENAI_API_KEY",
+    },
+    "jev": {
+        "label": "Fast decision model",
+        "detail": (
+            "Picks one answer for each built-in check. "
+            "Add a base URL and a key in Settings if this is not set up yet."
+        ),
+        "needs_endpoint": True,
+        "key_name": "JEV_API_KEY",
+    },
+    "clef": {
+        "label": "Alternate decision model",
+        "detail": (
+            "Picks one answer for each check. "
+            "Add an account id and a key in Settings if this is not set up yet."
+        ),
+        "needs_endpoint": False,
+        "key_name": "CLOUDFLARE_API_TOKEN",
+    },
+}
+_GENERIC_DECISION_COPY: dict[str, Any] = {
+    "label": "Decision model",
+    "detail": "Picks one answer for each check.",
+    "needs_endpoint": True,
+    "key_name": None,
+}
 
 
 @dataclass(frozen=True)
@@ -47,6 +81,26 @@ class JudgeProviderSettings:
         if self.key_env:
             payload["key_env"] = list(self.key_env)
         return payload
+
+
+def decision_judges() -> list[dict[str, Any]]:
+    """System 1 decision models the engine still accepts.
+
+    Chat and reasoning ids are not registered, so they are not listed.
+    An id the engine drops disappears here.
+    """
+    from skillgate_ai.judge import ensure_builtin_decision_endpoints
+    from skillgate_ai.judge_providers.decision import registered_decision_endpoint_ids
+
+    ensure_builtin_decision_endpoints()
+    registered = set(registered_decision_endpoint_ids())
+    ordered = [item for item in _PREFERRED_DECISION_IDS if item in registered]
+    ordered.extend(item for item in sorted(registered) if item not in ordered)
+    rows: list[dict[str, Any]] = []
+    for endpoint_id in ordered:
+        copy = _DECISION_JUDGE_COPY.get(endpoint_id, _GENERIC_DECISION_COPY)
+        rows.append({"id": endpoint_id, **copy})
+    return rows
 
 
 def judge_settings_path(root: str | Path | None = None) -> Path:

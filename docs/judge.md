@@ -4,12 +4,9 @@ Optional. Live checks still run with Cursor, Codex, or Claude. Scoring uses a de
 
 ## What you get
 
-When a decision model is on and you run a live check (`skillgate check`, or Run in the local UI), Skill Gate asks the same fixed questions on each live task. The check passes only when those answers meet the bar (job done, correct, followed the rules, and so on). Every check still needs a signed-in agent (`skillgate login`) or a key. Without one, `skillgate check` exits 2. Scoring is optional. File-exists, contains, and page-count scorers grade the live run when:
+When a decision model is on and you run a live check (`skillgate check`, or Run in the local UI), Skill Gate asks the same fixed questions on each live task. The check passes only when those answers meet the bar (job done, correct, followed the rules, and so on). Every check still needs a signed-in agent (`skillgate login`) or a key. Without one, `skillgate check` exits 2. A live check also needs a decision model. With none selected, the check exits 2 and asks you to pick one. It does not fall back to another model.
 
-- you leave scoring on file checks only
-- you set `SKILLGATE_JUDGE=skip`
-
-Scorers such as "does the output contain this text?" and page counts still apply. Scoring does not compare the full output to the expected file. It reads the expected and actual text (and a few images) and judges whether the work is done.
+Scorers such as "does the output contain this text?" and page counts still apply beside that decision model. Scoring does not compare the full output to the expected file. It reads the expected and actual text (and a few images) and judges whether the work is done. Pass `--no-judge` only when you mean to run without a decision model.
 
 Add extra scoring questions on top of Skill Gate's six (`skillgate judge add-question`, or the Checks editor). Built-in questions cannot be deleted. They can be Warn only. Seed pdf cases cannot be removed.
 
@@ -31,14 +28,13 @@ skillgate judge provider set <endpoint> --account-id <account-id> --model <model
 skillgate judge provider test
 ```
 
-A bad endpoint, rejected key, or empty balance fails that check. Chat and Responses completion models are not judges. Setting the judge backend to `responses`, `chat`, or `completions` fails the run. Older chat-style scoring setups fail until you pick file checks only or a registered decision model.
+A bad endpoint, rejected key, or empty balance fails that check. Chat and Responses completion models are not judges. Setting the judge backend to `responses`, `chat`, or `completions` fails the run. Older chat-style scoring setups fail until you pick a registered decision model.
 
 `--key-env` on `set` stores the env var name in `.skillgate/judge`. The key stays in that environment variable. Skill Gate does not write the value.
 
 | Env | Meaning |
 | --- | --- |
-| `SKILLGATE_JUDGE=auto` | Default. File checks only. A saved key does not turn scoring on. |
-| `SKILLGATE_JUDGE=skip` | Never score with a decision model. File-exists, contains, and page-count scorers grade the live run. |
+| unset, `auto`, or `skip` | No decision model. A live check exits 2 and asks you to pick one. A saved key does not turn scoring on. |
 | a decision-model endpoint id | Score with that decision model. A missing key exits 2. |
 
 Bad key, no credits, 403, 400, or timeout fails the check (exit 1) with a plain error. It never silently passes. The key is never printed or stored in history.
@@ -50,7 +46,7 @@ If the scorer is not very sure about a pass, the check still passes. You will se
 ```yaml
 - uses: actions/setup-python@v5
   with: { python-version: "3.12" }
-- run: pip install skillgate-ai==0.7.3
+- run: pip install skillgate-ai==0.7.4
 - run: skillgate check . --key-env DECISION_MODEL_API_KEY
   env:
     DECISION_MODEL_API_KEY: ${{ secrets.DECISION_MODEL_API_KEY }}

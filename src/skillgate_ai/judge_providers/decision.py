@@ -21,11 +21,11 @@ CHAT_NOT_A_JUDGE = (
     "A decision model scores checks directly. "
     "Chat and Responses completion models are not judges."
 )
-REMOVED_SETUP = (
-    "That scoring setup was removed. Pick file checks only or a decision model."
-)
-NOT_A_DECISION_MODEL = (
-    "That is not a decision model. Pick file checks only or a registered decision model."
+REMOVED_SETUP = "That scoring setup was removed. Pick a decision model."
+NOT_A_DECISION_MODEL = "That is not a decision model. Pick a registered decision model."
+NEEDS_DECISION_MODEL = "Pick a decision model before running a live check."
+NEEDS_DECISION_MODEL_HINT = (
+    "Choose one on Checks or in Settings, or with `skillgate judge provider set`."
 )
 NEEDS_KEY = (
     "This decision model needs an API key. Add it in Settings, or with `skillgate keys set`."

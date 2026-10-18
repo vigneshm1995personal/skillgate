@@ -45,9 +45,11 @@ class FakeResponse:
         return self._payload
 
 
-def test_auto_with_only_cursor_key_skips() -> None:
-    judge = resolve_judge(_cfg(cursor_api_key="cur-test"), harness_name="cursor-agent")
-    assert isinstance(judge, SkipJudge)
+def test_auto_with_only_cursor_key_asks_for_a_decision_model() -> None:
+    with pytest.raises(SkillGateError) as caught:
+        resolve_judge(_cfg(cursor_api_key="cur-test"), harness_name="cursor-agent")
+    assert caught.value.exit_code == 2
+    assert "Pick a decision model" in caught.value.message
 
 
 def test_explicit_aws_without_key_exits_2() -> None:

@@ -790,10 +790,17 @@ judge_app = typer.Typer(
 judge_provider_app = typer.Typer(
     add_completion=False,
     no_args_is_help=True,
-    help="Who scores live checks. File checks only, or a decision model.",
+    help="Who scores live checks. A decision model is required.",
 )
 app.add_typer(judge_app, name="judge")
 judge_app.add_typer(judge_provider_app, name="provider")
+
+checks_app = typer.Typer(
+    add_completion=False,
+    no_args_is_help=True,
+    help="Show the judge prompt for a built-in or custom check.",
+)
+app.add_typer(checks_app, name="checks")
 
 
 def _resolve_pack_arg(pack: Path | None) -> Path:
@@ -818,6 +825,25 @@ def _resolve_pack_arg(pack: Path | None) -> Path:
             exit_code=2,
         )
     return dest
+
+
+@checks_app.command("show")
+def checks_show_cmd(
+    check_id: str = typer.Argument(..., help="Built-in or custom check id"),
+    pack: Path | None = typer.Option(None, "--pack", help="Skill pack for a custom check"),
+) -> None:
+    """Print the judge prompt for this check."""
+    from skillgate_ai.checks_show import prompt_for_id
+
+    try:
+        dest = _resolve_pack_arg(pack) if pack is not None else None
+        row = prompt_for_id(check_id, pack=dest)
+    except SkillGateError as exc:
+        console.print(exc.render(), markup=False)
+        raise typer.Exit(exc.exit_code) from None
+    sys.stdout.write(row["prompt"])
+    if not str(row["prompt"]).endswith("\n"):
+        sys.stdout.write("\n")
 
 
 @judge_app.command("show")
@@ -954,6 +980,11 @@ def case_add_cmd(
     ),
     no_trigger: bool = typer.Option(False, "--no-trigger", help="This check should not run the skill"),
     force: bool = typer.Option(False, "--force", help="Replace a check that already uses this id"),
+    output_optional: bool = typer.Option(
+        False,
+        "--output-optional",
+        help="Accept a missing or empty output file. Expected stays reference text.",
+    ),
 ) -> None:
     """Add a check to this skill's Dataset."""
     from skillgate_ai.pack_edit import add_pack_case
@@ -969,6 +1000,7 @@ def case_add_cmd(
             should_trigger=not no_trigger,
             inputs=[str(path) for path in inputs] if inputs else None,
             force=force,
+            output_optional=output_optional,
         )
     except SkillGateError as exc:
         console.print(exc.render())
@@ -997,12 +1029,16 @@ def judge_provider_show() -> None:
     if cfg.judge_chosen:
         console.print(f"Scoring with {DEFAULT_NAME}")
         return
-    console.print("No scoring provider — file checks only.")
+    from skillgate_ai.judge_providers.decision import NEEDS_DECISION_MODEL
+
+    console.print(NEEDS_DECISION_MODEL)
 
 
 @judge_provider_app.command("set")
 def judge_provider_set(
-    provider: str = typer.Argument(..., help="auto, or a decision-model endpoint id"),
+    provider: str = typer.Argument(
+        ..., help="A decision-model endpoint id, or auto to clear the selection"
+    ),
     base_url: str | None = typer.Option(None, "--base-url"),
     region: str | None = typer.Option(None, "--region"),
     model: str | None = typer.Option(None, "--model"),
@@ -1031,9 +1067,11 @@ def judge_provider_set(
         console.print(exc.render())
         raise typer.Exit(exc.exit_code) from None
     if settings.chosen:
-        console.print("Scoring provider: the judge")
+        console.print("Scoring with the judge")
     else:
-        console.print("Scoring provider: Auto")
+        from skillgate_ai.judge_providers.decision import NEEDS_DECISION_MODEL
+
+        console.print(NEEDS_DECISION_MODEL)
 
 
 @judge_provider_app.command("test")

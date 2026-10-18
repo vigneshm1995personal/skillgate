@@ -71,6 +71,7 @@ export type Check = {
   input?: string | null
   golden_path?: string | null
   golden_kind?: "json" | "text" | "bytes" | null
+  output_optional?: boolean | null
   bank_status?: "pinned" | "draft" | null
   budgets?: CaseBudgets | null
   locked?: boolean
@@ -191,6 +192,8 @@ export type SkillPayload = {
   fixture_defaults?: Array<{ src: string; dest: string; bytes?: number }>
   default_output_path?: string | null
   has_dataset?: boolean
+  source?: string
+  source_label?: string
 }
 
 export const DEFAULT_OUTPUT_PATH = "output/result.txt"

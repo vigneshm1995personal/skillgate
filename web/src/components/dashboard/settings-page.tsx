@@ -79,38 +79,20 @@ const EMPTY_PRESENCE: SettingsKeyPresence = {
   from_env: false,
 }
 
-type ScoringMode = "auto" | "decision"
+const NOT_SELECTED = "auto"
+const REMOVED_ENDPOINTS = new Set(["other", "compatible", "aws", "unknown", "skip"])
 
-const REMOVED_ENDPOINTS = new Set(["other", "compatible", "aws", "unknown"])
-
-const SCORING_CHOICES: { value: ScoringMode; label: string }[] = [
-  { value: "auto", label: "File checks only" },
-  { value: "decision", label: "Decision model" },
-]
-
-const ENDPOINT_KEYS: Record<string, SettingsKeyId> = {
-  openai: "OPENAI_API_KEY",
-  jev: "JEV_API_KEY",
-  clef: "CLOUDFLARE_API_TOKEN",
+type DecisionJudge = {
+  id: string
+  label: string
+  detail: string
+  needs_endpoint: boolean
+  key_name?: string | null
 }
 
-function savedScoring(value: string | null | undefined): {
-  mode: ScoringMode | ""
-  endpoint: string
-  removed: boolean
-} {
-  const provider = (value || "auto").trim().toLowerCase()
-  if (!provider || provider === "auto") {
-    return { mode: "auto", endpoint: "", removed: false }
-  }
-  if (REMOVED_ENDPOINTS.has(provider)) {
-    return { mode: "", endpoint: "", removed: true }
-  }
-  return { mode: "decision", endpoint: provider, removed: false }
-}
-
-function keyForEndpoint(endpoint: string): SettingsKeyId | null {
-  return ENDPOINT_KEYS[endpoint.trim().toLowerCase()] ?? null
+function keyForJudge(judges: DecisionJudge[], provider: string): SettingsKeyId | null {
+  const name = judges.find((row) => row.id === provider)?.key_name?.trim()
+  return name ? (name as SettingsKeyId) : null
 }
 
 export function SettingsPage() {
@@ -145,8 +127,8 @@ function LocalSettings() {
   )
   const [agents, setAgents] = useState<AgentAuthRow[]>(FALLBACK_AGENTS)
   const [judgeDraft, setJudgeDraft] = useState("")
-  const [mode, setMode] = useState<ScoringMode | "">("")
-  const [endpoint, setEndpoint] = useState("")
+  const [judges, setJudges] = useState<DecisionJudge[]>([])
+  const [provider, setProvider] = useState("")
   const [removedProvider, setRemovedProvider] = useState(false)
   const [baseUrl, setBaseUrl] = useState("")
   const [model, setModel] = useState("")
@@ -159,16 +141,27 @@ function LocalSettings() {
 
   const load = async () => {
     try {
-      const [keyData, loginData, judgeData] = await Promise.all([
+      const [keyData, loginData, judgeData, catalog] = await Promise.all([
         api.settingsKeys(),
         api.loginStatus(),
         api.settingsJudge(),
+        api.decisionJudges(),
       ])
       setKeys(keyData.keys)
-      const saved = savedScoring(judgeData.judge.provider)
-      setMode(saved.mode)
-      setEndpoint(saved.endpoint)
-      setRemovedProvider(saved.removed)
+      const listed = catalog.judges
+      setJudges(listed)
+      const known = new Set(listed.map((row) => row.id))
+      const saved = (judgeData.judge.provider || NOT_SELECTED).trim().toLowerCase()
+      if (!saved || saved === NOT_SELECTED) {
+        setProvider(NOT_SELECTED)
+        setRemovedProvider(false)
+      } else if (REMOVED_ENDPOINTS.has(saved) || !known.has(saved)) {
+        setProvider("")
+        setRemovedProvider(true)
+      } else {
+        setProvider(saved)
+        setRemovedProvider(false)
+      }
       setBaseUrl(judgeData.judge.base_url || "")
       setModel(judgeData.judge.model || "")
       setAccountId(judgeData.judge.account_id || "")
@@ -187,25 +180,22 @@ function LocalSettings() {
   }, [])
 
   const persistJudgeSetup = async () => {
-    if (mode === "") {
-      throw new ApiError("Pick file checks only or a decision model.")
+    if (!provider) {
+      throw new ApiError("Pick a decision model before running a live check.")
     }
-    const providerId = mode === "auto" ? "auto" : endpoint.trim().toLowerCase()
-    if (mode === "decision" && !providerId) {
-      throw new ApiError("A decision model needs an endpoint.")
-    }
+    const chosen = provider !== NOT_SELECTED
     const value = judgeDraft.trim()
-    const keyName = keyForEndpoint(providerId)
+    const keyName = chosen ? keyForJudge(judges, provider) : null
     if (value && keyName) {
       const data = await api.setSettingsKey(keyName, value)
       setKeys(data.keys)
       setJudgeDraft("")
     }
     await api.setSettingsJudge({
-      provider: providerId,
-      base_url: mode === "decision" ? baseUrl.trim() || null : null,
-      model: mode === "decision" ? model.trim() || null : null,
-      account_id: mode === "decision" ? accountId.trim() || null : null,
+      provider,
+      base_url: chosen ? baseUrl.trim() || null : null,
+      model: chosen ? model.trim() || null : null,
+      account_id: chosen ? accountId.trim() || null : null,
     })
   }
 
@@ -230,9 +220,8 @@ function LocalSettings() {
       await persistJudgeSetup()
       await refreshStatus()
       const result = await api.pingJudge()
-      const message = /no scoring provider/i.test(result.message)
-        ? "No scoring provider. File checks only."
-        : result.message || (result.ok ? "The judge answered." : "The judge did not answer.")
+      const message =
+        result.message || (result.ok ? "The judge answered." : "The judge did not answer.")
       setTestMessage(message)
     } catch (err) {
       const message = err instanceof ApiError ? err.message : "Could not test the judge."
@@ -246,7 +235,7 @@ function LocalSettings() {
     setBusy(true)
     try {
       let latest = keys
-      const keyName = keyForEndpoint(endpoint)
+      const keyName = keyForJudge(judges, provider)
       if (keyName && latest?.[keyName]?.from_vault) {
         const data = await api.clearSettingsKey(keyName)
         latest = data.keys
@@ -255,8 +244,7 @@ function LocalSettings() {
         setKeys(latest)
       }
       setJudgeDraft("")
-      setMode("auto")
-      setEndpoint("")
+      setProvider(NOT_SELECTED)
       setRemovedProvider(false)
       setBaseUrl("")
       setModel("")
@@ -299,7 +287,13 @@ function LocalSettings() {
     }
   }
 
-  const keyName = mode === "decision" ? keyForEndpoint(endpoint) : null
+  const chosen = provider !== "" && provider !== NOT_SELECTED
+  const keyName = chosen ? keyForJudge(judges, provider) : null
+  const selected = judges.find((row) => row.id === provider)
+  const judgeItems = [
+    { value: NOT_SELECTED, label: "Not selected" },
+    ...judges.map((row) => ({ value: row.id, label: row.label })),
+  ]
   const presence = keyName && keys ? (keys[keyName] ?? EMPTY_PRESENCE) : EMPTY_PRESENCE
   const showKey = keyName !== null
 
@@ -307,7 +301,7 @@ function LocalSettings() {
     <div className="flex flex-col gap-6">
       <PageHeader
         title="Settings"
-        description="Sign in with Cursor, Codex, or Claude Code. A decision model is optional."
+        description="Sign in with Cursor, Codex, or Claude Code. Pick a decision model before a live check."
       />
       <Card>
         <CardHeader>
@@ -364,9 +358,9 @@ function LocalSettings() {
       </Card>
       <Card>
         <CardHeader>
-          <CardTitle>Decision model (optional)</CardTitle>
+          <CardTitle>Decision model</CardTitle>
           <CardDescription>
-            Pick a decision model, or leave scoring off and run file checks only.
+            Pick a decision model before running a live check.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -379,23 +373,23 @@ function LocalSettings() {
           {keys ? (
             <FieldGroup>
               <Field orientation="vertical">
-                <FieldLabel htmlFor="settings-judge-provider">Scoring</FieldLabel>
+                <FieldLabel htmlFor="settings-judge-provider">Decision model</FieldLabel>
                 <Select
-                  items={SCORING_CHOICES}
-                  value={mode || null}
+                  items={judgeItems}
+                  value={provider || null}
                   onValueChange={(next) => {
-                    if (next === "auto" || next === "decision") {
-                      setMode(next)
+                    if (typeof next === "string") {
+                      setProvider(next)
                       setRemovedProvider(false)
                     }
                   }}
                 >
                   <SelectTrigger id="settings-judge-provider" className="w-full">
-                    <SelectValue placeholder="File checks only or a decision model" />
+                    <SelectValue placeholder="Not selected" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectGroup>
-                      {SCORING_CHOICES.map((item) => (
+                      {judgeItems.map((item) => (
                         <SelectItem key={item.value} value={item.value}>
                           {item.label}
                         </SelectItem>
@@ -405,24 +399,14 @@ function LocalSettings() {
                 </Select>
                 {removedProvider ? (
                   <FieldDescription>
-                    The saved scoring setup was removed. Pick file checks only or a decision
-                    model.
+                    The saved scoring setup was removed. Pick a decision model.
                   </FieldDescription>
                 ) : null}
+                {selected?.detail ? (
+                  <FieldDescription>{selected.detail}</FieldDescription>
+                ) : null}
               </Field>
-              {mode === "decision" ? (
-                <Field orientation="vertical">
-                  <FieldLabel htmlFor="settings-judge-endpoint">Endpoint</FieldLabel>
-                  <Input
-                    id="settings-judge-endpoint"
-                    autoComplete="off"
-                    value={endpoint}
-                    placeholder="endpoint"
-                    onChange={(event) => setEndpoint(event.target.value)}
-                  />
-                </Field>
-              ) : null}
-              {mode === "decision" ? (
+              {chosen ? (
                 <Field orientation="vertical">
                   <FieldLabel htmlFor="settings-judge-base-url">Base URL</FieldLabel>
                   <Input
@@ -435,7 +419,7 @@ function LocalSettings() {
                   />
                 </Field>
               ) : null}
-              {mode === "decision" ? (
+              {chosen ? (
                 <Field orientation="vertical">
                   <FieldLabel htmlFor="settings-judge-model">Model</FieldLabel>
                   <Input
@@ -447,7 +431,7 @@ function LocalSettings() {
                   />
                 </Field>
               ) : null}
-              {mode === "decision" ? (
+              {chosen ? (
                 <Field orientation="vertical">
                   <FieldLabel htmlFor="settings-judge-account-id">Account id</FieldLabel>
                   <Input
@@ -482,7 +466,7 @@ function LocalSettings() {
                     type="password"
                     autoComplete="off"
                     value={judgeDraft}
-                    placeholder={presence.set ? "Set — enter a replacement" : "Optional"}
+                    placeholder={presence.set ? "Set — enter a replacement" : "API key"}
                     onChange={(event) => setJudgeDraft(event.target.value)}
                   />
                 </Field>
@@ -491,7 +475,7 @@ function LocalSettings() {
                 <Button
                   id="btn-settings-save-judge"
                   size="sm"
-                  disabled={busy || testing || mode === ""}
+                  disabled={busy || testing || !provider}
                   onClick={() => void onSaveJudge()}
                 >
                   {busy ? <Spinner data-icon="inline-start" /> : null}
@@ -501,7 +485,7 @@ function LocalSettings() {
                   id="btn-settings-test-judge"
                   variant="outline"
                   size="sm"
-                  disabled={busy || testing || mode === ""}
+                  disabled={busy || testing || !provider}
                   onClick={() => void onTestJudge()}
                 >
                   {testing ? <Spinner data-icon="inline-start" /> : null}
@@ -522,7 +506,8 @@ function LocalSettings() {
                               !baseUrl.trim() &&
                               !model.trim() &&
                               !accountId.trim() &&
-                              !removedProvider)
+                              !removedProvider &&
+                              !chosen)
                           }
                           onClick={() => void onClearJudge()}
                         >

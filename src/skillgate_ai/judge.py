@@ -115,33 +115,39 @@ def ensure_builtin_decision_endpoints() -> None:
 
 
 def resolve_judge(cfg: LLMConfig, *, harness_name: str) -> Judge:
-    """Pick file checks, or one registered decision model. Auto and non-live runs skip."""
+    """Return one registered decision model. A live check with none fails."""
     from skillgate_ai.judge_providers.decision import (
         CHAT_BACKENDS,
         CHAT_NOT_A_JUDGE,
+        NEEDS_DECISION_MODEL,
+        NEEDS_DECISION_MODEL_HINT,
         NOT_A_DECISION_MODEL,
         REMOVED_BACKENDS,
         REMOVED_SETUP,
         decision_endpoint,
     )
 
-    pref = (cfg.judge_pref or "auto").strip().lower() or "auto"
-    if pref == "skip" or not is_live_harness(harness_name):
+    if not is_live_harness(harness_name):
         return SkipJudge()
     backend = (cfg.judge_backend or "").strip().lower()
     if backend in CHAT_BACKENDS:
         raise SkillGateError(CHAT_NOT_A_JUDGE, exit_code=2)
     ensure_builtin_decision_endpoints()
+    pref = (cfg.judge_pref or "auto").strip().lower() or "auto"
     selected = (getattr(cfg, "judge_provider", None) or "auto").strip().lower() or "auto"
-    endpoint_id = "openai" if pref == "openai" else selected
+    endpoint_id = selected if pref in {"", "auto"} else pref
     if endpoint_id in CHAT_BACKENDS:
         raise SkillGateError(CHAT_NOT_A_JUDGE, exit_code=2)
     if endpoint_id in REMOVED_BACKENDS:
         raise SkillGateError(REMOVED_SETUP, exit_code=2)
+    if endpoint_id in {"", "auto", "skip"}:
+        raise SkillGateError(
+            NEEDS_DECISION_MODEL,
+            hint=NEEDS_DECISION_MODEL_HINT,
+            exit_code=2,
+        )
     endpoint = decision_endpoint(endpoint_id)
     if endpoint is None:
-        if endpoint_id == "auto":
-            return SkipJudge()
         raise SkillGateError(NOT_A_DECISION_MODEL, exit_code=2)
     return endpoint.build(cfg)
 
@@ -237,7 +243,7 @@ def _clef_judge(cfg: LLMConfig, *, chosen: bool) -> Judge:
 def ping_judge(cfg: LLMConfig) -> dict[str, str | bool]:
     judge = resolve_judge(cfg, harness_name="cursor-agent")
     if isinstance(judge, SkipJudge):
-        return {"ok": False, "message": "No scoring provider — file checks only."}
+        return {"ok": False, "message": "Pick a decision model before running a live check."}
     backend = getattr(judge, "backend", None)
     display = str(getattr(judge, "display_name", None) or DEFAULT_NAME)
     if backend is not None and hasattr(backend, "ping"):

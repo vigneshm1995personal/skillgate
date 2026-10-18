@@ -210,7 +210,7 @@ def test_oss_never_calls_skillgate_hosted_endpoint_or_runs_without_user_key(
     from skillgate_ai.errors import MissingLLMKeyError, SkillGateError
     from skillgate_ai.gate import run_check
     from skillgate_ai.helper import connect as connect_helper
-    from skillgate_ai.judge import SkipJudge, resolve_judge
+    from skillgate_ai.judge import resolve_judge
     from skillgate_ai.keys import (
         PROVIDER_KEY_NAMES,
         SKILLGATE_KEY_ENV,
@@ -268,7 +268,9 @@ def test_oss_never_calls_skillgate_hosted_endpoint_or_runs_without_user_key(
         ]
     )
     assert cfg.judge_endpoint in (None, "")
-    assert isinstance(resolve_judge(cfg, harness_name="cursor-agent"), SkipJudge)
+    with pytest.raises(SkillGateError) as unconfigured:
+        resolve_judge(cfg, harness_name="cursor-agent")
+    assert "Pick a decision model" in unconfigured.value.message
 
     with pytest.raises(SkillGateError) as missing_jev_host:
         resolve_judge(

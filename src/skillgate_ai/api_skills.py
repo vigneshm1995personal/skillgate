@@ -35,6 +35,13 @@ from skillgate_ai.pack import (
     write_sample_fixture,
 )
 
+_PICKER_SOURCE_LABELS = {
+    "workspace": "This project",
+    "cursor": "Cursor",
+    "codex": "Codex",
+    "claude": "Claude Code",
+}
+
 
 def _broken_skill_row(item: dict[str, Any]) -> dict[str, Any]:
     folder = Path(str(item.get("absolute") or item.get("name") or "skill"))
@@ -54,17 +61,35 @@ def _broken_skill_row(item: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _listed_skill(state: Any, item: dict[str, Any]) -> dict[str, Any]:
+    try:
+        payload = skill_payload(state, Path(item["absolute"]))
+    except (SkillGateError, OSError, ValueError):
+        payload = _broken_skill_row(item)
+    source = str(item.get("source") or "")
+    payload["source"] = source
+    payload["source_label"] = _PICKER_SOURCE_LABELS.get(
+        source, str(item.get("source_label") or source)
+    )
+    return payload
+
+
+def _listed_skills(state: Any) -> list[dict[str, Any]]:
+    return [
+        _listed_skill(state, item)
+        for item in catalog_entries(state.root, include_agents=True)
+    ]
+
+
 def register_skill_routes(app: FastAPI) -> None:
     @app.get("/api/skills")
     def list_skills(request: Request) -> dict[str, Any]:
         state = state_of(request)
-        skills: list[dict[str, Any]] = []
-        for item in catalog_entries(state.root):
-            try:
-                skills.append(skill_payload(state, Path(item["absolute"])))
-            except (SkillGateError, OSError, ValueError):
-                skills.append(_broken_skill_row(item))
-        return {"skills": skills, "catalog_error": None, "sources": agent_source_status()}
+        return {
+            "skills": _listed_skills(state),
+            "catalog_error": None,
+            "sources": agent_source_status(),
+        }
 
     @app.get("/api/skills/import-sources")
     def import_sources() -> dict[str, Any]:
@@ -86,13 +111,7 @@ def register_skill_routes(app: FastAPI) -> None:
                 state.root,
                 sources=sources if isinstance(sources, list) else None,
             )
-        skills: list[dict[str, Any]] = []
-        for item in catalog_entries(state.root):
-            try:
-                skills.append(skill_payload(state, Path(item["absolute"])))
-            except (SkillGateError, OSError, ValueError):
-                skills.append(_broken_skill_row(item))
-        result["skills"] = skills
+        result["skills"] = _listed_skills(state)
         result["sources"] = agent_source_status()
         return result
 

@@ -528,6 +528,8 @@ def test_ui_live_with_key_does_not_use_builtin(
     from conftest import enable_cursor_agent
 
     enable_cursor_agent(monkeypatch, project_root)
+    monkeypatch.setenv("SKILLGATE_JUDGE", "openai")
+    monkeypatch.setenv("SKILLGATE_OPENAI_API_KEY", "sk-test")
     dest = tmp_path / "pdf"
     shutil.copytree(project_root / "skills" / "pdf", dest)
     ensure_demo_pdfs(dest / "evals" / "fixtures")
@@ -569,6 +571,8 @@ def test_ui_demo_flag_still_runs_live(
     from conftest import enable_cursor_agent
 
     enable_cursor_agent(monkeypatch, project_root)
+    monkeypatch.setenv("SKILLGATE_JUDGE", "openai")
+    monkeypatch.setenv("SKILLGATE_OPENAI_API_KEY", "sk-test")
     dest = tmp_path / "pdf"
     shutil.copytree(project_root / "skills" / "pdf", dest)
     ensure_demo_pdfs(dest / "evals" / "fixtures")

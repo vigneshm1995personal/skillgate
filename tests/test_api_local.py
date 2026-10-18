@@ -188,12 +188,19 @@ def test_import_from_cursor_skills(tmp_path: Path, monkeypatch) -> None:
     )
     client = _client(tmp_path, monkeypatch)
     listed = client.get("/api/skills")
-    names = {item["name"] for item in listed.json()["skills"]}
-    assert "imported-skill" not in names
+    rows = listed.json()["skills"]
+    names = {item["name"] for item in rows}
+    assert "imported-skill" in names
+    cursor_row = next(item for item in rows if item["name"] == "imported-skill")
+    assert cursor_row["source"] == "cursor"
     imported = client.post("/api/skills/import", json={"sources": ["cursor"]})
     assert imported.status_code == 200
     dest = tmp_path / "skills" / "imported-skill"
     assert (dest / "SKILL.md").is_file()
+    again = client.get("/api/skills").json()["skills"]
+    copied = next(item for item in again if item["name"] == "imported-skill")
+    assert copied["source"] == "workspace"
+    assert len(again) == len(rows)
 
 
 def test_deploy_copies_into_agent_folder(tmp_path: Path, monkeypatch) -> None:

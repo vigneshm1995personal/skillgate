@@ -1,3 +1,4 @@
+import { CheckPromptPreview } from "@/components/dashboard/check-prompts"
 import { Button } from "@/components/ui/button"
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
@@ -19,19 +20,6 @@ import {
   type ExtraQuestion,
   type JudgeBlock,
 } from "@/lib/judge-spec"
-
-export function BuiltinChecks() {
-  return (
-    <ul id="builtin-checks" className="flex flex-col gap-3">
-      {BUILTIN_QUESTIONS.map((question) => (
-        <li key={question.id} className="flex flex-col gap-1">
-          <p className="text-sm font-medium">{question.ask}</p>
-          <p className="text-sm text-muted-foreground">{question.explain}</p>
-        </li>
-      ))}
-    </ul>
-  )
-}
 
 const TYPE_ITEMS = [
   { value: "predicate", label: "Yes/No" },
@@ -159,17 +147,21 @@ export function PackScoringExtras({
   packJudge,
   disabled,
   onPackJudge,
+  hideHeading = false,
 }: {
   packJudge?: JudgeBlock | null
   disabled?: boolean
   onPackJudge: (next: JudgeBlock | null) => void
+  hideHeading?: boolean
 }) {
   const extras = packJudge?.extra_questions ?? []
   return (
     <div className="flex flex-col gap-2">
-      <p className="text-sm font-medium">Your questions for every test case</p>
+      {hideHeading ? null : (
+        <p className="text-sm font-medium">Your checks</p>
+      )}
       <FieldDescription>
-        Optional. The judge asks these about every test case, after the checks above.
+        Open a check to read the prompt the judge uses.
       </FieldDescription>
       {extras.map((extra, extraIndex) => (
         <ExtraQuestionFields
@@ -225,7 +217,7 @@ export function PackScoringExtras({
             })
           }}
         >
-          Add a question for every test case
+          Add a check
         </Button>
       </div>
     </div>
@@ -339,6 +331,7 @@ function ExtraQuestionFields({
           />
         </Field>
       ) : null}
+      <CheckPromptPreview question={extra} />
       <div className="flex justify-end">
         <Button variant="ghost" size="xs" disabled={disabled} onClick={onRemove}>
           Remove
