@@ -10,23 +10,86 @@ Scorers such as "does the output contain this text?" and page counts still apply
 
 Add extra scoring questions on top of Skill Gate's six (`skillgate judge add-question`, or the Checks editor). Built-in questions cannot be deleted. They can be Warn only. Seed pdf cases cannot be removed.
 
-## Setup
+## Set up a decision model
+
+A decision model scores each live check, and one is required. Each option below takes one key and only the fields listed. `skillgate keys set` prompts, or reads the value from stdin. Do not put the key on the command line.
+
+**CI and Docker:** set the `SKILLGATE_*` name for that key. That prefix is the documented job path and is always read. A key that is only in the process environment is ignored unless you pass `--key-env`. Each decision model uses its own key. A missing key fails that check. Skill Gate does not switch to another decision model.
+
+### OpenRouter
+
+An OpenRouter key from <https://openrouter.ai/keys>, saved as the Jev key.
+
+Fields: base URL `https://openrouter.ai/api/v1`, model `typesafe/jev-1.14`, API key.
 
 ```bash
-skillgate keys set
-skillgate judge provider set <endpoint>
-skillgate judge provider test
+printf '%s\n' "$JEV_API_KEY" | skillgate keys set JEV_API_KEY
+skillgate judge provider set jev --base-url https://openrouter.ai/api/v1 --model typesafe/jev-1.14
 ```
 
-Paste the key in `skillgate ui` (Settings), choose Decision model, and enter the endpoint id. **CI and Docker:** set the `SKILLGATE_*` name for that key. That prefix is the documented job path and is always read. A key that is only in the process environment is ignored unless you pass `--key-env`.
+`skillgate judge provider set jev` fills that URL and model when you leave the flags off.
 
-Each decision model uses its own key. A missing key fails that check. Skill Gate does not switch to another decision model.
+UI: `skillgate ui`, open Settings, choose OpenRouter, confirm Advanced shows that URL and model, paste the key, Save, then Test.
+
+### OpenAI
+
+An OpenAI key from <https://platform.openai.com/api-keys>.
+
+Field: API key.
 
 ```bash
-skillgate judge provider set <endpoint> --base-url https://example.com/v1 --model <model>
-skillgate judge provider set <endpoint> --account-id <account-id> --model <model>
-skillgate judge provider test
+printf '%s\n' "$OPENAI_API_KEY" | skillgate keys set OPENAI_API_KEY
+skillgate judge provider set openai
 ```
+
+UI: `skillgate ui`, open Settings, choose OpenAI, paste the key, Save, then Test.
+
+### Cloudflare
+
+A Cloudflare token from <https://dash.cloudflare.com/profile/api-tokens>. The account id is the id in the account URL. Replace `accountid` with that id. Letters and digits only.
+
+Fields: account id, model (`clef` or `clef-flash`), token.
+
+```bash
+printf '%s\n' "$CLOUDFLARE_API_TOKEN" | skillgate keys set CLOUDFLARE_API_TOKEN
+skillgate judge provider set clef --account-id accountid --model clef
+```
+
+UI: `skillgate ui`, open Settings, choose Cloudflare, enter the account id, pick `clef` or `clef-flash`, paste the token, Save, then Test.
+
+### Custom endpoint
+
+A key for the URL you enter.
+
+Fields: base URL, model, API key. There is no fixed model list. Replace `MODEL` with the model name.
+
+```bash
+printf '%s\n' "$CUSTOM_DECISION_API_KEY" | skillgate keys set CUSTOM_DECISION_API_KEY
+skillgate judge provider set custom --base-url https://example.com/v1 --model MODEL
+```
+
+UI: `skillgate ui`, open Settings, choose Custom endpoint, enter the base URL and model, paste the key, Save, then Test.
+
+```bash
+skillgate judge test
+```
+
+`skillgate judge provider test` runs the same check.
+
+### Troubleshooting
+
+- `This API key was rejected.` The key is wrong for this option, or it was revoked. Create a new key from the same page and run `skillgate keys set` for that option again.
+- `This key is for a different endpoint.` The URL is not a scoring URL. OpenRouter uses `https://openrouter.ai/api/v1`.
+- `This account is out of credits.` Add credits on that account, then run `skillgate judge test`.
+- This looks like an OpenRouter key. Switch to OpenRouter with `skillgate judge provider set jev`. Run that command, or press Switch.
+- `OpenAI does not use a base URL. It only needs an API key.` Run `skillgate judge provider set openai`.
+- `Cloudflare scores only with clef or clef-flash. Choose OpenRouter for typesafe/jev-1.14.` That option does not score `typesafe/jev-1.14`. Use `--model clef` or `--model clef-flash`, or switch to OpenRouter.
+- `OpenRouter scores only with typesafe/jev-1.14. Choose Cloudflare for clef or clef-flash.` Use `--model typesafe/jev-1.14`, or switch to Cloudflare and pick `clef` or `clef-flash`.
+- This decision model needs an API key. Add it in Settings, or with `skillgate keys set`. Save the key named above.
+- `This decision model needs a base URL.` Pass `--base-url`. OpenRouter's is `https://openrouter.ai/api/v1`.
+- This decision model needs an account id. Set it with `skillgate judge provider set` and `--account-id`. Cloudflare needs that flag.
+- `This decision model needs a model.` Pass `--model`, or pick one from the list.
+- `Pick a decision model before running a live check.` Run one `skillgate judge provider set` command above.
 
 A bad endpoint, rejected key, or empty balance fails that check. Chat and Responses completion models are not judges. Setting the judge backend to `responses`, `chat`, or `completions` fails the run. Older chat-style scoring setups fail until you pick a registered decision model.
 
@@ -46,7 +109,7 @@ If the scorer is not very sure about a pass, the check still passes. You will se
 ```yaml
 - uses: actions/setup-python@v5
   with: { python-version: "3.12" }
-- run: pip install skillgate-ai==0.7.7
+- run: pip install skillgate-ai==0.7.8
 - run: skillgate check . --key-env DECISION_MODEL_API_KEY
   env:
     DECISION_MODEL_API_KEY: ${{ secrets.DECISION_MODEL_API_KEY }}

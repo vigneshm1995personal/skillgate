@@ -116,21 +116,18 @@ def test_api_show_matches_cli(tmp_path: Path, monkeypatch) -> None:
 
 
 def test_decision_judges_exclude_chat_models() -> None:
-    import re
-
     rows = decision_judges()
     ids = {row["id"] for row in rows}
     assert "aws" not in ids
     assert "compatible" not in ids
     assert "auto" not in ids
-    assert ids == {"openai", "jev", "clef"}
+    assert ids == {"openai", "jev", "clef", "custom"}
+    # Key-source names (OpenAI, OpenRouter, Cloudflare) are the catalog copy.
+    # Chat vendors stay out of that copy.
     for row in rows:
-        text = f"{row['label']} {row['detail']}"
-        assert re.search(
-            r"openai|jev|clef|aws|anthropic|gpt|bedrock|decisions|provider",
-            text,
-            re.IGNORECASE,
-        ) is None
+        text = f"{row['label']} {row['detail']}".lower()
+        for banned in ("anthropic", "bedrock", "gpt-", "aws"):
+            assert banned not in text
 
 
 def test_decision_judges_follow_the_engine_allowlist(monkeypatch) -> None:

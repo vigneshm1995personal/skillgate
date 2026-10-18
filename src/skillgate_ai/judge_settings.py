@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from skillgate_ai.errors import SkillGateError
+from skillgate_ai.judge_setup import option_for, prepare_option_fields
 from skillgate_ai.keys import KEYS_DIRNAME
 from skillgate_ai.paths import project_root
 
@@ -17,39 +18,19 @@ JUDGE_FILENAME = "judge"
 REMOVED_IDS = frozenset({"other", "compatible", "aws", "unknown"})
 _ACCOUNT_ID = re.compile(r"^[A-Za-z0-9]+$")
 _ENV_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
-_PREFERRED_DECISION_IDS = ("openai", "jev", "clef")
-# Labels stay free of vendor names. An id the engine drops disappears here.
-_DECISION_JUDGE_COPY: dict[str, dict[str, Any]] = {
-    "openai": {
-        "label": "Decision model",
-        "detail": "Picks one answer for each check.",
-        "needs_endpoint": False,
-        "key_name": "OPENAI_API_KEY",
-    },
-    "jev": {
-        "label": "Fast decision model",
-        "detail": (
-            "Picks one answer for each built-in check. "
-            "Add a base URL and a key in Settings if this is not set up yet."
-        ),
-        "needs_endpoint": True,
-        "key_name": "JEV_API_KEY",
-    },
-    "clef": {
-        "label": "Alternate decision model",
-        "detail": (
-            "Picks one answer for each check. "
-            "Add an account id and a key in Settings if this is not set up yet."
-        ),
-        "needs_endpoint": False,
-        "key_name": "CLOUDFLARE_API_TOKEN",
-    },
-}
+_PREFERRED_DECISION_IDS = ("openai", "jev", "clef", "custom")
+# A plugin id with no catalog row. Key-source names live on the known options.
 _GENERIC_DECISION_COPY: dict[str, Any] = {
     "label": "Decision model",
     "detail": "Picks one answer for each check.",
-    "needs_endpoint": True,
+    "fields": ["base_url", "model", "key"],
+    "advanced": [],
+    "models": [],
+    "model_free": True,
+    "defaults": {},
     "key_name": None,
+    "key_label": "API key",
+    "needs_endpoint": True,
 }
 
 
@@ -98,8 +79,11 @@ def decision_judges() -> list[dict[str, Any]]:
     ordered.extend(item for item in sorted(registered) if item not in ordered)
     rows: list[dict[str, Any]] = []
     for endpoint_id in ordered:
-        copy = _DECISION_JUDGE_COPY.get(endpoint_id, _GENERIC_DECISION_COPY)
-        rows.append({"id": endpoint_id, **copy})
+        option = option_for(endpoint_id)
+        if option is not None:
+            rows.append(option.to_public())
+            continue
+        rows.append({"id": endpoint_id, **_GENERIC_DECISION_COPY})
     return rows
 
 
@@ -177,14 +161,21 @@ def save_judge_settings(
         from skillgate_ai.judge_providers.decision import NOT_A_DECISION_MODEL
 
         raise SkillGateError(NOT_A_DECISION_MODEL, exit_code=2)
+    region, model, base_url, account_id = prepare_option_fields(
+        name,
+        region=region,
+        model=model,
+        base_url=base_url,
+        account_id=account_id,
+    )
     settings = JudgeProviderSettings(
         provider=name,
-        region=_blank(region),
-        model=_blank(model),
-        base_url=_blank(base_url),
+        region=region,
+        model=model,
+        base_url=base_url,
         decisions_path=_blank(decisions_path),
         key_env=_require_key_env(key_env),
-        account_id=_account_id(account_id, required=name == "clef" and account_id is not None),
+        account_id=_account_id(account_id, required=False),
     )
     dest = judge_settings_path(root)
     dest.parent.mkdir(parents=True, exist_ok=True)

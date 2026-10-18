@@ -35,6 +35,17 @@ def test_public_docs_drop_internal_words() -> None:
         assert word not in blob, word
 
 
+def _readme_outside_decision_setup(text: str) -> str:
+    """Key-source names belong in the setup section. The rest of the README stays free of them."""
+    start = text.find("## Set up a decision model")
+    if start < 0:
+        return text
+    rest = text[start:]
+    end_rel = rest.find("\n## ", 1)
+    end = len(text) if end_rel < 0 else start + end_rel
+    return text[:start] + text[end:]
+
+
 def test_readme_points_at_docs() -> None:
     text = README.read_text(encoding="utf-8")
     assert "https://www.skill-gate-ai.app/docs" in text
@@ -42,7 +53,8 @@ def test_readme_points_at_docs() -> None:
     assert "agentskills.io" not in text
     assert "decision model" in text.lower()
     assert "custom" in text.lower()
-    lowered = text.lower()
+    assert "## Set up a decision model" in text
+    lowered = _readme_outside_decision_setup(text).lower()
     for needle in (
         "promptfoo",
         "agentskills.io",
@@ -64,18 +76,18 @@ def test_release_yml_example_tag_is_current() -> None:
     assert "v0.4.2" in text or "v0.5.0" in text or "v0.5.1" in text or "v0.6.0" in text
 
 
-def test_package_and_docs_pin_077() -> None:
+def test_package_and_docs_pin_078() -> None:
     pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
     init = (ROOT / "src" / "skillgate_ai" / "__init__.py").read_text(encoding="utf-8")
     readme = README.read_text(encoding="utf-8")
     quickstart = QUICKSTART.read_text(encoding="utf-8")
     judge = (ROOT / "docs" / "judge.md").read_text(encoding="utf-8")
-    assert 'version = "0.7.7"' in pyproject
-    assert '__version__ = "0.7.7"' in init
+    assert 'version = "0.7.8"' in pyproject
+    assert '__version__ = "0.7.8"' in init
     assert "pip install skillgate-ai" in readme
-    assert "0.7.7" in readme
-    assert "skillgate-ai==0.7.7" in quickstart
-    assert "skillgate-ai==0.7.7" in judge
+    assert "0.7.8" in readme
+    assert "skillgate-ai==0.7.8" in quickstart
+    assert "skillgate-ai==0.7.8" in judge
     assert "# 10-minute" in quickstart
 
 

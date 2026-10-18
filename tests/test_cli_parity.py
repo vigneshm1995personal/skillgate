@@ -71,6 +71,17 @@ def test_parity_table_is_in_docs() -> None:
 _SETTINGS_TSX = (
     Path(__file__).resolve().parents[1] / "web" / "src" / "components" / "dashboard" / "settings-page.tsx"
 )
+_JUDGE_FORM_TSX = (
+    Path(__file__).resolve().parents[1]
+    / "web"
+    / "src"
+    / "components"
+    / "dashboard"
+    / "judge-setup-form.tsx"
+)
+_JUDGE_SETUP_TS = (
+    Path(__file__).resolve().parents[1] / "web" / "src" / "lib" / "judge-setup.ts"
+)
 _WEB_STATIC = Path(__file__).resolve().parents[1] / "src" / "skillgate_ai" / "web_static"
 _OLD_KEY_COPY = (
     "Model keys",
@@ -91,20 +102,27 @@ _OLD_KEY_COPY = (
 
 def test_settings_screen_has_no_provider_key_fields() -> None:
     text = _SETTINGS_TSX.read_text(encoding="utf-8")
+    form = _JUDGE_FORM_TSX.read_text(encoding="utf-8")
     for phrase in _OLD_KEY_COPY:
         assert phrase not in text, phrase
-    assert text.count('type="password"') == 1
+    assert 'type="password"' not in text
+    assert form.count('type="password"') == 1
     assert "signed in" in text
     assert "not signed in" in text
     assert "Decision model" in text
-    assert "Not selected" in text
-    assert "Pick a decision model before running a live check." in text
+    assert "Not selected" in form
+    assert "A decision model scores each live check, and one is required." in _JUDGE_SETUP_TS.read_text(
+        encoding="utf-8"
+    )
+    assert 'idPrefix="settings-judge"' in text
+    assert "${idPrefix}-account-id" in form
+    assert "${idPrefix}-base-url" in form
+    assert "${idPrefix}-model" in form
     assert "File checks only" not in text
     assert "Decision model (optional)" not in text
     assert "OpenAI Decisions" not in text
     assert 'label: "Jev"' not in text
     assert 'label: "Clef"' not in text
-    assert "settings-judge-account-id" in text
     assert "Skip it to run without the judge" not in text
     assert "Any OpenAI-compatible endpoint" not in text
     assert "AI_GATEWAY_API_KEY" not in text
@@ -123,7 +141,7 @@ def test_settings_screen_has_no_provider_key_fields() -> None:
         assert phrase not in bundled, phrase
     assert "File checks only" not in bundled
     assert "Not selected" in bundled
-    assert "Pick a decision model before running a live check." in bundled
+    assert "A decision model scores each live check, and one is required." in bundled
     assert "Decision model" in bundled
     # One historical rewrite remains so old couldn't-score lines do not show a provider.
     assert bundled.count("OpenAI Decisions") == 1

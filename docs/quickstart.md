@@ -10,7 +10,7 @@ Requires **Python 3.11+**.
 python3 -m venv .venv
 source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install skillgate-ai
-skillgate version           # 0.7.7
+skillgate version           # 0.7.8
 ```
 
 (`pip install skillgate` is a different product.) From a clone of this repo you can use `pip install -e .` instead.
@@ -52,7 +52,7 @@ skillgate login --status         # installed / logged in / API key / none
 skillgate judge provider set <endpoint>
 ```
 
-Pick a decision model before a live check. With none selected, `skillgate check` exits 2 and asks you to pick one. See [judge.md](https://github.com/vigneshm1995personal/skillgate/blob/main/docs/judge.md). Every check is a live agent run. Without `skillgate login` or a key, `skillgate check` exits 2. Default results say "Scored by the judge" when a decision model scored the run.
+Pick a decision model before a live check. With none selected, `skillgate check` exits 2 and asks you to pick one. Commands for each option are in [Set up a decision model](judge.md#set-up-a-decision-model). Every check is a live agent run. Without `skillgate login` or a key, `skillgate check` exits 2. Default results say "Scored by the judge" when a decision model scored the run.
 
 ## A pass and a fail
 
@@ -152,7 +152,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: { python-version: "3.12" }
-      - run: pip install skillgate-ai==0.7.7
+      - run: pip install skillgate-ai==0.7.8
       - run: skillgate check . --key-env OPENAI_API_KEY
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}

@@ -252,8 +252,14 @@ export const api = {
         id: string
         label: string
         detail: string
-        needs_endpoint: boolean
+        needs_endpoint?: boolean
+        fields?: string[]
+        advanced?: string[]
+        models?: string[]
+        model_free?: boolean
+        defaults?: Record<string, string>
         key_name?: string | null
+        key_label?: string
       }>
     }>("/api/settings/judges"),
   loginStatus: () =>
@@ -265,7 +271,7 @@ export const api = {
       body: "{}",
     }),
   pingJudge: () =>
-    request<{ ok: boolean; message: string }>("/api/judge/ping", {
+    request<{ ok: boolean; message: string; switch_to?: string }>("/api/judge/ping", {
       method: "POST",
       headers: jsonHeaders,
       body: "{}",

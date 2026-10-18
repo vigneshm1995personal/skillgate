@@ -272,13 +272,12 @@ def test_oss_never_calls_skillgate_hosted_endpoint_or_runs_without_user_key(
         resolve_judge(cfg, harness_name="cursor-agent")
     assert "Pick a decision model" in unconfigured.value.message
 
-    with pytest.raises(SkillGateError) as missing_jev_host:
-        resolve_judge(
-            _judge_cfg(jev_api_key="jev-user-key", judge_provider="jev", judge_chosen=True),
-            harness_name="cursor-agent",
-        )
-    assert missing_jev_host.value.exit_code == 2
-    assert "base URL" in missing_jev_host.value.message
+    ready = resolve_judge(
+        _judge_cfg(jev_api_key="jev-user-key", judge_provider="jev", judge_chosen=True),
+        harness_name="cursor-agent",
+    )
+    assert str(getattr(ready.backend, "base_url", "")).rstrip("/") == "https://openrouter.ai/api/v1"
+    assert http_calls == []
 
     pack = tmp_path / "pdf"
     shutil.copytree(REPO / "skills" / "pdf", pack)
