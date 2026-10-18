@@ -32,6 +32,7 @@ SETTINGS_KEYS = (
     "AI_GATEWAY_API_KEY",
     "ANTHROPIC_API_KEY",
     "JEV_API_KEY",
+    "CLOUDFLARE_API_TOKEN",
     "AWS_ACCESS_KEY_ID",
     "AWS_SECRET_ACCESS_KEY",
     "AWS_SESSION_TOKEN",
@@ -65,9 +66,11 @@ def fail(status: int, message: str, hint: str | None = None, **extra: Any) -> No
 
 
 def keys_payload(state: AppState) -> dict[str, Any]:
-    from skillgate_ai.keys import public_key_presence
+    from skillgate_ai.keys import CUSTOMER_SETTINGS_KEYS, key_presence
 
-    return public_key_presence(state.root)
+    presence = key_presence(state.root)
+    names = (*CUSTOMER_SETTINGS_KEYS, "JEV_API_KEY", "CLOUDFLARE_API_TOKEN")
+    return {name: presence[name] for name in names}
 
 
 def is_relative(path: Path, root: Path) -> bool:

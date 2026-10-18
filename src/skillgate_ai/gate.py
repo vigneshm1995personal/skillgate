@@ -29,7 +29,7 @@ from skillgate_ai.eval_config import (
     with_timeout_effective,
 )
 from skillgate_ai.harness import is_live_harness, live_harness_or_error
-from skillgate_ai.judge import judge_stamp, resolve_judge
+from skillgate_ai.judge import SkipJudge, judge_stamp, resolve_judge
 from skillgate_ai.history import append_eval
 from skillgate_ai.live import RunControl
 from skillgate_ai.observability import (
@@ -250,7 +250,9 @@ def _execute_check(
         cfg = apply_eval_config(cfg, run_cfg)
         resolved = live_harness_or_error(harness_pref, cfg)
         run_cfg = stamp_resolved(run_cfg, resolved.name, cfg)
-        outcome_judge = resolve_judge(cfg, harness_name=resolved.name)
+        outcome_judge = (
+            SkipJudge() if no_judge else resolve_judge(cfg, harness_name=resolved.name)
+        )
         run_cfg = with_judge(run_cfg, judge_stamp(outcome_judge))
         mode = "live"
         with eval_transaction(

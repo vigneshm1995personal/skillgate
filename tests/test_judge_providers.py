@@ -8,9 +8,7 @@ import pytest
 from skillgate_ai.config import LLMConfig, get_llm_config
 from skillgate_ai.errors import MissingLLMKeyError, SkillGateError
 from skillgate_ai.judge import SkipJudge, resolve_judge
-from skillgate_ai.judge_openai import OutcomeJudge, make_openai_judge
-from skillgate_ai.judge_providers.aws import AwsBackend
-from skillgate_ai.judge_providers.compatible import CompatibleBackend
+from skillgate_ai.judge_openai import DecisionsBackend, OutcomeJudge, make_openai_judge
 from skillgate_ai.judge_providers.jev import JevBackend
 from skillgate_ai.judge_settings import save_judge_settings
 from skillgate_ai.judge_spec import resolve_judge_spec
@@ -47,19 +45,21 @@ class FakeResponse:
         return self._payload
 
 
-def test_auto_with_only_cursor_key_skips() -> None:
-    judge = resolve_judge(_cfg(cursor_api_key="cur-test"), harness_name="cursor-agent")
-    assert isinstance(judge, SkipJudge)
+def test_auto_with_only_cursor_key_asks_for_a_decision_model() -> None:
+    with pytest.raises(SkillGateError) as caught:
+        resolve_judge(_cfg(cursor_api_key="cur-test"), harness_name="cursor-agent")
+    assert caught.value.exit_code == 2
+    assert "Pick a decision model" in caught.value.message
 
 
 def test_explicit_aws_without_key_exits_2() -> None:
-    with pytest.raises(MissingLLMKeyError) as caught:
+    with pytest.raises(SkillGateError) as caught:
         resolve_judge(
             _cfg(judge_provider="aws", judge_chosen=True, judge_region="us-east-1"),
             harness_name="cursor-agent",
         )
     assert caught.value.exit_code == 2
-    assert "AWS" in caught.value.message
+    assert "removed" in caught.value.message.lower()
     assert "OPENAI" not in caught.value.message
 
 
@@ -75,7 +75,7 @@ def test_aws_without_region_exits_2() -> None:
             harness_name="cursor-agent",
         )
     assert caught.value.exit_code == 2
-    assert "region" in caught.value.message.lower()
+    assert "removed" in caught.value.message.lower()
 
 
 def test_aws_ignores_ambient_credentials(
@@ -103,7 +103,8 @@ def test_openai_key_not_reused_for_jev() -> None:
             ),
             harness_name="cursor-agent",
         )
-    assert "Jev" in caught.value.message
+    assert "API key" in caught.value.message
+    assert "OpenAI" not in caught.value.message
 
 
 def test_jev_scores_extra_questions_and_a_low_answer_fails() -> None:
@@ -170,65 +171,48 @@ def test_scoring_rejection_names_payload_size() -> None:
 
     def post(url, headers=None, json=None, timeout=None):
         del headers, json, timeout
-        if str(url).endswith("/decisions"):
-            return FakeResponse(404, {"error": {"message": "missing"}})
+        assert str(url).endswith("/decisions")
         return FakeResponse(413, {"error": {"message": "payload too large"}})
 
-    backend = CompatibleBackend(
-        api_key="gw-key",
-        base_url="https://openrouter.ai/api/v1",
-        post=post,
-    )
+    backend = DecisionsBackend(api_key="sk-test", post=post)
     result = backend.evaluate(state=state, images=[], timeout_sec=5)
     reason = str(result.get("reason") or "")
     assert result["status"] == "error"
     assert str(nbytes) in reason
     assert "2 files" in reason
-    assert "did not accept scoring requests" not in reason
+
+    def post_bad(url, headers=None, json=None, timeout=None):
+        del url, headers, json, timeout
+        return FakeResponse(400, {"error": {"message": "rejected"}})
+
+    bad = DecisionsBackend(api_key="sk-test", post=post_bad).evaluate(
+        state=state, images=[], timeout_sec=5
+    )
+    assert str(nbytes) not in str(bad.get("reason") or "")
 
 
-def test_compatible_404_falls_back_without_confidence_warning() -> None:
-    spec = resolve_judge_spec()
+def test_removed_provider_does_not_post(monkeypatch: pytest.MonkeyPatch) -> None:
     calls: list[str] = []
 
     def post(url, headers=None, json=None, timeout=None):
         del headers, json, timeout
-        calls.append(url)
-        if url.endswith("/decisions"):
-            return FakeResponse(404, {"error": {"message": "missing"}})
-        mapping = {
-            "task_completion": "Fully completed",
-            "correctness": "Correct",
-            "instruction_adherence": "Fully followed",
-            "evidence_action_validity": "Fully supported",
-            "result_quality": "Clear and complete",
-            "path_efficiency": "Efficient",
-        }
-        return FakeResponse(
-            200,
-            {
-                "output_text": __import__("json").dumps(mapping),
-                "model": "compat",
-            },
-        )
+        calls.append(str(url))
+        return FakeResponse(200, {})
 
-    backend = CompatibleBackend(
-        api_key="gw-key",
-        base_url="https://compat.example/v1",
-        post=post,
-    )
-    judged = OutcomeJudge(
-        backend,
-        display_name="Other",
-        provider="compatible",
-        chosen=True,
-        supports_why=True,
-        supports_confidence=False,
-    ).judge("goal", [], "tail", spec=spec, path={"had_path": True, "steps": 1})
-    assert judged["status"] == "completed"
-    assert judged["warnings"] == []
-    assert any(url.endswith("/decisions") for url in calls)
-    assert any("/responses" in url for url in calls)
+    monkeypatch.setattr("skillgate_ai.openai_http.httpx.post", post)
+    for provider in ("other", "compatible", "aws"):
+        with pytest.raises(SkillGateError) as caught:
+            resolve_judge(
+                _cfg(
+                    judge_provider=provider,
+                    judge_chosen=True,
+                    openai_api_key="sk-test",
+                    gateway_api_key="gw-test",
+                ),
+                harness_name="cursor-agent",
+            )
+        assert "removed" in caught.value.message.lower()
+    assert calls == []
 
 
 def test_provider_test_401_omits_secret() -> None:
@@ -254,143 +238,32 @@ def test_jev_module_is_not_jev_qa() -> None:
 
 def test_aws_backend_does_not_read_environ(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("AWS_ACCESS_KEY_ID", "AKIAAAMBIENT")
-    seen: dict[str, str] = {}
-
-    def post(url, headers=None, json=None, content=None, timeout=None):
-        del json, content, timeout
-        seen["url"] = url
-        seen["auth"] = str((headers or {}).get("Authorization") or "")
-        return FakeResponse(
-            200,
-            {
-                "output": {
-                    "message": {
-                        "content": [
-                            {
-                                "toolUse": {
-                                    "input": {
-                                        "task_completion": "Fully completed",
-                                        "correctness": "Correct",
-                                        "instruction_adherence": "Fully followed",
-                                        "evidence_action_validity": "Fully supported",
-                                        "result_quality": "Clear and complete",
-                                        "path_efficiency": "Efficient",
-                                    }
-                                }
-                            }
-                        ]
-                    }
-                }
-            },
-        )
-
-    backend = AwsBackend(
-        access_key="AKIATEST",
-        secret_key="vault-secret",
-        region="us-west-2",
-        model="amazon.nova-lite",
-        post=post,
-    )
-    judged = backend.evaluate(
-        state={"check_prompt": "p", "path": {"had_path": True, "steps": 1}},
-        images=[],
-        timeout_sec=5,
-    )
-    assert judged["status"] == "completed"
-    assert "us-west-2" in seen["url"]
-    assert "AKIATEST" in seen["auth"]
-    assert "AKIAAAMBIENT" not in seen["auth"]
-    assert os.environ.get("AWS_ACCESS_KEY_ID") == "AKIAAAMBIENT"
-
-
-def test_aws_encodes_colon_in_model_id() -> None:
-    seen: dict[str, str] = {}
+    calls: list[str] = []
 
     def post(url, headers=None, json=None, content=None, timeout=None):
         del headers, json, content, timeout
-        seen["url"] = url
-        return FakeResponse(
-            200,
-            {
-                "output": {
-                    "message": {
-                        "content": [
-                            {
-                                "toolUse": {
-                                    "input": {
-                                        "task_completion": "Fully completed",
-                                        "correctness": "Correct",
-                                        "instruction_adherence": "Fully followed",
-                                        "evidence_action_validity": "Fully supported",
-                                        "result_quality": "Clear and complete",
-                                        "path_efficiency": "Efficient",
-                                    }
-                                }
-                            }
-                        ]
-                    }
-                }
-            },
+        calls.append(str(url))
+        return FakeResponse(200, {})
+
+    monkeypatch.setattr("skillgate_ai.openai_http.httpx.post", post)
+    with pytest.raises(SkillGateError) as caught:
+        resolve_judge(
+            _cfg(
+                judge_provider="aws",
+                judge_chosen=True,
+                aws_access_key_id="AKIATEST",
+                aws_secret_access_key="vault-secret",
+                judge_region="us-west-2",
+                judge_provider_model="amazon.nova-lite",
+            ),
+            harness_name="cursor-agent",
         )
-
-    backend = AwsBackend(
-        access_key="AKIATEST",
-        secret_key="vault-secret",
-        region="us-east-1",
-        model="anthropic.claude-3-haiku-20240307-v1:0",
-        post=post,
-    )
-    judged = backend.evaluate(
-        state={"check_prompt": "p", "path": {"had_path": True, "steps": 1}},
-        images=[],
-        timeout_sec=5,
-    )
-    assert judged["status"] == "completed"
-    assert "%3A0" in seen["url"]
-    assert "v1:0" not in seen["url"]
+    assert "removed" in caught.value.message.lower()
+    assert calls == []
+    assert os.environ.get("AWS_ACCESS_KEY_ID") == "AKIAAAMBIENT"
 
 
-def test_compatible_evaluate_uses_decisions_path() -> None:
-    calls: list[str] = []
-
-    def post(url, headers=None, json=None, timeout=None):
-        del headers, json, timeout
-        calls.append(url)
-        return FakeResponse(
-            200,
-            {
-                "answers": [
-                    {"name": "task_completion", "choice": "Fully completed"},
-                    {"name": "correctness", "choice": "Correct"},
-                    {"name": "instruction_adherence", "choice": "Fully followed"},
-                    {"name": "evidence_action_validity", "choice": "Fully supported"},
-                    {"name": "result_quality", "choice": "Clear and complete"},
-                    {"name": "path_efficiency", "choice": "Efficient"},
-                ],
-                "model": "compat",
-            },
-        )
-
-    backend = CompatibleBackend(
-        api_key="gw-key",
-        base_url="https://compat.example/v1",
-        decisions_path="/score",
-        post=post,
-    )
-    judged = OutcomeJudge(
-        backend,
-        display_name="Other",
-        provider="compatible",
-        chosen=True,
-        supports_why=True,
-        supports_confidence=True,
-    ).judge("goal", [], "tail", spec=resolve_judge_spec(), path={"had_path": True, "steps": 1})
-    assert judged["status"] == "completed"
-    assert any(url.endswith("/score") for url in calls)
-    assert not any(url.rstrip("/").endswith("/decisions") for url in calls)
-
-
-def test_aws_extra_choice_is_visible() -> None:
+def test_decisions_extra_choice_is_visible() -> None:
     spec = resolve_judge_spec(
         pack={
             "extra_questions": [
@@ -404,54 +277,34 @@ def test_aws_extra_choice_is_visible() -> None:
         }
     )
 
-    def post(url, headers=None, json=None, content=None, timeout=None):
-        del url, headers, json, content, timeout
-        return FakeResponse(
-            200,
-            {
-                "output": {
-                    "message": {
-                        "content": [
-                            {
-                                "toolUse": {
-                                    "input": {
-                                        "task_completion": "Fully completed",
-                                        "correctness": "Correct",
-                                        "instruction_adherence": "Fully followed",
-                                        "evidence_action_validity": "Fully supported",
-                                        "result_quality": "Clear and complete",
-                                        "path_efficiency": "Efficient",
-                                        "totals_match": "yes",
-                                    }
-                                }
-                            }
-                        ]
-                    }
-                }
-            },
-        )
+    def post(url, headers=None, json=None, timeout=None):
+        del url, headers, timeout
+        answers = [
+            {"name": "task_completion", "choice": "Fully completed"},
+            {"name": "correctness", "choice": "Correct"},
+            {"name": "instruction_adherence", "choice": "Fully followed"},
+            {"name": "evidence_action_validity", "choice": "Fully supported"},
+            {"name": "result_quality", "choice": "Clear and complete"},
+            {"name": "path_efficiency", "choice": "Efficient"},
+            {"name": "totals_match", "choice": "yes"},
+        ]
+        return FakeResponse(200, {"answers": answers, "model": "gpt-6-luna"})
 
-    backend = AwsBackend(
-        access_key="AKIATEST",
-        secret_key="vault-secret",
-        region="us-east-1",
-        model="amazon.nova-lite",
-        post=post,
-    )
+    backend = DecisionsBackend(api_key="sk-test", post=post)
     judged = OutcomeJudge(
         backend,
-        display_name="AWS",
-        provider="aws",
+        display_name="the judge",
+        provider="openai",
         chosen=True,
-        supports_why=True,
-        supports_confidence=False,
+        supports_why=False,
+        supports_confidence=True,
     ).judge("goal", [], "tail", spec=spec, path={"had_path": True, "steps": 1})
     assert judged["status"] == "completed"
     assert judged["cells"]["totals_match"]["choice"] == "yes"
     assert judged["answers"]["totals_match"]["choice"] == "yes"
 
 
-def test_aws_extra_predicate_is_visible() -> None:
+def test_decisions_extra_predicate_is_visible() -> None:
     spec = resolve_judge_spec(
         pack={
             "extra_questions": [
@@ -464,46 +317,26 @@ def test_aws_extra_predicate_is_visible() -> None:
         }
     )
 
-    def post(url, headers=None, json=None, content=None, timeout=None):
-        del url, headers, json, content, timeout
-        return FakeResponse(
-            200,
-            {
-                "output": {
-                    "message": {
-                        "content": [
-                            {
-                                "toolUse": {
-                                    "input": {
-                                        "task_completion": "Fully completed",
-                                        "correctness": "Correct",
-                                        "instruction_adherence": "Fully followed",
-                                        "evidence_action_validity": "Fully supported",
-                                        "result_quality": "Clear and complete",
-                                        "path_efficiency": "Efficient",
-                                        "totals_ok": 0.91,
-                                    }
-                                }
-                            }
-                        ]
-                    }
-                }
-            },
-        )
+    def post(url, headers=None, json=None, timeout=None):
+        del url, headers, timeout
+        answers = [
+            {"name": "task_completion", "choice": "Fully completed"},
+            {"name": "correctness", "choice": "Correct"},
+            {"name": "instruction_adherence", "choice": "Fully followed"},
+            {"name": "evidence_action_validity", "choice": "Fully supported"},
+            {"name": "result_quality", "choice": "Clear and complete"},
+            {"name": "path_efficiency", "choice": "Efficient"},
+            {"name": "totals_ok", "noul": 0.91},
+        ]
+        return FakeResponse(200, {"answers": answers, "model": "gpt-6-luna"})
 
-    backend = AwsBackend(
-        access_key="AKIATEST",
-        secret_key="vault-secret",
-        region="us-east-1",
-        model="amazon.nova-lite",
-        post=post,
-    )
+    backend = DecisionsBackend(api_key="sk-test", post=post)
     judged = OutcomeJudge(
         backend,
-        display_name="AWS",
-        provider="aws",
+        display_name="the judge",
+        provider="openai",
         chosen=True,
-        supports_why=True,
+        supports_why=False,
         supports_confidence=False,
     ).judge("goal", [], "tail", spec=spec, path={"had_path": True, "steps": 1})
     assert judged["status"] == "completed"

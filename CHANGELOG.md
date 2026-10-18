@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Score live checks only with a decision model. Chat and Responses judges are removed, including auto selection and fallbacks. A live check with no decision model fails and asks you to pick one.
+- Another System 1 endpoint can register on the same decision-model interface.
+- Skip `.pydeps`, `pydeps`, and `__pypackages__` when collecting workspace files for a check.
+
 ## 0.7.4
 
 - Add `output_optional: true` so Expected text is reference text for the judge and a missing or empty output file passes. A present file is still checked. Checks without the field stay required.

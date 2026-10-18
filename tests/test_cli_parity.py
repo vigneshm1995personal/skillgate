@@ -96,8 +96,18 @@ def test_settings_screen_has_no_provider_key_fields() -> None:
     assert text.count('type="password"') == 1
     assert "signed in" in text
     assert "not signed in" in text
-    assert "Judge key (optional)" in text
-    assert "Skip it to run without the judge" in text
+    assert "Decision model" in text
+    assert "Not selected" in text
+    assert "Pick a decision model before running a live check." in text
+    assert "File checks only" not in text
+    assert "Decision model (optional)" not in text
+    assert "OpenAI Decisions" not in text
+    assert 'label: "Jev"' not in text
+    assert 'label: "Clef"' not in text
+    assert "settings-judge-account-id" in text
+    assert "Skip it to run without the judge" not in text
+    assert "Any OpenAI-compatible endpoint" not in text
+    assert "AI_GATEWAY_API_KEY" not in text
     bundles = list((_WEB_STATIC / "assets").glob("index-*.js"))
     assert bundles, "packaged UI bundle is missing"
     bundled = "\n".join(path.read_text(encoding="utf-8") for path in bundles)
@@ -108,5 +118,12 @@ def test_settings_screen_has_no_provider_key_fields() -> None:
         "Paste key",
         "Claude / Anthropic",
         "AI Gateway",
+        "Skip it to run without the judge",
     ):
         assert phrase not in bundled, phrase
+    assert "File checks only" not in bundled
+    assert "Not selected" in bundled
+    assert "Pick a decision model before running a live check." in bundled
+    assert "Decision model" in bundled
+    # One historical rewrite remains so old couldn't-score lines do not show a provider.
+    assert bundled.count("OpenAI Decisions") == 1

@@ -212,7 +212,7 @@ describe("scoredByLine", () => {
     ).toBe("Scored by the judge")
     expect(
       scoredByLine({
-        scored_by: "OpenAI couldn't score this run. Your OpenAI account is out of credits.",
+        scored_by: "OpenAI Decisions couldn't score this run. Your OpenAI account is out of credits.",
         skill: "pdf",
         passed_count: 0,
         task_count: 1,
@@ -410,12 +410,36 @@ describe("openedCheckAnswers / low confidence", () => {
     ).toBe("Scored by the judge")
     expect(
       scoredByFromJudge({
+        provider: "clef",
+        chosen: true,
+        status: "completed",
+        answers: passTask.judge?.answers,
+      })
+    ).toBe("Scored by the judge")
+    expect(
+      scoredByFromJudge({
         provider: "openai",
         chosen: false,
         status: "completed",
         answers: passTask.judge?.answers,
       })
     ).toBe("Scored by the judge")
+    expect(
+      scoredByFromJudge({
+        provider: "aws",
+        display_name: "AWS",
+        chosen: true,
+        status: "completed",
+        answers: passTask.judge?.answers,
+      })
+    ).toBe("Scored by the judge")
+    expect(
+      scoredByFromJudge({
+        provider: "other",
+        status: "completed",
+        answers: passTask.judge?.answers,
+      })
+    ).toBe("Scored by your judge")
   })
 
   it("warns on low confidence for an otherwise-Pass OpenAI cell and not for Jev", () => {

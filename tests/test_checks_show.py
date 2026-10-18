@@ -123,9 +123,7 @@ def test_decision_judges_exclude_chat_models() -> None:
     assert "aws" not in ids
     assert "compatible" not in ids
     assert "auto" not in ids
-    assert "openai" in ids
-    assert "jev" in ids
-    assert "clef" not in ids
+    assert ids == {"openai", "jev", "clef"}
     for row in rows:
         text = f"{row['label']} {row['detail']}"
         assert re.search(
@@ -136,9 +134,23 @@ def test_decision_judges_exclude_chat_models() -> None:
 
 
 def test_decision_judges_follow_the_engine_allowlist(monkeypatch) -> None:
+    import skillgate_ai.judge as judge
+    import skillgate_ai.judge_providers.decision as decision
     import skillgate_ai.judge_settings as settings
+    from skillgate_ai.judge_providers.decision import DecisionEndpoint
 
-    monkeypatch.setattr(settings, "PROVIDER_IDS", ("auto", "aws", "compatible", "clef"))
+    monkeypatch.setattr(judge, "_builtins_ready", True)
+    monkeypatch.setattr(
+        decision,
+        "_ENDPOINTS",
+        {
+            "clef": DecisionEndpoint("clef", lambda cfg: cfg),
+            "zeta": DecisionEndpoint("zeta", lambda cfg: cfg),
+        },
+    )
     rows = settings.decision_judges()
-    assert [row["id"] for row in rows] == ["clef"]
+    assert [row["id"] for row in rows] == ["clef", "zeta"]
     assert "Clef" not in rows[0]["label"]
+    assert rows[1]["label"] == "Decision model"
+    assert rows[1]["needs_endpoint"] is True
+    assert rows[1]["key_name"] is None

@@ -352,22 +352,7 @@ function scoredByFromStamp(judge?: EvalRunConfig["judge"]): string {
   ) {
     return "Scored by your judge"
   }
-  if (provider === "jev" || name === "Jev") {
-    return JUDGE_SCORED
-  }
-  if (name === "OpenAI" || name === "AWS") {
-    return `Scored by ${name}`
-  }
   if (stampIsChosen(judge)) {
-    if (provider === "openai") {
-      return "Scored by OpenAI"
-    }
-    if (provider === "jev") {
-      return JUDGE_SCORED
-    }
-    if (provider === "aws") {
-      return "Scored by AWS"
-    }
     if (provider === "compatible" || provider === "other") {
       return "Scored by your judge"
     }

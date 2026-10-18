@@ -8,12 +8,12 @@ from skillgate_ai.config import (
     DEFAULT_JUDGE_MODEL,
     LLMConfig,
 )
-from skillgate_ai.errors import MissingLLMKeyError
+from skillgate_ai.errors import MissingLLMKeyError, SkillGateError
 from skillgate_ai.engine import _live_verdict, _maybe_explain_fail
 from skillgate_ai.output_match import REASON_MISSING_OUTPUT
 from skillgate_ai.judge import SkipJudge, judge_stamp, resolve_judge
 from skillgate_ai.judge_bank import LOW_CONFIDENCE_WARNING
-from skillgate_ai.judge_openai import GATEWAY_DECISIONS_MODEL, OutcomeJudge, make_openai_judge
+from skillgate_ai.judge_openai import OutcomeJudge, make_openai_judge
 
 
 def _cfg(**overrides: object) -> LLMConfig:
@@ -47,23 +47,26 @@ def test_skip_judge_does_not_pass_or_fail() -> None:
     assert judged["display_name"] == "Checks"
 
 
-def test_resolve_judge_auto_skips_without_key() -> None:
-    judge = resolve_judge(_cfg(), harness_name="cursor-agent")
-    assert isinstance(judge, SkipJudge)
+def test_resolve_judge_auto_asks_for_a_decision_model() -> None:
+    with pytest.raises(SkillGateError) as caught:
+        resolve_judge(_cfg(), harness_name="cursor-agent")
+    assert "Pick a decision model" in caught.value.message
+    assert caught.value.exit_code == 2
 
 
-def test_resolve_judge_auto_openai_on_live() -> None:
-    judge = resolve_judge(_cfg(openai_api_key="sk-test"), harness_name="cursor-agent")
-    assert isinstance(judge, OutcomeJudge)
-    assert judge.backend.name == "decisions"
+def test_resolve_judge_auto_does_not_use_a_saved_key() -> None:
+    with pytest.raises(SkillGateError) as caught:
+        resolve_judge(_cfg(openai_api_key="sk-test"), harness_name="cursor-agent")
+    assert "Pick a decision model" in caught.value.message
 
 
-def test_resolve_judge_skip_override() -> None:
-    judge = resolve_judge(
-        _cfg(openai_api_key="sk-test", judge_pref="skip"),
-        harness_name="cursor-agent",
-    )
-    assert isinstance(judge, SkipJudge)
+def test_resolve_judge_skip_is_not_a_live_judge() -> None:
+    with pytest.raises(SkillGateError) as caught:
+        resolve_judge(
+            _cfg(openai_api_key="sk-test", judge_pref="skip"),
+            harness_name="cursor-agent",
+        )
+    assert "Pick a decision model" in caught.value.message
 
 
 def test_resolve_judge_demo_always_skips() -> None:
@@ -75,50 +78,48 @@ def test_resolve_judge_openai_without_key() -> None:
     with pytest.raises(MissingLLMKeyError) as caught:
         resolve_judge(_cfg(judge_pref="openai"), harness_name="cursor-agent")
     assert caught.value.exit_code == 2
-    assert "OpenAI API key" in caught.value.message
+    assert "API key" in caught.value.message
+    assert "OpenAI" not in caught.value.message
 
 
 def test_missing_provider_key_uses_add_your() -> None:
     from skillgate_ai.judge import missing_provider_key
 
     aws = missing_provider_key("aws")
-    assert aws.message.startswith("Add your AWS key")
-    assert "Add a AWS" not in aws.message
+    assert "API key" in aws.message
+    assert "AWS" not in aws.message
     other = missing_provider_key("compatible")
-    assert other.message.startswith("Add your Other key")
-    assert "Add a Other" not in other.message
+    assert "API key" in other.message
+    assert "Other" not in other.message
     assert "AI_GATEWAY_API_KEY" not in other.message
     assert "gateway" not in other.message.lower()
 
 
-def test_resolve_judge_openai_pref_uses_gateway_decisions() -> None:
-    judge = resolve_judge(
-        _cfg(
-            gateway_api_key="gw-test",
-            judge_pref="openai",
-            gateway_base_url="https://ai-gateway.vercel.sh/v1",
-        ),
-        harness_name="cursor-agent",
-    )
-    assert isinstance(judge, OutcomeJudge)
-    assert judge.backend.name == "decisions"
-    assert judge.backend.model == "openai/gpt-6-luna-decisions"
+def test_resolve_judge_openai_pref_ignores_gateway_key() -> None:
+    with pytest.raises(MissingLLMKeyError) as caught:
+        resolve_judge(
+            _cfg(
+                gateway_api_key="gw-test",
+                judge_pref="openai",
+                gateway_base_url="https://ai-gateway.vercel.sh/v1",
+            ),
+            harness_name="cursor-agent",
+        )
+    assert "API key" in caught.value.message
+    assert "OpenAI" not in caught.value.message
+    assert "gateway" not in caught.value.message.lower()
 
 
-def test_gateway_key_uses_openai_decisions_via_gateway() -> None:
-    judge = resolve_judge(
-        _cfg(
-            gateway_api_key="gw-test",
-            gateway_base_url="https://ai-gateway.vercel.sh/v1",
-        ),
-        harness_name="cursor-agent",
-    )
-    assert isinstance(judge, OutcomeJudge)
-    assert judge.backend.name == "decisions"
-    assert judge.backend.api_key == "gw-test"
-    assert judge.backend.base_url == "https://ai-gateway.vercel.sh/v1"
-    assert "api.openai.com" not in judge.backend.base_url
-    assert judge.backend.model == "openai/gpt-6-luna-decisions"
+def test_gateway_key_does_not_select_a_judge() -> None:
+    with pytest.raises(SkillGateError) as caught:
+        resolve_judge(
+            _cfg(
+                gateway_api_key="gw-test",
+                gateway_base_url="https://ai-gateway.vercel.sh/v1",
+            ),
+            harness_name="cursor-agent",
+        )
+    assert "Pick a decision model" in caught.value.message
 
 
 def test_openai_key_keeps_judge_on_openai_decisions() -> None:
@@ -127,6 +128,9 @@ def test_openai_key_keeps_judge_on_openai_decisions() -> None:
             openai_api_key="sk-test",
             gateway_api_key="gw-test",
             gateway_base_url="https://ai-gateway.vercel.sh/v1",
+            judge_pref="openai",
+            judge_provider="openai",
+            judge_chosen=True,
         ),
         harness_name="cursor-agent",
     )
@@ -143,7 +147,11 @@ def test_default_scoring_uses_decisions_not_the_task_model() -> None:
     assert DEFAULT_GATEWAY_MODEL == "openai/gpt-4o-mini"
 
     direct = resolve_judge(
-        _cfg(openai_api_key="sk-test", gateway_model=DEFAULT_GATEWAY_MODEL),
+        _cfg(
+            openai_api_key="sk-test",
+            gateway_model=DEFAULT_GATEWAY_MODEL,
+            judge_pref="openai",
+        ),
         harness_name="cursor-agent",
     )
     assert isinstance(direct, OutcomeJudge)
@@ -151,22 +159,25 @@ def test_default_scoring_uses_decisions_not_the_task_model() -> None:
     assert direct.backend.model == DEFAULT_JUDGE_MODEL
     assert direct.backend.model != DEFAULT_GATEWAY_MODEL
 
-    gateway = resolve_judge(
-        _cfg(
-            gateway_api_key="gw-test",
-            gateway_base_url="https://ai-gateway.vercel.sh/v1",
-            gateway_model=DEFAULT_GATEWAY_MODEL,
-        ),
-        harness_name="cursor-agent",
-    )
-    assert isinstance(gateway, OutcomeJudge)
-    assert gateway.backend.name == "decisions"
-    assert gateway.backend.model == GATEWAY_DECISIONS_MODEL
-    assert gateway.backend.model != DEFAULT_GATEWAY_MODEL
+    with pytest.raises(SkillGateError) as caught:
+        resolve_judge(
+            _cfg(
+                gateway_api_key="gw-test",
+                gateway_base_url="https://ai-gateway.vercel.sh/v1",
+                gateway_model=DEFAULT_GATEWAY_MODEL,
+            ),
+            harness_name="cursor-agent",
+        )
+    assert "Pick a decision model" in caught.value.message
 
 
 def test_judge_stamp_has_no_secret() -> None:
-    stamp = judge_stamp(resolve_judge(_cfg(openai_api_key="sk-secret"), harness_name="cursor-agent"))
+    stamp = judge_stamp(
+        resolve_judge(
+            _cfg(openai_api_key="sk-secret", judge_pref="openai"),
+            harness_name="cursor-agent",
+        )
+    )
     blob = str(stamp)
     assert "sk-secret" not in blob
     assert stamp["provider"] == "openai"
@@ -175,8 +186,8 @@ def test_judge_stamp_has_no_secret() -> None:
     assert stamp["model"] == "gpt-6-luna"
 
 
-def test_gateway_judge_stamp_names_decisions_via_gateway() -> None:
-    stamp = judge_stamp(
+def test_gateway_key_does_not_stamp_a_judge() -> None:
+    with pytest.raises(SkillGateError) as caught:
         resolve_judge(
             _cfg(
                 gateway_api_key="gw-test",
@@ -184,12 +195,9 @@ def test_gateway_judge_stamp_names_decisions_via_gateway() -> None:
             ),
             harness_name="cursor-agent",
         )
-    )
-    assert stamp["provider"] == "openai"
-    assert stamp["backend"] == "decisions"
-    assert stamp["display_name"] == "the judge"
-    assert stamp["model"] == "openai/gpt-6-luna-decisions"
-    assert "gw-test" not in str(stamp)
+    assert "Pick a decision model" in caught.value.message
+    assert "gw-test" not in caught.value.message
+    assert "fallback" not in caught.value.message.lower()
 
 
 def test_judge_stamp_uses_decisions_backend_model() -> None:

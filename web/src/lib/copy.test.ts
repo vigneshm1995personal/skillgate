@@ -25,12 +25,10 @@ const CUSTOMER_DENY = [
   "doesn't change Install",
   "OpenAI was unsure",
   "Scored by OpenAI",
-  "OpenAI Decisions",
   "via Vercel AI Gateway",
   "gpt-6-luna",
   "Gate pre-selected skill",
   "skip catalog discovery",
-  "Decisions",
   "Bedrock",
 ] as const
 
@@ -83,19 +81,28 @@ describe("settings footer", () => {
     expect(src).toMatch(/status\?\.build/)
   })
 
-  it("shows agent sign-in and an optional judge key, not provider key fields", () => {
+  it("shows agent sign-in and a decision model, not provider key fields", () => {
     const src = readFileSync(
       join(componentsRoot, "dashboard/settings-page.tsx"),
       "utf8"
     )
     expect(src).toMatch(/signed in/)
     expect(src).toMatch(/not signed in/)
-    expect(src).toMatch(/Judge key \(optional\)/)
-    expect(src).toMatch(/Any OpenAI-compatible endpoint/)
-    expect(src).toMatch(/Skip it to run without the judge/)
+    expect(src).toMatch(/Pick a decision model before running a live check\./)
+    expect(src).toMatch(/Not selected/)
+    expect(src).toMatch(/decisionJudges/)
+    expect(src).not.toMatch(/File checks only/)
+    expect(src).not.toMatch(/Decision model \(optional\)/)
+    expect(src).not.toMatch(/OpenAI Decisions/)
+    expect(src).not.toMatch(/label: "Jev"/)
+    expect(src).not.toMatch(/label: "Clef"/)
+    expect(src).not.toMatch(/Cloudflare/)
+    expect(src).toMatch(/htmlFor="settings-judge-account-id"/)
+    expect(src).toMatch(/Account id/)
     expect(src).toMatch(/htmlFor="settings-judge-base-url"/)
     expect(src).toMatch(/Base URL/)
-    expect(src).toMatch(/https:\/\/openrouter\.ai\/api\/v1/)
+    expect(src).toMatch(/https:\/\/example\.com\/v1/)
+    expect(src).not.toMatch(/settings-judge-endpoint/)
     expect(src).toMatch(/htmlFor="settings-judge-model"/)
     expect(src).toMatch(/>API key</)
     expect(src).toMatch(/btn-settings-test-judge/)
@@ -116,12 +123,13 @@ describe("settings footer", () => {
     expect(src).not.toMatch(/CURSOR_API_KEY/)
     expect(src).not.toMatch(/CODEX_API_KEY/)
     expect(src).not.toMatch(/ANTHROPIC_API_KEY/)
-    expect(src).not.toMatch(/label: "OpenAI"/)
+    expect(src).not.toMatch(/label: "OpenAI"(?! Decisions)/)
     expect(src).not.toMatch(/label: "Anthropic"/)
-    expect(src).not.toMatch(/label: "Jev"/)
+    expect(src).not.toMatch(/AI_GATEWAY_API_KEY/)
+    expect(src).not.toMatch(/Any OpenAI-compatible endpoint/)
+    expect(src).not.toMatch(/Skip it to run without the judge/)
     expect(src).not.toMatch(/AI Gateway/)
     expect(src).not.toMatch(/Scoring provider/)
-    expect(src).not.toMatch(/Decisions/)
     expect(src).not.toMatch(/Bedrock/)
   })
 })

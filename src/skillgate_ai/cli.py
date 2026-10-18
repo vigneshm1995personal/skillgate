@@ -790,7 +790,7 @@ judge_app = typer.Typer(
 judge_provider_app = typer.Typer(
     add_completion=False,
     no_args_is_help=True,
-    help="Who scores live checks (auto or a configured judge).",
+    help="Who scores live checks. A decision model is required.",
 )
 app.add_typer(judge_app, name="judge")
 judge_app.add_typer(judge_provider_app, name="provider")
@@ -1026,27 +1026,29 @@ def judge_provider_show() -> None:
 
     root = _boot()
     cfg = get_llm_config(root)
-    if cfg.judge_chosen or cfg.openai_api_key or cfg.gateway_api_key:
+    if cfg.judge_chosen:
         console.print(f"Scoring with {DEFAULT_NAME}")
         return
-    console.print("No scoring provider — file checks only.")
+    from skillgate_ai.judge_providers.decision import NEEDS_DECISION_MODEL
+
+    console.print(NEEDS_DECISION_MODEL)
 
 
 @judge_provider_app.command("set")
 def judge_provider_set(
-    provider: str = typer.Argument(..., help="auto, openai, jev, aws, or other"),
+    provider: str = typer.Argument(
+        ..., help="A decision-model endpoint id, or auto to clear the selection"
+    ),
     base_url: str | None = typer.Option(None, "--base-url"),
     region: str | None = typer.Option(None, "--region"),
     model: str | None = typer.Option(None, "--model"),
+    account_id: str | None = typer.Option(
+        None, "--account-id", help="Account id for this decision model"
+    ),
     decisions_path: str | None = typer.Option(None, "--decisions-path", hidden=True),
     key_env: list[str] | None = typer.Option(None, "--key-env", help=_KEY_ENV_HELP),
 ) -> None:
-    """Write `.skillgate/judge`. Stores env var names, never key values.
-
-    Jev on OpenRouter: ``skillgate judge provider set jev --base-url
-    https://openrouter.ai/api/v1 --model typesafe/jev-1.14`` after
-    ``skillgate keys set JEV_API_KEY``.
-    """
+    """Write `.skillgate/judge`. Stores env var names, never key values."""
     from skillgate_ai.judge_settings import save_judge_settings
 
     root = _boot()
@@ -1059,14 +1061,17 @@ def judge_provider_set(
             base_url=base_url,
             decisions_path=decisions_path,
             key_env=key_env,
+            account_id=account_id,
         )
     except SkillGateError as exc:
         console.print(exc.render())
         raise typer.Exit(exc.exit_code) from None
     if settings.chosen:
-        console.print("Scoring provider: the judge")
+        console.print("Scoring with the judge")
     else:
-        console.print("Scoring provider: Auto")
+        from skillgate_ai.judge_providers.decision import NEEDS_DECISION_MODEL
+
+        console.print(NEEDS_DECISION_MODEL)
 
 
 @judge_provider_app.command("test")

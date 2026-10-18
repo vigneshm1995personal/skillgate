@@ -107,6 +107,7 @@ class LLMConfig:
     judge_why: bool = True
     judge_reasoning_effort: str = DEFAULT_JUDGE_REASONING_EFFORT
     jev_api_key: str | None = None
+    clef_api_key: str | None = None
     aws_access_key_id: str | None = None
     aws_secret_access_key: str | None = None
     aws_session_token: str | None = None
@@ -117,6 +118,7 @@ class LLMConfig:
     judge_provider_model: str | None = None
     judge_decisions_path: str | None = None
     judge_key_env: tuple[str, ...] = ()
+    judge_account_id: str | None = None
 
     @property
     def has_any_key(self) -> bool:
@@ -193,6 +195,7 @@ def get_llm_config(root: Path | None = None) -> LLMConfig:
         judge_reasoning_effort=_opt("SKILLGATE_JUDGE_REASONING_EFFORT")
         or DEFAULT_JUDGE_REASONING_EFFORT,
         jev_api_key=keys.get("JEV_API_KEY"),
+        clef_api_key=keys.get("CLOUDFLARE_API_TOKEN"),
         aws_access_key_id=keys.get("AWS_ACCESS_KEY_ID"),
         aws_secret_access_key=keys.get("AWS_SECRET_ACCESS_KEY"),
         aws_session_token=keys.get("AWS_SESSION_TOKEN"),
@@ -203,6 +206,7 @@ def get_llm_config(root: Path | None = None) -> LLMConfig:
         judge_provider_model=settings.model,
         judge_decisions_path=settings.decisions_path,
         judge_key_env=tuple(settings.key_env),
+        judge_account_id=settings.account_id,
     )
 
 
@@ -215,11 +219,7 @@ def _judge_pref() -> str:
 
 def _judge_backend() -> str:
     raw = (os.environ.get("SKILLGATE_JUDGE_BACKEND") or DEFAULT_JUDGE_BACKEND).strip().lower()
-    if raw in {"structured", "responses"}:
-        return "responses"
-    if raw == "decisions":
-        return "decisions"
-    return DEFAULT_JUDGE_BACKEND
+    return raw or DEFAULT_JUDGE_BACKEND
 
 
 def _env_bool(name: str, default: bool) -> bool:

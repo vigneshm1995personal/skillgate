@@ -185,6 +185,7 @@ export const api = {
         region: string | null
         model: string | null
         base_url: string | null
+        account_id: string | null
         key_env?: string[]
       }
     }>("/api/settings/judge"),
@@ -193,6 +194,7 @@ export const api = {
     region?: string | null
     model?: string | null
     base_url?: string | null
+    account_id?: string | null
     key_env?: string[] | null
   }) =>
     request<{
@@ -202,6 +204,7 @@ export const api = {
         region: string | null
         model: string | null
         base_url: string | null
+        account_id: string | null
         key_env?: string[]
       }
     }>("/api/settings/judge", {
@@ -239,6 +242,7 @@ export const api = {
         label: string
         detail: string
         needs_endpoint: boolean
+        key_name?: string | null
       }>
     }>("/api/settings/judges"),
   loginStatus: () => request<{ harnesses: AgentAuthRow[] }>("/api/login/status"),

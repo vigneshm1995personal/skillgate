@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-import os
 from typing import Any, Mapping, Protocol
 
 from skillgate_ai.config import LLMConfig
 from skillgate_ai.errors import MissingLLMKeyError, SkillGateError
 from skillgate_ai.harness import is_live_harness
-from skillgate_ai.judge_copy import CHOSEN_LABELS, DEFAULT_NAME
+from skillgate_ai.judge_copy import DEFAULT_NAME
 
 
 class Judge(Protocol):
@@ -79,192 +78,172 @@ def default_judge() -> SkipJudge:
     return SkipJudge()
 
 
+def missing_decision_key() -> MissingLLMKeyError:
+    from skillgate_ai.judge_providers.decision import NEEDS_KEY
+
+    return MissingLLMKeyError(NEEDS_KEY, exit_code=2)
+
+
 def missing_openai_judge_key() -> MissingLLMKeyError:
-    return MissingLLMKeyError(
-        "No OpenAI API key found. Scoring with OpenAI needs your key.",
-        hint="Add an OpenAI key in Settings (`skillgate keys set`), or set SKILLGATE_JUDGE=skip.",
-    )
+    return missing_decision_key()
 
 
 def missing_provider_key(provider: str) -> MissingLLMKeyError:
-    labels = {
-        "openai": "OpenAI",
-        "jev": "Jev",
-        "aws": "AWS",
-        "compatible": "Other",
-    }
-    label = labels.get(provider, "scoring")
-    return MissingLLMKeyError(
-        f"Add your {label} key in Settings (`skillgate keys set`), or pick a different scoring provider.",
-        exit_code=2,
-    )
-
-
-def _judge_api_key(cfg: LLMConfig) -> str:
-    return (cfg.openai_api_key or cfg.gateway_api_key or "").strip()
-
-
-def _named_env_key(names: tuple[str, ...] | None) -> str:
-    for name in names or ():
-        value = os.environ.get(name, "").strip()
-        if value:
-            return value
-    return ""
+    del provider
+    return missing_decision_key()
 
 
 def _display_name(provider: str, *, chosen: bool) -> str:
-    if chosen:
-        return CHOSEN_LABELS.get(provider, DEFAULT_NAME)
+    del provider, chosen
     return DEFAULT_NAME
 
 
+_builtins_ready = False
+
+
+def ensure_builtin_decision_endpoints() -> None:
+    """Register the built-in System 1 endpoints once."""
+    global _builtins_ready
+    if _builtins_ready:
+        return
+    from skillgate_ai.judge_providers.decision import DecisionEndpoint, register_decision_endpoint
+
+    register_decision_endpoint(DecisionEndpoint("openai", _openai_from_cfg))
+    register_decision_endpoint(DecisionEndpoint("jev", _jev_from_cfg))
+    register_decision_endpoint(DecisionEndpoint("clef", _clef_from_cfg))
+    _builtins_ready = True
+
+
 def resolve_judge(cfg: LLMConfig, *, harness_name: str) -> Judge:
-    """Pick Skip vs a scoring adapter. Demo / non-live always skip."""
-    pref = (cfg.judge_pref or "auto").strip().lower() or "auto"
-    if pref == "skip" or not is_live_harness(harness_name):
+    """Return one registered decision model. A live check with none fails."""
+    from skillgate_ai.judge_providers.decision import (
+        CHAT_BACKENDS,
+        CHAT_NOT_A_JUDGE,
+        NEEDS_DECISION_MODEL,
+        NEEDS_DECISION_MODEL_HINT,
+        NOT_A_DECISION_MODEL,
+        REMOVED_BACKENDS,
+        REMOVED_SETUP,
+        decision_endpoint,
+    )
+
+    if not is_live_harness(harness_name):
         return SkipJudge()
+    backend = (cfg.judge_backend or "").strip().lower()
+    if backend in CHAT_BACKENDS:
+        raise SkillGateError(CHAT_NOT_A_JUDGE, exit_code=2)
+    ensure_builtin_decision_endpoints()
+    pref = (cfg.judge_pref or "auto").strip().lower() or "auto"
     selected = (getattr(cfg, "judge_provider", None) or "auto").strip().lower() or "auto"
-    chosen = bool(getattr(cfg, "judge_chosen", False)) and selected in CHOSEN_LABELS
-    if pref == "openai":
-        if not _judge_api_key(cfg):
-            raise missing_openai_judge_key()
-        return _openai_judge(cfg, chosen=chosen and selected == "openai")
-    if selected in CHOSEN_LABELS and selected != "openai":
-        return _provider_judge(cfg, selected, chosen=True)
-    if selected == "openai":
-        if not _judge_api_key(cfg):
-            raise missing_provider_key("openai")
-        return _openai_judge(cfg, chosen=True)
-    key = _judge_api_key(cfg)
-    if key:
-        return _openai_judge(cfg, chosen=False)
-    return SkipJudge()
+    endpoint_id = selected if pref in {"", "auto"} else pref
+    if endpoint_id in CHAT_BACKENDS:
+        raise SkillGateError(CHAT_NOT_A_JUDGE, exit_code=2)
+    if endpoint_id in REMOVED_BACKENDS:
+        raise SkillGateError(REMOVED_SETUP, exit_code=2)
+    if endpoint_id in {"", "auto", "skip"}:
+        raise SkillGateError(
+            NEEDS_DECISION_MODEL,
+            hint=NEEDS_DECISION_MODEL_HINT,
+            exit_code=2,
+        )
+    endpoint = decision_endpoint(endpoint_id)
+    if endpoint is None:
+        raise SkillGateError(NOT_A_DECISION_MODEL, exit_code=2)
+    return endpoint.build(cfg)
+
+
+def _openai_from_cfg(cfg: LLMConfig) -> Judge:
+    selected = (getattr(cfg, "judge_provider", None) or "").strip().lower()
+    chosen = bool(getattr(cfg, "judge_chosen", False)) and selected == "openai"
+    return _openai_judge(cfg, chosen=chosen)
+
+
+def _jev_from_cfg(cfg: LLMConfig) -> Judge:
+    return _jev_judge(cfg, chosen=True)
+
+
+def _clef_from_cfg(cfg: LLMConfig) -> Judge:
+    return _clef_judge(cfg, chosen=True)
 
 
 def _openai_judge(cfg: LLMConfig, *, chosen: bool) -> Judge:
-    from skillgate_ai.config import DEFAULT_JUDGE_MODEL
-    from skillgate_ai.judge_openai import (
-        DEFAULT_BASE_URL,
-        GATEWAY_DECISIONS_MODEL,
-        make_openai_judge,
-    )
+    from skillgate_ai.judge_openai import DEFAULT_BASE_URL, make_openai_judge
 
     api_key = (cfg.openai_api_key or "").strip()
-    backend = cfg.judge_backend
-    model = cfg.judge_model
-    base_url = DEFAULT_BASE_URL
-    display_name = _display_name("openai", chosen=chosen)
     if not api_key:
-        api_key = (cfg.gateway_api_key or "").strip()
-        base_url = (cfg.gateway_base_url or "").rstrip("/") or DEFAULT_BASE_URL
-        backend_name = (backend or "decisions").strip().lower()
-        if backend_name not in {"structured", "responses"} and (model or "").strip() in {
-            "",
-            DEFAULT_JUDGE_MODEL,
-        }:
-            model = GATEWAY_DECISIONS_MODEL
+        raise missing_openai_judge_key()
     return make_openai_judge(
         api_key=api_key,
-        backend=backend,
-        model=model,
+        backend="decisions",
+        model=cfg.judge_model,
         min_confidence=cfg.judge_min_confidence,
-        why_enabled=cfg.judge_why,
+        why_enabled=False,
         reasoning_effort=cfg.judge_reasoning_effort,
         timeout_sec=cfg.judge_timeout_sec,
-        base_url=base_url,
-        display_name=display_name,
+        base_url=DEFAULT_BASE_URL,
+        display_name=_display_name("openai", chosen=chosen),
         chosen=chosen,
     )
 
 
-def _provider_judge(cfg: LLMConfig, provider: str, *, chosen: bool) -> Judge:
+def _jev_judge(cfg: LLMConfig, *, chosen: bool) -> Judge:
     from skillgate_ai.judge_openai import OutcomeJudge
+    from skillgate_ai.judge_providers.jev import JevBackend
 
-    display = _display_name(provider, chosen=chosen)
-    if provider == "jev":
-        key = (getattr(cfg, "jev_api_key", None) or "").strip()
-        base_url = (getattr(cfg, "judge_endpoint", None) or "").strip()
-        if not key:
-            raise missing_provider_key("jev")
-        if not base_url:
-            raise SkillGateError("Jev scoring needs a base URL in Settings.", exit_code=2)
-        from skillgate_ai.judge_providers.jev import JevBackend
-
-        model = (getattr(cfg, "judge_provider_model", None) or "").strip() or "jev"
-        backend = JevBackend(api_key=key, base_url=base_url, model=model)
-        return OutcomeJudge(
-            backend,
-            min_confidence=cfg.judge_min_confidence,
-            why_enabled=False,
-            timeout_sec=cfg.judge_timeout_sec,
-            display_name=display,
-            provider="jev",
-            chosen=chosen,
-            supports_why=False,
-            supports_confidence=False,
-        )
-    if provider == "aws":
-        access = (getattr(cfg, "aws_access_key_id", None) or "").strip()
-        secret = (getattr(cfg, "aws_secret_access_key", None) or "").strip()
-        region = (getattr(cfg, "judge_region", None) or "").strip()
-        model = (getattr(cfg, "judge_provider_model", None) or "").strip()
-        if not access or not secret:
-            raise missing_provider_key("aws")
-        if not region:
-            raise SkillGateError("AWS scoring needs a region in Settings.", exit_code=2)
-        if not model:
-            raise SkillGateError("AWS scoring needs a model in Settings.", exit_code=2)
-        from skillgate_ai.judge_providers.aws import AwsBackend
-
-        backend = AwsBackend(
-            access_key=access,
-            secret_key=secret,
-            region=region,
-            model=model,
-            session_token=(getattr(cfg, "aws_session_token", None) or "").strip() or None,
-        )
-        return OutcomeJudge(
-            backend,
-            min_confidence=cfg.judge_min_confidence,
-            why_enabled=cfg.judge_why,
-            timeout_sec=cfg.judge_timeout_sec,
-            display_name=display,
-            provider="aws",
-            chosen=chosen,
-            supports_why=True,
-            supports_confidence=False,
-        )
-    key = _named_env_key(getattr(cfg, "judge_key_env", ())) or (cfg.gateway_api_key or "").strip()
-    base_url = (getattr(cfg, "judge_endpoint", None) or cfg.gateway_base_url or "").strip()
+    key = (getattr(cfg, "jev_api_key", None) or "").strip()
+    base_url = (getattr(cfg, "judge_endpoint", None) or "").strip()
     if not key:
-        raise missing_provider_key("compatible")
+        raise missing_provider_key("jev")
     if not base_url:
-        raise SkillGateError("Other scoring needs a base URL in Settings.", exit_code=2)
-    from skillgate_ai.judge_providers.compatible import CompatibleBackend
+        from skillgate_ai.judge_providers.decision import NEEDS_BASE_URL
 
-    backend = CompatibleBackend(
-        api_key=key,
-        base_url=base_url,
-        model=(getattr(cfg, "judge_provider_model", None) or cfg.judge_model),
-        decisions_path=getattr(cfg, "judge_decisions_path", None) or "/decisions",
-    )
+        raise SkillGateError(NEEDS_BASE_URL, exit_code=2)
+    model = (getattr(cfg, "judge_provider_model", None) or "").strip() or "jev"
+    backend = JevBackend(api_key=key, base_url=base_url, model=model)
     return OutcomeJudge(
         backend,
         min_confidence=cfg.judge_min_confidence,
-        why_enabled=cfg.judge_why,
+        why_enabled=False,
         timeout_sec=cfg.judge_timeout_sec,
-        display_name=display,
-        provider="compatible",
+        display_name=_display_name("jev", chosen=chosen),
+        provider="jev",
         chosen=chosen,
-        supports_why=True,
-        supports_confidence=True,
+        supports_why=False,
+        supports_confidence=False,
+    )
+
+
+def _clef_judge(cfg: LLMConfig, *, chosen: bool) -> Judge:
+    from skillgate_ai.judge_openai import OutcomeJudge
+    from skillgate_ai.judge_providers.clef import ClefBackend
+
+    key = (getattr(cfg, "clef_api_key", None) or "").strip()
+    account = (getattr(cfg, "judge_account_id", None) or "").strip()
+    if not key:
+        raise missing_decision_key()
+    if not account:
+        from skillgate_ai.judge_providers.decision import NEEDS_ACCOUNT
+
+        raise SkillGateError(NEEDS_ACCOUNT, exit_code=2)
+    model = (getattr(cfg, "judge_provider_model", None) or "").strip() or "clef"
+    backend = ClefBackend(api_key=key, account_id=account, model=model)
+    return OutcomeJudge(
+        backend,
+        min_confidence=cfg.judge_min_confidence,
+        why_enabled=False,
+        timeout_sec=cfg.judge_timeout_sec,
+        display_name=_display_name("clef", chosen=chosen),
+        provider="clef",
+        chosen=chosen,
+        supports_why=False,
+        supports_confidence=False,
     )
 
 
 def ping_judge(cfg: LLMConfig) -> dict[str, str | bool]:
     judge = resolve_judge(cfg, harness_name="cursor-agent")
     if isinstance(judge, SkipJudge):
-        return {"ok": False, "message": "No scoring provider — file checks only."}
+        return {"ok": False, "message": "Pick a decision model before running a live check."}
     backend = getattr(judge, "backend", None)
     display = str(getattr(judge, "display_name", None) or DEFAULT_NAME)
     if backend is not None and hasattr(backend, "ping"):
@@ -275,7 +254,7 @@ def ping_judge(cfg: LLMConfig) -> dict[str, str | bool]:
 
     if backend is not None and hasattr(backend, "post_json"):
         return ping_openai_backend(backend, display_name=display)
-    return {"ok": False, "message": "This scoring provider cannot be tested."}
+    return {"ok": False, "message": "This decision model cannot be tested."}
 
 
 def judge_stamp(judge: Judge | None) -> dict[str, str]:

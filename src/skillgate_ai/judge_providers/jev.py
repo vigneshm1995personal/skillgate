@@ -1,4 +1,4 @@
-"""Jev adapter. Built-in questions and the case's extra questions."""
+"""Decision-model adapter. Scores the built-in questions and the case's extra questions."""
 
 from __future__ import annotations
 
@@ -126,7 +126,7 @@ def _openrouter_host(base_url: str) -> bool:
 
 
 def _score_url(base_url: str) -> str:
-    """OpenRouter serves Jev at its Decisions API. Other bases keep /evaluate."""
+    """A hosted decisions base posts to its decisions URL. Other bases keep /evaluate."""
     if _openrouter_host(base_url):
         return OPENROUTER_DECISIONS_URL
     base = base_url.rstrip("/")
@@ -152,7 +152,7 @@ def _request_body(
 
 
 def _openrouter_questions(questions: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
-    """Map Skill Gate's question list onto OpenRouter's keyed Decisions schema."""
+    """Map Skill Gate's question list onto the keyed decisions schema."""
     mapped: dict[str, dict[str, Any]] = {}
     for question in questions:
         name = str(question.get("name") or "").strip()

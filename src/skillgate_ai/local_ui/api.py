@@ -160,7 +160,7 @@ def meta_payload(state: UiState) -> dict[str, Any]:
     pdf = pdf_demo_path(state)
     try:
         outcome = resolve_judge(cfg, harness_name="cursor-agent")
-    except MissingLLMKeyError:
+    except SkillGateError:
         judge_provider = "skip"
     else:
         judge_provider = "skip" if isinstance(outcome, SkipJudge) else "openai"

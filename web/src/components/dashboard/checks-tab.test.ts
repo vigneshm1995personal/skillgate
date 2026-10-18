@@ -53,5 +53,6 @@ describe("Checks tab", () => {
     expect(judge).toMatch(/decisionJudges/)
     expect(judge).not.toMatch(PROVIDER_NAMES)
     expect(judge).toMatch(/Not selected/)
+    expect(judge).toMatch(/account_id: saved\.account_id/)
   })
 })

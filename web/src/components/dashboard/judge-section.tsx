@@ -23,6 +23,7 @@ type SavedJudge = {
   region: string | null
   model: string | null
   base_url: string | null
+  account_id: string | null
   key_env?: string[]
 }
 
@@ -81,6 +82,7 @@ export function JudgeSection({ disabled }: { disabled?: boolean }) {
         region: saved.region,
         model: keepModel ? saved.model : null,
         base_url: saved.base_url,
+        account_id: saved.account_id,
         key_env: saved.key_env ?? [],
       })
       setSaved(result.judge)

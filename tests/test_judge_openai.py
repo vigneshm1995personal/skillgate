@@ -21,7 +21,6 @@ from skillgate_ai.judge_openai import (
     DISPLAY_NAME,
     GATEWAY_DECISIONS_MODEL,
     IMAGE_MAX_BYTES,
-    WHY_MAX_OUTPUT_TOKENS,
     WHY_OUTPUT_CHARS,
     collect_images,
     make_openai_judge,
@@ -236,17 +235,13 @@ def test_default_scoring_posts_decisions_not_the_task_model() -> None:
 
 
 def test_fail_lock_does_not_fail_on_wasteful_path() -> None:
-    post = FakePost(
-        [
-            FakeResponse(200, decisions_payload({"correctness": "Incorrect"})),
-            FakeResponse(200, why_payload("The numbers were wrong.")),
-        ]
-    )
+    post = FakePost([FakeResponse(200, decisions_payload({"correctness": "Incorrect"}))])
     passed, failures, judged = _gated(_judge(post))
     assert passed is False
     assert judged["passed"] is False
     assert any("Got it right?" in item for item in failures)
-    assert judged["why"] == "The numbers were wrong."
+    assert judged["why"] is None
+    assert len(post.calls) == 1
 
     post2 = FakePost([FakeResponse(200, decisions_payload({"path_efficiency": "Wasteful"}))])
     judged2 = _score(_judge(post2), path={"steps": 4, "errors": 0, "had_path": True})
@@ -418,27 +413,17 @@ def test_timeout_fails_closed() -> None:
     assert all(not str(item["url"]).endswith("/v1/responses") for item in post.calls)
 
 
-def test_why_call_on_fail_ignored_on_error() -> None:
-    post = FakePost(
-        [
-            FakeResponse(200, decisions_payload({"correctness": "Incorrect"})),
-            FakeResponse(429, {"error": "nope"}),
-            FakeResponse(200, why_payload("should not be used")),
-        ]
-    )
+def test_fail_does_not_post_a_why_call() -> None:
+    post = FakePost([FakeResponse(200, decisions_payload({"correctness": "Incorrect"}))])
     passed, _failures, judged = _gated(_judge(post))
     assert passed is False
     assert judged["passed"] is False
     assert judged["why"] is None
-    assert len(post.calls) == 2
+    assert len(post.calls) == 1
     assert post.calls[0]["url"].endswith("/v1/decisions")
-    why_calls = [item for item in post.calls if str(item["url"]).endswith("/v1/responses")]
-    assert len(why_calls) == 1
-    why_json = why_calls[0]["json"]
-    assert why_json["max_output_tokens"] == WHY_MAX_OUTPUT_TOKENS == 128
-    schema = why_json["text"]["format"]
-    assert schema["strict"] is True
-    assert schema["name"] == "check_fail_why"
+    judge = _judge(FakePost([]))
+    assert judge.explain_fail(["the file was wrong"]) is None
+    assert judge.supports_why is False
 
 
 def test_why_call_skipped_on_pass() -> None:
@@ -459,22 +444,15 @@ def test_why_call_skipped_on_low_confidence_pass() -> None:
     assert len(post.calls) == 1
 
 
-def test_responses_fallback_uses_structured_outputs() -> None:
-    body = json.dumps(PASS_CHOICES)
-    post = FakePost([FakeResponse(200, {"output_text": body, "model": "gpt-6-luna"})])
-    judged = _score(_judge(post, backend="responses"))
-    assert judged["passed"] is True
-    assert judged["backend"] == "responses"
-    assert judged["warnings"] == []
-    assert len(post.calls) == 1
-    assert post.calls[0]["url"].endswith("/v1/responses")
-    fmt = post.calls[0]["json"]["text"]["format"]
-    assert fmt["type"] == "json_schema"
-    assert fmt["strict"] is True
-    assert "path_efficiency" not in fmt["schema"]["properties"]
-    assert "decisions" not in post.calls[0]["url"]
-    assert judged["cells"]["path_efficiency"]["reason"] == PATH_NOT_AVAILABLE
-    assert post.calls[0]["json"]["reasoning"] == {"effort": "low"}
+def test_responses_backend_does_not_post() -> None:
+    from skillgate_ai.errors import SkillGateError
+
+    post = FakePost([FakeResponse(200, {"output_text": "{}", "model": "gpt-6-luna"})])
+    with pytest.raises(SkillGateError) as caught:
+        _judge(post, backend="responses")
+    assert "decision model" in caught.value.message.lower()
+    assert "not judges" in caught.value.message.lower()
+    assert post.calls == []
 
 
 def test_gateway_decisions_posts_luna_decisions_not_responses() -> None:
@@ -496,85 +474,53 @@ def test_gateway_decisions_posts_luna_decisions_not_responses() -> None:
     assert "reasoning" not in post.calls[0]["json"]
 
 
-def test_gateway_why_call_uses_language_model_not_decisions() -> None:
-    post = FakePost(
-        [
-            FakeResponse(200, decisions_payload({"correctness": "Incorrect"})),
-            FakeResponse(200, why_payload("The numbers were wrong.")),
-        ]
-    )
+def test_openai_fail_does_not_follow_up_on_responses() -> None:
+    post = FakePost([FakeResponse(200, decisions_payload({"correctness": "Incorrect"}))])
     passed, _failures, judged = _gated(
         make_openai_judge(
-            api_key="gw-test",
+            api_key="sk-test",
             backend="decisions",
-            model="openai/gpt-6-luna-decisions",
-            base_url="https://ai-gateway.vercel.sh/v1",
+            model="gpt-6-luna",
             why_enabled=True,
             post=post,
         )
     )
     assert passed is False
-    assert judged["why"] == "The numbers were wrong."
+    assert judged["why"] is None
+    assert len(post.calls) == 1
     assert post.calls[0]["url"].endswith("/v1/decisions")
-    assert post.calls[0]["json"]["model"] == "openai/gpt-6-luna-decisions"
-    assert post.calls[1]["url"].endswith("/v1/responses")
-    assert post.calls[1]["json"]["model"] == "openai/gpt-6-luna"
-    assert post.calls[1]["json"]["model"].endswith("-decisions") is False
+    assert "/responses" not in post.calls[0]["url"]
 
 
-def test_gateway_mini_responses_omits_reasoning() -> None:
-    body = json.dumps(PASS_CHOICES)
-    post = FakePost([FakeResponse(200, {"output_text": body, "model": "openai/gpt-4o-mini"})])
-    judge = make_openai_judge(
-        api_key=SECRET,
-        backend="responses",
-        model="openai/gpt-4o-mini",
-        why_enabled=False,
-        post=post,
-    )
-    judged = _score(judge)
-    assert judged["passed"] is True
-    payload = post.calls[0]["json"]
-    assert payload["model"] == "openai/gpt-4o-mini"
-    assert "reasoning" not in payload
+def test_chat_backend_does_not_post() -> None:
+    from skillgate_ai.errors import SkillGateError
+
+    post = FakePost([])
+    with pytest.raises(SkillGateError) as caught:
+        make_openai_judge(api_key=SECRET, backend="chat", post=post)
+    assert "decision model" in caught.value.message.lower()
+    assert "not judges" in caught.value.message.lower()
+    assert post.calls == []
 
 
-def test_o_series_responses_includes_reasoning() -> None:
-    body = json.dumps(PASS_CHOICES)
-    post = FakePost([FakeResponse(200, {"output_text": body, "model": "openai/o3-mini"})])
-    judge = make_openai_judge(
-        api_key=SECRET,
-        backend="responses",
-        model="openai/o3-mini",
-        why_enabled=False,
-        post=post,
-    )
-    judged = _score(judge)
-    assert judged["passed"] is True
-    assert post.calls[0]["json"]["reasoning"] == {"effort": "low"}
+def test_completions_backend_does_not_post() -> None:
+    from skillgate_ai.errors import SkillGateError
+
+    post = FakePost([])
+    with pytest.raises(SkillGateError):
+        make_openai_judge(api_key=SECRET, backend="completions", post=post)
+    assert post.calls == []
 
 
-def test_gateway_mini_why_call_omits_reasoning() -> None:
-    body = json.dumps({**PASS_CHOICES, "correctness": "Incorrect"})
-    post = FakePost(
-        [
-            FakeResponse(200, {"output_text": body, "model": "openai/gpt-4o-mini"}),
-            FakeResponse(200, why_payload("The numbers were wrong.")),
-        ]
-    )
-    judge = make_openai_judge(
-        api_key=SECRET,
-        backend="responses",
-        model="openai/gpt-4o-mini",
-        why_enabled=True,
-        post=post,
-    )
-    passed, _failures, judged = _gated(judge)
-    assert passed is False
-    assert judged["why"] == "The numbers were wrong."
-    assert "reasoning" not in post.calls[0]["json"]
-    assert post.calls[1]["url"].endswith("/v1/responses")
-    assert "reasoning" not in post.calls[1]["json"]
+def test_structured_backend_does_not_post() -> None:
+    from skillgate_ai.errors import SkillGateError
+
+    post = FakePost([])
+    with pytest.raises(SkillGateError) as caught:
+        make_openai_judge(api_key=SECRET, backend="structured", post=post)
+    assert "decision model" in caught.value.message.lower()
+    assert "not judges" in caught.value.message.lower()
+    assert post.calls == []
 
 
 def test_images_inline_jpeg_png_only(tmp_path: Path) -> None:
@@ -682,11 +628,10 @@ def test_output_mismatch_fails_and_makes_one_why_call() -> None:
     assert passed is False
     assert judged["passed"] is True
     assert REASON_MISSING_OUTPUT in failures
-    assert judged["why"] == "The expected file was missing."
+    assert judged["why"] is None
     assert judged["warnings"] == []
-    assert len(post.calls) == 2
-    assert post.calls[1]["url"].endswith("/v1/responses")
-    assert post.calls[1]["json"]["max_output_tokens"] == 128
+    assert len(post.calls) == 1
+    assert post.calls[0]["url"].endswith("/v1/decisions")
 
 
 def test_image_paths_stay_inside_workspace(tmp_path: Path) -> None:
@@ -715,24 +660,20 @@ def test_image_paths_stay_inside_workspace(tmp_path: Path) -> None:
 
 
 def test_why_call_redacts_key_shaped_text() -> None:
-    post = FakePost(
-        [
-            FakeResponse(200, decisions_payload({"correctness": "Incorrect"})),
-            FakeResponse(
-                200,
-                why_payload(f"The scorer echoed {SECRET} and sk-otherleak123 in the explanation."),
-            ),
-        ]
-    )
+    post = FakePost([FakeResponse(200, decisions_payload({"correctness": "Incorrect"}))])
     passed, _failures, judged = _gated(_judge(post))
     assert passed is False
-    assert judged["passed"] is False
-    assert judged["why"] is not None
-    assert SECRET not in judged["why"]
-    assert "sk-otherleak123" not in judged["why"]
-    assert "sk-***" in judged["why"]
+    assert judged["why"] is None
+    assert len(post.calls) == 1
     blob = json.dumps(judged)
     assert SECRET not in blob
+    redacted = redact_secrets(
+        f"The scorer echoed {SECRET} and sk-otherleak123 in the explanation.",
+        SECRET,
+    )
+    assert SECRET not in redacted
+    assert "sk-otherleak123" not in redacted
+    assert "sk-***" in redacted
 
 
 def test_why_skipped_on_no_trigger_without_mismatch() -> None:
@@ -836,17 +777,12 @@ def test_why_call_includes_expected_and_actual_text() -> None:
         },
     )
     assert passed is False
-    assert judged["why"] is not None
-    assert "Hello Skill Gate" in judged["why"]
-    assert "Goodbye Skill Gate" in judged["why"]
-    assert len(post.calls) == 2
-    why_json = post.calls[1]["json"]
-    assert why_json["max_output_tokens"] == WHY_MAX_OUTPUT_TOKENS == 128
-    user = json.loads(why_json["input"][1]["content"])
-    assert user["expected_output"] == "Goodbye Skill Gate, totally different text"
-    assert user["actual_output"] == "Hello Skill Gate"
-    system = why_json["input"][0]["content"]
-    assert "expected and actual" in system.lower()
+    assert judged["why"] is None
+    assert len(post.calls) == 1
+    blob = post.calls[0]["json"]["input"]
+    assert isinstance(blob, str)
+    assert "Hello Skill Gate" in blob
+    assert "Goodbye Skill Gate" in blob
 
 
 def test_why_call_redacts_and_caps_output_text() -> None:
@@ -868,15 +804,9 @@ def test_why_call_redacts_and_caps_output_text() -> None:
         },
     )
     assert passed is False
-    why_json = post.calls[1]["json"]
-    user = json.loads(why_json["input"][1]["content"])
-    assert SECRET not in user["expected_output"]
-    assert SECRET not in user["actual_output"]
-    assert "sk-" not in user["expected_output"]
-    assert "sk-" not in user["actual_output"]
-    assert len(user["actual_output"]) <= WHY_OUTPUT_CHARS
-    assert judged["why"] is not None
-    assert SECRET not in judged["why"]
+    assert judged["why"] is None
+    assert len(post.calls) == 1
+    assert SECRET not in json.dumps(judged)
 
 
 def test_path_not_asked_when_unrecorded() -> None:
