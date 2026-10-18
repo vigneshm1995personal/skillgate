@@ -96,11 +96,12 @@ def test_settings_screen_has_no_provider_key_fields() -> None:
     assert text.count('type="password"') == 1
     assert "signed in" in text
     assert "not signed in" in text
-    assert "Judge key (optional)" in text
+    assert "Decision model (optional)" in text
     assert "File checks only" in text
-    assert "OpenAI Decisions" in text
-    assert 'label: "Jev"' in text
-    assert 'label: "Clef"' in text
+    assert 'label: "Decision model"' in text
+    assert "OpenAI Decisions" not in text
+    assert 'label: "Jev"' not in text
+    assert 'label: "Clef"' not in text
     assert "settings-judge-account-id" in text
     assert "Skip it to run without the judge" not in text
     assert "Any OpenAI-compatible endpoint" not in text
@@ -119,4 +120,6 @@ def test_settings_screen_has_no_provider_key_fields() -> None:
     ):
         assert phrase not in bundled, phrase
     assert "File checks only" in bundled
-    assert "OpenAI Decisions" in bundled
+    assert "Decision model" in bundled
+    # One historical rewrite remains so old couldn't-score lines do not show a provider.
+    assert bundled.count("OpenAI Decisions") == 1

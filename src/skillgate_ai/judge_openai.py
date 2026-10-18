@@ -1,4 +1,4 @@
-"""OpenAI outcome judge. Scoring uses the Decisions API."""
+"""Direct-answer scoring. Chat and Responses completion models are refused."""
 
 from __future__ import annotations
 
@@ -32,6 +32,7 @@ from skillgate_ai.judge_spec import (
     spec_decisions_questions,
     spec_verdict,
 )
+from skillgate_ai.judge_providers.decision import DecisionModel, require_decision_model
 from skillgate_ai.openai_http import (
     DEFAULT_BASE_URL,
     OUT_OF_CREDITS,
@@ -50,7 +51,7 @@ WHY_OUTPUT_CHARS = 1500
 TRANSCRIPT_TAIL_CHARS = 4000
 DISPLAY_NAME = "the judge"
 GATEWAY_DISPLAY_NAME = "the judge"
-CHOSEN_DISPLAY_NAME = "OpenAI"
+CHOSEN_DISPLAY_NAME = DISPLAY_NAME
 
 
 def _decisions_model(model: str) -> str:
@@ -62,6 +63,8 @@ def _decisions_model(model: str) -> str:
 
 
 class JudgeBackend(Protocol):
+    """HTTP client for one decisions endpoint. A judge implements DecisionModel."""
+
     name: str
     model: str
     api_key: str
@@ -410,6 +413,30 @@ class DecisionsBackend(_OpenAIPosted):
         finished["scoring_endpoint"] = "decisions"
         return finished
 
+    def ping(self, *, timeout_sec: float = DEFAULT_TIMEOUT_SEC) -> dict[str, Any]:
+        result = self.post_json(
+            self.decisions_path,
+            {
+                "model": self.model,
+                "input": "ping",
+                "questions": [
+                    {
+                        "type": "predicate",
+                        "name": "connection_test",
+                        "instructions": "Is this a connection test?",
+                    }
+                ],
+            },
+            timeout_sec=timeout_sec,
+            retries=False,
+        )
+        if result.get("status") == "ok":
+            return {
+                "ok": True,
+                "message": "Connected to the judge.",
+                "scoring_endpoint": "decisions",
+            }
+        return {"ok": False, "message": str(result.get("reason") or "Could not connect.")}
 
 
 class OutcomeJudge:
@@ -419,7 +446,7 @@ class OutcomeJudge:
 
     def __init__(
         self,
-        backend: JudgeBackend,
+        backend: DecisionModel,
         *,
         min_confidence: float = DEFAULT_MIN_CONFIDENCE,
         why_enabled: bool = True,
@@ -431,6 +458,7 @@ class OutcomeJudge:
         supports_why: bool | None = None,
         supports_confidence: bool | None = None,
     ) -> None:
+        require_decision_model(backend)
         self.backend = backend
         self.min_confidence = min_confidence
         self.why_enabled = why_enabled
@@ -712,6 +740,7 @@ def _as_path(value: Any) -> Path | None:
 
 
 def ping_openai_backend(backend: JudgeBackend, *, display_name: str = DISPLAY_NAME) -> dict[str, Any]:
+    del display_name
     result = backend.post_json(
         "/decisions",
         {
@@ -731,7 +760,7 @@ def ping_openai_backend(backend: JudgeBackend, *, display_name: str = DISPLAY_NA
     if result.get("status") == "ok":
         return {
             "ok": True,
-            "message": f"Connected to {display_name} via the Decisions API.",
+            "message": "Connected to the judge.",
             "scoring_endpoint": "decisions",
         }
     return {"ok": False, "message": str(result.get("reason") or "Could not connect.")}
@@ -756,10 +785,9 @@ def make_openai_judge(
     del why_enabled
     name = (backend or "decisions").strip().lower()
     if name in {"structured", "responses", "chat", "completions"}:
-        raise SkillGateError(
-            "OpenAI scoring uses the Decisions API. Chat and Responses scoring was removed.",
-            exit_code=2,
-        )
+        from skillgate_ai.judge_providers.decision import CHAT_NOT_A_JUDGE
+
+        raise SkillGateError(CHAT_NOT_A_JUDGE, exit_code=2)
     impl = DecisionsBackend(
         api_key=api_key,
         base_url=base_url,

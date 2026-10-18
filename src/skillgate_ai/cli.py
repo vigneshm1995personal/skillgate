@@ -790,7 +790,7 @@ judge_app = typer.Typer(
 judge_provider_app = typer.Typer(
     add_completion=False,
     no_args_is_help=True,
-    help="Who scores live checks (auto, openai, jev, or clef).",
+    help="Who scores live checks. File checks only, or a decision model.",
 )
 app.add_typer(judge_app, name="judge")
 judge_app.add_typer(judge_provider_app, name="provider")
@@ -994,8 +994,7 @@ def judge_provider_show() -> None:
 
     root = _boot()
     cfg = get_llm_config(root)
-    provider = (cfg.judge_provider or "auto").strip().lower()
-    if cfg.judge_chosen and provider in {"openai", "jev", "clef"}:
+    if cfg.judge_chosen:
         console.print(f"Scoring with {DEFAULT_NAME}")
         return
     console.print("No scoring provider — file checks only.")
@@ -1003,22 +1002,17 @@ def judge_provider_show() -> None:
 
 @judge_provider_app.command("set")
 def judge_provider_set(
-    provider: str = typer.Argument(..., help="auto, openai, jev, or clef"),
+    provider: str = typer.Argument(..., help="auto, or a decision-model endpoint id"),
     base_url: str | None = typer.Option(None, "--base-url"),
     region: str | None = typer.Option(None, "--region"),
     model: str | None = typer.Option(None, "--model"),
     account_id: str | None = typer.Option(
-        None, "--account-id", help="Cloudflare account id for Clef"
+        None, "--account-id", help="Account id for this decision model"
     ),
     decisions_path: str | None = typer.Option(None, "--decisions-path", hidden=True),
     key_env: list[str] | None = typer.Option(None, "--key-env", help=_KEY_ENV_HELP),
 ) -> None:
-    """Write `.skillgate/judge`. Stores env var names, never key values.
-
-    Jev on OpenRouter: ``skillgate judge provider set jev --base-url
-    https://openrouter.ai/api/v1 --model typesafe/jev-1.14`` after
-    ``skillgate keys set JEV_API_KEY``.
-    """
+    """Write `.skillgate/judge`. Stores env var names, never key values."""
     from skillgate_ai.judge_settings import save_judge_settings
 
     root = _boot()

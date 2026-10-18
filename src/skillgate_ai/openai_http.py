@@ -20,10 +20,7 @@ _QUOTA_CODES = frozenset({"insufficient_quota", "credit_balance_exhausted"})
 _RETRY_BACKOFF_SEC = (0.5, 1.0, 2.0)
 _MAX_ATTEMPTS = 3
 _SK_TOKEN = re.compile(r"sk-[A-Za-z0-9_*\-]{2,}")
-OUT_OF_CREDITS = (
-    "Your OpenAI account is out of credits. Add credits at platform.openai.com "
-    "billing, then try again."
-)
+OUT_OF_CREDITS = "This account is out of credits. Add credits, then try again."
 
 PostFn = Callable[..., httpx.Response]
 
@@ -75,7 +72,7 @@ def user_message_for_status(
     if status in {402, 429} and error_code in _QUOTA_CODES:
         if who == "OpenAI":
             return OUT_OF_CREDITS
-        return f"{label} is out of credits. Add credits, then try again."
+        return OUT_OF_CREDITS if label == "The judge" else f"{label} is out of credits. Add credits, then try again."
     if status == 402:
         return f"{label} is out of credits. Add credits, then try again."
     if status == 429:

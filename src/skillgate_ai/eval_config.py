@@ -345,6 +345,7 @@ def friendly_model_name(model: str | None) -> str:
 
 
 _OPENAI_SCORER = re.compile(r"\bopenai\b(?!/)", re.IGNORECASE)
+_VENDOR_SCORER = re.compile(r"\b(?:openai(?!/)|jev|clef|aws|cloudflare)\b", re.IGNORECASE)
 
 
 def is_openai_scorer_text(*parts: str) -> bool:
@@ -381,7 +382,9 @@ def customer_config_label(
     name = customer_scorer_name(judge)
     if name in CHOSEN_LABELS.values():
         return scored_by_phrase(name)
-    if _is_openai_scorer(cfg, raw_label):
+    if _is_openai_scorer(cfg, raw_label) or _VENDOR_SCORER.search(raw_label):
+        return "Scored by the judge"
+    if _VENDOR_SCORER.search(str(judge.get("display_name") or "")):
         return "Scored by the judge"
     if raw_label.startswith("Scored by "):
         return raw_label

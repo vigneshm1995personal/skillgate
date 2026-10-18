@@ -450,7 +450,8 @@ def test_responses_backend_does_not_post() -> None:
     post = FakePost([FakeResponse(200, {"output_text": "{}", "model": "gpt-6-luna"})])
     with pytest.raises(SkillGateError) as caught:
         _judge(post, backend="responses")
-    assert "Decisions" in caught.value.message
+    assert "decision model" in caught.value.message.lower()
+    assert "not judges" in caught.value.message.lower()
     assert post.calls == []
 
 
@@ -497,7 +498,8 @@ def test_chat_backend_does_not_post() -> None:
     post = FakePost([])
     with pytest.raises(SkillGateError) as caught:
         make_openai_judge(api_key=SECRET, backend="chat", post=post)
-    assert "Decisions" in caught.value.message
+    assert "decision model" in caught.value.message.lower()
+    assert "not judges" in caught.value.message.lower()
     assert post.calls == []
 
 
@@ -516,7 +518,8 @@ def test_structured_backend_does_not_post() -> None:
     post = FakePost([])
     with pytest.raises(SkillGateError) as caught:
         make_openai_judge(api_key=SECRET, backend="structured", post=post)
-    assert "Decisions" in caught.value.message
+    assert "decision model" in caught.value.message.lower()
+    assert "not judges" in caught.value.message.lower()
     assert post.calls == []
 
 

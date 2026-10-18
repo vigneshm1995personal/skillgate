@@ -113,7 +113,9 @@ def test_openai_judge_without_scoring_key_exits_2(
     assert result.exit_code == 2
     assert result.report is None
     assert result.error is not None
-    assert "OpenAI" in (result.error.get("message") or "")
+    message = result.error.get("message") or ""
+    assert "API key" in message
+    assert "OpenAI" not in message
     blob = json.dumps(result.error)
     assert "sk-" not in blob
 

@@ -531,7 +531,7 @@ def coerce_extra_answer(raw: Any, *, kind: str | None = None) -> Any:
 def _extract_probability(answer: Any) -> float | None:
     """Yes-probability from a predicate answer.
 
-    Decision models return this as ``probability``, as OpenRouter ``noul``
+    Decision models return this as ``probability``, as ``noul``
     (the probability of yes), or as a yes/no choice.
     """
     if isinstance(answer, bool):

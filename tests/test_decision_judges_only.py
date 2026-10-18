@@ -86,7 +86,8 @@ def test_openai_responses_backend_does_not_post(monkeypatch: pytest.MonkeyPatch)
     monkeypatch.setattr("skillgate_ai.openai_http.httpx.post", recorder)
     with pytest.raises(SkillGateError) as caught:
         make_openai_judge(api_key="sk-test", backend="responses", post=recorder)
-    assert "Decisions" in caught.value.message
+    assert "decision model" in caught.value.message.lower()
+    assert "not judges" in caught.value.message.lower()
     assert recorder.urls == []
     with pytest.raises(SkillGateError):
         resolve_judge(
@@ -116,6 +117,8 @@ def test_removed_providers_do_not_post(monkeypatch: pytest.MonkeyPatch) -> None:
                 harness_name="cursor-agent",
             )
         assert "removed" in caught.value.message.lower()
+        assert "openai" not in caught.value.message.lower()
+        assert "jev" not in caught.value.message.lower()
     assert recorder.urls == []
 
 
@@ -129,7 +132,8 @@ def test_openai_missing_key_ignores_gateway() -> None:
             ),
             harness_name="cursor-agent",
         )
-    assert "OpenAI API key" in caught.value.message
+    assert "API key" in caught.value.message
+    assert "OpenAI" not in caught.value.message
     assert "gateway" not in caught.value.message.lower()
 
 
@@ -145,7 +149,9 @@ def test_jev_missing_key_does_not_use_openai() -> None:
             ),
             harness_name="cursor-agent",
         )
-    assert "Jev" in caught.value.message
+    assert "API key" in caught.value.message
+    assert "Jev" not in caught.value.message
+    assert "OpenAI" not in caught.value.message
 
 
 def test_explain_fail_does_not_post() -> None:
@@ -301,14 +307,18 @@ def test_clef_missing_token_or_account_fails_clearly() -> None:
             _cfg(judge_provider="clef", judge_chosen=True, judge_account_id="abc123"),
             harness_name="cursor-agent",
         )
-    assert "CLOUDFLARE_API_TOKEN" in missing_key.value.message
+    assert "API key" in missing_key.value.message
+    assert "Clef" not in missing_key.value.message
+    assert "Cloudflare" not in missing_key.value.message
     with pytest.raises(SkillGateError) as missing_account:
         resolve_judge(
             _cfg(clef_api_key="cf-token", judge_provider="clef", judge_chosen=True),
             harness_name="cursor-agent",
         )
     assert "account id" in missing_account.value.message.lower()
-    assert "skillgate judge provider set clef --account-id" in missing_account.value.message
+    assert "Clef" not in missing_account.value.message
+    assert "Cloudflare" not in missing_account.value.message
+    assert "--account-id" in missing_account.value.message
 
 
 def test_clef_rejects_chat_base_url() -> None:
@@ -322,6 +332,69 @@ def test_clef_rejects_chat_base_url() -> None:
     with pytest.raises(SkillGateError) as caught:
         backend.ping()
     assert "decision model" in caught.value.message.lower()
+
+
+def test_a_new_decision_endpoint_plugs_in_and_chat_ids_do_not(tmp_path: Path) -> None:
+    from skillgate_ai.judge_providers.decision import (
+        DecisionEndpoint,
+        register_decision_endpoint,
+        unregister_decision_endpoint,
+    )
+
+    class _Direct:
+        name = "northstar"
+        model = "northstar-1"
+
+        def evaluate(self, *, state, images, timeout_sec, spec=None):
+            del state, images, timeout_sec, spec
+            return {"status": "ok", "model": self.model, "answers": {}}
+
+        def ping(self, *, timeout_sec: float = 20.0):
+            del timeout_sec
+            return {"ok": True, "message": "Connected to the judge."}
+
+    def build(cfg: LLMConfig) -> OutcomeJudge:
+        del cfg
+        return OutcomeJudge(_Direct(), provider="northstar", display_name="the judge")
+
+    register_decision_endpoint(DecisionEndpoint("northstar", build))
+    try:
+        judge = resolve_judge(
+            _cfg(judge_provider="northstar", judge_chosen=True),
+            harness_name="cursor-agent",
+        )
+        assert isinstance(judge, OutcomeJudge)
+        assert judge.name == "northstar"
+        assert judge.backend.name == "northstar"
+        saved = save_judge_settings(tmp_path, provider="northstar")
+        assert saved.provider == "northstar"
+        for banned in ("chat", "responses", "completions", "structured", "aws"):
+            with pytest.raises(SkillGateError):
+                register_decision_endpoint(DecisionEndpoint(banned, build))
+
+        class _Chat:
+            name = "responses"
+            model = "chat-model"
+
+            def evaluate(self, *, state, images, timeout_sec, spec=None):
+                del state, images, timeout_sec, spec
+                return {}
+
+            def ping(self, *, timeout_sec: float = 20.0):
+                del timeout_sec
+                return {"ok": True, "message": "no"}
+
+        with pytest.raises(SkillGateError) as wrapped:
+            OutcomeJudge(_Chat(), provider="responses")
+        assert "not judges" in wrapped.value.message.lower()
+    finally:
+        unregister_decision_endpoint("northstar")
+    with pytest.raises(SkillGateError) as gone:
+        resolve_judge(
+            _cfg(judge_provider="northstar", judge_chosen=True),
+            harness_name="cursor-agent",
+        )
+    assert "decision model" in gone.value.message.lower()
 
 
 def test_save_rejects_removed_providers_and_keeps_clef_account(tmp_path: Path) -> None:

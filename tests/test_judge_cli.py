@@ -122,13 +122,16 @@ def test_judge_provider_set_help_is_neutral(tmp_path: Path, monkeypatch) -> None
     result = runner.invoke(app, ["judge", "provider", "set", "--help"])
     out = plain_text(result.stdout + result.stderr)
     assert result.exit_code == 0, out
+    lower = out.lower()
     assert "--decisions-path" not in out
     assert "--account-id" in out
-    assert "clef" in out.lower()
-    assert "jev" in out.lower()
-    assert "openai" in out.lower()
-    assert "aws" not in out.lower()
-    assert "other" not in out.lower()
+    assert "decision-model endpoint id" in lower
+    assert "account id for this decision model" in lower
+    assert "clef" not in lower
+    assert "jev" not in lower
+    assert "openai decisions" not in lower
+    assert "aws" not in lower
+    assert "cloudflare" not in lower
     saved = runner.invoke(app, ["judge", "provider", "set", "other"])
     saved_out = plain_text(saved.stdout + saved.stderr)
     assert saved.exit_code != 0

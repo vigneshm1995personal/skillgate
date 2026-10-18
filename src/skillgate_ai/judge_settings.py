@@ -14,9 +14,7 @@ from skillgate_ai.keys import KEYS_DIRNAME
 from skillgate_ai.paths import project_root
 
 JUDGE_FILENAME = "judge"
-PROVIDER_IDS = ("auto", "openai", "jev", "clef")
 REMOVED_IDS = frozenset({"other", "compatible", "aws", "unknown"})
-CHOSEN_IDS = frozenset({"openai", "jev", "clef"})
 _ACCOUNT_ID = re.compile(r"^[A-Za-z0-9]+$")
 _ENV_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
@@ -33,7 +31,9 @@ class JudgeProviderSettings:
 
     @property
     def chosen(self) -> bool:
-        return self.provider in CHOSEN_IDS
+        if self.provider in {"", "auto", "skip"} or self.provider in REMOVED_IDS:
+            return False
+        return _is_decision_endpoint(self.provider)
 
     def to_public_dict(self) -> dict[str, Any]:
         payload = {
@@ -116,15 +116,13 @@ def save_judge_settings(
 ) -> JudgeProviderSettings:
     name = (provider or "auto").strip().lower() or "auto"
     if name in REMOVED_IDS:
-        raise SkillGateError(
-            "That scoring provider was removed. Pick auto, openai, jev, or clef.",
-            exit_code=2,
-        )
-    if name not in PROVIDER_IDS:
-        raise SkillGateError(
-            "Scoring provider must be auto, openai, jev, or clef.",
-            exit_code=2,
-        )
+        from skillgate_ai.judge_providers.decision import REMOVED_SETUP
+
+        raise SkillGateError(REMOVED_SETUP, exit_code=2)
+    if name != "auto" and not _is_decision_endpoint(name):
+        from skillgate_ai.judge_providers.decision import NOT_A_DECISION_MODEL
+
+        raise SkillGateError(NOT_A_DECISION_MODEL, exit_code=2)
     settings = JudgeProviderSettings(
         provider=name,
         region=_blank(region),
@@ -169,7 +167,7 @@ def _require_key_env(value: Any) -> tuple[str, ...]:
         if not _ENV_NAME.fullmatch(name):
             raise SkillGateError(
                 "Pass the env var name, not the key.",
-                hint="Example: --key-env OPENROUTER_API_KEY",
+                hint="Example: --key-env DECISION_MODEL_API_KEY",
                 exit_code=2,
             )
     return tuple(names)
@@ -191,16 +189,22 @@ def _key_env_items(value: Any) -> list[str]:
     return names
 
 
+def _is_decision_endpoint(name: str) -> bool:
+    from skillgate_ai.judge import ensure_builtin_decision_endpoints
+    from skillgate_ai.judge_providers.decision import decision_endpoint
+
+    ensure_builtin_decision_endpoints()
+    return decision_endpoint(name) is not None
+
+
 def _account_id(value: Any, *, required: bool) -> str | None:
     text = _blank(value)
     if text is None:
         return None
     if not _ACCOUNT_ID.fullmatch(text):
-        raise SkillGateError(
-            "Clef scoring needs a Cloudflare account id made of letters and digits. "
-            "Set it with `skillgate judge provider set clef --account-id`.",
-            exit_code=2,
-        )
+        from skillgate_ai.judge_providers.decision import NEEDS_ACCOUNT
+
+        raise SkillGateError(NEEDS_ACCOUNT, exit_code=2)
     del required
     return text
 

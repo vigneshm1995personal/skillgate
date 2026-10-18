@@ -1,4 +1,4 @@
-"""Customer-facing scoring copy. Names a vendor only when the user picked one."""
+"""Customer-facing scoring copy. A decision model is always called the judge."""
 
 from __future__ import annotations
 
@@ -36,18 +36,8 @@ def customer_scorer_name(stamp: Mapping[str, Any] | None) -> str:
     display = str(stamp.get("display_name") or "").strip()
     if provider in {"compatible", "other"} or display.lower() in {"other", YOUR_JUDGE}:
         return YOUR_JUDGE
-    if provider in {"jev", "clef"} or display.lower() in {"jev", "clef"}:
-        return DEFAULT_NAME
-    if provider == "aws":
-        return CHOSEN_LABELS["aws"]
-    if provider == "skip":
+    if provider == "skip" or display == SKIP_NAME:
         return SKIP_NAME
-    if display in CHOSEN_LABELS.values():
-        return display
-    if display == SKIP_NAME:
-        return SKIP_NAME
-    if stamp_is_chosen(stamp):
-        return CHOSEN_LABELS.get(provider, DEFAULT_NAME)
     return DEFAULT_NAME
 
 

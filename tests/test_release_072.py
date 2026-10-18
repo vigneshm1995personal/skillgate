@@ -517,7 +517,8 @@ def test_judge_provider_set_stores_key_env_name_not_value(
     cfg = get_llm_config(tmp_path)
     with pytest.raises(MissingLLMKeyError) as caught:
         resolve_judge(cfg, harness_name="cursor-agent")
-    assert "Jev" in caught.value.message
+    assert "API key" in caught.value.message
+    assert "Jev" not in caught.value.message
     assert secret not in caught.value.message
 
 

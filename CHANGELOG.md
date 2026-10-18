@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- Score live checks only with decision models: OpenAI Decisions, Jev, and Clef. Auto leaves scoring off, even when a key is saved. Chat, Responses, AWS, and Other scoring are removed. A missing decision key fails the run and does not fall back to another provider.
+- Score live checks only with a decision model. Built-in scorers share one decision-model interface, and another System 1 endpoint can register the same way. Auto leaves scoring off, even when a key is saved. Chat and Responses completion models are not judges. Older chat-style scoring setups are removed. A missing key fails the run and does not fall back to another decision model.
 - Skip `.pydeps`, `pydeps`, and `__pypackages__` when collecting workspace files for a check.
 
 ## 0.7.3

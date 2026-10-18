@@ -24,7 +24,7 @@ From a clone of this repo, `pip install -e .` works the same once the virtualenv
 
 Optional local UI (same engine, no account): `skillgate ui` → http://127.0.0.1:8765. See [`docs/ui.md`](docs/ui.md). Docker still runs `skillgate check /pack` (exit 2 until a key is mounted). Everything the UI can do has a CLI command (`skillgate login` for Sign in).
 
-- **Bring your own judge.** Pick OpenAI Decisions, Jev, or Clef in Settings (`skillgate judge provider set`). Auto leaves scoring off. Skill Gate does not ship a scorer account. See [`docs/judge.md`](docs/judge.md).
+- **Bring your own judge.** Turn on a decision model in Settings (`skillgate judge provider set`). Auto leaves scoring off. Skill Gate does not ship a scorer account. See [`docs/judge.md`](docs/judge.md).
 - **Custom scoring questions** — add extras on top of Skill Gate’s six (`skillgate judge add-question`). Built-ins stay.
 
 `--expect-fail` inverts the exit code (CI for a skill that should fail):
@@ -96,7 +96,7 @@ Or set `SKILLGATE_OPENAI_API_KEY` in the job env instead of `--key-env`.
 - [`docs/ui.md`](docs/ui.md) — local React UI (`skillgate ui`), red path, Docker stays `check /pack`
 - [`docs/proof/PUBLISH.md`](docs/proof/PUBLISH.md) — secret scan, tag, PyPI Trusted Publishing, GHCR
 
-Keys live in `{project}/.skillgate/keys` (gitignored, mode 0600). Ambient `OPENAI_API_KEY` / `AI_GATEWAY_API_KEY` / `AWS_*` are ignored unless you pass `--key-env`. **CI and Docker:** set `SKILLGATE_OPENAI_API_KEY` / `SKILLGATE_AI_GATEWAY_API_KEY` (and the other `SKILLGATE_*` key names). That prefix is the documented job path and is always read. See `.env.example` for non-secret config. Pick who scores in Settings (`skillgate judge provider set`). Default results say **Scored by the judge** unless you picked a provider.
+Keys live in `{project}/.skillgate/keys` (gitignored, mode 0600). Ambient keys are ignored unless you pass `--key-env`. **CI and Docker:** set the `SKILLGATE_*` name for that key. That prefix is the documented job path and is always read. See `.env.example` for non-secret config. Turn scoring on in Settings (`skillgate judge provider set`). Default results say **Scored by the judge** when a decision model scored the run.
 
 ## Layout
 

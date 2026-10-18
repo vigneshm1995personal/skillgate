@@ -101,7 +101,8 @@ def test_openai_key_not_reused_for_jev() -> None:
             ),
             harness_name="cursor-agent",
         )
-    assert "Jev" in caught.value.message
+    assert "API key" in caught.value.message
+    assert "OpenAI" not in caught.value.message
 
 
 def test_jev_scores_extra_questions_and_a_low_answer_fails() -> None:

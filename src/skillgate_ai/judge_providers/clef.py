@@ -1,4 +1,4 @@
-"""Clef adapter. Cloudflare Workers AI decision models."""
+"""Decision-model adapter. Posts the decision payload to the account endpoint."""
 
 from __future__ import annotations
 
@@ -130,11 +130,9 @@ class ClefBackend:
 def _require_account(account_id: str) -> str:
     account = (account_id or "").strip()
     if not account or not _ACCOUNT_ID.fullmatch(account):
-        raise SkillGateError(
-            "Clef scoring needs a Cloudflare account id. "
-            "Set it with `skillgate judge provider set clef --account-id`.",
-            exit_code=2,
-        )
+        from skillgate_ai.judge_providers.decision import NEEDS_ACCOUNT
+
+        raise SkillGateError(NEEDS_ACCOUNT, exit_code=2)
     return account
 
 
@@ -142,7 +140,7 @@ def _model_slug(model: str) -> str:
     slug = (model or "clef").strip().lower()
     if slug not in _MODELS:
         raise SkillGateError(
-            "Clef scoring uses the clef or clef-flash decision model.",
+            "This endpoint only scores with its decision models.",
             exit_code=2,
         )
     return slug

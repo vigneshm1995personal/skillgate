@@ -253,11 +253,6 @@ export function extraFailWhy(task: TaskResult): string | null {
   return why
 }
 
-function stampIsChosen(judge: JudgeResult | null | undefined): boolean {
-  const raw = judge?.chosen
-  return raw === true || raw === "true" || raw === "1"
-}
-
 function customerScorerName(judge: JudgeResult | null | undefined): string {
   const provider = trimText(judge?.provider).toLowerCase()
   if (provider === "skip") {
@@ -274,26 +269,6 @@ function customerScorerName(judge: JudgeResult | null | undefined): string {
     provider === "other"
   ) {
     return "your judge"
-  }
-  if (provider === "jev" || provider === "clef" || name === "Jev" || name === "Clef") {
-    return "the judge"
-  }
-  if (name === "OpenAI" || name === "AWS") {
-    return name
-  }
-  if (stampIsChosen(judge)) {
-    if (provider === "openai") {
-      return "OpenAI"
-    }
-    if (provider === "jev") {
-      return "the judge"
-    }
-    if (provider === "aws") {
-      return "AWS"
-    }
-    if (provider === "compatible" || provider === "other") {
-      return "your judge"
-    }
   }
   return "the judge"
 }
@@ -312,20 +287,22 @@ export function customerScoredBy(line: string): string {
   if (/^scored by (other|your judge)\b/i.test(text)) {
     return "Scored by your judge"
   }
-  if (/^scored by (jev|clef)\b/i.test(text)) {
+  if (/^scored by (jev|clef|openai|aws)\b/i.test(text)) {
     return JUDGE_SCORED
   }
-  if (
-    /^scored by (openai|aws|other|checks)\b/i.test(text) &&
-    !/decisions/i.test(text)
-  ) {
-    return text.replace(/^scored by/i, "Scored by")
+  if (/^scored by checks\b/i.test(text)) {
+    return "Scored by Checks"
   }
   if (/couldn['’]t score/i.test(text)) {
     return text
+      .replace(/OpenAI Decisions/gi, "OpenAI")
       .replace(/^OpenAI couldn't score this run/i, "The judge couldn't score this run")
-      .replace(/^OpenAI\b/i, "The judge")
-      .replace(/OpenAI Decisions/gi, "the judge")
+      .replace(/Your OpenAI account is out of credits/gi, "This account is out of credits")
+      .replace(/\bOpenAI\b/g, "the judge")
+      .replace(/\bJev\b/g, "the judge")
+      .replace(/\bClef\b/g, "the judge")
+      .replace(/\bAWS\b/g, "the judge")
+      .replace(/\bCloudflare\b/gi, "the judge")
   }
   if (isJudgeScorerCopy(text) || /via (?:vercel )?ai gateway/i.test(text)) {
     return JUDGE_SCORED

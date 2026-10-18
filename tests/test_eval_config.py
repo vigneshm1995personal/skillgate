@@ -427,7 +427,8 @@ def test_customer_config_label_is_neutral_judge_copy() -> None:
             "judge": {"display_name": "OpenAI", "chosen": "True"},
         }
     )
-    assert scrubbed_openai == "Scored by OpenAI"
+    assert scrubbed_openai == "Scored by the judge"
+    assert "OpenAI" not in scrubbed_openai
 
 
 def test_codex_default_model_is_stamped_and_named() -> None:

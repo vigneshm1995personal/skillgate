@@ -47,7 +47,7 @@ skillgate check pdf-sabotaged --expect-fail
 echo $?    # 0
 ```
 
-Live scoring is optional. Pick OpenAI Decisions, Jev, or Clef in Settings. Auto leaves scoring off. See [judge.md](https://github.com/vigneshm1995personal/skillgate/blob/main/docs/judge.md). Every check is a live agent run. Without `skillgate login` or a key, `skillgate check` exits 2. Default results say "Scored by the judge" when a decision model scored the run.
+Live scoring is optional. Turn on a decision model in Settings, or leave scoring off. See [judge.md](https://github.com/vigneshm1995personal/skillgate/blob/main/docs/judge.md). Every check is a live agent run. Without `skillgate login` or a key, `skillgate check` exits 2. Default results say "Scored by the judge" when a decision model scored the run.
 
 ## Deploy (after a green check)
 

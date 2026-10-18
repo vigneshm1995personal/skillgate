@@ -212,7 +212,7 @@ describe("scoredByLine", () => {
     ).toBe("Scored by the judge")
     expect(
       scoredByLine({
-        scored_by: "OpenAI couldn't score this run. Your OpenAI account is out of credits.",
+        scored_by: "OpenAI Decisions couldn't score this run. Your OpenAI account is out of credits.",
         skill: "pdf",
         passed_count: 0,
         task_count: 1,
@@ -432,7 +432,7 @@ describe("openedCheckAnswers / low confidence", () => {
         status: "completed",
         answers: passTask.judge?.answers,
       })
-    ).toBe("Scored by AWS")
+    ).toBe("Scored by the judge")
     expect(
       scoredByFromJudge({
         provider: "other",
