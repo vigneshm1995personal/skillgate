@@ -11,6 +11,7 @@
 - `skillgate judge provider set` and `test` accept `--key-env`. `set` stores the env var name and does not store the key.
 - The model picker lists the current Codex and Claude models from each harness. A custom model id is not an error.
 - An Other judge stamp says "Scored by your judge".
+- Workspace capture skips virtualenvs, caches, and `site-packages`, and caps how many files and bytes go to the judge. A rejected score names that payload size.
 - Record the scoring endpoint that was actually used (Decisions API or Responses API) on the check JSON and in `judge provider test`.
 - Treat Cursor "unable to fetch user details" as not signed in. Auth errors fail fast. A red check exits 1. `skillgate login cursor` says when Cursor is already signed in.
 - `skillgate compare versions --git` accepts `--harness` and otherwise uses the harness from the skill's history runs.

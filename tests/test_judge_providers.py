@@ -161,6 +161,37 @@ def test_jev_skips_extras_with_plain_note() -> None:
     assert judged.get("why") is None
 
 
+def test_scoring_rejection_names_payload_size() -> None:
+    from skillgate_ai.judge_openai import _state_text
+
+    state = {
+        "check_prompt": "write the report",
+        "artifacts": [
+            {"path": "reports/final.txt", "present": True, "body": "wanted"},
+            {"path": "scratch/extra.txt", "present": True, "body": "n" * 4000},
+        ],
+    }
+    nbytes = len(_state_text(state).encode("utf-8"))
+
+    def post(url, headers=None, json=None, timeout=None):
+        del headers, json, timeout
+        if str(url).endswith("/decisions"):
+            return FakeResponse(404, {"error": {"message": "missing"}})
+        return FakeResponse(413, {"error": {"message": "payload too large"}})
+
+    backend = CompatibleBackend(
+        api_key="gw-key",
+        base_url="https://openrouter.ai/api/v1",
+        post=post,
+    )
+    result = backend.evaluate(state=state, images=[], timeout_sec=5)
+    reason = str(result.get("reason") or "")
+    assert result["status"] == "error"
+    assert str(nbytes) in reason
+    assert "2 files" in reason
+    assert "did not accept scoring requests" not in reason
+
+
 def test_compatible_404_falls_back_without_confidence_warning() -> None:
     spec = resolve_judge_spec()
     calls: list[str] = []

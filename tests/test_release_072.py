@@ -27,7 +27,7 @@ from skillgate_ai.judge_bank import OUTCOME_SCORING_NOTES, decisions_questions
 from skillgate_ai.judge_openai import StructuredOutputsBackend, _state_text
 from skillgate_ai.judge_spec import JudgeQuestion, extra_question_passed
 from skillgate_ai.report import report_to_dict
-from skillgate_ai.suite import TaskSpec
+from skillgate_ai.suite import FileExpect, ScorerSpec, TaskSpec
 from skillgate_ai.usage import render_stream_line
 from skillgate_ai.workspace_outputs import collect_workspace_outputs, snapshot_workspace
 
@@ -345,6 +345,74 @@ def test_collect_changed_workspace_files_skips_junk_and_saves_git(tmp_path: Path
     body = big.get("body")
     assert body is None or len(str(body)) <= 16_000
     assert big.get("size") == 300_000
+
+
+def test_workspace_capture_skips_envs_and_caps_judge_files(tmp_path: Path) -> None:
+    from skillgate_ai.workspace_outputs import MAX_SCORED_BODY_BYTES, MAX_SCORED_FILES
+
+    ws = tmp_path / "ws"
+    (ws / "reports").mkdir(parents=True)
+    (ws / "reports" / "final.txt").write_text("wanted", encoding="utf-8")
+    venv = ws / ".venv" / "lib" / "site-packages" / "pkg"
+    venv.mkdir(parents=True)
+    (venv / "mod.py").write_text("venv", encoding="utf-8")
+    (ws / ".venv" / "pyvenv.cfg").write_text("home = /usr\n", encoding="utf-8")
+    odd = ws / "workenv" / "lib" / "python3.12" / "site-packages"
+    odd.mkdir(parents=True)
+    (ws / "workenv" / "pyvenv.cfg").write_text("home = /usr\n", encoding="utf-8")
+    for index in range(30):
+        (odd / f"m{index}.py").write_text("x", encoding="utf-8")
+    vendor = ws / "vendor" / "site-packages"
+    vendor.mkdir(parents=True)
+    (vendor / "a.py").write_text("nope", encoding="utf-8")
+    (ws / "__pycache__").mkdir()
+    (ws / "__pycache__" / "a.pyc").write_bytes(b"pyc")
+    (ws / ".cache" / "pip").mkdir(parents=True)
+    (ws / ".cache" / "pip" / "wheel").write_text("cache", encoding="utf-8")
+    (ws / "node_modules" / "pkg").mkdir(parents=True)
+    (ws / "node_modules" / "pkg" / "index.js").write_text("js", encoding="utf-8")
+    (ws / "dist").mkdir()
+    (ws / "dist" / "bundle.js").write_text("js", encoding="utf-8")
+    (ws / "build" / "out").mkdir(parents=True)
+    (ws / "build" / "out" / "a.o").write_bytes(b"o")
+    scratch = ws / "scratch"
+    scratch.mkdir()
+    for index in range(MAX_SCORED_FILES + 15):
+        (scratch / f"n{index:02d}.txt").write_text("n" * 20_000, encoding="utf-8")
+    task = TaskSpec(
+        id="t",
+        prompt="write the report",
+        expect_skill="s",
+        scorers=[
+            ScorerSpec(
+                type="task_completion",
+                files=[FileExpect(path="reports/final.txt")],
+            )
+        ],
+    )
+    rows = collect_workspace_outputs(task, ws)
+    paths = [str(row["path"]) for row in rows]
+    blob = " ".join(paths)
+    for banned in (
+        ".venv",
+        "workenv",
+        "site-packages",
+        "__pycache__",
+        ".cache",
+        "node_modules",
+        "dist/",
+        "build/",
+    ):
+        assert banned not in blob
+    final = next(row for row in rows if row["path"] == "reports/final.txt")
+    assert "wanted" in str(final.get("body") or "")
+    scratch_rows = [row for row in rows if str(row["path"]).startswith("scratch/")]
+    assert len(scratch_rows) < MAX_SCORED_FILES + 15
+    assert len([path for path in paths if not path.startswith("git/")]) <= MAX_SCORED_FILES
+    scratch_bytes = sum(len(str(row.get("body") or "")) for row in scratch_rows)
+    assert scratch_bytes <= MAX_SCORED_BODY_BYTES
+    assert MAX_SCORED_FILES <= 40
+    assert MAX_SCORED_BODY_BYTES <= 256_000
 
 
 def test_claude_harness_is_noninteractive_inside_workspace(

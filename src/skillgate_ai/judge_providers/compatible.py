@@ -15,6 +15,47 @@ from skillgate_ai.openai_http import PostFn, post_openai_json
 DISPLAY_NAME = "Other"
 
 
+def _payload_stats(state: Mapping[str, Any]) -> tuple[int, int]:
+    from skillgate_ai.judge_openai import _state_text
+
+    artifacts = state.get("artifacts")
+    files = len(artifacts) if isinstance(artifacts, list) else 0
+    return files, len(_state_text(state).encode("utf-8"))
+
+
+def _rejected_scoring(
+    result: Mapping[str, Any],
+    state: Mapping[str, Any],
+    *,
+    model: str,
+) -> dict[str, Any]:
+    files, nbytes = _payload_stats(state)
+    status = int(result.get("http_status") or 0)
+    reason = str(result.get("reason") or "")
+    lowered = reason.lower()
+    size = f"The payload was {nbytes} bytes ({files} files)."
+    rejected = status in {400, 413} or "rejected" in lowered or "too large" in lowered
+    if rejected:
+        return {
+            "status": "error",
+            "reason": f"The judge rejected this scoring request. {size}",
+            "model": model,
+        }
+    if _missing_scoring_endpoint(result):
+        return {
+            "status": "error",
+            "reason": "This endpoint did not accept scoring requests. Check the base URL.",
+            "model": model,
+        }
+    if reason:
+        return {"status": "error", "reason": reason, "model": model}
+    return {
+        "status": "error",
+        "reason": f"The judge rejected this scoring request. {size}",
+        "model": model,
+    }
+
+
 def _missing_scoring_endpoint(result: Mapping[str, Any]) -> bool:
     if int(result.get("http_status") or 0) == 404:
         return True
@@ -84,11 +125,7 @@ class CompatibleBackend:
                 fallback["scoring_endpoint"] = "responses"
                 self.scoring_endpoint = "responses"
                 return fallback
-            return {
-                "status": "error",
-                "reason": "This endpoint did not accept scoring requests. Check the base URL.",
-                "model": self.model,
-            }
+            return _rejected_scoring(fallback, state, model=self.model)
         return first
 
     def post_json(
