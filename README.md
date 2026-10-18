@@ -1,47 +1,69 @@
-# skillgate-ai
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="web/public/sg-mark-dark.svg">
+    <img alt="skillgate" src="web/public/sg-mark-light.svg" width="96" height="96">
+  </picture>
+</p>
 
-Apache-2.0 local gate for [Agent Skills](https://agentskills.io): **one pack on disk** plus `skillgate check` exiting **0, 1, or 2**. No Skill Gate account. Every check is a live run of Cursor, Codex, or Claude Code using `skillgate login` or a key you set.
+<h1 align="center">skillgate</h1>
 
-Requires **Python 3.11+**. Install from PyPI:
+<p align="center">A local gate for agent skills.</p>
+
+<p align="center">
+  <a href="https://pypi.org/project/skillgate-ai/"><img alt="PyPI" src="https://img.shields.io/pypi/v/skillgate-ai"></a>
+  <a href="https://pypi.org/project/skillgate-ai/"><img alt="Python 3.11+" src="https://img.shields.io/badge/python-3.11%2B-blue"></a>
+  <a href="https://github.com/vigneshm1995personal/skillgate/actions/workflows/gate.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/vigneshm1995personal/skillgate/gate.yml?branch=main&label=CI"></a>
+  <a href="LICENSE"><img alt="License" src="https://img.shields.io/github/license/vigneshm1995personal/skillgate"></a>
+</p>
+
+skillgate checks an agent skill that lives in a folder on your machine. A pack is `SKILL.md` plus `evals/`. `skillgate check` exits 0 when the run passes, 1 when it fails, and 2 when it cannot run. Live checks are scored only by a decision model you select. Requires Python 3.11+. The package name is `skillgate-ai` (`pip install skillgate` is a different project).
+
+<p align="center">
+  <img alt="Local UI showing a passed check" src="docs/screenshots/after-evaluate-gate-light.png" width="880">
+</p>
+
+## Quickstart
+
+In an empty directory:
 
 ```bash
 pip install skillgate-ai
-```
-
-(`pip install skillgate` is a different project.) CLI command: `skillgate`.
-
-## 10 minutes, no account
-
-```bash
-python3 -m venv .venv && source .venv/bin/activate
-pip install skillgate-ai
-skillgate login                     # Cursor, Codex, or Claude Code (or: skillgate keys set)
 skillgate example pdf
-skillgate check pdf
+skillgate check skills/pdf
 ```
 
-From a clone of this repo, `pip install -e .` works the same once the virtualenv is on Python 3.11+.
+`skillgate example pdf` writes `skills/pdf`. The check exits 2 until an agent is available and a decision model is selected. Use `skillgate login` or `skillgate keys set` for the agent, and `skillgate judge provider set` for the decision model. These commands match release 0.7.5.
 
-Optional local UI (same engine, no account): `skillgate ui` → http://127.0.0.1:8765. See [`docs/ui.md`](docs/ui.md). Docker still runs `skillgate check /pack` (exit 2 until a key is mounted). Everything the UI can do has a CLI command (`skillgate login` for Sign in).
+## Features
 
-- **Bring your own judge.** Pick a decision model in Settings (`skillgate judge provider set`). A live check with none selected fails and asks you to pick one. Skill Gate does not ship a scorer account. See [`docs/judge.md`](docs/judge.md).
-- **Custom scoring questions** — add extras on top of Skill Gate’s six (`skillgate judge add-question`). Built-ins stay.
+- One pack on disk, checked with `skillgate check`
+- Exit 0 (pass), 1 (fail), or 2 (not ready)
+- Live checks scored only by a decision model
+- Custom scoring questions on top of the built-in questions
+- `--expect-fail` for a pack that should fail
+- Deploy copies skill files after a passing check
+- Local UI with `skillgate ui`
+- Compare two versions of the same dataset
 
-`--expect-fail` inverts the exit code (CI for a skill that should fail):
+## Usage
+
+From the quickstart directory:
 
 ```bash
+skillgate check skills/pdf
+skillgate ingest skills/pdf
 skillgate example pdf-sabotaged
-skillgate check pdf-sabotaged --expect-fail   # exit 0 after a live red run
+skillgate check skills/pdf-sabotaged --expect-fail
+skillgate deploy skills/pdf
+skillgate judge provider show
+skillgate judge add-question --ask "Did the answer follow the requested format?"
+skillgate compare versions skills/pdf --dry-run
+skillgate ui
 ```
 
-`skillgate deploy pdf` copies **only the skill files** (not `evals/`) into Cursor, Claude, or Codex **only if** this pack already has a passing check **and an agent is available** (`skillgate login` or a key). It does not run check for you. Without an agent, Deploy/Install stay blocked (CLI, API, and UI) even after a green check.
+`--expect-fail` exits 0 only when the live run is red. `skillgate deploy` copies the skill files after this pack already has a passing check. It does not run check for you. Deploy stays blocked until an agent is available, even after a green check. `skillgate ui` serves the local UI at http://127.0.0.1:8765. A version compare takes two `--run` ids or two `--git` refs.
 
-```bash
-skillgate check pdf
-skillgate deploy pdf
-```
-
-Create a workspace and a new skill (same as the UI):
+Create a workspace and a skill:
 
 ```bash
 skillgate init
@@ -50,58 +72,20 @@ skillgate new notes-helper
 
 ## Docker
 
-Image `ENTRYPOINT` is `skillgate`; default `CMD` is `check /pack` (never `serve`). Without a key, that exits 2.
-
 ```bash
-docker compose run --rm --no-TTY skillgate example pdf --dest /tmp/pdf
+docker compose run --rm --no-TTY skillgate
 ```
 
-Public image tag:
+The image entrypoint is `skillgate`. The default command is `check /pack`. With nothing configured, that exits 2.
 
-```bash
-docker run --rm -v "$PWD/pdf:/pack:ro" \
-  -e SKILLGATE_OPENAI_API_KEY \
-  ghcr.io/vigneshm1995personal/skillgate:v0.6.0
-```
+## Documentation
 
-A `:ro` mount skips writing `evals/history/*.jsonl` (not writable). Compose mounts the pack read-write so history can append.
+[Documentation](https://www.skill-gate-ai.app/docs)
 
-## Copy-paste GitHub Action
+## Contributing
 
-Working directory is the skill pack. Exit 1 fails the job. No account. Needs Python 3.11+ **and** a key (Skill Gate does not read `OPENAI_API_KEY` unless you pass `--key-env`).
+Issues and pull requests are welcome.
 
-```yaml
-- uses: actions/setup-python@v5
-  with: { python-version: "3.12" }
-- run: pip install skillgate-ai==0.7.5
-- run: skillgate check . --key-env OPENAI_API_KEY
-  env:
-    OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-```
+## License
 
-Or set `SKILLGATE_OPENAI_API_KEY` in the job env instead of `--key-env`.
-
-## Compare
-
-- **Compare models** — run the same Dataset on multiple harness setups side by side (CLI: `skillgate compare models`, UI: **Compare** tab).
-- **Compare versions** — diff two history runs (or git refs when the pack lives in a git tree) on one Dataset (`skillgate compare versions`).
-
-## Docs
-
-- [`docs/quickstart.md`](docs/quickstart.md) — keys, example pdf, live check
-- [`docs/plans/compare.md`](docs/plans/compare.md) — compare design
-- [`docs/pack.md`](docs/pack.md) — `evals/cases.yaml` schema 1, fixtures, goldens, history
-- [`docs/plans/0.5-decisions.md`](docs/plans/0.5-decisions.md) — 0.5 live-only / explicit keys
-- [`docs/judge.md`](docs/judge.md) — bring your own judge; custom scoring questions
-- [`docs/ui.md`](docs/ui.md) — local React UI (`skillgate ui`), red path, Docker stays `check /pack`
-- [`docs/proof/PUBLISH.md`](docs/proof/PUBLISH.md) — secret scan, tag, PyPI Trusted Publishing, GHCR
-
-Keys live in `{project}/.skillgate/keys` (gitignored, mode 0600). Ambient keys are ignored unless you pass `--key-env`. **CI and Docker:** set the `SKILLGATE_*` name for that key. That prefix is the documented job path and is always read. See `.env.example` for non-secret config. Turn scoring on in Settings (`skillgate judge provider set`). Default results say **Scored by the judge** when a decision model scored the run.
-
-## Layout
-
-```
-skills/<name>/SKILL.md
-skills/<name>/evals/cases.yaml
-src/skillgate_ai/     # this package
-```
+Apache License 2.0. See [LICENSE](LICENSE).
