@@ -37,11 +37,25 @@ def test_public_docs_drop_internal_words() -> None:
 
 def test_readme_points_at_docs() -> None:
     text = README.read_text(encoding="utf-8")
-    assert "docs/quickstart.md" in text
-    assert "docs/judge.md" in text
+    assert "https://www.skill-gate-ai.app/docs" in text
     assert "docs/openai-judge.md" not in text
-    assert "Bring your own judge" in text
+    assert "agentskills.io" not in text
+    assert "decision model" in text.lower()
     assert "custom" in text.lower()
+    lowered = text.lower()
+    for needle in (
+        "promptfoo",
+        "agentskills.io",
+        "openai",
+        "anthropic",
+        "claude",
+        "cursor",
+        "codex",
+        "dashboard",
+        "hosted",
+        "cloud",
+    ):
+        assert needle not in lowered, needle
 
 
 def test_release_yml_example_tag_is_current() -> None:
@@ -58,10 +72,10 @@ def test_package_and_docs_pin_075() -> None:
     judge = (ROOT / "docs" / "judge.md").read_text(encoding="utf-8")
     assert 'version = "0.7.5"' in pyproject
     assert '__version__ = "0.7.5"' in init
-    assert "skillgate-ai==0.7.5" in readme
+    assert "pip install skillgate-ai" in readme
+    assert "0.7.5" in readme
     assert "skillgate-ai==0.7.5" in quickstart
     assert "skillgate-ai==0.7.5" in judge
-    assert "0.7.5" in readme
     assert "# 10-minute" in quickstart
 
 
@@ -69,8 +83,13 @@ def test_deploy_docs_require_a_check_first() -> None:
     blob = README.read_text(encoding="utf-8") + "\n" + QUICKSTART.read_text(encoding="utf-8")
     assert "already has a passing check" in blob or "Run the checks first" in blob
     assert "does not run check" in blob.lower() or "does not run check for you" in blob
-    assert "deploy skills/pdf" not in README.read_text(encoding="utf-8")
-    assert "skillgate deploy pdf" in README.read_text(encoding="utf-8")
+    readme = README.read_text(encoding="utf-8")
+    # `skillgate example pdf` writes skills/<name>, so check and deploy take that path.
+    assert "skillgate check skills/pdf" in readme
+    assert "skillgate deploy skills/pdf" in readme
+    lines = readme.splitlines()
+    assert "skillgate check pdf" not in lines
+    assert "skillgate deploy pdf" not in lines
 
 
 def test_quickstart_uses_example_and_keys() -> None:
