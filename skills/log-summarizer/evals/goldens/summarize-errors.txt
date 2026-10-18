@@ -1,0 +1,4 @@
+Errors: 2
+Warnings: 1
+rate_limit: 1
+timeout: 2

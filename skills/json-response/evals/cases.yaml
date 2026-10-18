@@ -1,0 +1,39 @@
+schema: 1
+skill: json-response
+cases:
+  - id: flatten-orders
+    status: pinned
+    prompt: Flatten the JSON API response in orders.json to id, status, and total. Save output/orders.json.
+    should_trigger: true
+    input:
+      files:
+        - src: evals/fixtures/orders.json
+          dest: orders.json
+    golden:
+      output_path: output/orders.json
+      path: evals/goldens/flatten-orders.json
+      kind: json
+    contains:
+      - A-100
+      - A-101
+  - id: edge-empty
+    status: pinned
+    prompt: Flatten the JSON API response in empty-orders.json. Save output/orders.json.
+    should_trigger: true
+    input:
+      files:
+        - src: evals/fixtures/empty-orders.json
+          dest: empty-orders.json
+    golden:
+      output_path: output/orders.json
+      path: evals/goldens/edge-empty.json
+      kind: json
+    contains:
+      - "[]"
+  - id: no-trigger-unrelated
+    status: pinned
+    prompt: Write a pytest for a FastAPI health endpoint.
+    should_trigger: false
+    input:
+      files: []
+    golden: null

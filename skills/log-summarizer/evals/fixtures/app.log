@@ -1,0 +1,4 @@
+2026-04-02T10:00:01Z INFO api request id=req-1 path=/health status=200
+2026-04-02T10:00:04Z ERROR api request id=req-2 path=/orders status=500 error=timeout
+2026-04-02T10:00:09Z WARN api request id=req-3 path=/orders status=429 error=rate_limit
+2026-04-02T10:00:12Z ERROR api request id=req-4 path=/orders status=500 error=timeout

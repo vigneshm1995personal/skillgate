@@ -1,0 +1,39 @@
+schema: 1
+skill: readme-writer
+cases:
+  - id: write-readme
+    status: pinned
+    prompt: Write a project README from brief.txt. Include install steps and usage. Save output/README.md.
+    should_trigger: true
+    input:
+      files:
+        - src: evals/fixtures/brief.txt
+          dest: brief.txt
+    golden:
+      output_path: output/README.md
+      path: evals/goldens/write-readme.md
+      kind: text
+    contains:
+      - Harbor Notes
+      - pip install harbor-notes
+  - id: edge-no-license
+    status: pinned
+    prompt: Write a project README from brief-no-license.txt. Include install steps and usage. Do not invent a license when the brief has none. Save output/README.md.
+    should_trigger: true
+    input:
+      files:
+        - src: evals/fixtures/brief-no-license.txt
+          dest: brief-no-license.txt
+    golden:
+      output_path: output/README.md
+      path: evals/goldens/edge-no-license.md
+      kind: text
+    contains:
+      - not specified
+  - id: no-trigger-unrelated
+    status: pinned
+    prompt: Count the warnings in a server trace.
+    should_trigger: false
+    input:
+      files: []
+    golden: null

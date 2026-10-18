@@ -2,7 +2,7 @@
 
 A pack is a folder with `SKILL.md` (agentskills spec) plus optional `scripts/`, `evals/`, and other resources. Skill Gate does not invent a parallel blob store.
 
-The local wizard (`skillgate ui`) writes this same layout: `name` in frontmatter equals the folder basename, and `evals/cases.yaml` is schema 1.
+The local wizard (`skillgate ui`) writes this same layout: `name` in frontmatter equals the folder basename, and `evals/cases.yaml` is schema 1. How to fill that dataset is in [Writing a dataset](writing-a-dataset.md). `skillgate examples install` copies worked examples into `skills/`.
 
 
 ```

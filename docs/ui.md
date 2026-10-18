@@ -63,6 +63,8 @@ Everything the local UI can do has a CLI command. New API writes must update thi
 | Save the scoring provider | `PUT /api/settings/judge` | `skillgate judge provider set` |
 | Test the judge | `POST /api/judge/ping` | `skillgate judge provider test` |
 | Show the judge | `GET /api/settings/judge` | `skillgate judge provider show` |
+| List example datasets | `GET /api/examples` | `skillgate examples list` |
+| Install example datasets | `POST /api/examples/install` | `skillgate examples install` |
 | Import from agent folders | `POST /api/skills/import` | `skillgate import --only` |
 | Paste SKILL.md or import a zip (CLI only; Evaluate does not show this) | `POST /api/skills/paste`, `POST /api/skills/upload` | `skillgate skill paste` / `skillgate new` |
 | Edit SKILL.md or pack files | `POST /api/skills/pack-file`, `POST /api/skills/pack-upload`, `POST /api/skills/apply-fix`, `POST /api/evals/generate` | `skillgate skill write` |

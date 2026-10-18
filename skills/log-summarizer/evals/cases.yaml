@@ -1,0 +1,39 @@
+schema: 1
+skill: log-summarizer
+cases:
+  - id: summarize-errors
+    status: pinned
+    prompt: Summarize app.log. Count errors and warnings and name each error code. Save output/summary.txt.
+    should_trigger: true
+    input:
+      files:
+        - src: evals/fixtures/app.log
+          dest: app.log
+    golden:
+      output_path: output/summary.txt
+      path: evals/goldens/summarize-errors.txt
+      kind: text
+    contains:
+      - "Errors: 2"
+      - timeout
+  - id: edge-no-errors
+    status: pinned
+    prompt: Summarize quiet.log. Count errors and warnings. Save output/summary.txt.
+    should_trigger: true
+    input:
+      files:
+        - src: evals/fixtures/quiet.log
+          dest: quiet.log
+    golden:
+      output_path: output/summary.txt
+      path: evals/goldens/edge-no-errors.txt
+      kind: text
+    contains:
+      - "Errors: 0"
+  - id: no-trigger-unrelated
+    status: pinned
+    prompt: Draft a project overview from a brief.
+    should_trigger: false
+    input:
+      files: []
+    golden: null

@@ -1,6 +1,6 @@
 # 10-minute quickstart (no account)
 
-Skill Gate’s public CLI is a **local gate**. You do not sign up and you do not need a Skill Gate account. Every check is a live run of Cursor, Codex, or Claude Code after `skillgate login` or a key you set.
+Skill Gate’s public CLI is a **local gate**. You do not sign up and you do not need a Skill Gate account. Install the example datasets, then run one green check and one red check.
 
 Requires **Python 3.11+**.
 
@@ -10,14 +10,36 @@ Requires **Python 3.11+**.
 python3 -m venv .venv
 source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install skillgate-ai
-skillgate version           # 0.7.5
+skillgate version           # 0.7.7
 ```
 
 (`pip install skillgate` is a different product.) From a clone of this repo you can use `pip install -e .` instead.
 
 Skill scripts run with that same Python — install the skill’s own packages there too (the pdf example needs `pypdf`).
 
-## Keys, then the pdf example
+## Example datasets
+
+In an empty directory:
+
+```bash
+skillgate examples list
+skillgate examples install
+```
+
+`skillgate examples install` writes these folders under `skills/`:
+
+| Skill | What the dataset checks |
+| --- | --- |
+| `json-response` | Flatten a JSON API body to `id`, `status`, and `total` |
+| `json-response-sabotaged` | The same JSON cases, with instructions that ignore them |
+| `readme-writer` | Turn a project brief into a README |
+| `log-summarizer` | Count errors and warnings in a log |
+| `sql-writer` | Write a SQL query from a table schema |
+| `receipt-extractor` | Read merchant, date, and total from a fictional receipt |
+
+Files already in the destination stay as they are. A second install prints `Left N existing file(s) in place.` Install one skill with `skillgate examples install json-response`. Another folder: `skillgate examples install --dest /path/to/skills`.
+
+## Keys
 
 Sign in with the agent CLI (subscription login) or set a key. Skill Gate does not read `OPENAI_API_KEY` from the shell unless you pass `--key-env`. CI and Docker still use a key (vault, Settings, or the `SKILLGATE_*` prefix):
 
@@ -27,46 +49,86 @@ skillgate login --status         # installed / logged in / API key / none
 # or a key: skillgate keys set OPENAI_API_KEY
 # hidden prompt; or pipe stdin: printf '%s\n' "$OPENAI_API_KEY" | skillgate keys set OPENAI_API_KEY
 # or paste in Settings (`skillgate ui`)
-skillgate example pdf
-skillgate check pdf
-echo $?    # 0 when the live run is green
+skillgate judge provider set <endpoint>
 ```
 
-The sabotaged example has a meal-planner description, so PDF prompts never trigger it:
+Pick a decision model before a live check. With none selected, `skillgate check` exits 2 and asks you to pick one. See [judge.md](https://github.com/vigneshm1995personal/skillgate/blob/main/docs/judge.md). Every check is a live agent run. Without `skillgate login` or a key, `skillgate check` exits 2. Default results say "Scored by the judge" when a decision model scored the run.
+
+## A pass and a fail
+
+```bash
+skillgate check skills/json-response
+echo $?    # 0 when the live run is green; 2 until an agent and a decision model are ready
+skillgate check skills/json-response-sabotaged
+echo $?    # 1 when the JSON checks fail. The unrelated check can pass.
+skillgate check skills/json-response-sabotaged --expect-fail
+echo $?    # 0 only when that live run is red; 2 when no agent is available
+```
+
+`json-response` has three pinned cases: flatten two orders, flatten an empty list, and an unrelated pytest prompt that should not trigger the skill. `json-response-sabotaged` keeps those cases and writes a snack list instead of the JSON, so the trigger cases fail.
+
+One case:
+
+```bash
+skillgate check skills/json-response --case flatten-orders
+```
+
+Confirm the files before a live run:
+
+```bash
+skillgate ingest skills/json-response
+skillgate case list skills/json-response
+```
+
+## The same steps in the UI
+
+```bash
+skillgate ui                 # http://127.0.0.1:8765 — no account
+```
+
+1. Click **Skills**. The page title is Skill Repository.
+2. Click **Examples**, then **Install**. Existing files stay as they are.
+3. Open `json-response`. Click **Evaluate this skill**.
+4. Click **Run**. With the three cases loaded, the label is `Run 3 cases`. Until you sign in or add a key, the line above the button is `Next: sign in or add a key in Settings, then press Run.` A live check also needs a decision model. With none selected, the check exits 2.
+5. Open `json-response-sabotaged` and press **Run** again. The JSON checks fail. The unrelated check can pass.
+
+Same `run_check` engine as the CLI. See [ui.md](https://github.com/vigneshm1995personal/skillgate/blob/main/docs/ui.md). The Docker image still runs `skillgate check /pack`; do not treat the UI as `serve`.
+
+## The pdf example
+
+`skillgate example pdf` still copies the PDF pack. It refuses to write when the destination folder already exists. The dataset command above does not replace it.
+
+```bash
+skillgate example pdf
+skillgate check skills/pdf
+echo $?    # 0 when the live run is green; 2 until an agent and a decision model are ready
+```
+
+The sabotaged PDF example has a meal-planner description, so PDF prompts never trigger it:
 
 ```bash
 skillgate example pdf-sabotaged
-skillgate check pdf-sabotaged
-echo $?    # 1
+skillgate check skills/pdf-sabotaged
+echo $?    # 1 when the live run is red; 2 until an agent and a decision model are ready
 ```
 
 Intentional-fail CI:
 
 ```bash
-skillgate check pdf-sabotaged --expect-fail
-echo $?    # 0
+skillgate check skills/pdf-sabotaged --expect-fail
+echo $?    # 0 only when that live run is red
 ```
-
-Pick a decision model in Settings before a live check. With none selected, `skillgate check` exits 2 and asks you to pick one. See [judge.md](https://github.com/vigneshm1995personal/skillgate/blob/main/docs/judge.md). Every check is a live agent run. Without `skillgate login` or a key, `skillgate check` exits 2. Default results say "Scored by the judge" when a decision model scored the run.
 
 ## Deploy (after a green check)
 
 `skillgate deploy` copies **only the skill files** (not `evals/`) into Cursor, Claude, or Codex. It refuses unless this pack already has a passing check **and an agent is available** (`skillgate login`, vault, Settings, or `SKILLGATE_*`). It does not run check for you. Without an agent, Deploy stays blocked even after a green check; the pointer is `skillgate login` or Settings / `skillgate keys set`.
 
 ```bash
-skillgate check pdf
-skillgate deploy pdf
-skillgate deploy pdf --target claude
-skillgate deploy pdf --targets cursor,codex
+skillgate check skills/pdf
+skillgate deploy skills/pdf
+skillgate deploy skills/pdf --target claude
+skillgate deploy skills/pdf --targets cursor,codex
 ```
-
-## Optional local UI
-
-```bash
-skillgate ui                 # http://127.0.0.1:8765 — no account
-```
-
-Same `run_check` engine as the CLI. Run is disabled until `skillgate login` or a key is available. See [ui.md](https://github.com/vigneshm1995personal/skillgate/blob/main/docs/ui.md). The Docker image still runs `skillgate check /pack`; do not treat the UI as `serve`.
 
 ## Docker (optional)
 
@@ -90,7 +152,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: { python-version: "3.12" }
-      - run: pip install skillgate-ai==0.7.5
+      - run: pip install skillgate-ai==0.7.7
       - run: skillgate check . --key-env OPENAI_API_KEY
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}

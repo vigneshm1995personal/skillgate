@@ -1,0 +1,5 @@
+CREATE TABLE orders (
+  id TEXT PRIMARY KEY,
+  status TEXT NOT NULL,
+  total NUMERIC NOT NULL
+);

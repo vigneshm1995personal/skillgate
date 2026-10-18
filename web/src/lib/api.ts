@@ -168,15 +168,21 @@ export const api = {
   status: () => request<StatusPayload>("/api/status"),
   settingsKeys: () => request<SettingsKeysPayload>("/api/settings/keys"),
   setSettingsKey: (name: SettingsKeyId, value: string) =>
-    request<SettingsKeysPayload>(`/api/settings/keys/${encodeURIComponent(name)}`, {
-      method: "PUT",
-      headers: jsonHeaders,
-      body: JSON.stringify({ value }),
-    }),
+    request<SettingsKeysPayload>(
+      `/api/settings/keys/${encodeURIComponent(name)}`,
+      {
+        method: "PUT",
+        headers: jsonHeaders,
+        body: JSON.stringify({ value }),
+      }
+    ),
   clearSettingsKey: (name: SettingsKeyId) =>
-    request<SettingsKeysPayload>(`/api/settings/keys/${encodeURIComponent(name)}`, {
-      method: "DELETE",
-    }),
+    request<SettingsKeysPayload>(
+      `/api/settings/keys/${encodeURIComponent(name)}`,
+      {
+        method: "DELETE",
+      }
+    ),
   settingsJudge: () =>
     request<{
       judge: {
@@ -215,7 +221,12 @@ export const api = {
   listChecks: (skill?: string | null) => {
     const query = skill ? `?skill=${encodeURIComponent(skill)}` : ""
     return request<{
-      checks: Array<{ id: string; label: string; builtin: boolean; prompt: string }>
+      checks: Array<{
+        id: string
+        label: string
+        builtin: boolean
+        prompt: string
+      }>
     }>(`/api/checks${query}`)
   },
   previewCheck: (question: {
@@ -245,7 +256,8 @@ export const api = {
         key_name?: string | null
       }>
     }>("/api/settings/judges"),
-  loginStatus: () => request<{ harnesses: AgentAuthRow[] }>("/api/login/status"),
+  loginStatus: () =>
+    request<{ harnesses: AgentAuthRow[] }>("/api/login/status"),
   startLogin: (agent: string) =>
     request<LoginStartPayload>(`/api/login/${encodeURIComponent(agent)}`, {
       method: "POST",
@@ -269,6 +281,20 @@ export const api = {
     request<{ skills: SkillPayload[]; catalog_error?: CatalogError | null }>(
       "/api/skills"
     ),
+  listExamples: () =>
+    request<{ examples: Array<{ name: string; description: string }> }>(
+      "/api/examples"
+    ),
+  installExamples: (body?: { name?: string; names?: string[] }) =>
+    request<{
+      installed: Array<{ name: string; path: string; files: number }>
+      skipped: Array<{ name: string; path: string }>
+      skills: SkillPayload[]
+    }>("/api/examples/install", {
+      method: "POST",
+      headers: jsonHeaders,
+      body: JSON.stringify(body ?? {}),
+    }),
   importSources: () =>
     request<{
       sources: Array<{
@@ -307,7 +333,9 @@ export const api = {
       body: JSON.stringify(opts ?? {}),
     }),
   skill: (name: string) =>
-    request<SkillDetailPayload>(`/api/skills/${encodeURIComponent(packSkillName(name))}`),
+    request<SkillDetailPayload>(
+      `/api/skills/${encodeURIComponent(packSkillName(name))}`
+    ),
   packPreview: (name: string, path: string) =>
     request<PackPreview>(
       `/api/skills/${encodeURIComponent(packSkillName(name))}/pack-file?path=${encodeURIComponent(path)}`
@@ -327,14 +355,11 @@ export const api = {
       file: { src: string; dest: string; path: string } | null
       needs_upload?: boolean
       message?: string
-    }>(
-      "/api/skills/pack-file",
-      {
-        method: "POST",
-        headers: jsonHeaders,
-        body: JSON.stringify(payload),
-      }
-    ),
+    }>("/api/skills/pack-file", {
+      method: "POST",
+      headers: jsonHeaders,
+      body: JSON.stringify(payload),
+    }),
   packUpload: async (skill: string, file: File, path?: string) => {
     const body = new FormData()
     body.append("skill", skill)
@@ -446,10 +471,16 @@ export const api = {
     const data: unknown = await res.json().catch(() => ({}))
     if (!res.ok) {
       const parsed = detailFromBody(data)
-      const err = new ApiError(parsed.message, parsed.hint, { status: res.status })
+      const err = new ApiError(parsed.message, parsed.hint, {
+        status: res.status,
+      })
       if (data && typeof data === "object") {
         const detail = (data as { detail?: { rows?: unknown } }).detail
-        if (detail && typeof detail === "object" && Array.isArray(detail.rows)) {
+        if (
+          detail &&
+          typeof detail === "object" &&
+          Array.isArray(detail.rows)
+        ) {
           ;(err as ApiError & { rows?: unknown }).rows = detail.rows
         }
       }
@@ -561,19 +592,19 @@ export const api = {
       branch?: string | null
       pr_url?: string | null
       attempt?: DeployAttempt
-    }>(
-      "/api/deploy",
-      {
-        method: "POST",
-        headers: jsonHeaders,
-        body: JSON.stringify({ target, skill, mode }),
-      }
-    ),
+    }>("/api/deploy", {
+      method: "POST",
+      headers: jsonHeaders,
+      body: JSON.stringify({ target, skill, mode }),
+    }),
   helper: {
     createPairingCode: () =>
-      request<{ code: string; expires_at: string }>("/api/helper/pairing-codes", {
-        method: "POST",
-      }),
+      request<{ code: string; expires_at: string }>(
+        "/api/helper/pairing-codes",
+        {
+          method: "POST",
+        }
+      ),
     devices: () => request<{ devices: HelperDevice[] }>("/api/helper/devices"),
     removeDevice: (deviceId: string) =>
       request<Record<string, never>>(

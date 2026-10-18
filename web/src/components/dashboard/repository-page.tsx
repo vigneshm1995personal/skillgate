@@ -74,6 +74,12 @@ export function RepositoryPage() {
   const [sourcesError, setSourcesError] = useState("")
   const [folderPath, setFolderPath] = useState("")
   const [gitUrl, setGitUrl] = useState("")
+  const [examplesOpen, setExamplesOpen] = useState(false)
+  const [examples, setExamples] = useState<
+    Array<{ name: string; description: string }>
+  >([])
+  const [examplesError, setExamplesError] = useState("")
+  const [installingExamples, setInstallingExamples] = useState(false)
 
   const openImport = async () => {
     setImportOpen(true)
@@ -84,7 +90,9 @@ export function RepositoryPage() {
       setSources(data.sources ?? [])
     } catch (err) {
       const message =
-        err instanceof ApiError ? err.message : "Could not look up agent folders."
+        err instanceof ApiError
+          ? err.message
+          : "Could not look up agent folders."
       setSourcesError(message)
       setSources([])
     }
@@ -110,14 +118,60 @@ export function RepositoryPage() {
       })
       setImportOpen(false)
     } catch (err) {
-      const message = err instanceof ApiError ? err.message : "Could not import skills."
+      const message =
+        err instanceof ApiError ? err.message : "Could not import skills."
       toast.add({ title: message, type: "error" })
     } finally {
       setImporting(false)
     }
   }
 
-  const importFolderOrGit = async (opts: { folder?: string; git_url?: string }) => {
+  const openExamples = async () => {
+    setExamplesOpen(true)
+    setExamplesError("")
+    try {
+      const data = await api.listExamples()
+      setExamples(data.examples ?? [])
+    } catch (err) {
+      const message =
+        err instanceof ApiError ? err.message : "Could not list examples."
+      setExamplesError(message)
+      setExamples([])
+    }
+  }
+
+  const installExamples = async () => {
+    setInstallingExamples(true)
+    try {
+      const data = await api.installExamples()
+      await refreshSkills()
+      const count = data.installed?.length ?? 0
+      const skipped = data.skipped?.length ?? 0
+      const copied = (data.installed ?? []).reduce(
+        (sum, row) => sum + (row.files || 0),
+        0
+      )
+      toast.add({
+        title:
+          skipped > 0
+            ? `Installed ${count} example${count === 1 ? "" : "s"}. Left ${skipped} existing file${skipped === 1 ? "" : "s"} in place.`
+            : `Installed ${count} example${count === 1 ? "" : "s"} (${copied} files).`,
+        type: "success",
+      })
+      setExamplesOpen(false)
+    } catch (err) {
+      const message =
+        err instanceof ApiError ? err.message : "Could not install examples."
+      toast.add({ title: message, type: "error" })
+    } finally {
+      setInstallingExamples(false)
+    }
+  }
+
+  const importFolderOrGit = async (opts: {
+    folder?: string
+    git_url?: string
+  }) => {
     setImporting(true)
     try {
       const data = await api.importSkills(opts)
@@ -136,7 +190,8 @@ export function RepositoryPage() {
         setGitUrl("")
       }
     } catch (err) {
-      const message = err instanceof ApiError ? err.message : "Could not import skills."
+      const message =
+        err instanceof ApiError ? err.message : "Could not import skills."
       toast.add({ title: message, type: "error" })
     } finally {
       setImporting(false)
@@ -164,19 +219,28 @@ export function RepositoryPage() {
         title="Skill Repository"
         description={
           isLocalMode(status)
-            ? "Skills in this project. Connect an agent to import. Open one to read SKILL.md. Run never starts until you press it."
+            ? "Skills in this project. Install the examples, or connect an agent to import. Open one to read SKILL.md. Run never starts until you press it."
             : "Every skill on disk, with last gate, evals, versions, and deploys. Last eval is the latest full run; single checks don't count."
         }
         action={
           <div className="flex flex-wrap gap-2">
             {isLocalMode(status) ? (
-              <Button
-                id="btn-import-skills"
-                variant="outline"
-                onClick={() => void openImport()}
-              >
-                Connect
-              </Button>
+              <>
+                <Button
+                  id="btn-examples"
+                  variant="outline"
+                  onClick={() => void openExamples()}
+                >
+                  Examples
+                </Button>
+                <Button
+                  id="btn-import-skills"
+                  variant="outline"
+                  onClick={() => void openImport()}
+                >
+                  Connect
+                </Button>
+              </>
             ) : null}
             <Button
               variant="outline"
@@ -225,26 +289,30 @@ export function RepositoryPage() {
                   ) : null}
                 </EmptyHeader>
                 <EmptyContent>
-                  <Button variant="outline" onClick={() => void refreshSkills()}>
+                  <Button
+                    variant="outline"
+                    onClick={() => void refreshSkills()}
+                  >
                     Retry
                   </Button>
                 </EmptyContent>
               </Empty>
             ) : (
-            <Empty>
-              <EmptyHeader>
-                <EmptyMedia variant="icon">
-                  <FolderIcon />
-                </EmptyMedia>
-                <EmptyTitle>No skills in the repository</EmptyTitle>
-                <EmptyDescription>
-                  Pick a skill on Evaluate. It lists skills from your agent folders.
-                </EmptyDescription>
-              </EmptyHeader>
-              <EmptyContent>
-                <Button onClick={() => setStage("eval")}>Evaluate</Button>
-              </EmptyContent>
-            </Empty>
+              <Empty>
+                <EmptyHeader>
+                  <EmptyMedia variant="icon">
+                    <FolderIcon />
+                  </EmptyMedia>
+                  <EmptyTitle>No skills in the repository</EmptyTitle>
+                  <EmptyDescription>
+                    Pick a skill on Evaluate. It lists skills from your agent
+                    folders.
+                  </EmptyDescription>
+                </EmptyHeader>
+                <EmptyContent>
+                  <Button onClick={() => setStage("eval")}>Evaluate</Button>
+                </EmptyContent>
+              </Empty>
             )
           ) : (
             <Table>
@@ -265,8 +333,12 @@ export function RepositoryPage() {
                   <SkillRow
                     key={item.id}
                     skill={item}
-                    onOpen={() => openRepository(item.slug || item.id || item.name)}
-                    onEvaluate={() => void selectSkill(item.absolute || item.slug || item.id)}
+                    onOpen={() =>
+                      openRepository(item.slug || item.id || item.name)
+                    }
+                    onEvaluate={() =>
+                      void selectSkill(item.absolute || item.slug || item.id)
+                    }
                   />
                 ))}
               </TableBody>
@@ -279,7 +351,8 @@ export function RepositoryPage() {
           <DialogHeader>
             <DialogTitle>Connect</DialogTitle>
             <DialogDescription>
-              Choose an agent first. We’ll copy that agent’s skills into this project.
+              Choose an agent first. We’ll copy that agent’s skills into this
+              project.
             </DialogDescription>
           </DialogHeader>
           {sourcesError ? (
@@ -288,7 +361,9 @@ export function RepositoryPage() {
               <AlertDescription>{sourcesError}</AlertDescription>
             </Alert>
           ) : sources.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Looking up agent folders…</p>
+            <p className="text-sm text-muted-foreground">
+              Looking up agent folders…
+            </p>
           ) : (
             <div className="flex flex-col gap-3">
               {sources.map((source) => (
@@ -297,7 +372,9 @@ export function RepositoryPage() {
                   className="flex items-start gap-3 rounded-lg border px-3 py-2"
                 >
                   <span className="min-w-0 flex-1">
-                    <span className="block text-sm font-medium">{source.label}</span>
+                    <span className="block text-sm font-medium">
+                      {source.label}
+                    </span>
                     <span className="block text-xs text-muted-foreground">
                       {source.found
                         ? `${source.folder_label} · ${source.count} skill${source.count === 1 ? "" : "s"}`
@@ -356,7 +433,9 @@ export function RepositoryPage() {
                   id="btn-import-git"
                   variant="secondary"
                   disabled={importing || !gitUrl.trim()}
-                  onClick={() => void importFolderOrGit({ git_url: gitUrl.trim() })}
+                  onClick={() =>
+                    void importFolderOrGit({ git_url: gitUrl.trim() })
+                  }
                 >
                   Clone
                 </Button>
@@ -366,6 +445,54 @@ export function RepositoryPage() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setImportOpen(false)}>
               Cancel
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={examplesOpen} onOpenChange={setExamplesOpen}>
+        <DialogContent id="install-examples" className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Examples</DialogTitle>
+            <DialogDescription>
+              Sample skills with inputs and expected outputs. Install copies
+              them into this project. Files already there stay as they are.
+            </DialogDescription>
+          </DialogHeader>
+          {examplesError ? (
+            <Alert>
+              <AlertTitle>Could not list examples</AlertTitle>
+              <AlertDescription>{examplesError}</AlertDescription>
+            </Alert>
+          ) : examples.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              Looking up examples…
+            </p>
+          ) : (
+            <div className="flex max-h-80 flex-col gap-3 overflow-y-auto">
+              {examples.map((example) => (
+                <div key={example.name} className="rounded-lg border px-3 py-2">
+                  <span className="block text-sm font-medium">
+                    {example.name}
+                  </span>
+                  {example.description ? (
+                    <span className="block text-xs text-muted-foreground">
+                      {example.description}
+                    </span>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setExamplesOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              id="btn-install-examples"
+              disabled={installingExamples || examples.length === 0}
+              onClick={() => void installExamples()}
+            >
+              {installingExamples ? "Installing…" : "Install"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -396,7 +523,9 @@ function SkillRow({
             {skill.seed ? <Badge variant="outline">Seed</Badge> : null}
           </div>
           {skill.warning ? (
-            <span className="text-xs text-muted-foreground">{skill.warning}</span>
+            <span className="text-xs text-muted-foreground">
+              {skill.warning}
+            </span>
           ) : null}
         </div>
       </TableCell>
