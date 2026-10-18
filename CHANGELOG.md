@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.7.3
+
+- Score a case's extra questions with Jev and with OpenAI Decisions. A failing answer fails the check, and What happened shows the question text plus the answer.
+
 ## 0.7.2
 
 - Drop Claude `rate_limit_event` and system/init noise from rendered transcripts, judge evidence, and history. Tool use and tool result pairing stays.

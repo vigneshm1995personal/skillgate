@@ -511,7 +511,14 @@ def _gte(pass_if: Mapping[str, Any] | None, *, default: float | None) -> float |
 def coerce_extra_answer(raw: Any, *, kind: str | None = None) -> Any:
     """Turn a schema scalar into the mapping shape Decisions answers use."""
     if isinstance(raw, Mapping):
-        return raw
+        if kind != "predicate":
+            return raw
+        probability = _extract_probability(raw)
+        if probability is None or "probability" in raw:
+            return raw
+        lifted = dict(raw)
+        lifted["probability"] = probability
+        return lifted
     if isinstance(raw, str) and raw.strip():
         return {"choice": raw.strip()}
     if isinstance(raw, (int, float)) and not isinstance(raw, bool):
@@ -522,13 +529,30 @@ def coerce_extra_answer(raw: Any, *, kind: str | None = None) -> Any:
 
 
 def _extract_probability(answer: Any) -> float | None:
-    if isinstance(answer, (int, float)) and not isinstance(answer, bool):
+    """Yes-probability from a predicate answer.
+
+    Decision models return this as ``probability``, as OpenRouter ``noul``
+    (the probability of yes), or as a yes/no choice.
+    """
+    if isinstance(answer, bool):
+        return 1.0 if answer else 0.0
+    if isinstance(answer, (int, float)):
         return float(answer)
     if not isinstance(answer, Mapping):
         return None
-    raw = answer.get("probability")
-    if isinstance(raw, (int, float)) and not isinstance(raw, bool):
-        return float(raw)
+    for key in ("probability", "noul"):
+        raw = answer.get(key)
+        if isinstance(raw, bool):
+            return 1.0 if raw else 0.0
+        if isinstance(raw, (int, float)):
+            return float(raw)
+    choice = extract_choice(answer)
+    if isinstance(choice, str):
+        lower = choice.strip().lower()
+        if lower in {"yes", "true"}:
+            return 1.0
+        if lower in {"no", "false"}:
+            return 0.0
     return None
 
 
