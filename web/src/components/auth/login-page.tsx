@@ -1,4 +1,5 @@
 import { SignInWithVercelButton } from "@/components/auth/sign-in-with-vercel"
+import { SgMark } from "@/components/brand/sg-mark"
 
 export function LoginPage({
   error,
@@ -20,9 +21,12 @@ export function LoginPage({
     <div className="flex min-h-svh items-center justify-center bg-background px-6">
       <div className="flex w-full max-w-md flex-col gap-6 rounded-xl border bg-card p-8">
         <div className="flex flex-col gap-2">
-          <h1 className="font-heading text-3xl font-medium tracking-tight">
-            Skill Gate
-          </h1>
+          <div className="flex items-center gap-3">
+            <SgMark className="size-10 shrink-0" />
+            <h1 className="font-heading text-3xl font-medium tracking-tight">
+              Skill Gate
+            </h1>
+          </div>
           <p className="text-sm text-muted-foreground">
             Sign in to continue.
           </p>

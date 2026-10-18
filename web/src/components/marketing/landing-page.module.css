@@ -54,6 +54,12 @@
   letter-spacing: -0.02em;
 }
 
+.mark {
+  width: 22px;
+  height: 22px;
+  flex: none;
+}
+
 .navLinks {
   display: flex;
   align-items: center;

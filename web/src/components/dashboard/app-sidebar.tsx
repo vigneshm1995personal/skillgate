@@ -10,6 +10,7 @@ import {
   Settings2Icon,
 } from "lucide-react"
 
+import { SgMark } from "@/components/brand/sg-mark"
 import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
@@ -62,9 +63,12 @@ export function AppSidebar({
         className
       )}
     >
-      <div className="px-4 py-5">
-        <p className="truncate text-sm font-medium tracking-tight">Skill Gate</p>
-        <p className="truncate text-xs text-muted-foreground">Evaluate, Gate, Deploy</p>
+      <div className="flex items-center gap-2.5 px-4 py-5">
+        <SgMark className="size-8 shrink-0" />
+        <div className="min-w-0">
+          <p className="truncate text-sm font-medium tracking-tight">Skill Gate</p>
+          <p className="truncate text-xs text-muted-foreground">Evaluate, Gate, Deploy</p>
+        </div>
       </div>
       <Separator />
       <ScrollArea className="min-h-0 flex-1">

@@ -23,12 +23,19 @@ describe("stageTitle", () => {
 })
 
 describe("sidebar header", () => {
-  it("keeps Skill Gate text without the logo mark", () => {
+  it("shows the SG mark beside the Skill Gate wordmark", () => {
     const sidebar = readFileSync(join(dir, "app-sidebar.tsx"), "utf8")
+    const mark = readFileSync(join(dir, "../brand/sg-mark.tsx"), "utf8")
+    const svg = readFileSync(join(dir, "../../../public/sg-mark.svg"), "utf8")
     expect(sidebar).toMatch(/Skill Gate/)
     expect(sidebar).toMatch(/Evaluate, Gate, Deploy/)
+    expect(sidebar).toMatch(/SgMark/)
     expect(sidebar).not.toMatch(/skill-gate-mark/)
     expect(sidebar).not.toMatch(/sg-ink-bar/)
+    expect(mark).toContain("M100 0")
+    expect(mark).toContain('fill="currentColor"')
+    expect(svg).toContain("M100 0")
+    expect(svg).toContain("currentColor")
   })
 })
 

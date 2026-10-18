@@ -16,6 +16,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
+import { SgMark } from "@/components/brand/sg-mark"
 import { useTheme } from "@/components/theme-provider"
 import { SignOutButton } from "@/components/auth/sign-out-button"
 import { stageTitle } from "@/components/dashboard/chrome"
@@ -69,6 +70,7 @@ export function AppTopbar({ onMenuClick }: { onMenuClick?: () => void }) {
           <MenuIcon />
         </Button>
       ) : null}
+      <SgMark className="size-7 shrink-0 md:hidden" />
       <Breadcrumb className="hidden md:block">
         <BreadcrumbList>
           <BreadcrumbItem>
