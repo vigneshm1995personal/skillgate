@@ -171,6 +171,8 @@ def score_task_completion(expects: list[FileExpect], workspace: Path) -> Score:
     for item in expects:
         target = workspace / item.path
         if item.exists and not target.is_file():
+            if item.optional:
+                continue
             failures.append(f"missing file {item.path}")
             continue
         if not item.exists and target.exists():
@@ -294,8 +296,11 @@ def _rubric_check(check: RubricCheck, workspace: Path) -> tuple[bool, str]:
         return False, "rubric check is missing `file`"
     target = workspace / check.file
     if not target.is_file():
+        if check.optional:
+            return True, "optional file absent"
         return False, f"missing {check.file}"
-    if check.min_bytes is not None and target.stat().st_size < check.min_bytes:
+    min_bytes = None if check.optional else check.min_bytes
+    if min_bytes is not None and target.stat().st_size < min_bytes:
         return False, "too small"
     if check.contains and check.contains not in _file_text(target):
         return False, f"missing {check.contains!r}"

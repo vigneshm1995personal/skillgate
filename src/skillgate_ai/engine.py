@@ -427,12 +427,20 @@ def _run_outcome_judge(
         pack = load_case_pack(skill_root)
         case = case_for_task(pack, task.id)
         spec = _resolve_task_spec(skill_root, pack, case)
-        if case is not None and case.golden is not None:
+        if case is not None and (
+            case.golden is not None or (case.output_optional and case.contains)
+        ):
             golden_payload = golden_state(
-                case.golden, skill_root, contains=case.contains
+                case.golden,
+                skill_root,
+                contains=case.contains,
+                output_optional=case.output_optional,
             )
-            actual_payload = actual_output_state(
-                case.golden.output_path, artifacts.workspace
+            output_path = case.golden.output_path if case.golden is not None else None
+            actual_payload = (
+                actual_output_state(output_path, artifacts.workspace)
+                if output_path
+                else None
             )
     from skillgate_ai.judge_context import build_agent_trajectory, skill_instructions_text
     from skillgate_ai.workspace_outputs import collect_workspace_outputs

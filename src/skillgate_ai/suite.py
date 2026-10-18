@@ -23,6 +23,7 @@ class FileCopy(BaseModel):
 class FileExpect(BaseModel):
     path: str
     exists: bool = True
+    optional: bool = False
     contains: str | None = None
     min_bytes: int | None = None
     min_pages: int | None = None
@@ -32,6 +33,7 @@ class FileExpect(BaseModel):
 class RubricCheck(BaseModel):
     id: str
     file: str | None = None
+    optional: bool = False
     contains: str | None = None
     min_bytes: int | None = None
     pdf_pages: int | None = None

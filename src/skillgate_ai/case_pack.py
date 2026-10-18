@@ -100,6 +100,14 @@ class PackCase(BaseModel):
     budgets: CaseBudgets | None = None
     judge: JudgeBlock | None = None
     trigger_mode: bool = False
+    output_optional: bool = False
+
+    @field_validator("output_optional", mode="before")
+    @classmethod
+    def _output_optional_flag(cls, value: object) -> bool:
+        if isinstance(value, str):
+            return value.strip().lower() in {"1", "true", "yes", "y"}
+        return bool(value)
 
     @field_validator("id")
     @classmethod
@@ -288,6 +296,9 @@ def pack_fingerprint(pack: CasePack) -> str:
             dump["budgets"] = effective.to_sparse_dict()
         if case.judge is not None and not case.judge.is_empty():
             dump["judge"] = case.judge.to_sparse_dict()
+        if case.output_optional:
+            dump["output_optional"] = True
+            dump["contains"] = list(case.contains)
         pinned.append(dump)
     payload: dict[str, Any] = {"cases": pinned}
     if pack.judge is not None and not pack.judge.is_empty():
@@ -325,9 +336,14 @@ def suite_from_pack(pack: CasePack, skill_rel: str) -> SuiteSpec:
         scorers: list[dict[str, Any]] = [{"type": "skill_trigger"}]
         if case.golden and case.should_trigger:
             expects: list[dict[str, Any]] = []
-            if case.contains:
+            if case.output_optional:
+                entry = {"path": case.golden.output_path, "optional": True}
+                if case.min_pages is not None:
+                    entry["min_pages"] = case.min_pages
+                expects.append(entry)
+            elif case.contains:
                 for item in case.contains:
-                    entry: dict[str, Any] = {
+                    entry = {
                         "path": case.golden.output_path,
                         "contains": item,
                     }
@@ -340,15 +356,22 @@ def suite_from_pack(pack: CasePack, skill_rel: str) -> SuiteSpec:
                     entry["min_pages"] = case.min_pages
                 expects.append(entry)
             scorers.append({"type": "task_completion", "files": expects})
-            rubric: dict[str, Any] = {
-                "id": "output-exists",
-                "file": case.golden.output_path,
-                "min_bytes": 1,
-            }
-            if case.contains:
-                rubric["contains"] = case.contains[0]
+            if case.output_optional:
+                rubric = {
+                    "id": "output-exists",
+                    "file": case.golden.output_path,
+                    "optional": True,
+                }
+            else:
+                rubric = {
+                    "id": "output-exists",
+                    "file": case.golden.output_path,
+                    "min_bytes": 1,
+                }
+                if case.contains:
+                    rubric["contains"] = case.contains[0]
             scorers.append({"type": "rubric", "min_score": 1.0, "checks": [rubric]})
-        elif case.contains and case.should_trigger:
+        elif case.contains and case.should_trigger and not case.output_optional:
             scorers.append(
                 {
                     "type": "answer_contains",
@@ -403,6 +426,7 @@ def checks_from_pack(pack: CasePack, *, include_drafts: bool = False) -> list[di
             "min_pages": case.min_pages,
             "golden_path": case.golden.path if case.golden else None,
             "golden_kind": case.golden.kind if case.golden else None,
+            "output_optional": case.output_optional,
             "bank_status": case.status,
             "locked": case_is_locked(
                 pack.skill, case.id, pack_case_ids=[c.id for c in pack.cases]
@@ -453,7 +477,12 @@ def dataset_view(skill_path: str | Path) -> dict[str, Any] | None:
             golden_payload = _preview_file(root, case.golden.path)
             golden_payload["output_path"] = case.golden.output_path
             golden_payload["kind"] = case.golden.kind
-            state = golden_state(case.golden, root)
+            state = golden_state(
+                case.golden,
+                root,
+                contains=case.contains,
+                output_optional=case.output_optional,
+            )
             if state and state.get("body") is not None:
                 golden_payload["body"] = state["body"]
                 golden_payload.setdefault("text", state["body"])
@@ -658,9 +687,17 @@ def checks_fingerprint(checks: list[dict[str, Any]], *, skill: str) -> str:
                 contains=contains_list,
                 min_pages=raw.get("min_pages"),
                 budgets=parse_budgets(raw.get("budgets")),
+                output_optional=raw.get("output_optional", False),
             )
         )
     return pack_fingerprint(CasePack(schema_version=1, skill=skill, cases=cases))
+
+
+_OPTIONAL_OUTPUT_NOTE = (
+    "Example of an acceptable answer, not a required substring. "
+    "A missing or empty output file is acceptable. "
+    "Grade against the case prompt and the checks."
+)
 
 
 def golden_state(
@@ -668,11 +705,21 @@ def golden_state(
     skill_root: Path,
     *,
     contains: list[str] | None = None,
+    output_optional: bool = False,
 ) -> dict[str, Any] | None:
-    if golden is None:
-        return None
-    path = skill_root / golden.path
     needles = [str(item).strip() for item in (contains or []) if str(item).strip()]
+    if golden is None:
+        if not (output_optional and needles):
+            return None
+        return {
+            "path": None,
+            "output_path": None,
+            "kind": "text",
+            "body": needles[0],
+            "output_optional": True,
+            "note": _OPTIONAL_OUTPUT_NOTE,
+        }
+    path = skill_root / golden.path
     if golden.kind == "bytes":
         payload: dict[str, Any] = {
             "path": golden.path,
@@ -688,6 +735,12 @@ def golden_state(
             "kind": golden.kind,
             "body": read_capped_text(path) or "",
         }
+    if output_optional:
+        payload["output_optional"] = True
+        if needles:
+            payload["body"] = needles[0]
+        payload["note"] = _OPTIONAL_OUTPUT_NOTE
+        return payload
     if needles:
         payload["match"] = "contains"
         payload["contains"] = needles
@@ -767,6 +820,8 @@ def _dump_pack(pack: CasePack) -> str:
             item["judge"] = case.judge.to_sparse_dict()
         if not case.trigger_mode:
             item.pop("trigger_mode", None)
+        if not case.output_optional:
+            item.pop("output_optional", None)
     return yaml.safe_dump(payload, sort_keys=False, allow_unicode=True)
 
 
@@ -886,6 +941,7 @@ def _case_from_check(root: Path, raw: dict[str, Any], skill_name: str) -> PackCa
         min_pages=raw.get("min_pages"),
         budgets=parse_budgets(raw.get("budgets")),
         judge=judge,
+        output_optional=raw.get("output_optional", False),
     )
 
 

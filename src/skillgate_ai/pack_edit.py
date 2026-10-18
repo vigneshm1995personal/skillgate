@@ -122,6 +122,7 @@ def edit_pack_case(
     prompt: str | None = None,
     expected: str | None = None,
     output_path: str | None = None,
+    output_optional: bool | None = None,
 ):
     root = Path(skill_path).expanduser().resolve()
     pack = load_case_pack(root)
@@ -145,6 +146,8 @@ def edit_pack_case(
             updates["contains"] = [expected] if expected.strip() else []
         if output_path is not None and case.golden is not None:
             updates["golden"] = case.golden.model_copy(update={"output_path": output_path})
+        if output_optional is not None:
+            updates["output_optional"] = bool(output_optional)
         cases.append(case.model_copy(update=updates) if updates else case)
     if not found:
         raise SuiteError(f"No check named {case_id}.")
@@ -265,6 +268,7 @@ def add_pack_case(
     files: list[dict[str, Any]] | None = None,
     inputs: list[str] | None = None,
     force: bool = False,
+    output_optional: bool = False,
 ):
     if not str(prompt or "").strip():
         raise SuiteError("Add a prompt for this check.")
@@ -292,6 +296,8 @@ def add_pack_case(
         check["contains"] = expected
     if output_path:
         check["output_path"] = output_path
+    if output_optional:
+        check["output_optional"] = True
     return pin_checks(skill_path, [check]), None
 
 

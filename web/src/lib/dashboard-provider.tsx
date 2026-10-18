@@ -359,6 +359,7 @@ export function DashboardProvider({
         files: draft?.files || [],
         needs_upload: Boolean(draft?.needs_upload),
         golden_path: draft?.golden_path ?? null,
+        output_optional: draft?.output_optional === true,
         bank_status: draft?.bank_status ?? "draft",
       },
     ])

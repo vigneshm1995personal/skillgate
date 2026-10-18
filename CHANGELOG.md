@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.7.4
+
+- Add `output_optional: true` so Expected text is reference text for the judge and a missing or empty output file passes. A present file is still checked. Checks without the field stay required.
+
 ## 0.7.3
 
 - Score a case's extra questions with Jev and with OpenAI Decisions. A failing answer fails the check, and What happened shows the question text plus the answer.
