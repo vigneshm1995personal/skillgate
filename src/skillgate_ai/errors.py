@@ -18,7 +18,7 @@ _INTERNAL_LEAK = re.compile(r"skillgate_|/root/", re.IGNORECASE)
 _HEX_DIGEST = re.compile(r"\b[0-9a-f]{8,64}\b", re.IGNORECASE)
 
 OFFLINE_MESSAGE = "Couldn't reach the model service. Check your internet connection."
-BAD_OPENAI_KEY_MESSAGE = "OpenAI did not accept this API key."
+BAD_OPENAI_KEY_MESSAGE = "The model service did not accept this API key."
 
 
 def customer_job_error(message: str | None) -> str:
@@ -109,11 +109,11 @@ def harness_http_error(status: int, *, openai: bool = True) -> HarnessError:
         if openai:
             return HarnessError(
                 BAD_OPENAI_KEY_MESSAGE,
-                hint="Check the OpenAI or gateway key in Settings (`skillgate keys set`).",
+                hint="Check the key in Settings (`skillgate keys set`).",
             )
         return HarnessError(
-            "Anthropic did not accept this API key.",
-            hint="Check the Anthropic key in Settings (`skillgate keys set`).",
+            "The model service did not accept this API key.",
+            hint="Check the key in Settings (`skillgate keys set`).",
         )
     return HarnessError(friendly_http_status(status, openai=openai))
 
@@ -121,17 +121,17 @@ def harness_http_error(status: int, *, openai: bool = True) -> HarnessError:
 def friendly_http_status(status: int, *, openai: bool = True) -> str:
     if status == 401:
         return (
-            BAD_OPENAI_KEY_MESSAGE if openai else "The model service did not accept this API key."
+            "The model service did not accept this API key."
         )
     if status == 403:
         return (
-            "OpenAI scoring is not enabled for this key."
+            "Scoring is not enabled for this key."
             if openai
             else "The model service refused this request."
         )
     if status == 404:
         return (
-            "OpenAI has no scoring endpoint for this key."
+            "This key has no scoring endpoint."
             if openai
             else "The model service has no matching endpoint."
         )

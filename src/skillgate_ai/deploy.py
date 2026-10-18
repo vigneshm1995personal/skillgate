@@ -125,7 +125,7 @@ class _PackAdapter:
 
 class CursorAdapter(_PackAdapter):
     id = "cursor"
-    label = "Cursor"
+    label = "Editor agent"
 
     def skills_root(self) -> Path:
         return cursor_skills_root()
@@ -133,7 +133,7 @@ class CursorAdapter(_PackAdapter):
 
 class ClaudeAdapter(_PackAdapter):
     id = "claude"
-    label = "Claude"
+    label = "Code agent"
 
     def skills_root(self) -> Path:
         return claude_skills_root()
@@ -141,7 +141,7 @@ class ClaudeAdapter(_PackAdapter):
 
 class CodexAdapter(_PackAdapter):
     id = "codex"
-    label = "Codex"
+    label = "Terminal agent"
 
     def skills_root(self) -> Path:
         return codex_skills_root()
@@ -178,7 +178,7 @@ def get_adapter(target: str) -> DeployAdapter:
     key = (target or "").strip().lower()
     cls = ADAPTERS.get(key)
     if cls is None:
-        raise DeployError("Deploy target must be Cursor, Claude, or Codex.")
+        raise DeployError("Deploy target must be an agent skills folder.")
     return cls()
 
 

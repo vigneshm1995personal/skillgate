@@ -256,7 +256,7 @@ def test_format_cli_fresh_skip_judge_is_not_older_run() -> None:
     )
     text = format_cli(report)
     assert "Older run (before live-only checks)" not in text
-    assert "Cursor" in text
+    assert "Editor agent" in text
 
 
 def test_format_cli_names_codex_default_model() -> None:
@@ -271,7 +271,7 @@ def test_format_cli_names_codex_default_model() -> None:
         tasks=[_task(judge=None)],
     )
     text = format_cli(report)
-    assert "Codex" in text
+    assert "Terminal agent" in text
     assert "luna" in text.lower()
     assert "Older run" not in text
 
@@ -288,8 +288,8 @@ def test_format_cli_names_claude_model() -> None:
         tasks=[_task(judge=None)],
     )
     text = format_cli(report)
-    assert "Claude" in text
-    assert "Opus" in text
+    assert "Code agent" in text
+    assert "claude-opus-5-5" in text
     assert "Older run" not in text
 
 

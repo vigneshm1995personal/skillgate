@@ -467,7 +467,7 @@ export function SkillDetailPage({ name }: { name: string }) {
         <Card>
           <CardHeader>
             <CardTitle>Deployments</CardTitle>
-            <CardDescription>Installs of this gated skill into Cursor, Claude, or Codex.</CardDescription>
+            <CardDescription>Installs of this gated skill into an agent skills folder.</CardDescription>
           </CardHeader>
           <CardContent>
             {loading ? (

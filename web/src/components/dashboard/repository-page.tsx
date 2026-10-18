@@ -92,7 +92,7 @@ export function RepositoryPage() {
 
   const importAgentSkills = async (wanted: string[]) => {
     if (!wanted.length) {
-      toast.add({ title: "Choose Cursor, Codex, or Claude first.", type: "error" })
+      toast.add({ title: "Choose an agent first.", type: "error" })
       return
     }
     setSelected(wanted)
@@ -164,7 +164,7 @@ export function RepositoryPage() {
         title="Skill Repository"
         description={
           isLocalMode(status)
-            ? "Skills in this project. Connect Cursor, Codex, or Claude to import. Open one to read SKILL.md. Run never starts until you press it."
+            ? "Skills in this project. Connect an agent to import. Open one to read SKILL.md. Run never starts until you press it."
             : "Every skill on disk, with last gate, evals, versions, and deploys. Last eval is the latest full run; single checks don't count."
         }
         action={
@@ -279,7 +279,7 @@ export function RepositoryPage() {
           <DialogHeader>
             <DialogTitle>Connect</DialogTitle>
             <DialogDescription>
-              Choose Cursor, Codex, or Claude first. We’ll copy that agent’s skills into this project.
+              Choose an agent first. We’ll copy that agent’s skills into this project.
             </DialogDescription>
           </DialogHeader>
           {sourcesError ? (

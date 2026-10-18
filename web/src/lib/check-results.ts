@@ -295,7 +295,9 @@ export function customerScoredBy(line: string): string {
   }
   if (/couldn['’]t score/i.test(text)) {
     return text
-      .replace(/OpenAI Decisions/gi, "OpenAI")
+      .replace(/OpenAI Decisions( couldn't score this run)?/gi, (_match, tail) =>
+        tail ? "The judge couldn't score this run" : "the judge"
+      )
       .replace(/^OpenAI couldn't score this run/i, "The judge couldn't score this run")
       .replace(/Your OpenAI account is out of credits/gi, "This account is out of credits")
       .replace(/\bOpenAI\b/g, "the judge")

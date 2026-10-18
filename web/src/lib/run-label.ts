@@ -1,7 +1,9 @@
+import { agentLabel } from "@/lib/agent-label"
+
 const AGENT_NAMES: Record<string, string> = {
-  "cursor-agent": "Cursor",
-  codex: "Codex",
-  claude: "Claude Code",
+  "cursor-agent": agentLabel("cursor-agent"),
+  codex: agentLabel("codex"),
+  claude: agentLabel("claude"),
 }
 
 export function runButtonLabel(opts: {

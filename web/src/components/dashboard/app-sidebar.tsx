@@ -173,7 +173,7 @@ export function AppSidebar({
         ) : null}
         <div className="px-1 pb-1">
           <p className="text-sm font-medium">{sidebarVersionLabel(status)}</p>
-          <p className="text-xs text-muted-foreground">Codex may use CLI login</p>
+          <p className="text-xs text-muted-foreground">Agents may use their CLI login</p>
         </div>
       </div>
       <span className="sr-only">{gateLabel}</span>

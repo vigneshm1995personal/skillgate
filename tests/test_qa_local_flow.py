@@ -106,9 +106,9 @@ def test_fake_home_import_list_open_run_deploy(tmp_path: Path, monkeypatch) -> N
     assert "vercel-react-best-practices" in slugs
     assert "web-design-guidelines" in slugs
     labels = {item.get("source_label") for item in before_import}
-    assert "Cursor" in labels
-    assert "Codex" in labels
-    assert "Claude Code" in labels
+    assert "Editor agent" in labels
+    assert "Terminal agent" in labels
+    assert "Code agent" in labels
     by_slug = {item.get("slug"): item for item in before_import}
     assert by_slug["pdf"]["source"] == "cursor"
     idea = client.get("/api/skills/idea-brainstorming")
@@ -135,7 +135,7 @@ def test_fake_home_import_list_open_run_deploy(tmp_path: Path, monkeypatch) -> N
     by_id = {item["id"]: item for item in sources.json()["sources"]}
     assert by_id["cursor"]["found"] is True
     assert by_id["cursor"]["count"] >= 2
-    assert "Cursor's skills folder" in by_id["cursor"]["folder_label"]
+    assert "Editor agent's skills folder" in by_id["cursor"]["folder_label"]
     assert by_id["codex"]["found"] is True
     assert by_id["codex"]["count"] >= 1
     assert by_id["claude"]["found"] is True
@@ -335,7 +335,7 @@ def test_fake_home_import_list_open_run_deploy(tmp_path: Path, monkeypatch) -> N
         for item in (hist_after.get("timeline") or [])
         if item.get("kind") == "deploy"
     ]
-    assert "Install to Cursor" in deploy_labels
+    assert "Install to Editor agent" in deploy_labels
     assert "Install to cursor" not in deploy_labels
 
     idea_deploy = client.post(

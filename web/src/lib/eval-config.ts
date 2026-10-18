@@ -1,3 +1,5 @@
+import { agentLabel, scrubAgentNames } from "@/lib/agent-label"
+
 export type ReasoningEffort = "low" | "medium" | "high" | "ultra"
 
 export type EvalRunConfig = {
@@ -130,25 +132,19 @@ export function harnessDisplayName(
   resolvedHarness?: string
 ): string {
   if (pref === "auto") {
-    const labels: Record<string, string> = {
-      codex: "Codex",
-      claude: "Claude",
-      "cursor-agent": "Cursor",
-    }
-    const resolved = labels[resolvedHarness || ""]
-    if (!resolved) {
+    const resolved = agentLabel(resolvedHarness)
+    if (!resolvedHarness || resolved === "Agent") {
       return "Auto"
     }
     return `Auto · ${resolved}`
   }
-  if (pref === "cursor-agent") {
-    return "Cursor"
-  }
-  if (pref === "codex") {
-    return "Codex"
-  }
-  if (pref === "claude") {
-    return "Claude"
+  if (
+    pref === "cursor-agent" ||
+    pref === "codex" ||
+    pref === "claude" ||
+    pref === "claude-code"
+  ) {
+    return agentLabel(pref)
   }
   return pref
 }
@@ -216,12 +212,8 @@ export function plainRunSetup(
   resolvedHarness?: string
 ): string {
   let agent = "Choose for me."
-  if (pref === "cursor-agent") {
-    agent = "Cursor."
-  } else if (pref === "codex") {
-    agent = "Codex."
-  } else if (pref === "claude") {
-    agent = "Claude."
+  if (pref === "cursor-agent" || pref === "codex" || pref === "claude") {
+    agent = `${agentLabel(pref)}.`
   } else if (
     resolvedHarness === "cursor-agent" ||
     resolvedHarness === "codex" ||
@@ -297,6 +289,9 @@ export function friendlyModelName(model?: string | null): string {
     return ""
   }
   const slug = raw.includes("/") ? raw.slice(raw.lastIndexOf("/") + 1) : raw
+  if (/^(claude|cursor|codex|openai|anthropic|gemini)([-_]|$)/i.test(slug)) {
+    return slug
+  }
   const gpt = slug.match(/^gpt-(.+)$/i)
   if (gpt) {
     const [ver, ...tail] = gpt[1].split("-")
@@ -425,10 +420,7 @@ export function configLabel(config?: EvalRunConfig | null): string {
   }
   if (config.label && !isStaleAutoLabel(config.label, config.harness)) {
     return collapseDuplicateTimeout(
-      config.label
-        .replace(/\bcursor-agent\b/g, "Cursor")
-        .replace(/\bcodex\b/g, "Codex")
-        .replace(/\bclaude\b/g, "Claude")
+      scrubAgentNames(config.label)
     )
   }
   const resolved = (config.harness || config.harness_pref || "auto").trim()

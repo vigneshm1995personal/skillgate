@@ -20,9 +20,9 @@ SOURCE_ROOTS = (
 
 SOURCE_LABELS = {
     "workspace": "this project",
-    "cursor": "Cursor",
-    "codex": "Codex",
-    "claude": "Claude",
+    "cursor": "Editor agent",
+    "codex": "Terminal agent",
+    "claude": "Code agent",
 }
 
 
@@ -40,7 +40,7 @@ def source_dir(source: str, *, root: Path) -> Path:
         return codex_skills_root()
     if key == "claude":
         return claude_skills_root()
-    raise SkillGateError("Import source must be Cursor, Codex, Claude, or this project.")
+    raise SkillGateError("Import source must be an agent folder or this project.")
 
 
 def _iter_skill_dirs(parent: Path) -> list[Path]:
@@ -191,7 +191,7 @@ def find_skill(root: Path, name: str) -> Path:
             return Path(entry["absolute"])
     raise SkillGateError(
         f"Skill {text!r} was not found.",
-        hint="Connect Cursor, Codex, or Claude, or paste a SKILL.md.",
+        hint="Connect an agent, or paste a SKILL.md.",
     )
 
 
@@ -202,7 +202,7 @@ def import_from_agent_folders(
     wanted = [item.strip().lower() for item in (sources or []) if item]
     if not wanted:
         raise SkillGateError(
-            "Choose Cursor, Codex, or Claude first.",
+            "Choose an agent first.",
             hint="Pick an agent, then import.",
         )
     slugs = {item.strip() for item in (only or []) if str(item).strip()}

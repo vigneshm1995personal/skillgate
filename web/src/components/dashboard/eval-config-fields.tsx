@@ -189,7 +189,7 @@ export function EvalConfigFields({
         </Field>
         {showReasoning ? (
           <Field data-disabled={disabled || undefined}>
-            <FieldLabel id="eval-reasoning-label">Codex reasoning</FieldLabel>
+            <FieldLabel id="eval-reasoning-label">Reasoning effort</FieldLabel>
             <ToggleGroup
               id="eval-reasoning"
               aria-labelledby="eval-reasoning-label"

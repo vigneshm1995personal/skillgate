@@ -134,9 +134,9 @@ class LLMConfig:
         if self.codex_api_key:
             found.append("codex")
         if self.gateway_api_key:
-            found.append("OpenAI-compatible")
+            found.append("compatible")
         elif self.openai_api_key:
-            found.append("OpenAI-compatible")
+            found.append("compatible")
         if self.anthropic_api_key:
             found.append("anthropic")
         return found
@@ -258,10 +258,26 @@ def _env_temperature() -> float:
 
 NO_KEY_MESSAGE = "No agent is available to run checks."
 NO_KEY_HINT = (
-    "Install Cursor, Codex, or Claude Code, then run `skillgate login` "
+    "Install an agent CLI, then run `skillgate login` "
     "or add a matching key with `skillgate keys set` "
     "(CURSOR_API_KEY, CODEX_API_KEY, or ANTHROPIC_API_KEY)."
 )
+
+# Shown in the UI and CLI. The ids (cursor, codex, claude) stay internal.
+AGENT_LABELS = {
+    "cursor": "Editor agent",
+    "cursor-agent": "Editor agent",
+    "codex": "Terminal agent",
+    "claude": "Code agent",
+    "claude-code": "Code agent",
+}
+
+
+def agent_label(kind: str | None) -> str:
+    key = (kind or "").strip().lower()
+    return AGENT_LABELS.get(key, "Agent")
+
+
 UI_NO_KEY_HINT = "Sign in under Settings, or add a key, then press Run."
 
 
@@ -275,18 +291,18 @@ def missing_key_error(
     del live
     if for_codex:
         hint = (
-            "Codex CLI needs a key in Settings (`skillgate keys set`) "
+            "Terminal agent needs a key in Settings (`skillgate keys set`) "
             "or a CLI login (`skillgate login codex`)."
         )
     elif for_cursor:
         hint = (
-            "Cursor Agent needs `agent login` (`skillgate login cursor`) "
+            "Editor agent needs `agent login` (`skillgate login cursor`) "
             "or CURSOR_API_KEY in Settings (`skillgate keys set`), and the "
             "`agent` CLI on your PATH (or set CURSOR_AGENT_BIN)."
         )
     elif for_claude:
         hint = (
-            "Claude Code needs ANTHROPIC_API_KEY in Settings (`skillgate keys set`) "
+            "Code agent needs ANTHROPIC_API_KEY in Settings (`skillgate keys set`) "
             "or a CLI login (`skillgate login claude`), and the "
             "`claude` CLI on your PATH (or set CLAUDE_BIN)."
         )
@@ -296,7 +312,7 @@ def missing_key_error(
 
 
 def no_agent_available_error(cfg: LLMConfig) -> MissingLLMKeyError:
-    """Exit 2 when auto cannot pick Cursor, Codex, or Claude Code."""
+    """Exit 2 when auto cannot pick an agent."""
     del cfg
     return missing_key_error()
 

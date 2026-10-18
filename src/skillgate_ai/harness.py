@@ -16,6 +16,7 @@ from typing import Any, Protocol
 from skillgate_ai.config import (
     DEFAULT_CODEX_REASONING_EFFORT,
     LLMConfig,
+    agent_label,
     missing_key_error,
     no_agent_available_error,
     normalize_codex_reasoning_effort,
@@ -208,9 +209,9 @@ class CursorAgentHarness:
         binary = _resolve_agent_bin(self.cfg.cursor_agent_bin)
         if binary is None:
             raise HarnessError(
-                "Cursor Agent CLI was not found (`agent` / `cursor-agent`).",
+                "Editor agent CLI was not found (`agent` / `cursor-agent`).",
                 hint=(
-                    f"Install Cursor with `{_AGENT_INSTALL['cursor']}`, "
+                    f"Install this agent's CLI with `{_AGENT_INSTALL['cursor']}`, "
                     "or set CURSOR_AGENT_BIN, then run `skillgate login cursor`."
                 ),
             )
@@ -491,8 +492,8 @@ def _claude_model_access_error(stdout: str, stderr: str) -> bool:
 def _claude_model_access_message(model: str | None) -> str:
     named = (model or "").strip()
     if named:
-        return f"Claude couldn't use the selected model {named!r}."
-    return "Claude couldn't use its default model."
+        return f"The agent couldn't use the selected model {named!r}."
+    return "The agent couldn't use its default model."
 
 
 _CLAUDE_MODEL_ACCESS_HINT = "Pass --model with an available alias (for example, --model sonnet)."
@@ -560,7 +561,7 @@ def codex_chatgpt_model_hint(
         catalog = [item for item in CodexCliHarness.supported_models if item != rejected]
     models = ", ".join(catalog) if catalog else CODEX_CHATGPT_DEFAULT
     return (
-        "ChatGPT login rejected that model. "
+        "CLI login rejected that model. "
         f"Pass --model with a supported id ({models}), "
         f"or change model in ~/.codex/config.toml."
     )
@@ -594,9 +595,9 @@ class CodexCliHarness:
         binary = _resolve_codex_bin(self.cfg.codex_bin)
         if binary is None:
             raise HarnessError(
-                "Codex CLI was not found (`codex`).",
+                "Terminal agent CLI was not found (`codex`).",
                 hint=(
-                    f"Install Codex with `{_AGENT_INSTALL['codex']}`, "
+                    f"Install this agent's CLI with `{_AGENT_INSTALL['codex']}`, "
                     "or set CODEX_BIN, then run `skillgate login codex`."
                 ),
             )
@@ -627,7 +628,7 @@ class CodexCliHarness:
             rejected, accepted = _codex_rejected_model(proc.stdout or "", proc.stderr or "")
             named = rejected or (self.cfg.codex_model or "").strip() or model
             raise HarnessError(
-                f"Codex rejected model {named!r}.",
+                f"The agent rejected model {named!r}.",
                 hint=codex_chatgpt_model_hint(named, accepted=accepted),
             )
         selected = _parse_selected(sandbox.workspace, transcript, skills)
@@ -699,9 +700,9 @@ class ClaudeCodeHarness:
         binary = _resolve_claude_bin(self.cfg.claude_bin)
         if binary is None:
             raise HarnessError(
-                "Claude Code CLI was not found (`claude`).",
+                "Code agent CLI was not found (`claude`).",
                 hint=(
-                    f"Install Claude Code with `{_AGENT_INSTALL['claude']}`, "
+                    f"Install this agent's CLI with `{_AGENT_INSTALL['claude']}`, "
                     "or set CLAUDE_BIN, then run `skillgate login claude`."
                 ),
             )
@@ -1028,7 +1029,7 @@ def _raise_if_auth_failed(stdout: str, stderr: str) -> None:
         return
     raise HarnessError(
         message,
-        hint="Run `skillgate login` for Cursor, Codex, or Claude Code.",
+        hint="Run `skillgate login`.",
         exit_code=2,
     )
 
@@ -1167,21 +1168,21 @@ def harness_auth_status(cfg: LLMConfig) -> list[dict[str, str | bool]]:
     """Per-agent install + auth. Never includes secrets."""
     rows: list[tuple[str, str, str, str | None, str]] = [
         (
-            "Cursor",
+            agent_label("cursor-agent"),
             "cursor-agent",
             "cursor",
             _resolve_agent_bin(cfg.cursor_agent_bin),
             cursor_auth_kind(cfg),
         ),
         (
-            "Codex",
+            agent_label("codex"),
             "codex",
             "codex",
             _resolve_codex_bin(cfg.codex_bin),
             codex_auth_kind(cfg),
         ),
         (
-            "Claude Code",
+            agent_label("claude"),
             "claude",
             "claude",
             _resolve_claude_bin(cfg.claude_bin),
@@ -1292,7 +1293,7 @@ def run_official_login(agent: str, cfg: LLMConfig) -> dict[str, str | bool]:
             "status": "none",
             "install": "",
             "command": "skillgate login",
-            "message": "Use cursor, claude, or codex.",
+            "message": "Pass an agent id: cursor, claude, or codex.",
         }
     if kind == "cursor":
         binary = _resolve_agent_bin(cfg.cursor_agent_bin)
@@ -1316,7 +1317,7 @@ def run_official_login(agent: str, cfg: LLMConfig) -> dict[str, str | bool]:
             "status": "none",
             "install": install,
             "command": command,
-            "message": f"Not installed. {install}",
+            "message": "Not installed. Install this agent's CLI, then sign in.",
         }
     code = _run_inherited(argv, timeout=_login_timeout_sec())
     if code == 124:
@@ -1327,7 +1328,7 @@ def run_official_login(agent: str, cfg: LLMConfig) -> dict[str, str | bool]:
             "status": "installed",
             "install": install,
             "command": command,
-            "message": f"{kind} login timed out. Run `{command}` in your terminal.",
+            "message": f"{agent_label(kind)} login timed out. Run `{command}` in your terminal.",
         }
     logged_in = probe(binary)
     return {
@@ -1338,9 +1339,9 @@ def run_official_login(agent: str, cfg: LLMConfig) -> dict[str, str | bool]:
         "install": install,
         "command": command,
         "message": (
-            f"{kind} is logged in."
+            f"{agent_label(kind)} is logged in."
             if logged_in
-            else f"{kind} login did not complete. Run `{command}` in your terminal."
+            else f"{agent_label(kind)} login did not complete. Run `{command}` in your terminal."
         ),
     }
 

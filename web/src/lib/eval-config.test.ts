@@ -139,9 +139,9 @@ describe("plainConfigDiff", () => {
 
 describe("configLabel", () => {
   it("collapses a stored Cursor · 300s · 300s label", () => {
-    expect(configLabel({ label: "Cursor · 300s · 300s" })).toBe("Cursor · 300s")
+    expect(configLabel({ label: "Cursor · 300s · 300s" })).toBe("Editor agent · 300s")
     expect(configLabel({ label: "cursor-agent · 300s · 300s" })).toBe(
-      "Cursor · 300s"
+      "Editor agent · 300s"
     )
   })
 
@@ -165,13 +165,13 @@ describe("configLabel", () => {
 
   it("describes the agent in a sentence, not Auto · Cursor", () => {
     expect(plainRunSetup("auto", { model: "", timeoutSec: "" }, "cursor-agent")).toBe(
-      "Choose for me. Signed in with Cursor. Model: the agent's default."
+      "Choose for me. Signed in with Editor agent. Model: the agent's default."
     )
     expect(plainRunSetup("auto", { model: "", timeoutSec: "" })).toBe(
       "Choose for me. Model: the agent's default."
     )
     expect(plainRunSetup("codex", { model: "gpt-5.6-luna", timeoutSec: "240" })).toBe(
-      "Codex. Model: gpt-5.6-luna. Time limit 240 seconds."
+      "Terminal agent. Model: gpt-5.6-luna. Time limit 240 seconds."
     )
     expect(plainRunSetup("auto", { model: "", timeoutSec: "" }, "cursor-agent")).not.toMatch(
       /Auto ·/
@@ -183,7 +183,7 @@ describe("configLabel", () => {
     expect(harnessDisplayName("auto", "auto")).toBe("Auto")
     expect(harnessDisplayName("auto", "")).toBe("Auto")
     expect(draftConfigSummary("auto", { model: "", timeoutSec: "" })).toBe("Auto")
-    expect(harnessDisplayName("auto", "cursor-agent")).toBe("Auto · Cursor")
+    expect(harnessDisplayName("auto", "cursor-agent")).toBe("Auto · Editor agent")
   })
 
   it("shows the actual Cursor model via gateway, not Auto · Cursor", () => {
@@ -195,7 +195,7 @@ describe("configLabel", () => {
         applied: { via_gateway: true },
         label: "Auto · Cursor",
       })
-    ).toBe("Cursor · GPT-4o mini")
+    ).toBe("Editor agent · GPT-4o mini")
   })
 
   it("hides the default task model unless the user picked it", () => {
@@ -250,7 +250,7 @@ describe("configLabel", () => {
           display_name: "OpenAI Decisions via Vercel AI Gateway (your key)",
         },
       })
-    ).toBe("Cursor · 300s")
+    ).toBe("Editor agent · 300s")
     expect(
       customerRunDetails({
         harness: "cursor-agent",
@@ -262,7 +262,7 @@ describe("configLabel", () => {
           display_name: "OpenAI (your key)",
         },
       })
-    ).toBe("Cursor · GPT-4.1 · 300s")
+    ).toBe("Editor agent · GPT-4.1 · 300s")
   })
 
   it("names the Codex model actually used, including the default", () => {
@@ -273,7 +273,7 @@ describe("configLabel", () => {
         timeout_effective: 240,
         applied: { model: false },
       })
-    ).toBe("Codex · GPT-5.6 luna · 240s")
+    ).toBe("Terminal agent · GPT-5.6 luna · 240s")
   })
 
   it("names the Claude model actually used, including the default", () => {
@@ -284,7 +284,7 @@ describe("configLabel", () => {
         timeout_effective: 240,
         applied: { model: false },
       })
-    ).toBe("Claude · Claude Opus 5 5 · 240s")
+    ).toBe("Code agent · claude-opus-5-5 · 240s")
   })
 
   it("names a chosen scoring provider on History", () => {
@@ -340,6 +340,6 @@ describe("configLabel", () => {
           }
         )
       )
-    ).toBe("Cursor · GPT-4o mini")
+    ).toBe("Editor agent · GPT-4o mini")
   })
 })

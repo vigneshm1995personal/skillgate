@@ -8,13 +8,14 @@ import {
   type EvalConfigDraft,
   type SupportedModelsMeta,
 } from "@/lib/eval-config"
+import { agentLabel } from "@/lib/agent-label"
 import { agentSessionLabel } from "@/lib/login-status"
 import type { AgentAuthRow, HarnessPref } from "@/lib/types"
 
 const AGENTS = [
-  { id: "cursor-agent", label: "Cursor" },
-  { id: "codex", label: "Codex" },
-  { id: "claude", label: "Claude Code" },
+  { id: "cursor-agent", label: agentLabel("cursor-agent") },
+  { id: "codex", label: agentLabel("codex") },
+  { id: "claude", label: agentLabel("claude") },
 ] as const
 
 type AgentId = (typeof AGENTS)[number]["id"]

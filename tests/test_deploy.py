@@ -279,7 +279,7 @@ def test_deploy_invalid_target_before_gate(
     result = runner.invoke(app, ["deploy", str(pack), "--target", "not-a-tool"])
     combined = plain_text(result.stdout + result.stderr)
     assert result.exit_code == 1, combined
-    assert "Cursor, Claude, or Codex" in combined
+    assert "agent skills folder" in combined
     assert latest_check_passed(pack) is None
     assert "GREEN" not in combined
     assert "built-in checker" not in combined.lower()

@@ -124,7 +124,7 @@ def post_openai(
             if attempt >= attempts - 1:
                 raise
             _LOG.warning(
-                "OpenAI scoring transport error (attempt %s/%s): %s",
+                "scoring transport error (attempt %s/%s): %s",
                 attempt + 1,
                 attempts,
                 type(exc).__name__,
@@ -137,7 +137,7 @@ def post_openai(
             and not is_quota_exhausted(response)
         ):
             _LOG.warning(
-                "OpenAI scoring HTTP %s (attempt %s/%s)",
+                "scoring HTTP %s (attempt %s/%s)",
                 response.status_code,
                 attempt + 1,
                 attempts,

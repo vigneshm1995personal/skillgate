@@ -370,7 +370,7 @@ export function EvalPage() {
             <CardHeader>
               <CardTitle id="eval-step-skill">Pick a skill</CardTitle>
               <CardDescription>
-                Choose a skill from your Cursor, Codex, or Claude Code folder.
+                Choose a skill from an agent folder.
               </CardDescription>
               <CardAction>
                 <Button
@@ -536,7 +536,7 @@ export function EvalPage() {
             <CardHeader>
               <CardTitle id="eval-step-agent">Agent setup</CardTitle>
               <CardDescription>
-                Pick Cursor, Codex, or Claude Code, then the model.
+                Pick an agent, then the model.
               </CardDescription>
             </CardHeader>
             <CardContent>

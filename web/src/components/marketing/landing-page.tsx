@@ -168,7 +168,7 @@ export function LandingPage({ configured }: { configured?: boolean }) {
           <section className={styles.band} aria-labelledby="band-deploy">
             <div className={styles.bandCopy}>
               <h2 id="band-deploy">Ship when clear</h2>
-              <p>Install to Cursor, Codex, or Claude only after checks pass.</p>
+              <p>Install into an agent skills folder only after checks pass.</p>
             </div>
             <div className={styles.bandVisual}>
               <div className={styles.frame}>
