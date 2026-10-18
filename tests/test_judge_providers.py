@@ -155,6 +155,7 @@ def test_jev_skips_extras_with_plain_note() -> None:
     assert not any("Totals match" in str(item) for item in judged.get("reasons") or [])
     assert judged.get("extra_failures") == []
     assert JEV_EXTRAS_NOTE in judged["warnings"]
+    assert "Jev" not in JEV_EXTRAS_NOTE
     assert "numbers_match" not in (posted[0].get("questions") or [{}])[0].get("name", "")
     names = [row["name"] for row in posted[0]["questions"]]
     assert "numbers_match" not in names
@@ -520,3 +521,160 @@ def test_save_provider_marks_chosen(tmp_path: Path) -> None:
     settings = save_judge_settings(tmp_path, provider="openai")
     assert settings.chosen is True
     assert settings.provider == "openai"
+
+
+_PASS_CHOICES = {
+    "task_completion": "Fully completed",
+    "correctness": "Correct",
+    "instruction_adherence": "Fully followed",
+    "evidence_action_validity": "Fully supported",
+    "result_quality": "Clear and complete",
+    "path_efficiency": "Efficient",
+}
+_OPENROUTER_DECISIONS = "https://openrouter.ai/api/alpha/decisions"
+_PROVIDER_NAMES = ("jev", "openai", "openrouter", "aws")
+
+
+def _assert_no_provider_name(text: str) -> None:
+    lowered = text.lower()
+    for name in _PROVIDER_NAMES:
+        assert name not in lowered, text
+
+
+def _capture_post(status: int, payload: object, calls: list[dict]):
+    def post(url, headers=None, json=None, timeout=None):
+        del headers, timeout
+        calls.append({"url": url, "json": json or {}})
+        return FakeResponse(status, payload)
+
+    return post
+
+
+def test_resolve_judge_passes_saved_jev_model_and_base_url() -> None:
+    judge = resolve_judge(
+        _cfg(
+            jev_api_key="jev-key",
+            judge_provider="jev",
+            judge_chosen=True,
+            judge_endpoint="https://openrouter.ai/api/v1",
+            judge_provider_model="typesafe/jev-1.14",
+        ),
+        harness_name="cursor-agent",
+    )
+    assert isinstance(judge, OutcomeJudge)
+    assert judge.backend.model == "typesafe/jev-1.14"
+    assert judge.backend.base_url == "https://openrouter.ai/api/v1"
+
+
+def test_jev_openrouter_posts_decisions_with_saved_model() -> None:
+    calls: list[dict] = []
+    backend = JevBackend(
+        api_key="jev-key",
+        base_url="https://openrouter.ai/api/v1/",
+        model="typesafe/jev-1.14",
+        post=_capture_post(200, {"model": "typesafe/jev-1.14", "answers": {}}, calls),
+    )
+    result = backend.ping()
+    assert result["ok"] is True
+    _assert_no_provider_name(result["message"])
+    assert calls[0]["url"] == _OPENROUTER_DECISIONS
+    body = calls[0]["json"]
+    assert body["model"] == "typesafe/jev-1.14"
+    assert body["state"] == "ping"
+    assert "input" not in body
+    question = body["questions"]["connection_test"]
+    assert question["type"] == "noul"
+    assert set(question["criteria"]) == {"true", "false"}
+    assert len(calls) == 1
+
+
+def test_jev_other_base_url_still_posts_evaluate() -> None:
+    calls: list[dict] = []
+    backend = JevBackend(
+        api_key="jev-key",
+        base_url="https://jev.example/v1",
+        model="typesafe-ai/jev",
+        post=_capture_post(200, {"model": "typesafe-ai/jev", "answers": []}, calls),
+    )
+    result = backend.ping()
+    assert result["ok"] is True
+    assert calls[0]["url"] == "https://jev.example/v1/evaluate"
+    body = calls[0]["json"]
+    assert body["model"] == "typesafe-ai/jev"
+    assert body["input"] == "ping"
+    assert isinstance(body["questions"], list)
+    assert "state" not in body
+
+
+def test_jev_openrouter_parses_choice_answers() -> None:
+    calls: list[dict] = []
+
+    def post(url, headers=None, json=None, timeout=None):
+        del headers, timeout
+        calls.append({"url": url, "json": json or {}})
+        answers = {
+            key: {
+                "type": "choice",
+                "choice": value,
+                "confidence": 0.91,
+                "probabilities": {value: 0.91},
+            }
+            for key, value in _PASS_CHOICES.items()
+        }
+        return FakeResponse(200, {"model": "typesafe/jev-1.14", "answers": answers})
+
+    backend = JevBackend(
+        api_key="jev-key",
+        base_url="https://openrouter.ai/api/v1",
+        model="typesafe/jev-1.14",
+        post=post,
+    )
+    judged = OutcomeJudge(
+        backend,
+        display_name="the judge",
+        provider="jev",
+        chosen=True,
+        supports_why=False,
+        supports_confidence=False,
+    ).judge("goal", [], "tail", spec=resolve_judge_spec(), path={"had_path": True, "steps": 1})
+    assert calls[0]["url"] == _OPENROUTER_DECISIONS
+    body = calls[0]["json"]
+    assert body["model"] == "typesafe/jev-1.14"
+    assert isinstance(body["state"], str) and body["state"]
+    task = body["questions"]["task_completion"]
+    assert task["type"] == "choice"
+    assert "Fully completed" in task["criteria"]
+    assert judged["status"] == "completed"
+    assert judged["passed"] is True
+    assert judged["answers"]["task_completion"]["choice"] == "Fully completed"
+    assert len(calls) == 1
+
+
+@pytest.mark.parametrize(
+    ("status", "code", "snippet"),
+    [
+        (404, None, "scoring endpoint"),
+        (401, None, "api key"),
+        (429, "insufficient_quota", "out of credits"),
+    ],
+)
+def test_jev_errors_name_the_failure_not_a_provider(
+    status: int, code: str | None, snippet: str
+) -> None:
+    calls: list[dict] = []
+    error: dict[str, object] = {"message": "nope sk-secret"}
+    if code:
+        error["code"] = code
+    backend = JevBackend(
+        api_key="sk-secret",
+        base_url="https://openrouter.ai/api/v1",
+        model="typesafe/jev-1.14",
+        post=_capture_post(status, {"error": error}, calls),
+    )
+    result = backend.ping()
+    assert result["ok"] is False
+    message = result["message"]
+    assert snippet in message.lower()
+    _assert_no_provider_name(message)
+    assert "sk-secret" not in message
+    assert [call["url"] for call in calls] == [_OPENROUTER_DECISIONS]

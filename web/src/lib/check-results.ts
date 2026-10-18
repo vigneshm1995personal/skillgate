@@ -275,7 +275,10 @@ function customerScorerName(judge: JudgeResult | null | undefined): string {
   ) {
     return "your judge"
   }
-  if (name === "OpenAI" || name === "Jev" || name === "AWS") {
+  if (provider === "jev" || name === "Jev") {
+    return "the judge"
+  }
+  if (name === "OpenAI" || name === "AWS") {
     return name
   }
   if (stampIsChosen(judge)) {
@@ -283,7 +286,7 @@ function customerScorerName(judge: JudgeResult | null | undefined): string {
       return "OpenAI"
     }
     if (provider === "jev") {
-      return "Jev"
+      return "the judge"
     }
     if (provider === "aws") {
       return "AWS"
@@ -309,8 +312,11 @@ export function customerScoredBy(line: string): string {
   if (/^scored by (other|your judge)\b/i.test(text)) {
     return "Scored by your judge"
   }
+  if (/^scored by jev\b/i.test(text)) {
+    return JUDGE_SCORED
+  }
   if (
-    /^scored by (openai|jev|aws|other|checks)\b/i.test(text) &&
+    /^scored by (openai|aws|other|checks)\b/i.test(text) &&
     !/decisions/i.test(text)
   ) {
     return text.replace(/^scored by/i, "Scored by")

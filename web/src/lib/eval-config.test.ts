@@ -293,7 +293,7 @@ describe("configLabel", () => {
         harness: "cursor-agent",
         judge: { provider: "jev", chosen: true, display_name: "Jev" },
       })
-    ).toBe("Scored by Jev")
+    ).toBe("Scored by the judge")
   })
 
   it("uses a neutral stamp for the other judge", () => {

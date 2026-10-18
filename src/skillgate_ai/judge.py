@@ -190,7 +190,8 @@ def _provider_judge(cfg: LLMConfig, provider: str, *, chosen: bool) -> Judge:
             raise SkillGateError("Jev scoring needs a base URL in Settings.", exit_code=2)
         from skillgate_ai.judge_providers.jev import JevBackend
 
-        backend = JevBackend(api_key=key, base_url=base_url)
+        model = (getattr(cfg, "judge_provider_model", None) or "").strip() or "jev"
+        backend = JevBackend(api_key=key, base_url=base_url, model=model)
         return OutcomeJudge(
             backend,
             min_confidence=cfg.judge_min_confidence,

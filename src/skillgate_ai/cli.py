@@ -1009,7 +1009,12 @@ def judge_provider_set(
     decisions_path: str | None = typer.Option(None, "--decisions-path", hidden=True),
     key_env: list[str] | None = typer.Option(None, "--key-env", help=_KEY_ENV_HELP),
 ) -> None:
-    """Write `.skillgate/judge`. Stores env var names, never key values."""
+    """Write `.skillgate/judge`. Stores env var names, never key values.
+
+    Jev on OpenRouter: ``skillgate judge provider set jev --base-url
+    https://openrouter.ai/api/v1 --model typesafe/jev-1.14`` after
+    ``skillgate keys set JEV_API_KEY``.
+    """
     from skillgate_ai.judge_settings import save_judge_settings
 
     root = _boot()

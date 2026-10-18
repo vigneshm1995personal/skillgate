@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import Any, Mapping
+from urllib.parse import urlparse
 
 from skillgate_ai.judge_bank import decisions_questions
 from skillgate_ai.judge_openai import (
@@ -14,9 +15,10 @@ from skillgate_ai.judge_openai import (
 )
 from skillgate_ai.openai_http import PostFn, post_openai_json
 
-DISPLAY_NAME = "Jev"
+DISPLAY_NAME = "the judge"
+OPENROUTER_DECISIONS_URL = "https://openrouter.ai/api/alpha/decisions"
 JEV_EXTRAS_NOTE = (
-    "Jev scores Skill Gate’s built-in questions only. Extra questions were skipped."
+    "Extra questions were skipped. Only the built-in questions were scored."
 )
 
 
@@ -52,20 +54,21 @@ class JevBackend:
         if spec is not None:
             extras = [q.id for q in getattr(spec, "extras", ()) if not q.builtin]
         result = post_openai_json(
-            f"{self.base_url}/evaluate",
+            _score_url(self.base_url),
             api_key=self.api_key,
-            payload={
-                "model": self.model,
-                "input": _state_text(state),
-                "questions": decisions_questions(include_path=include_path),
-            },
+            payload=_request_body(
+                self.base_url,
+                model=self.model,
+                text=_state_text(state),
+                questions=decisions_questions(include_path=include_path),
+            ),
             timeout_sec=timeout_sec,
             model=self.model,
             post=self._post,
             who=DISPLAY_NAME,
         )
         if result.get("status") != "ok":
-            return {**result, "reason": _relabel(str(result.get("reason") or ""), DISPLAY_NAME)}
+            return {**result, "reason": _public_failure(result)}
         data = result["data"]
         usage = data.get("usage") if isinstance(data.get("usage"), dict) else None
         answers = _normalize_answers(
@@ -84,19 +87,20 @@ class JevBackend:
 
     def ping(self, *, timeout_sec: float = DEFAULT_TIMEOUT_SEC) -> dict[str, Any]:
         result = post_openai_json(
-            f"{self.base_url}/evaluate",
+            _score_url(self.base_url),
             api_key=self.api_key,
-            payload={
-                "model": self.model,
-                "input": "ping",
-                "questions": [
+            payload=_request_body(
+                self.base_url,
+                model=self.model,
+                text="ping",
+                questions=[
                     {
                         "type": "predicate",
                         "name": "connection_test",
                         "instructions": "Is this a connection test?",
                     }
                 ],
-            },
+            ),
             timeout_sec=timeout_sec,
             model=self.model,
             post=self._post,
@@ -104,16 +108,97 @@ class JevBackend:
             who=DISPLAY_NAME,
         )
         if result.get("status") == "ok":
-            return {"ok": True, "message": f"Connected to {DISPLAY_NAME}."}
-        reason = _relabel(str(result.get("reason") or "Could not connect."), DISPLAY_NAME)
-        return {"ok": False, "message": reason}
+            return {"ok": True, "message": "Connected to the judge."}
+        return {"ok": False, "message": _public_failure(result)}
 
 
-def _relabel(reason: str, who: str) -> str:
-    return (
-        reason.replace("OpenAI", who)
-        .replace("the judge", who)
-        .replace("The judge", who)
-    )
+def _openrouter_host(base_url: str) -> bool:
+    host = (urlparse(base_url).hostname or "").lower()
+    return host == "openrouter.ai" or host.endswith(".openrouter.ai")
+
+
+def _score_url(base_url: str) -> str:
+    """OpenRouter serves Jev at its Decisions API. Other bases keep /evaluate."""
+    if _openrouter_host(base_url):
+        return OPENROUTER_DECISIONS_URL
+    base = base_url.rstrip("/")
+    if base.endswith("/evaluate") or base.endswith("/decisions"):
+        return base
+    return f"{base}/evaluate"
+
+
+def _request_body(
+    base_url: str,
+    *,
+    model: str,
+    text: str,
+    questions: list[dict[str, Any]],
+) -> dict[str, Any]:
+    if _openrouter_host(base_url):
+        return {
+            "model": model,
+            "state": text,
+            "questions": _openrouter_questions(questions),
+        }
+    return {"model": model, "input": text, "questions": questions}
+
+
+def _openrouter_questions(questions: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    """Map Skill Gate's question list onto OpenRouter's keyed Decisions schema."""
+    mapped: dict[str, dict[str, Any]] = {}
+    for question in questions:
+        name = str(question.get("name") or "").strip()
+        if not name:
+            continue
+        instructions = str(question.get("instructions") or name)
+        criteria: dict[str, str] = {}
+        choices = question.get("choices")
+        if isinstance(choices, list):
+            for choice in choices:
+                if not isinstance(choice, Mapping):
+                    continue
+                value = str(choice.get("value") or "").strip()
+                if not value:
+                    continue
+                description = choice.get("description")
+                criteria[value] = (
+                    description.strip()
+                    if isinstance(description, str) and description.strip()
+                    else value
+                )
+        if criteria:
+            mapped[name] = {
+                "type": "choice",
+                "instructions": instructions,
+                "criteria": criteria,
+            }
+            continue
+        mapped[name] = {
+            "type": "noul",
+            "instructions": instructions,
+            "criteria": {"true": "Yes.", "false": "No."},
+        }
+    return mapped
+
+
+def _public_failure(result: Mapping[str, Any]) -> str:
+    """Say what failed. Never name a scoring provider."""
+    status = result.get("http_status")
+    reason = str(result.get("reason") or "")
+    if status == 404:
+        return "No scoring endpoint at this URL."
+    if status == 401:
+        return "This API key was not accepted."
+    if status == 403:
+        return "This API key is not allowed to score."
+    if status in {402, 429} and "out of credits" in reason.lower():
+        return "This account is out of credits."
+    if status == 429:
+        return "This request was rate-limited. Wait and retry, or check billing."
+    if status == 400:
+        return "This scoring request was rejected."
+    if isinstance(status, int):
+        return f"Scoring failed (HTTP {status})."
+    return "Could not connect."
 
 

@@ -555,9 +555,11 @@ def test_browser_api_scrubs_provider_model_names(tmp_path: Path, monkeypatch) ->
     assert "provider" not in auto_row["config"]["judge"]
     assert "backend" not in auto_row["config"]["judge"]
     assert "model" not in auto_row["config"]
-    assert jev_run["config"]["judge"]["display_name"] == "Jev"
+    assert jev_run["config"]["judge"]["display_name"] == "the judge"
+    assert "Jev" not in jev_run["config"]["judge"]["display_name"]
     assert "provider" not in jev_run["config"]["judge"]
-    assert jev_run["config_label"] == "Scored by Jev"
+    assert jev_run["config_label"] == "Scored by the judge"
+    assert "Jev" not in jev_run["config_label"]
     assert other_run["config"]["judge"]["display_name"] == "your judge"
     assert "provider" not in other_run["config"]["judge"]
     assert other_run["config_label"] == "Scored by your judge"

@@ -36,8 +36,10 @@ def customer_scorer_name(stamp: Mapping[str, Any] | None) -> str:
     display = str(stamp.get("display_name") or "").strip()
     if provider in {"compatible", "other"} or display.lower() in {"other", YOUR_JUDGE}:
         return YOUR_JUDGE
-    if provider in {"jev", "aws"}:
-        return CHOSEN_LABELS[provider]
+    if provider == "jev" or display.lower() == "jev":
+        return DEFAULT_NAME
+    if provider == "aws":
+        return CHOSEN_LABELS["aws"]
     if provider == "skip":
         return SKIP_NAME
     if display in CHOSEN_LABELS.values():

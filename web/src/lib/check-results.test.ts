@@ -407,7 +407,7 @@ describe("openedCheckAnswers / low confidence", () => {
         status: "completed",
         answers: passTask.judge?.answers,
       })
-    ).toBe("Scored by Jev")
+    ).toBe("Scored by the judge")
     expect(
       scoredByFromJudge({
         provider: "openai",
