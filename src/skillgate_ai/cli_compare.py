@@ -102,6 +102,11 @@ def register_compare_commands(app: typer.Typer, *, key_env_help: str) -> None:
         pack: Path = typer.Argument(..., help="Skill pack directory"),
         run: list[str] = typer.Option([], "--run", help="History run id (repeat twice)"),
         git_ref: list[str] = typer.Option([], "--git", help="Git ref (repeat twice)"),
+        harness: str | None = typer.Option(
+            None,
+            "--harness",
+            help="Harness for --git arms. Defaults to the harness of this skill's history runs.",
+        ),
         rerun: bool = typer.Option(False, "--rerun", help="Re-run both arms using stored configs"),
         dry_run: bool = typer.Option(False, "--dry-run", help="Print plan only"),
         json_out: bool = typer.Option(False, "--json", help="Machine JSON (scrubbed)"),
@@ -146,6 +151,7 @@ def register_compare_commands(app: typer.Typer, *, key_env_help: str) -> None:
                 rerun=rerun,
                 compare_id=compare_id,
                 dry_run=dry_run,
+                harness=harness,
             )
         except CompareError as exc:
             console.print(exc.render())

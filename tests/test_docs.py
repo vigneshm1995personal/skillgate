@@ -56,12 +56,12 @@ def test_package_and_docs_pin_070() -> None:
     readme = README.read_text(encoding="utf-8")
     quickstart = QUICKSTART.read_text(encoding="utf-8")
     judge = (ROOT / "docs" / "judge.md").read_text(encoding="utf-8")
-    assert 'version = "0.7.1"' in pyproject
-    assert '__version__ = "0.7.1"' in init
-    assert "skillgate-ai==0.7.1" in readme
-    assert "skillgate-ai==0.7.1" in quickstart
-    assert "skillgate-ai==0.7.1" in judge
-    assert "0.7.1" in readme
+    assert 'version = "0.7.2"' in pyproject
+    assert '__version__ = "0.7.2"' in init
+    assert "skillgate-ai==0.7.2" in readme
+    assert "skillgate-ai==0.7.2" in quickstart
+    assert "skillgate-ai==0.7.2" in judge
+    assert "0.7.2" in readme
     assert "# 10-minute" in quickstart
 
 
@@ -97,6 +97,12 @@ def test_docs_keys_set_never_puts_value_on_the_command_line() -> None:
     assert "keys set OPENAI_API_KEY $OPENAI_API_KEY" not in blob
     assert "keys set OPENAI_API_KEY sk-" not in blob
     assert "skillgate keys set OPENAI_API_KEY" in blob
+
+
+def test_quickstart_does_not_require_codex_api_key() -> None:
+    text = QUICKSTART.read_text(encoding="utf-8")
+    assert "isolated `CODEX_HOME`" not in text
+    assert "authenticates the isolated run" not in text
 
 
 def test_quickstart_does_not_promise_fixture_checks_without_a_key() -> None:

@@ -131,6 +131,7 @@ def login(
     from skillgate_ai.harness import (
         AUTH_CLI_LOGIN,
         claude_auth_kind,
+        cursor_auth_kind,
         format_harness_status,
         harness_auth_status,
         normalize_login_agent,
@@ -158,30 +159,32 @@ def login(
             console.print(format_harness_status(rows))
         raise typer.Exit(0 if installed else 2)
     cfg = get_llm_config(root)
-    if (
-        agent
-        and not force
-        and normalize_login_agent(agent) == "claude"
-        and claude_auth_kind(cfg) == AUTH_CLI_LOGIN
-    ):
-        if json_out:
-            _emit_json(
-                {
-                    "results": [
-                        {
-                            "agent": "claude",
-                            "ok": True,
-                            "installed": True,
-                            "status": "logged in",
-                            "message": "Claude Code is already signed in",
-                        }
-                    ],
-                    "harnesses": harness_auth_status(cfg),
-                }
-            )
-        else:
-            console.print("Claude Code is already signed in")
-        raise typer.Exit(0)
+    signed_in_kind = normalize_login_agent(agent) if agent else None
+    already_signed_in = {
+        "claude": ("claude", claude_auth_kind, "Claude Code is already signed in"),
+        "cursor": ("cursor", cursor_auth_kind, "Cursor is already signed in"),
+    }
+    if signed_in_kind in already_signed_in and not force:
+        name, auth_kind, message = already_signed_in[signed_in_kind]
+        if auth_kind(cfg) == AUTH_CLI_LOGIN:
+            if json_out:
+                _emit_json(
+                    {
+                        "results": [
+                            {
+                                "agent": name,
+                                "ok": True,
+                                "installed": True,
+                                "status": "logged in",
+                                "message": message,
+                            }
+                        ],
+                        "harnesses": harness_auth_status(cfg),
+                    }
+                )
+            else:
+                console.print(message)
+            raise typer.Exit(0)
     results = [run_official_login(name, cfg) for name in targets]
     if json_out:
         _emit_json({"results": results, "harnesses": harness_auth_status(cfg)})
@@ -1004,8 +1007,14 @@ def judge_provider_set(
     region: str | None = typer.Option(None, "--region"),
     model: str | None = typer.Option(None, "--model"),
     decisions_path: str | None = typer.Option(None, "--decisions-path", hidden=True),
+    key_env: list[str] | None = typer.Option(None, "--key-env", help=_KEY_ENV_HELP),
 ) -> None:
-    """Write `.skillgate/judge`. Does not print keys."""
+    """Write `.skillgate/judge`. Stores env var names, never key values.
+
+    Jev on OpenRouter: ``skillgate judge provider set jev --base-url
+    https://openrouter.ai/api/v1 --model typesafe/jev-1.14`` after
+    ``skillgate keys set JEV_API_KEY``.
+    """
     from skillgate_ai.judge_settings import save_judge_settings
 
     root = _boot()
@@ -1017,6 +1026,7 @@ def judge_provider_set(
             model=model,
             base_url=base_url,
             decisions_path=decisions_path,
+            key_env=key_env,
         )
     except SkillGateError as exc:
         console.print(exc.render())
@@ -1028,12 +1038,15 @@ def judge_provider_set(
 
 
 @judge_provider_app.command("test")
-def judge_provider_test() -> None:
+def judge_provider_test(
+    key_env: list[str] | None = typer.Option(None, "--key-env", help=_KEY_ENV_HELP),
+) -> None:
     """Test the scoring connection. Never prints the key."""
     from skillgate_ai.config import get_llm_config
     from skillgate_ai.judge import ping_judge
 
     root = _boot()
+    _bind_key_env(key_env)
     try:
         result = ping_judge(get_llm_config(root))
     except SkillGateError as exc:

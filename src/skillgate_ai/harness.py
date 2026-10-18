@@ -214,13 +214,7 @@ class CursorAgentHarness:
                     "or set CURSOR_AGENT_BIN, then run `skillgate login cursor`."
                 ),
             )
-        pinned = _read_selection(sandbox.workspace)
-        if pinned is _MISSING:
-            agent_prompt = _cursor_discover_prompt(prompt, skills)
-        else:
-            agent_prompt = _cursor_prompt(
-                prompt, skills, pinned_skill=pinned  # type: ignore[arg-type]
-            )
+        agent_prompt = _agent_prompt(sandbox.workspace, prompt, skills)
         command = _cursor_exec_command(
             binary,
             sandbox.workspace,
@@ -231,6 +225,7 @@ class CursorAgentHarness:
         if self.cfg.cursor_api_key:
             env["CURSOR_API_KEY"] = self.cfg.cursor_api_key
         proc = sandbox.run(command, env=env, timeout=timeout_sec)
+        _raise_if_auth_failed(proc.stdout or "", proc.stderr or "")
         transcript = _cursor_transcript(proc.stdout or "", proc.stderr or "")
         selected = _parse_selected(sandbox.workspace, transcript, skills)
         read_paths = _parse_read_paths(transcript)
@@ -311,6 +306,7 @@ def _codex_exec_command(
     *,
     reasoning_effort: str = DEFAULT_CODEX_REASONING_EFFORT,
     model: str | None = None,
+    extra_config: list[str] | None = None,
 ) -> list[str]:
     """argv for `codex exec` on 0.154.
 
@@ -328,6 +324,10 @@ def _codex_exec_command(
     `--json` makes stdout JSONL so `turn.completed` carries real token counts.
     Skill selection still rides on `.skillgate/selected.json`; the JSONL rows
     are rendered back into a readable transcript for the trigger parser.
+
+    ``skills.include_instructions=false`` and ``skills.bundled.enabled=false``
+    are session overrides on Codex 0.163 (`codex exec -c`). They keep the
+    login ``CODEX_HOME`` and drop user plus bundled skills from the prompt.
     """
     effort = normalize_codex_reasoning_effort(reasoning_effort)
     command = [
@@ -342,12 +342,38 @@ def _codex_exec_command(
         str(workspace),
         "-c",
         f'model_reasoning_effort="{effort}"',
+        "-c",
+        "skills.include_instructions=false",
+        "-c",
+        "skills.bundled.enabled=false",
     ]
+    for item in extra_config or []:
+        command.extend(["-c", item])
     model_id = (model or "").strip() or None
     if model_id:
         command.extend(["-m", model_id])
     command.append(prompt)
     return command
+
+
+_CLAUDE_PREAMBLE = (
+    "This run is non-interactive. Do not ask for confirmation and do not wait. "
+    "Proceed and finish the task. Stay inside this workspace; "
+    "do not read or write files outside it.\n\n"
+)
+# acceptEdits auto-approves edits inside the working directory.
+# --permission-prompts none denies anything that would still prompt.
+# --allowedTools pre-approves Bash and the file tools a case runs in that
+# directory. Writes outside the workspace still prompt and are denied.
+# bypassPermissions is not used.
+_CLAUDE_SYSTEM_PREAMBLE = (
+    "Non-interactive eval. Do not ask for confirmation. Do not use AskUserQuestion. "
+    "Stay inside this workspace; do not read or write files outside it."
+)
+
+
+# Claude Code 2.1.302: --allowedTools is comma- or space-separated.
+_CLAUDE_WORKSPACE_TOOLS = "Bash,Read,Edit,Write,Glob,Grep"
 
 
 def _claude_code_exec_command(
@@ -356,11 +382,18 @@ def _claude_code_exec_command(
     *,
     model: str | None = None,
 ) -> list[str]:
-    """argv for headless ``claude -p`` in the eval sandbox (no approval prompts)."""
+    """argv for headless ``claude -p`` confined to the sandbox cwd."""
     command = [
         binary,
         "-p",
-        "--dangerously-skip-permissions",
+        "--permission-mode",
+        "acceptEdits",
+        "--permission-prompts",
+        "none",
+        "--allowedTools",
+        _CLAUDE_WORKSPACE_TOOLS,
+        "--append-system-prompt",
+        _CLAUDE_SYSTEM_PREAMBLE,
         "--output-format",
         "stream-json",
         "--verbose",
@@ -567,29 +600,28 @@ class CodexCliHarness:
                     "or set CODEX_BIN, then run `skillgate login codex`."
                 ),
             )
-        pinned = _read_selection(sandbox.workspace)
-        if pinned is _MISSING:
-            agent_prompt = _cursor_discover_prompt(prompt, skills)
-        else:
-            agent_prompt = _cursor_prompt(
-                prompt, skills, pinned_skill=pinned  # type: ignore[arg-type]
-            )
+        agent_prompt = _agent_prompt(sandbox.workspace, prompt, skills)
         model = _codex_model_flag(self.cfg.codex_model, cli_login=not bool(key))
+        extra_config: list[str] = []
+        skill_config = _codex_user_skill_config_override()
+        if skill_config:
+            extra_config.append(skill_config)
         command = _codex_exec_command(
             binary,
             sandbox.workspace,
             agent_prompt,
             reasoning_effort=self.cfg.codex_reasoning_effort,
             model=model,
+            extra_config=extra_config,
         )
+        # Leave CODEX_HOME alone so `codex login` (auth.json in that home) is used.
+        # A tokenless home drops the subscription, and Codex 0.163 has no flag
+        # that moves only the skills directory.
         env: dict[str, str] = {"SKILLGATE_TASK": prompt}
-        home_env = _prepare_codex_env(sandbox.workspace, api_key=key)
-        env.update(home_env)
-        try:
-            proc = sandbox.run(command, env=env, timeout=timeout_sec)
-        finally:
-            if not key:
-                _restore_codex_auth(Path(home_env["CODEX_HOME"]))
+        if key:
+            env["CODEX_API_KEY"] = key
+        proc = sandbox.run(command, env=env, timeout=timeout_sec)
+        _raise_if_auth_failed(proc.stdout or "", proc.stderr or "")
         transcript = _codex_transcript(proc.stdout or "", proc.stderr or "")
         if _codex_rejected_chatgpt_model(proc.stdout or "", proc.stderr or ""):
             rejected, accepted = _codex_rejected_model(proc.stdout or "", proc.stderr or "")
@@ -673,22 +705,17 @@ class ClaudeCodeHarness:
                     "or set CLAUDE_BIN, then run `skillgate login claude`."
                 ),
             )
-        pinned = _read_selection(sandbox.workspace)
-        if pinned is _MISSING:
-            agent_prompt = _cursor_discover_prompt(prompt, skills)
-        else:
-            agent_prompt = _cursor_prompt(
-                prompt, skills, pinned_skill=pinned  # type: ignore[arg-type]
-            )
+        agent_prompt = _agent_prompt(sandbox.workspace, prompt, skills)
         command = _claude_code_exec_command(
             binary,
-            agent_prompt,
+            _CLAUDE_PREAMBLE + agent_prompt,
             model=(self.cfg.anthropic_model or "").strip() or None,
         )
         env: dict[str, str] = {"SKILLGATE_TASK": prompt}
         if self.cfg.anthropic_api_key:
             env["ANTHROPIC_API_KEY"] = self.cfg.anthropic_api_key
         proc = sandbox.run(command, env=env, timeout=timeout_sec)
+        _raise_if_auth_failed(proc.stdout or "", proc.stderr or "")
         requested = (self.cfg.anthropic_model or "").strip() or None
         if _claude_model_access_error(proc.stdout or "", proc.stderr or ""):
             raise HarnessError(
@@ -831,38 +858,91 @@ def _codex_auth_key(cfg: LLMConfig) -> str | None:
     return cfg.codex_api_key
 
 
-def _prepare_codex_env(workspace: Path, *, api_key: str | None) -> dict[str, str]:
-    """Throwaway CODEX_HOME so exec cannot write ~/.codex/config.toml."""
-    home = workspace / ".skillgate" / "codex-home"
-    home.mkdir(parents=True, exist_ok=True)
-    env = {"CODEX_HOME": str(home)}
-    if api_key:
-        env["CODEX_API_KEY"] = api_key
-        return env
-    _symlink_codex_auth(home)
-    return env
+_SKILL_WALK_SKIP = {"node_modules", ".git"}
+_SKILL_WALK_MAX_DEPTH = 6
 
 
-def _symlink_codex_auth(temp_home: Path) -> None:
-    dest = temp_home / "auth.json"
-    if dest.exists() or dest.is_symlink():
-        dest.unlink()
-    src = Path.home() / ".codex" / "auth.json"
+def _toml_basic_string(value: str) -> str:
+    escaped = value.replace("\\", "\\\\").replace('"', '\\"')
+    return f'"{escaped}"'
+
+
+def _codex_user_skill_roots() -> list[Path]:
+    """Directories Codex scans for user skills. Does not open auth.json."""
+    codex_home = os.environ.get("CODEX_HOME", "").strip()
+    if codex_home:
+        roots = [Path(codex_home) / "skills"]
+    else:
+        roots = [Path.home() / ".codex" / "skills"]
+    roots.append(Path.home() / ".agents" / "skills")
+    return roots
+
+
+def _skill_markdown_files(root: Path) -> list[Path]:
+    """SKILL.md paths under ``root``. Stats only; file bodies are not read."""
     try:
-        if src.exists() or src.is_symlink():
-            dest.symlink_to(src)
+        if not root.is_dir():
+            return []
     except OSError:
+        return []
+    found: list[Path] = []
+    seen_dirs: set[tuple[int, int]] = set()
+
+    def _on_error(_err: OSError) -> None:
         return
 
+    for dirpath, dirnames, filenames in os.walk(root, followlinks=True, onerror=_on_error):
+        try:
+            stat = os.stat(dirpath)
+            depth = len(Path(dirpath).resolve().relative_to(root.resolve()).parts)
+        except (OSError, ValueError):
+            dirnames.clear()
+            continue
+        marker = (stat.st_dev, stat.st_ino)
+        if marker in seen_dirs:
+            dirnames.clear()
+            continue
+        seen_dirs.add(marker)
+        dirnames[:] = [
+            name
+            for name in dirnames
+            if not name.startswith(".") and name not in _SKILL_WALK_SKIP
+        ]
+        if depth >= _SKILL_WALK_MAX_DEPTH:
+            dirnames.clear()
+        if "SKILL.md" not in filenames:
+            continue
+        skill_md = Path(dirpath) / "SKILL.md"
+        try:
+            if skill_md.is_file():
+                found.append(skill_md)
+        except OSError:
+            continue
+    return found
 
-def _restore_codex_auth(temp_home: Path) -> None:
-    """If Codex rotated auth.json over the symlink, put the file back without reading it."""
-    dest = temp_home / "auth.json"
-    if dest.is_symlink() or not dest.is_file():
-        return
-    src = Path.home() / ".codex" / "auth.json"
-    src.parent.mkdir(parents=True, exist_ok=True)
-    os.replace(dest, src)
+
+def _codex_user_skill_config_override() -> str | None:
+    """Session ``skills.config`` that disables discovered user skills.
+
+    Codex 0.163 applies ``enabled=false`` only when ``path`` is the SKILL.md
+    file. A directory path leaves the skill in the prompt. There is no config
+    key that points the skills directory somewhere else.
+    """
+    paths: list[str] = []
+    seen: set[str] = set()
+    for root in _codex_user_skill_roots():
+        for skill_md in _skill_markdown_files(root):
+            text = str(skill_md)
+            if text in seen or "\n" in text or text.endswith(f"{os.sep}auth.json"):
+                continue
+            seen.add(text)
+            paths.append(text)
+    if not paths:
+        return None
+    entries = ",".join(
+        f"{{path={_toml_basic_string(path)},enabled=false}}" for path in paths
+    )
+    return f"skills.config=[{entries}]"
 
 
 _CODEX_LOGIN_STATUS_TIMEOUT_SEC = 5
@@ -907,10 +987,58 @@ def _codex_session_ok(cfg: LLMConfig) -> bool:
 _CURSOR_LOGIN_STATUS_TIMEOUT_SEC = 5
 
 
+_AUTH_FAILURE_RE = re.compile(
+    r"unable to fetch user details"
+    r"|not logged in"
+    r"|not authenticated"
+    r"|authentication required"
+    r"|please (?:re-?)?log ?in"
+    r"|invalid api key",
+    re.IGNORECASE,
+)
+
+
+def auth_failure_message(stdout: str, stderr: str) -> str | None:
+    """Auth failure in harness stderr or an error event. Not assistant prose."""
+    if _AUTH_FAILURE_RE.search(stderr or ""):
+        return "The agent is not signed in."
+    for line in (stdout or "").splitlines():
+        text = line.strip()
+        if not text.startswith("{"):
+            continue
+        try:
+            obj = json.loads(text)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(obj, dict):
+            continue
+        kind = str(obj.get("type") or "")
+        errored = kind == "error" or (kind == "result" and obj.get("is_error") is True)
+        if not errored:
+            continue
+        blob = " ".join(str(obj.get(key) or "") for key in ("message", "error", "result"))
+        if _AUTH_FAILURE_RE.search(blob):
+            return "The agent is not signed in."
+    return None
+
+
+def _raise_if_auth_failed(stdout: str, stderr: str) -> None:
+    message = auth_failure_message(stdout, stderr)
+    if message is None:
+        return
+    raise HarnessError(
+        message,
+        hint="Run `skillgate login` for Cursor, Codex, or Claude Code.",
+        exit_code=2,
+    )
+
+
 def _cursor_login_status_authenticated(returncode: int, stdout: str, stderr: str) -> bool:
     if returncode != 0:
         return False
     text = f"{stdout}\n{stderr}".lower()
+    if "unable to fetch user details" in text:
+        return False
     if "not logged in" in text or "not authenticated" in text:
         return False
     return True
@@ -1286,6 +1414,33 @@ def _pinned_has_agent_entry(skills: list[Skill], pinned_skill: str) -> bool:
     return False
 
 
+def _workspace_trigger_mode(workspace: Path) -> bool:
+    marker = workspace / ".skillgate" / "mode"
+    if not marker.is_file():
+        return False
+    return marker.read_text(encoding="utf-8").strip() == "trigger"
+
+
+def _trigger_mode_prompt(task: str) -> str:
+    """Install is on disk. The prompt does not name a skill."""
+    return (
+        "You are running inside Skill Gate.\n"
+        "Skills may be installed under `.skillgate/skills/`. "
+        "Use one only if it fits the task. Do not assume a skill was pre-selected. "
+        "If you use a skill, read its SKILL.md.\n"
+        f"Task:\n{task}"
+    )
+
+
+def _agent_prompt(workspace: Path, task: str, skills: list[Skill]) -> str:
+    if _workspace_trigger_mode(workspace):
+        return _trigger_mode_prompt(task)
+    pinned = _read_selection(workspace)
+    if pinned is _MISSING:
+        return _cursor_discover_prompt(task, skills)
+    return _cursor_prompt(task, skills, pinned_skill=pinned)  # type: ignore[arg-type]
+
+
 def _cursor_discover_prompt(task: str, skills: list[Skill]) -> str:
     """No-trigger / unpinned: the agent must choose from the catalog."""
     catalog = "\n".join(f"- {s.name}: {s.description}" for s in skills)
@@ -1345,7 +1500,7 @@ def _cursor_prompt(
                 "After reading SKILL.md, follow it to complete the task. "
                 "Use bundled scripts under that skill when they exist."
             )
-        parts.append("Put user-requested output files where the task says (usually `output/`).")
+        parts.append("Put user-requested output files where the task says.")
         parts.append(f"Task:\n{task}")
         return "\n".join(parts)
     return (

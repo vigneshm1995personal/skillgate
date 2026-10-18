@@ -71,13 +71,26 @@ def test_removed_llm_harness_errors() -> None:
 
 def test_claude_harness_skips_permissions_headless() -> None:
     cmd = _claude_code_exec_command("/bin/claude", "run task")
-    assert "--dangerously-skip-permissions" in cmd
-    assert "acceptEdits" not in cmd
+    assert "--permission-mode" in cmd
+    assert cmd[cmd.index("--permission-mode") + 1] == "acceptEdits"
+    assert "--permission-prompts" in cmd
+    assert cmd[cmd.index("--permission-prompts") + 1] == "none"
+    assert "--dangerously-skip-permissions" not in cmd
+    assert "bypassPermissions" not in cmd
+    tools_flag = "--allowedTools" if "--allowedTools" in cmd else "--allowed-tools"
+    assert tools_flag in cmd
+    tools = cmd[cmd.index(tools_flag) + 1]
+    assert "Bash" in tools
+    assert "Edit" in tools
+    assert "Write" in tools
 
 
 def test_codex_harness_approves_headless() -> None:
     cmd = _codex_exec_command("/bin/codex", "/tmp/ws", "run task")
     assert "--approve-for-me" in cmd
+    overrides = [cmd[i + 1] for i, arg in enumerate(cmd) if arg == "-c"]
+    assert "skills.include_instructions=false" in overrides
+    assert "skills.bundled.enabled=false" in overrides
 
 
 def test_user_pdf_skill_name_does_not_require_seed_cases(tmp_path) -> None:

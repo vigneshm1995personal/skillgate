@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "skillgate-ai"
-version = "0.7.1"
+version = "0.7.2"
 description = "Local skill gate: pack on disk + live skillgate check (exit 0/1/2), no account"
 readme = "README.md"
 requires-python = ">=3.11"

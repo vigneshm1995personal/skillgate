@@ -118,6 +118,16 @@ def create_app(*, root: Path | None = None, pack: Path | None = None) -> FastAPI
     return app
 
 
+def _supported_models_payload() -> dict[str, list[str]]:
+    from skillgate_ai.harness import ClaudeCodeHarness, CodexCliHarness, CursorAgentHarness
+
+    return {
+        "cursor-agent": list(CursorAgentHarness.supported_models),
+        "codex": list(CodexCliHarness.supported_models),
+        "claude": list(ClaudeCodeHarness.supported_models),
+    }
+
+
 def _register_core_routes(app: FastAPI) -> None:
     @app.get("/api/status")
     def status(request: Request) -> dict[str, Any]:
@@ -144,6 +154,7 @@ def _register_core_routes(app: FastAPI) -> None:
             "ci": {"url": "", "badge": "", "workflow": ""},
             "deploy": deploy_status(),
             "harness_auth": _harness_auth_payload(cfg),
+            "supported_models": _supported_models_payload(),
             "skills_dir_exists": (state.root / "skills").is_dir(),
             "skills_dir_count": len(skills),
             "catalog_error": None,

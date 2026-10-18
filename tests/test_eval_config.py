@@ -418,7 +418,8 @@ def test_customer_config_label_is_neutral_judge_copy() -> None:
             judge={"provider": "jev", "chosen": True, "display_name": "Jev"},
         )
     )
-    assert chosen == "Scored by Jev"
+    assert chosen == "Scored by the judge"
+    assert "Jev" not in chosen
     scrubbed_openai = customer_config_label(
         {
             "harness": "cursor-agent",

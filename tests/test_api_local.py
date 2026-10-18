@@ -63,6 +63,24 @@ def test_pack_file_outside_skill_is_400(tmp_path: Path, monkeypatch) -> None:
     assert not (tmp_path / "outside.txt").exists()
 
 
+def test_status_lists_harness_models(tmp_path: Path, monkeypatch) -> None:
+    from skillgate_ai.harness import (
+        ClaudeCodeHarness,
+        CodexCliHarness,
+        CursorAgentHarness,
+    )
+
+    client = _client(tmp_path, monkeypatch)
+    data = client.get("/api/status").json()
+    models = data["supported_models"]
+    assert models["codex"] == list(CodexCliHarness.supported_models)
+    assert models["claude"] == list(ClaudeCodeHarness.supported_models)
+    assert models["cursor-agent"] == list(CursorAgentHarness.supported_models)
+    assert "gpt-5.6-luna" in models["codex"]
+    assert "sonnet" in models["claude"]
+    assert "claude-sonnet-5" in models["claude"]
+
+
 def test_status_includes_build_for_qa(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("SKILLGATE_BUILD", "deadbeefcafebabe")
     client = _client(tmp_path, monkeypatch)
@@ -529,7 +547,7 @@ def test_browser_api_scrubs_provider_model_names(tmp_path: Path, monkeypatch) ->
     )
     assert auto_skill["report"]["scored_by"] == "Scored by the judge"
     assert auto_row["report"]["scored_by"] == "Scored by the judge"
-    assert hist["last_run"]["config_label"] == "Scored by Other"
+    assert hist["last_run"]["config_label"] == "Scored by your judge"
     assert auto_row["config_label"] == "Scored by the judge"
     assert auto_row["config"]["label"] == "Scored by the judge"
     assert auto_row["config"]["judge"]["display_name"] == "the judge"
@@ -537,12 +555,15 @@ def test_browser_api_scrubs_provider_model_names(tmp_path: Path, monkeypatch) ->
     assert "provider" not in auto_row["config"]["judge"]
     assert "backend" not in auto_row["config"]["judge"]
     assert "model" not in auto_row["config"]
-    assert jev_run["config"]["judge"]["display_name"] == "Jev"
+    assert jev_run["config"]["judge"]["display_name"] == "the judge"
+    assert "Jev" not in jev_run["config"]["judge"]["display_name"]
     assert "provider" not in jev_run["config"]["judge"]
-    assert jev_run["config_label"] == "Scored by Jev"
-    assert other_run["config"]["judge"]["display_name"] == "Other"
+    assert jev_run["config_label"] == "Scored by the judge"
+    assert "Jev" not in jev_run["config_label"]
+    assert other_run["config"]["judge"]["display_name"] == "your judge"
     assert "provider" not in other_run["config"]["judge"]
-    assert other_run["config_label"] == "Scored by Other"
+    assert other_run["config_label"] == "Scored by your judge"
+    assert "Other" not in other_run["config_label"]
 
 
 def test_scrub_config_keeps_live_agent_model(tmp_path: Path, monkeypatch) -> None:

@@ -24,9 +24,16 @@ Or paste the key in `skillgate ui` (Settings). **CI and Docker:** set `SKILLGATE
 Pick a scoring provider in Settings or:
 
 ```bash
-skillgate judge provider set openai|jev|aws|Other
+skillgate judge provider set openai|jev|aws|other
+skillgate keys set JEV_API_KEY
+skillgate judge provider set jev --base-url https://openrouter.ai/api/v1 --model typesafe/jev-1.14
+skillgate judge provider set other --base-url https://openrouter.ai/api/v1 --model openai/gpt-4o-mini --key-env OPENROUTER_API_KEY
 skillgate judge provider test
 ```
+
+Jev on OpenRouter uses the saved model and posts to `POST https://openrouter.ai/api/alpha/decisions`. Any other Jev base URL still posts to `{base}/evaluate`. A bad endpoint, rejected key, or empty balance fails that check. Skill Gate does not switch to another judge.
+
+`--key-env` on `set` stores the env var name in `.skillgate/judge`. The key stays in that environment variable. Skill Gate does not write the value.
 
 Override if you need it (CI / scripts — keep these `SKILLGATE_*` names):
 
@@ -48,7 +55,7 @@ If the scorer is not very sure about a Pass, the check still Passes. You will se
 ```yaml
 - uses: actions/setup-python@v5
   with: { python-version: "3.12" }
-- run: pip install skillgate-ai==0.7.1
+- run: pip install skillgate-ai==0.7.2
 - run: skillgate check . --key-env OPENAI_API_KEY
   env:
     OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}

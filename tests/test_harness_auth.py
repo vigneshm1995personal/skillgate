@@ -442,39 +442,54 @@ def test_codex_run_reuses_host_login_without_copying_auth(
 ) -> None:
     user_home = tmp_path / "home"
     real_codex = user_home / ".codex"
-    real_codex.mkdir(parents=True)
+    foreign = real_codex / "skills" / "other-skill"
+    foreign.mkdir(parents=True)
+    (foreign / "SKILL.md").write_text(
+        "---\nname: other-skill\ndescription: not this test\n---\nsecret-other\n",
+        encoding="utf-8",
+    )
     marker = "sg-test-auth-marker-not-a-secret"
     real_auth = real_codex / "auth.json"
     real_auth.write_text(f'{{"marker":"{marker}"}}\n', encoding="utf-8")
     monkeypatch.setattr(Path, "home", classmethod(lambda cls: user_home))
+    monkeypatch.delenv("CODEX_HOME", raising=False)
     sandbox = _FakeSandbox(tmp_path / "ws")
     sandbox.workspace.mkdir()
     _stub_run(monkeypatch)
     monkeypatch.setattr("skillgate_ai.harness._codex_ready", lambda _c: True)
     monkeypatch.setattr("skillgate_ai.harness._resolve_codex_bin", lambda _p: "/bin/codex")
     result = CodexCliHarness(_cfg(codex_api_key=None)).run(sandbox, "task", [], timeout_sec=5)
-    home = Path(sandbox.env["CODEX_HOME"])
-    assert str(home).endswith("/.skillgate/codex-home")
-    linked = home / "auth.json"
-    assert linked.is_symlink()
-    assert linked.resolve() == real_auth.resolve()
+    assert "CODEX_HOME" not in sandbox.env
+    assert not (sandbox.workspace / ".skillgate" / "codex-home").exists()
+    assert real_auth.read_text(encoding="utf-8") == f'{{"marker":"{marker}"}}\n'
     assert "CODEX_API_KEY" not in sandbox.env
-    assert marker not in json.dumps(sandbox.env)
+    blob = json.dumps({"env": sandbox.env, "argv": sandbox.command})
+    assert marker not in blob
+    assert "secret-other" not in blob
+    overrides = [sandbox.command[i + 1] for i, arg in enumerate(sandbox.command) if arg == "-c"]
+    assert "skills.include_instructions=false" in overrides
+    assert "skills.bundled.enabled=false" in overrides
+    disabled = next(item for item in overrides if item.startswith("skills.config="))
+    assert str(foreign / "SKILL.md") in disabled
+    assert "enabled=false" in disabled
+    assert "auth.json" not in disabled
     assert result.auth_mode == AUTH_CLI_LOGIN
 
 
-def test_codex_run_isolates_home_when_key_set(
+def test_codex_key_does_not_replace_login_home(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
+    user_home = tmp_path / "home"
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: user_home))
+    monkeypatch.delenv("CODEX_HOME", raising=False)
     sandbox = _FakeSandbox(tmp_path / "ws")
     sandbox.workspace.mkdir()
     _stub_run(monkeypatch)
     monkeypatch.setattr("skillgate_ai.harness._codex_ready", lambda _c: True)
     monkeypatch.setattr("skillgate_ai.harness._resolve_codex_bin", lambda _p: "/bin/codex")
     result = CodexCliHarness(_cfg(codex_api_key="k")).run(sandbox, "task", [], timeout_sec=5)
-    home = Path(sandbox.env["CODEX_HOME"])
-    assert str(home).endswith("/.skillgate/codex-home")
-    assert not (home / "auth.json").exists()
+    assert "CODEX_HOME" not in sandbox.env
+    assert not (sandbox.workspace / ".skillgate" / "codex-home").exists()
     assert sandbox.env["CODEX_API_KEY"] == "k"
     assert result.auth_mode == AUTH_API_KEY
 
@@ -996,6 +1011,8 @@ def test_codex_rejected_live_error_without_supported_list() -> None:
 def test_codex_cli_login_run_passes_luna_when_no_model(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path / "home"))
+    monkeypatch.delenv("CODEX_HOME", raising=False)
     sandbox = _FakeSandbox(tmp_path / "ws")
     sandbox.workspace.mkdir()
     _stub_run(monkeypatch)
@@ -1005,7 +1022,8 @@ def test_codex_cli_login_run_passes_luna_when_no_model(
         sandbox, "task", [], timeout_sec=5
     )
     assert sandbox.command[sandbox.command.index("-m") + 1] == "gpt-5.6-luna"
-    assert sandbox.env["CODEX_HOME"].endswith("/.skillgate/codex-home")
+    assert "CODEX_HOME" not in sandbox.env
+    assert "CODEX_API_KEY" not in sandbox.env
     assert result.model == "gpt-5.6-luna"
 
 
@@ -1024,6 +1042,8 @@ def test_codex_run_reports_model_from_json_output() -> None:
 def test_codex_run_names_rejected_model_from_error(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path / "home"))
+    monkeypatch.delenv("CODEX_HOME", raising=False)
     sandbox = _FakeSandbox(tmp_path / "ws")
     sandbox.workspace.mkdir()
 
@@ -1055,7 +1075,7 @@ def test_codex_run_names_rejected_model_from_error(
 
 
 def test_codex_exec_skillgate_argv(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    """A Skill Gate Codex run must not mutate the user's ~/.codex/config.toml."""
+    """Login stays on the ambient Codex home. Skill Gate does not read auth.json."""
     user_home = tmp_path / "home"
     real_codex = user_home / ".codex"
     real_codex.mkdir(parents=True)
@@ -1067,20 +1087,13 @@ def test_codex_exec_skillgate_argv(monkeypatch: pytest.MonkeyPatch, tmp_path: Pa
     fake_bin = tmp_path / "codex"
     fake_bin.write_text(
         "#!/usr/bin/env python3\n"
-        "import os, pathlib, sys\n"
-        "home = pathlib.Path(os.environ.get('CODEX_HOME') or (pathlib.Path.home() / '.codex'))\n"
-        "home.mkdir(parents=True, exist_ok=True)\n"
-        "args = sys.argv[1:]\n"
-        "cwd = args[args.index('-C') + 1] if '-C' in args else str(pathlib.Path.cwd())\n"
-        "cfg = home / 'config.toml'\n"
-        "prior = cfg.read_text() if cfg.exists() else ''\n"
-        "cfg.write_text(prior + f'\\n[projects.\"{cwd}\"]\\ntrust_level = \"trusted\"\\n')\n"
         "print('{\"type\":\"turn.completed\"}')\n",
         encoding="utf-8",
     )
     fake_bin.chmod(0o755)
     monkeypatch.setenv("HOME", str(user_home))
     monkeypatch.setattr(Path, "home", classmethod(lambda cls: user_home))
+    monkeypatch.delenv("CODEX_HOME", raising=False)
     sandbox = _FakeSandbox(tmp_path / "ws")
     sandbox.workspace.mkdir()
 
@@ -1103,11 +1116,17 @@ def test_codex_exec_skillgate_argv(monkeypatch: pytest.MonkeyPatch, tmp_path: Pa
     monkeypatch.setattr("skillgate_ai.harness._codex_ready", lambda _c: True)
     monkeypatch.setattr("skillgate_ai.harness._resolve_codex_bin", lambda _p: str(fake_bin))
     CodexCliHarness(_cfg(codex_api_key=None)).run(sandbox, "task", [], timeout_sec=5)
+    assert "CODEX_HOME" not in sandbox.env
+    assert "CODEX_API_KEY" not in sandbox.env
     assert config.read_bytes() == original
-    isolated = Path(sandbox.env["CODEX_HOME"]) / "config.toml"
-    assert isolated.is_file()
-    assert "trust_level" in isolated.read_text(encoding="utf-8")
-    assert "sg-test-auth-marker-not-a-secret" not in (sandbox.env.get("CODEX_API_KEY") or "")
+    assert real_auth.read_text(encoding="utf-8") == (
+        '{"marker":"sg-test-auth-marker-not-a-secret"}\n'
+    )
+    blob = " ".join(sandbox.command)
+    assert "sg-test-auth-marker-not-a-secret" not in blob
+    assert "auth.json" not in blob
+    overrides = [sandbox.command[i + 1] for i, arg in enumerate(sandbox.command) if arg == "-c"]
+    assert "skills.include_instructions=false" in overrides
 
 
 def test_check_no_judge_uses_cursor_cli_login(

@@ -11,7 +11,9 @@ from skillgate_ai.judge_bank import (
     CHECK_CELL_LABELS,
     CHECK_CELL_ORDER,
     DEFAULT_MIN_CONFIDENCE,
+    EVIDENCE_RULE,
     PATH_NOT_AVAILABLE,
+    REFERENCE_EXAMPLE_NOTE,
     SOFT_CELL_LABELS,
     SOFT_CELL_ORDER,
     UNUSABLE_ANSWER,
@@ -49,6 +51,11 @@ WHY_TIMEOUT_SEC = 10.0
 WHY_MAX_OUTPUT_TOKENS = 128
 WHY_OUTPUT_CHARS = 1500
 TRANSCRIPT_TAIL_CHARS = 4000
+RESPONSES_SYSTEM_PROMPT = (
+    "Score this skill check. Pick exactly one allowed answer for each field. "
+    "Use only the evidence in the user message. "
+    f"{EVIDENCE_RULE} {REFERENCE_EXAMPLE_NOTE}"
+)
 DISPLAY_NAME = "the judge"
 GATEWAY_DISPLAY_NAME = "the judge"
 CHOSEN_DISPLAY_NAME = "OpenAI"
@@ -435,7 +442,7 @@ class DecisionsBackend(_OpenAIPosted):
 
         model_name = str(data.get("model") or self.model)
         usage = normalize_judge_api_usage(data, model=model_name)
-        return _finished_answers(
+        finished = _finished_answers(
             _normalize_answers(
                 _answers_from_decisions_list(data),
                 include_path=include_path,
@@ -444,6 +451,8 @@ class DecisionsBackend(_OpenAIPosted):
             model=model_name,
             usage=usage,
         )
+        finished["scoring_endpoint"] = "decisions"
+        return finished
 
 
 class StructuredOutputsBackend(_OpenAIPosted):
@@ -484,10 +493,7 @@ class StructuredOutputsBackend(_OpenAIPosted):
                 "input": [
                     {
                         "role": "system",
-                        "content": (
-                            "Score this skill check. Pick exactly one allowed answer "
-                            "for each field. Use only the evidence in the user message."
-                        ),
+                        "content": RESPONSES_SYSTEM_PROMPT,
                     },
                     {"role": "user", "content": user_content},
                 ],
@@ -524,11 +530,13 @@ class StructuredOutputsBackend(_OpenAIPosted):
 
         model_name = str(data.get("model") or self.model)
         usage = normalize_judge_api_usage(data, model=model_name)
-        return _finished_answers(
+        finished = _finished_answers(
             _normalize_answers(parsed, include_path=include_path, spec=resolved),
             model=model_name,
             usage=usage,
         )
+        finished["scoring_endpoint"] = "responses"
+        return finished
 
 
 class OutcomeJudge:
@@ -637,8 +645,9 @@ class OutcomeJudge:
         warnings: list[str],
         questions: dict[str, Any],
         soft_questions: dict[str, Any],
+        scoring_endpoint: str | None = None,
     ) -> dict[str, Any]:
-        return {
+        payload = {
             "status": status,
             "provider": self.name,
             "backend": self.backend.name,
@@ -661,6 +670,9 @@ class OutcomeJudge:
             "min_confidence": self.min_confidence,
             "supports_confidence": self.supports_confidence,
         }
+        if scoring_endpoint:
+            payload["scoring_endpoint"] = scoring_endpoint
+        return payload
 
     def _stamp(
         self,
@@ -697,6 +709,7 @@ class OutcomeJudge:
                     warnings=extra_warnings,
                     questions=all_questions(),
                     soft_questions=soft_questions,
+                    scoring_endpoint=_scoring_endpoint(evaluated),
                 ),
                 spec=resolved,
                 confidence=bool(
@@ -736,10 +749,24 @@ class OutcomeJudge:
                 "choice": extract_choice(raw),
                 "reason": None,
             }
-            if isinstance(raw, Mapping) and raw.get("probability") is not None:
-                cell["probability"] = raw.get("probability")
+            probability = None
+            if isinstance(raw, Mapping) and isinstance(raw.get("probability"), (int, float)):
+                if not isinstance(raw.get("probability"), bool):
+                    probability = float(raw["probability"])
             elif isinstance(raw, (int, float)) and not isinstance(raw, bool):
-                cell["probability"] = float(raw)
+                probability = float(raw)
+            if probability is not None:
+                cell["probability"] = probability
+                threshold = 0.8
+                if isinstance(question.pass_if, Mapping) and "gte" in question.pass_if:
+                    try:
+                        threshold = float(question.pass_if["gte"])
+                    except (TypeError, ValueError):
+                        threshold = 0.8
+                cell["choice"] = "Yes" if probability >= threshold else "No"
+            elif isinstance(raw, Mapping) and raw.get("score") is not None:
+                cell["score"] = raw.get("score")
+                cell["choice"] = str(raw.get("score"))
             cells[question.id] = cell
         merged_answers = {**pass_answers, **extra_answers}
         extra_questions = {q.id: {"instructions": q.ask, "type": q.type} for q in resolved.extras}
@@ -759,6 +786,7 @@ class OutcomeJudge:
                 warnings=warnings,
                 questions={**{k: all_questions()[k] for k in CHECK_CELL_ORDER}, **extra_questions},
                 soft_questions=soft_questions,
+                scoring_endpoint=_scoring_endpoint(evaluated),
             ),
             spec=resolved,
             confidence=confidence,
@@ -919,6 +947,13 @@ class OutcomeJudge:
         return None
 
 
+def _scoring_endpoint(evaluated: Mapping[str, Any]) -> str | None:
+    raw = evaluated.get("scoring_endpoint")
+    if isinstance(raw, str) and raw.strip():
+        return raw.strip()
+    return None
+
+
 def _as_path(value: Any) -> Path | None:
     if isinstance(value, Path):
         return value
@@ -945,7 +980,11 @@ def ping_openai_backend(backend: JudgeBackend, *, display_name: str = DISPLAY_NA
         retries=False,
     )
     if result.get("status") == "ok":
-        return {"ok": True, "message": f"Connected to {display_name}."}
+        return {
+            "ok": True,
+            "message": f"Connected to {display_name} via the Decisions API.",
+            "scoring_endpoint": "decisions",
+        }
     return {"ok": False, "message": str(result.get("reason") or "Could not connect.")}
 
 

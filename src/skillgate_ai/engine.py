@@ -402,6 +402,7 @@ def _run_outcome_judge(
     judge: Judge | None = None,
     spans: list[dict[str, Any]] | None = None,
     skill_instructions: str | None = None,
+    file_baseline: dict[str, tuple[int, int]] | None = None,
 ) -> tuple[
     dict[str, Any] | None,
     str | None,
@@ -436,7 +437,9 @@ def _run_outcome_judge(
     from skillgate_ai.judge_context import build_agent_trajectory, skill_instructions_text
     from skillgate_ai.workspace_outputs import collect_workspace_outputs
 
-    outputs = collect_workspace_outputs(task, artifacts.workspace)
+    outputs = collect_workspace_outputs(
+        task, artifacts.workspace, baseline=file_baseline
+    )
     if not outputs:
         outputs = _outcome_judge_outputs(task, artifacts)
     trajectory = build_agent_trajectory(
@@ -693,7 +696,18 @@ def _run_task(
                 copies.append((src, item.dest))
             staged = skills if task.expect_skill is not None else []
             prepare_workspace(sandbox.workspace, staged, copies)
-            _seed_skill_selection(sandbox.workspace, task.expect_skill)
+            if task.trigger_mode:
+                mode = sandbox.workspace / ".skillgate" / "mode"
+                mode.parent.mkdir(parents=True, exist_ok=True)
+                mode.write_text("trigger\n", encoding="utf-8")
+                selected = sandbox.workspace / ".skillgate" / "selected.json"
+                if selected.is_file():
+                    selected.unlink()
+            else:
+                _seed_skill_selection(sandbox.workspace, task.expect_skill)
+            from skillgate_ai.workspace_outputs import snapshot_workspace
+
+            file_baseline = snapshot_workspace(sandbox.workspace)
             with span("eval.harness", harness.name):
                 try:
                     result: HarnessResult = harness.run(sandbox, task.prompt, skills, timeout)
@@ -753,6 +767,7 @@ def _run_task(
                     judge=judge,
                     spans=spans,
                     skill_instructions=skills[0].body if skills else None,
+                    file_baseline=file_baseline,
                 )
                 passed, failures, judged = _live_verdict(
                     judged,
@@ -841,7 +856,9 @@ def _run_task(
                 stderr=result.stderr,
                 returncode=result.returncode,
                 files=[{"src": item.src, "dest": item.dest} for item in task.files],
-                outputs=collect_workspace_outputs(task, sandbox.workspace),
+                outputs=collect_workspace_outputs(
+                    task, sandbox.workspace, baseline=file_baseline
+                ),
                 advice=advice,
                 usage=task_usage,
                 judge=judged,

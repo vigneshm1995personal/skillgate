@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from typing import Any, Mapping, Protocol
 
 from skillgate_ai.config import LLMConfig
@@ -103,6 +104,14 @@ def _judge_api_key(cfg: LLMConfig) -> str:
     return (cfg.openai_api_key or cfg.gateway_api_key or "").strip()
 
 
+def _named_env_key(names: tuple[str, ...] | None) -> str:
+    for name in names or ():
+        value = os.environ.get(name, "").strip()
+        if value:
+            return value
+    return ""
+
+
 def _display_name(provider: str, *, chosen: bool) -> str:
     if chosen:
         return CHOSEN_LABELS.get(provider, DEFAULT_NAME)
@@ -181,7 +190,8 @@ def _provider_judge(cfg: LLMConfig, provider: str, *, chosen: bool) -> Judge:
             raise SkillGateError("Jev scoring needs a base URL in Settings.", exit_code=2)
         from skillgate_ai.judge_providers.jev import JevBackend
 
-        backend = JevBackend(api_key=key, base_url=base_url)
+        model = (getattr(cfg, "judge_provider_model", None) or "").strip() or "jev"
+        backend = JevBackend(api_key=key, base_url=base_url, model=model)
         return OutcomeJudge(
             backend,
             min_confidence=cfg.judge_min_confidence,
@@ -224,7 +234,7 @@ def _provider_judge(cfg: LLMConfig, provider: str, *, chosen: bool) -> Judge:
             supports_why=True,
             supports_confidence=False,
         )
-    key = (cfg.gateway_api_key or "").strip()
+    key = _named_env_key(getattr(cfg, "judge_key_env", ())) or (cfg.gateway_api_key or "").strip()
     base_url = (getattr(cfg, "judge_endpoint", None) or cfg.gateway_base_url or "").strip()
     if not key:
         raise missing_provider_key("compatible")
