@@ -14,8 +14,10 @@ from skillgate_ai.keys import KEYS_DIRNAME
 from skillgate_ai.paths import project_root
 
 JUDGE_FILENAME = "judge"
-PROVIDER_IDS = ("auto", "openai", "jev", "aws", "compatible")
-CHOSEN_IDS = frozenset({"openai", "jev", "aws", "compatible"})
+PROVIDER_IDS = ("auto", "openai", "jev", "clef")
+REMOVED_IDS = frozenset({"other", "compatible", "aws", "unknown"})
+CHOSEN_IDS = frozenset({"openai", "jev", "clef"})
+_ACCOUNT_ID = re.compile(r"^[A-Za-z0-9]+$")
 _ENV_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 
@@ -27,6 +29,7 @@ class JudgeProviderSettings:
     base_url: str | None = None
     decisions_path: str | None = None
     key_env: tuple[str, ...] = ()
+    account_id: str | None = None
 
     @property
     def chosen(self) -> bool:
@@ -39,6 +42,7 @@ class JudgeProviderSettings:
             "region": self.region,
             "model": self.model,
             "base_url": self.base_url,
+            "account_id": self.account_id,
         }
         if self.key_env:
             payload["key_env"] = list(self.key_env)
@@ -61,8 +65,6 @@ def load_judge_settings(root: str | Path | None = None) -> JudgeProviderSettings
     if not isinstance(raw, dict):
         return JudgeProviderSettings()
     provider = str(raw.get("provider") or "auto").strip().lower() or "auto"
-    if provider not in PROVIDER_IDS:
-        provider = "auto"
     decisions_path = _blank(raw.get("decisions_path"))
     settings = JudgeProviderSettings(
         provider=provider,
@@ -71,6 +73,7 @@ def load_judge_settings(root: str | Path | None = None) -> JudgeProviderSettings
         base_url=_blank(raw.get("base_url")),
         decisions_path=decisions_path,
         key_env=_stored_key_env(raw.get("key_env")),
+        account_id=_account_id(raw.get("account_id"), required=False),
     )
     if "decisions_path" in raw:
         _rewrite_judge_file(path, settings)
@@ -83,6 +86,7 @@ def _rewrite_judge_file(path: Path, settings: JudgeProviderSettings) -> None:
         "region": settings.region,
         "model": settings.model,
         "base_url": settings.base_url,
+        "account_id": settings.account_id,
     }
     if settings.key_env:
         payload["key_env"] = list(settings.key_env)
@@ -107,14 +111,18 @@ def save_judge_settings(
     base_url: str | None = None,
     decisions_path: str | None = None,
     key_env: list[str] | tuple[str, ...] | None = None,
+    account_id: str | None = None,
     _persist_decisions_path: bool = False,
 ) -> JudgeProviderSettings:
     name = (provider or "auto").strip().lower() or "auto"
-    if name == "other":
-        name = "compatible"
+    if name in REMOVED_IDS:
+        raise SkillGateError(
+            "That scoring provider was removed. Pick auto, openai, jev, or clef.",
+            exit_code=2,
+        )
     if name not in PROVIDER_IDS:
         raise SkillGateError(
-            "Scoring provider must be auto or a supported judge id.",
+            "Scoring provider must be auto, openai, jev, or clef.",
             exit_code=2,
         )
     settings = JudgeProviderSettings(
@@ -124,6 +132,7 @@ def save_judge_settings(
         base_url=_blank(base_url),
         decisions_path=_blank(decisions_path),
         key_env=_require_key_env(key_env),
+        account_id=_account_id(account_id, required=name == "clef" and account_id is not None),
     )
     dest = judge_settings_path(root)
     dest.parent.mkdir(parents=True, exist_ok=True)
@@ -133,6 +142,7 @@ def save_judge_settings(
         "region": settings.region,
         "model": settings.model,
         "base_url": settings.base_url,
+        "account_id": settings.account_id,
     }
     if settings.key_env:
         payload["key_env"] = list(settings.key_env)
@@ -179,6 +189,20 @@ def _key_env_items(value: Any) -> list[str]:
         if name and name not in names:
             names.append(name)
     return names
+
+
+def _account_id(value: Any, *, required: bool) -> str | None:
+    text = _blank(value)
+    if text is None:
+        return None
+    if not _ACCOUNT_ID.fullmatch(text):
+        raise SkillGateError(
+            "Clef scoring needs a Cloudflare account id made of letters and digits. "
+            "Set it with `skillgate judge provider set clef --account-id`.",
+            exit_code=2,
+        )
+    del required
+    return text
 
 
 def _blank(value: Any) -> str | None:

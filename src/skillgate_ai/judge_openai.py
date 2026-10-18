@@ -1,4 +1,4 @@
-"""OpenAI outcome judge: Decisions by default, Responses fallback."""
+"""OpenAI outcome judge. Scoring uses the Decisions API."""
 
 from __future__ import annotations
 
@@ -11,9 +11,7 @@ from skillgate_ai.judge_bank import (
     CHECK_CELL_LABELS,
     CHECK_CELL_ORDER,
     DEFAULT_MIN_CONFIDENCE,
-    EVIDENCE_RULE,
     PATH_NOT_AVAILABLE,
-    REFERENCE_EXAMPLE_NOTE,
     SOFT_CELL_LABELS,
     SOFT_CELL_ORDER,
     UNUSABLE_ANSWER,
@@ -32,7 +30,6 @@ from skillgate_ai.judge_spec import (
     coerce_extra_answer,
     extra_block_failures,
     spec_decisions_questions,
-    spec_structured_schema,
     spec_verdict,
 )
 from skillgate_ai.openai_http import (
@@ -51,11 +48,6 @@ WHY_TIMEOUT_SEC = 10.0
 WHY_MAX_OUTPUT_TOKENS = 128
 WHY_OUTPUT_CHARS = 1500
 TRANSCRIPT_TAIL_CHARS = 4000
-RESPONSES_SYSTEM_PROMPT = (
-    "Score this skill check. Pick exactly one allowed answer for each field. "
-    "Use only the evidence in the user message. "
-    f"{EVIDENCE_RULE} {REFERENCE_EXAMPLE_NOTE}"
-)
 DISPLAY_NAME = "the judge"
 GATEWAY_DISPLAY_NAME = "the judge"
 CHOSEN_DISPLAY_NAME = "OpenAI"
@@ -67,23 +59,6 @@ def _decisions_model(model: str) -> str:
         return slug
     return DEFAULT_MODEL
 
-
-def _responses_model(model: str) -> str:
-    slug = (model or "").strip() or DEFAULT_MODEL
-    if slug.endswith("-decisions"):
-        return slug[: -len("-decisions")]
-    return slug
-
-
-def _model_supports_reasoning(model: str) -> bool:
-    slug = (model or "").strip().lower().rsplit("/", 1)[-1]
-    return slug.startswith(("o1", "o3", "o4", "gpt-5", "gpt-6"))
-
-
-def _reasoning_field(model: str, effort: str) -> dict[str, Any]:
-    if _model_supports_reasoning(model):
-        return {"reasoning": {"effort": effort}}
-    return {}
 
 
 class JudgeBackend(Protocol):
@@ -246,28 +221,6 @@ def _path_is_recorded(path: Any) -> bool:
     return int(steps) > 0
 
 
-def _why_output_text(raw: Any, *, secret: str) -> str | None:
-    """Size-capped, redacted expected/actual for the Fail why-call."""
-    if raw is None:
-        return None
-    if isinstance(raw, str):
-        text = raw
-    elif isinstance(raw, Mapping):
-        if raw.get("present") is False:
-            return redact_secrets("(missing)", secret)
-        body = raw.get("body")
-        if isinstance(body, bytes) or body is None:
-            kind = raw.get("kind") or raw.get("magic")
-            if isinstance(kind, str) and kind.strip():
-                return f"(binary {kind})"
-            return None
-        text = str(body)
-    else:
-        return None
-    if WHY_OUTPUT_CHARS > 0 and len(text) > WHY_OUTPUT_CHARS:
-        text = text[-WHY_OUTPUT_CHARS:]
-    return redact_secrets(text, secret)
-
 
 def _path_not_available_cell() -> dict[str, Any]:
     return {
@@ -369,36 +322,24 @@ def _lift_decision_answer(item: Any) -> Any:
     return data
 
 
-def _output_text(payload: Mapping[str, Any]) -> tuple[str | None, bool]:
-    """Return (text, refused)."""
-    refused = False
-    direct = payload.get("output_text")
-    if isinstance(direct, str) and direct.strip():
-        return direct, False
-    output = payload.get("output")
-    chunks: list[str] = []
-    if isinstance(output, list):
-        for item in output:
-            if not isinstance(item, Mapping):
-                continue
-            content = item.get("content")
-            if not isinstance(content, list):
-                continue
-            for part in content:
-                if not isinstance(part, Mapping):
-                    continue
-                kind = str(part.get("type") or "")
-                if kind == "refusal":
-                    refused = True
-                    continue
-                text = part.get("text")
-                if isinstance(text, str) and text.strip():
-                    chunks.append(text)
-    if refused and not chunks:
-        return None, True
-    if chunks:
-        return "".join(chunks), refused
-    return None, refused
+
+
+def _annotate_payload_too_large(
+    result: Mapping[str, Any], state: Mapping[str, Any]
+) -> dict[str, Any]:
+    """Name the payload size only when the decision endpoint returns HTTP 413."""
+    if int(result.get("http_status") or 0) != 413:
+        return dict(result)
+    artifacts = state.get("artifacts")
+    files = len(artifacts) if isinstance(artifacts, list) else 0
+    nbytes = len(_state_text(state).encode("utf-8"))
+    size = f"The payload was {nbytes} bytes ({files} files)."
+    reason = str(result.get("reason") or "").strip()
+    if size in reason:
+        return dict(result)
+    joined = f"{reason} {size}".strip() if reason else size
+    return {**result, "reason": joined}
+
 
 
 class DecisionsBackend(_OpenAIPosted):
@@ -451,7 +392,7 @@ class DecisionsBackend(_OpenAIPosted):
             timeout_sec=timeout_sec,
         )
         if result.get("status") != "ok":
-            return result
+            return _annotate_payload_too_large(result, state)
         data = result["data"]
         from skillgate_ai.usage import normalize_judge_api_usage
 
@@ -469,89 +410,6 @@ class DecisionsBackend(_OpenAIPosted):
         finished["scoring_endpoint"] = "decisions"
         return finished
 
-
-class StructuredOutputsBackend(_OpenAIPosted):
-    name = "responses"
-
-    def __init__(
-        self,
-        *,
-        api_key: str,
-        base_url: str = DEFAULT_BASE_URL,
-        model: str = DEFAULT_MODEL,
-        reasoning_effort: str = "low",
-        post: PostFn | None = None,
-        who: str = DISPLAY_NAME,
-    ) -> None:
-        super().__init__(
-            api_key=api_key, base_url=base_url, model=model, post=post, who=who
-        )
-        self.reasoning_effort = reasoning_effort
-
-    def evaluate(
-        self,
-        *,
-        state: Mapping[str, Any],
-        images: list[dict[str, str]],
-        timeout_sec: float,
-        spec: JudgeSpec | None = None,
-    ) -> dict[str, Any]:
-        text = _state_text(state)
-        user_content = _user_content(text, images)
-        include_path = _path_is_recorded(state.get("path"))
-        resolved = spec or builtin_spec()
-        result = self.post_json(
-            "/responses",
-            {
-                "model": self.model,
-                **_reasoning_field(self.model, self.reasoning_effort),
-                "input": [
-                    {
-                        "role": "system",
-                        "content": RESPONSES_SYSTEM_PROMPT,
-                    },
-                    {"role": "user", "content": user_content},
-                ],
-                "text": {
-                    "format": {
-                        "type": "json_schema",
-                        "name": "skill_gate_check",
-                        "strict": True,
-                        "schema": spec_structured_schema(resolved, include_path=include_path),
-                    }
-                },
-            },
-            timeout_sec=timeout_sec,
-        )
-        if result.get("status") != "ok":
-            return result
-        data = result["data"]
-        text_out, refused = _output_text(data)
-        if refused:
-            return {
-                "status": "error",
-                "reason": "The judge declined to score this check.",
-                "model": str(data.get("model") or self.model),
-            }
-        if not text_out:
-            return {"status": "error", "reason": UNUSABLE_ANSWER, "model": self.model}
-        try:
-            parsed = json.loads(text_out)
-        except json.JSONDecodeError:
-            return {"status": "error", "reason": UNUSABLE_ANSWER, "model": self.model}
-        if not isinstance(parsed, Mapping):
-            return {"status": "error", "reason": UNUSABLE_ANSWER, "model": self.model}
-        from skillgate_ai.usage import normalize_judge_api_usage
-
-        model_name = str(data.get("model") or self.model)
-        usage = normalize_judge_api_usage(data, model=model_name)
-        finished = _finished_answers(
-            _normalize_answers(parsed, include_path=include_path, spec=resolved),
-            model=model_name,
-            usage=usage,
-        )
-        finished["scoring_endpoint"] = "responses"
-        return finished
 
 
 class OutcomeJudge:
@@ -833,134 +691,8 @@ class OutcomeJudge:
         expected_output: Any = None,
         actual_output: Any = None,
     ) -> str | None:
-        """One Fail sentence after the engine has the gate verdict."""
-        if not self.why_enabled or not self.supports_why:
-            return None
-        blob = judged or {}
-        if blob.get("status") == "error":
-            cell_reasons = [str(item) for item in (blob.get("reasons") or [])]
-            if UNUSABLE_ANSWER not in cell_reasons:
-                return None
-        if hasattr(self.backend, "explain_fail_payload"):
-            user_blob = self._why_user_blob(
-                check,
-                reasons,
-                transcript_tail,
-                expected_output=expected_output,
-                actual_output=actual_output,
-            )
-            try:
-                why = self.backend.explain_fail_payload(user_blob, timeout_sec=WHY_TIMEOUT_SEC)
-            except Exception:
-                return None
-            return why.strip() if isinstance(why, str) and why.strip() else None
-        if not hasattr(self.backend, "post_json"):
-            return None
-        return self._why_call(
-            check,
-            reasons,
-            transcript_tail,
-            expected_output=expected_output,
-            actual_output=actual_output,
-        )
-
-    def _why_user_blob(
-        self,
-        check: str,
-        reasons: list[str],
-        transcript_tail: str,
-        *,
-        expected_output: Any = None,
-        actual_output: Any = None,
-    ) -> dict[str, Any]:
-        secret = self.backend.api_key
-        user_blob: dict[str, Any] = {
-            "check": check,
-            "what_failed": reasons,
-            "transcript_tail": _tail(transcript_tail),
-        }
-        expected = _why_output_text(expected_output, secret=secret)
-        actual = _why_output_text(actual_output, secret=secret)
-        if expected is not None:
-            user_blob["expected_output"] = expected
-        if actual is not None:
-            user_blob["actual_output"] = actual
-        return user_blob
-
-    def _why_call(
-        self,
-        check: str,
-        reasons: list[str],
-        transcript_tail: str,
-        *,
-        expected_output: Any = None,
-        actual_output: Any = None,
-    ) -> str | None:
-        user_blob = self._why_user_blob(
-            check,
-            reasons,
-            transcript_tail,
-            expected_output=expected_output,
-            actual_output=actual_output,
-        )
-        why_model = _responses_model(self.backend.model)
-        payload = {
-            "model": why_model,
-            "max_output_tokens": WHY_MAX_OUTPUT_TOKENS,
-            **_reasoning_field(why_model, self.reasoning_effort),
-            "input": [
-                {
-                    "role": "system",
-                    "content": (
-                        "Explain in one or two short sentences why this check failed. "
-                        "Use everyday words. Do not mention APIs, schemas, or internal field names. "
-                        "If expected and actual output differ, say what was expected and what was produced."
-                    ),
-                },
-                {
-                    "role": "user",
-                    "content": json.dumps(
-                        user_blob,
-                        ensure_ascii=True,
-                        default=str,
-                    ),
-                },
-            ],
-            "text": {
-                "format": {
-                    "type": "json_schema",
-                    "name": "check_fail_why",
-                    "strict": True,
-                    "schema": {
-                        "type": "object",
-                        "properties": {"why": {"type": "string"}},
-                        "required": ["why"],
-                        "additionalProperties": False,
-                    },
-                }
-            },
-        }
-        result = self.backend.post_json(
-            "/responses",
-            payload,
-            timeout_sec=WHY_TIMEOUT_SEC,
-            retries=False,
-        )
-        if result.get("status") != "ok":
-            return None
-        data = result["data"]
-        text_out, refused = _output_text(data)
-        if refused or not text_out:
-            return None
-        try:
-            parsed = json.loads(text_out)
-        except json.JSONDecodeError:
-            return None
-        if not isinstance(parsed, Mapping):
-            return None
-        why = parsed.get("why")
-        if isinstance(why, str) and why.strip():
-            return redact_secrets(why.strip(), self.backend.api_key)
+        """Decision scoring does not make a follow-up chat call."""
+        del reasons, judged, check, transcript_tail, expected_output, actual_output
         return None
 
 
@@ -1019,35 +751,33 @@ def make_openai_judge(
     display_name: str = DISPLAY_NAME,
     chosen: bool = False,
 ) -> OutcomeJudge:
+    from skillgate_ai.errors import SkillGateError
+
+    del why_enabled
     name = (backend or "decisions").strip().lower()
-    if name in {"structured", "responses"}:
-        impl: JudgeBackend = StructuredOutputsBackend(
-            api_key=api_key,
-            base_url=base_url,
-            model=model,
-            reasoning_effort=reasoning_effort,
-            post=post,
-            who=display_name,
+    if name in {"structured", "responses", "chat", "completions"}:
+        raise SkillGateError(
+            "OpenAI scoring uses the Decisions API. Chat and Responses scoring was removed.",
+            exit_code=2,
         )
-    else:
-        impl = DecisionsBackend(
-            api_key=api_key,
-            base_url=base_url,
-            model=model,
-            post=post,
-            who=display_name,
-        )
+    impl = DecisionsBackend(
+        api_key=api_key,
+        base_url=base_url,
+        model=model,
+        post=post,
+        who=display_name,
+    )
     return OutcomeJudge(
         impl,
         min_confidence=min_confidence,
-        why_enabled=why_enabled,
+        why_enabled=False,
         reasoning_effort=reasoning_effort,
         timeout_sec=timeout_sec,
         display_name=display_name,
         provider="openai",
         chosen=chosen,
-        supports_why=True,
-        supports_confidence=impl.name == "decisions",
+        supports_why=False,
+        supports_confidence=True,
     )
 
 
@@ -1061,7 +791,6 @@ __all__ = [
     "WHY_OUTPUT_CHARS",
     "DecisionsBackend",
     "OutcomeJudge",
-    "StructuredOutputsBackend",
     "collect_images",
     "make_openai_judge",
     "redact_secrets",

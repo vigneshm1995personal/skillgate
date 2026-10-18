@@ -19,7 +19,8 @@ from skillgate_ai.compare import (
 from skillgate_ai.eval_config import EvalRunConfig, with_model
 from skillgate_ai.judge_context import parse_command_runs
 from skillgate_ai.judge_openai import _state_text
-from skillgate_ai.judge_providers.compatible import CompatibleBackend
+from skillgate_ai.errors import SkillGateError
+from skillgate_ai.judge import resolve_judge
 from skillgate_ai.pack_files import GOLDEN_TAIL_CHARS, read_capped_text
 from skillgate_ai.sandbox import _sandbox_env
 from skillgate_ai.suite import TaskSpec
@@ -450,71 +451,43 @@ def test_scrub_compare_keeps_resolved_arm_model() -> None:
     assert "gpt-secret" not in json.dumps(customer)
 
 
-def test_compatible_ping_falls_back_to_responses() -> None:
+def test_compatible_ping_falls_back_to_responses(monkeypatch: pytest.MonkeyPatch) -> None:
+    from test_judge import _cfg
+
     calls: list[str] = []
 
     def post(url, headers=None, json=None, timeout=None):
         del headers, json, timeout
-        calls.append(url)
-        if url.endswith("/decisions"):
-            return FakeResponse(404, {"error": {"message": "missing"}})
-        return FakeResponse(200, {"id": "resp_ok", "model": "compat"})
+        calls.append(str(url))
+        return FakeResponse(200, {})
 
-    backend = CompatibleBackend(
-        api_key="gw-key",
-        base_url="https://openrouter.ai/api/v1",
-        post=post,
-    )
-    result = backend.ping()
-    assert result["ok"] is True
-    assert any(url.endswith("/decisions") for url in calls)
-    assert any("/responses" in url for url in calls)
+    monkeypatch.setattr("skillgate_ai.openai_http.httpx.post", post)
+    with pytest.raises(SkillGateError) as caught:
+        resolve_judge(
+            _cfg(judge_provider="compatible", judge_chosen=True, gateway_api_key="gw-test"),
+            harness_name="cursor-agent",
+        )
+    assert "removed" in caught.value.message.lower()
+    assert calls == []
 
 
 def test_compatible_404_fallback_does_not_warn_http_404(
     caplog: pytest.LogCaptureFixture,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from skillgate_ai.judge_openai import OutcomeJudge
-    from skillgate_ai.judge_spec import resolve_judge_spec
-
-    answers = json.dumps(
-        {
-            "task_completion": "Fully completed",
-            "correctness": "Correct",
-            "instruction_adherence": "Fully followed",
-            "evidence_action_validity": "Fully supported",
-            "result_quality": "Clear and complete",
-            "path_efficiency": "Efficient",
-        }
-    )
+    from test_judge import _cfg
 
     def post(url, headers=None, json=None, timeout=None):
-        del headers, json, timeout
-        if url.endswith("/decisions"):
-            return FakeResponse(404, {"error": {"message": "missing"}})
-        return FakeResponse(200, {"output_text": answers, "model": "compat"})
+        del url, headers, json, timeout
+        return FakeResponse(404, {"error": {"message": "missing"}})
 
-    backend = CompatibleBackend(
-        api_key="gw-key",
-        base_url="https://openrouter.ai/api/v1",
-        post=post,
-    )
+    monkeypatch.setattr("skillgate_ai.openai_http.httpx.post", post)
     with caplog.at_level(logging.WARNING):
-        judged = OutcomeJudge(
-            backend,
-            display_name="Other",
-            provider="compatible",
-            chosen=True,
-            supports_why=True,
-            supports_confidence=False,
-        ).judge(
-            "goal",
-            [],
-            "tail",
-            spec=resolve_judge_spec(),
-            path={"had_path": True, "steps": 1},
-        )
-    assert judged["status"] == "completed"
+        with pytest.raises(SkillGateError):
+            resolve_judge(
+                _cfg(judge_provider="other", judge_chosen=True, openai_api_key="sk-test"),
+                harness_name="cursor-agent",
+            )
     assert "scoring HTTP 404" not in caplog.text
 
 

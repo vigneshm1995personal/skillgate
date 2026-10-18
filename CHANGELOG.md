@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Score live checks only with decision models: OpenAI Decisions, Jev, and Clef. Auto leaves scoring off, even when a key is saved. Chat, Responses, AWS, and Other scoring are removed. A missing decision key fails the run and does not fall back to another provider.
+- Skip `.pydeps`, `pydeps`, and `__pypackages__` when collecting workspace files for a check.
+
 ## 0.7.3
 
 - Score a case's extra questions with Jev and with OpenAI Decisions. A failing answer fails the check, and What happened shows the question text plus the answer.

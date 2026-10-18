@@ -74,7 +74,8 @@ def test_api_settings_keys_hides_judge_backend_key_names(tmp_path: Path, monkeyp
     monkeypatch.setenv("SKILLGATE_ROOT", str(tmp_path))
     client = TestClient(create_app(root=tmp_path), base_url="http://127.0.0.1:8765")
     blob = json.dumps(client.get("/api/settings/keys").json())
-    assert "JEV_API_KEY" not in blob
+    assert "JEV_API_KEY" in blob
+    assert "CLOUDFLARE_API_TOKEN" in blob
     assert "AWS_ACCESS_KEY_ID" not in blob
     assert "AI_GATEWAY_API_KEY" in blob
 
@@ -83,12 +84,13 @@ def test_judge_settings_file_omits_decisions_path_after_save(tmp_path: Path) -> 
     path = judge_settings_path(tmp_path)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
-        '{"provider": "compatible", "base_url": "https://x", "decisions_path": "/score"}\n',
+        '{"provider": "jev", "base_url": "https://x", "decisions_path": "/score"}\n',
         encoding="utf-8",
     )
     settings = load_judge_settings(tmp_path)
+    assert settings.provider == "jev"
     assert settings.decisions_path == "/score"
-    save_judge_settings(tmp_path, provider=settings.provider, base_url=settings.base_url)
+    save_judge_settings(tmp_path, provider="jev", base_url=settings.base_url)
     raw = json.loads(path.read_text(encoding="utf-8"))
     assert "decisions_path" not in raw
 

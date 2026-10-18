@@ -25,12 +25,10 @@ const CUSTOMER_DENY = [
   "doesn't change Install",
   "OpenAI was unsure",
   "Scored by OpenAI",
-  "OpenAI Decisions",
   "via Vercel AI Gateway",
   "gpt-6-luna",
   "Gate pre-selected skill",
   "skip catalog discovery",
-  "Decisions",
   "Bedrock",
 ] as const
 
@@ -91,8 +89,12 @@ describe("settings footer", () => {
     expect(src).toMatch(/signed in/)
     expect(src).toMatch(/not signed in/)
     expect(src).toMatch(/Judge key \(optional\)/)
-    expect(src).toMatch(/Any OpenAI-compatible endpoint/)
-    expect(src).toMatch(/Skip it to run without the judge/)
+    expect(src).toMatch(/File checks only/)
+    expect(src).toMatch(/OpenAI Decisions/)
+    expect(src).toMatch(/label: "Jev"/)
+    expect(src).toMatch(/label: "Clef"/)
+    expect(src).toMatch(/htmlFor="settings-judge-account-id"/)
+    expect(src).toMatch(/Account id/)
     expect(src).toMatch(/htmlFor="settings-judge-base-url"/)
     expect(src).toMatch(/Base URL/)
     expect(src).toMatch(/https:\/\/openrouter\.ai\/api\/v1/)
@@ -116,12 +118,13 @@ describe("settings footer", () => {
     expect(src).not.toMatch(/CURSOR_API_KEY/)
     expect(src).not.toMatch(/CODEX_API_KEY/)
     expect(src).not.toMatch(/ANTHROPIC_API_KEY/)
-    expect(src).not.toMatch(/label: "OpenAI"/)
+    expect(src).not.toMatch(/label: "OpenAI"(?! Decisions)/)
     expect(src).not.toMatch(/label: "Anthropic"/)
-    expect(src).not.toMatch(/label: "Jev"/)
+    expect(src).not.toMatch(/AI_GATEWAY_API_KEY/)
+    expect(src).not.toMatch(/Any OpenAI-compatible endpoint/)
+    expect(src).not.toMatch(/Skip it to run without the judge/)
     expect(src).not.toMatch(/AI Gateway/)
     expect(src).not.toMatch(/Scoring provider/)
-    expect(src).not.toMatch(/Decisions/)
     expect(src).not.toMatch(/Bedrock/)
   })
 })

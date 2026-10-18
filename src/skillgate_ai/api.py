@@ -245,6 +245,7 @@ def _register_core_routes(app: FastAPI) -> None:
                 model=body.get("model"),
                 base_url=body.get("base_url"),
                 decisions_path=body.get("decisions_path"),
+                account_id=body.get("account_id"),
             )
         except SkillGateError as exc:
             fail(400, exc.message, hint=exc.hint)

@@ -33,6 +33,9 @@ _SKIP_DIR_NAMES = frozenset(
         "site-packages",
         ".skillgate",
         ".skillgate-git-home",
+        ".pydeps",
+        "pydeps",
+        "__pypackages__",
     }
 )
 _MAX_EXTRA_BYTES = 262_144

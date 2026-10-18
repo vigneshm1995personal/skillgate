@@ -22,11 +22,11 @@ This is a **local process**, not hosted `serve`. Default bind is `127.0.0.1:8765
 
 **Compare** (sidebar tab) has CLI equivalents: `skillgate compare models` (arms via `--arm 'Label:codex'`, spend cap via `--max-spend-usd`), `skillgate compare versions --run …`, `skillgate compare list`, `skillgate compare show`, and `skillgate compare cancel` while a job is running.
 
-The React app in `web/` is the only Skill Gate UI (`@skillgate/ui`). `skillgate ui` serves that build. Home is the first screen. Paid screens (cloud sign-in, billing, shared history, hosted judge, sandboxes) are slots: off here, supplied by the hosted app. Import from `~/.cursor/skills`, `~/.codex/skills`, and `~/.claude/skills`, or use packs under `skills/`. Evaluate lists skills that already live in those folders (**Pick a skill**). Paste and zip are not on that screen; `skillgate skill paste` and `skillgate import` still do them. Then checks, with agent and model tucked in an accordion, and one **Run**. Nothing evaluates until you press it. Run is disabled until `skillgate login` (Settings → Sign in). The optional judge is that one Settings card: base URL, model, and API key. Test uses the same call as `skillgate judge provider test`. Results use the same drawn mark, Result | Check | What happened, and the built-in checks.
+The React app in `web/` is the only Skill Gate UI (`@skillgate/ui`). `skillgate ui` serves that build. Home is the first screen. Paid screens (cloud sign-in, billing, shared history, hosted judge, sandboxes) are slots: off here, supplied by the hosted app. Import from `~/.cursor/skills`, `~/.codex/skills`, and `~/.claude/skills`, or use packs under `skills/`. Evaluate lists skills that already live in those folders (**Pick a skill**). Paste and zip are not on that screen; `skillgate skill paste` and `skillgate import` still do them. Then checks, with agent and model tucked in an accordion, and one **Run**. Nothing evaluates until you press it. Run is disabled until `skillgate login` (Settings → Sign in). The optional judge is that one Settings card: File checks only, OpenAI Decisions, Jev, or Clef, plus the key that provider needs. Test uses the same call as `skillgate judge provider test`. Results use the same drawn mark, Result | Check | What happened, and the built-in checks.
 
 **Deploy** copies a green-gated skill (skill files only, not `evals/`) into those same agent folders. Install stays disabled without an agent (`skillgate login` or Settings → Sign in), even after a passing check. The optional judge key lives in this project’s `.skillgate/keys`, or CI/Docker can set `SKILLGATE_*` (always read). `skillgate check` still exits 0, 1, or 2 with no account.
 
-The result panel names who scored the run in plain words (`Scored by the judge`, or `Scored by OpenAI` / `Jev` / `AWS` / `Other` if you picked a provider in Settings, or `Checks scored this run.`). Checking → slide → drawn Passed/Failed is unchanged.
+The result panel names who scored the run in plain words (`Scored by the judge` for OpenAI Decisions, Jev, and Clef, or `Checks scored this run.` when scoring is off). A historical AWS stamp still says `Scored by AWS`. A historical Other stamp says `Scored by your judge`. Checking → slide → drawn Passed/Failed is unchanged.
 
 ## Intentional red path
 
@@ -60,7 +60,7 @@ Everything the local UI can do has a CLI command. New API writes must update thi
 | Save a judge key (optional) | `PUT /api/settings/keys/{name}` | `skillgate keys set` |
 | Clear a judge key | `DELETE /api/settings/keys/{name}` | `skillgate keys clear` |
 | List keys | `GET /api/settings/keys` | `skillgate keys list` |
-| Save judge base URL and model | `PUT /api/settings/judge` | `skillgate judge provider set` |
+| Save the scoring provider | `PUT /api/settings/judge` | `skillgate judge provider set` |
 | Test the judge | `POST /api/judge/ping` | `skillgate judge provider test` |
 | Show the judge | `GET /api/settings/judge` | `skillgate judge provider show` |
 | Import from agent folders | `POST /api/skills/import` | `skillgate import --only` |

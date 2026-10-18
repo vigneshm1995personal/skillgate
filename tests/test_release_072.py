@@ -24,7 +24,7 @@ from skillgate_ai.harness import (
 )
 from skillgate_ai.history import append_eval, load_history
 from skillgate_ai.judge_bank import OUTCOME_SCORING_NOTES, decisions_questions
-from skillgate_ai.judge_openai import StructuredOutputsBackend, _state_text
+from skillgate_ai.judge_openai import DecisionsBackend, _state_text
 from skillgate_ai.judge_spec import JudgeQuestion, extra_question_passed
 from skillgate_ai.report import report_to_dict
 from skillgate_ai.suite import FileExpect, ScorerSpec, TaskSpec
@@ -257,19 +257,19 @@ def test_judge_questions_require_concrete_evidence() -> None:
         captured["payload"] = json
         from test_judge_providers import FakeResponse
 
-        return FakeResponse(200, {"output_text": "{}", "model": "compat"})
+        return FakeResponse(200, {"answers": [], "model": "gpt-6-luna"})
 
-    StructuredOutputsBackend(api_key="sk-test", post=post).evaluate(
+    DecisionsBackend(api_key="sk-test", post=post).evaluate(
         state={"check_prompt": "grade"},
         images=[],
         timeout_sec=1,
     )
     payload = captured["payload"]
     assert isinstance(payload, dict)
-    system = payload["input"][0]["content"].lower()
-    assert "not applicable" in system
-    assert "example" in system
-    assert "no violation" in system
+    assert str(captured["url"]).endswith("/decisions")
+    assert "/responses" not in str(captured["url"])
+    assert isinstance(payload["questions"], list)
+    assert payload["questions"]
 
 
 def test_regression_fixture_no_useeffect_is_not_a_violation() -> None:
@@ -492,11 +492,11 @@ def test_judge_provider_set_stores_key_env_name_not_value(
             "judge",
             "provider",
             "set",
-            "other",
+            "jev",
             "--base-url",
             "https://openrouter.ai/api/v1",
             "--model",
-            "openai/gpt-4o-mini",
+            "typesafe/jev-1.14",
             "--key-env",
             "OPENROUTER_API_KEY",
         ],
@@ -512,51 +512,48 @@ def test_judge_provider_set_stores_key_env_name_not_value(
     from skillgate_ai.config import get_llm_config
     from skillgate_ai.judge import resolve_judge
 
+    from skillgate_ai.errors import MissingLLMKeyError
+
     cfg = get_llm_config(tmp_path)
-    judge = resolve_judge(cfg, harness_name="cursor-agent")
-    assert judge.backend.api_key == secret
+    with pytest.raises(MissingLLMKeyError) as caught:
+        resolve_judge(cfg, harness_name="cursor-agent")
+    assert "Jev" in caught.value.message
+    assert secret not in caught.value.message
 
 
-def test_scoring_endpoint_recorded_for_responses_fallback() -> None:
+def test_scoring_endpoint_recorded_for_decisions() -> None:
     from test_judge_providers import FakeResponse
 
     from skillgate_ai.judge_openai import OutcomeJudge
-    from skillgate_ai.judge_providers.compatible import CompatibleBackend
     from skillgate_ai.judge_spec import resolve_judge_spec
-
-    answers = json.dumps(
-        {
-            "task_completion": "Fully completed",
-            "correctness": "Correct",
-            "instruction_adherence": "Fully followed",
-            "evidence_action_validity": "Fully supported",
-            "result_quality": "Clear and complete",
-        }
-    )
 
     def post(url, headers=None, json=None, timeout=None):
         del headers, json, timeout
-        if str(url).endswith("/decisions"):
-            return FakeResponse(404, {"error": {"message": "missing"}})
-        return FakeResponse(200, {"output_text": answers, "model": "compat"})
+        assert str(url).endswith("/decisions")
+        answers = [
+            {"name": "task_completion", "choice": "Fully completed"},
+            {"name": "correctness", "choice": "Correct"},
+            {"name": "instruction_adherence", "choice": "Fully followed"},
+            {"name": "evidence_action_validity", "choice": "Fully supported"},
+            {"name": "result_quality", "choice": "Clear and complete"},
+        ]
+        return FakeResponse(200, {"answers": answers, "model": "gpt-6-luna"})
 
-    backend = CompatibleBackend(
-        api_key="gw-key",
-        base_url="https://openrouter.ai/api/v1",
-        post=post,
-    )
-    ping = backend.ping()
-    assert ping.get("scoring_endpoint") == "responses"
-    assert "Responses API" in str(ping.get("message") or "")
+    from skillgate_ai.judge_openai import ping_openai_backend
+
+    backend = DecisionsBackend(api_key="sk-test", post=post)
+    ping = ping_openai_backend(backend, display_name="the judge")
+    assert ping["ok"] is True
+    assert "Responses" not in str(ping.get("message") or "")
     judged = OutcomeJudge(
         backend,
-        display_name="Other",
-        provider="compatible",
+        display_name="the judge",
+        provider="openai",
         chosen=True,
         supports_why=False,
-        supports_confidence=False,
+        supports_confidence=True,
     ).judge("goal", [], "tail", spec=resolve_judge_spec(), path={"had_path": False, "steps": 0})
-    assert judged["scoring_endpoint"] == "responses"
+    assert judged["scoring_endpoint"] == "decisions"
     payload = report_to_dict(
         SuiteReport(
             suite="s",
@@ -578,8 +575,8 @@ def test_scoring_endpoint_recorded_for_responses_fallback() -> None:
             ],
         )
     )
-    assert payload["tasks"][0]["judge"]["scoring_endpoint"] == "responses"
-    assert payload.get("scoring_endpoint") == "responses"
+    assert payload["tasks"][0]["judge"]["scoring_endpoint"] == "decisions"
+    assert payload.get("scoring_endpoint") == "decisions"
 
 
 def test_cursor_unable_to_fetch_user_details_is_signed_out() -> None:

@@ -275,7 +275,7 @@ function customerScorerName(judge: JudgeResult | null | undefined): string {
   ) {
     return "your judge"
   }
-  if (provider === "jev" || name === "Jev") {
+  if (provider === "jev" || provider === "clef" || name === "Jev" || name === "Clef") {
     return "the judge"
   }
   if (name === "OpenAI" || name === "AWS") {
@@ -312,7 +312,7 @@ export function customerScoredBy(line: string): string {
   if (/^scored by (other|your judge)\b/i.test(text)) {
     return "Scored by your judge"
   }
-  if (/^scored by jev\b/i.test(text)) {
+  if (/^scored by (jev|clef)\b/i.test(text)) {
     return JUDGE_SCORED
   }
   if (
@@ -400,11 +400,11 @@ function hasConfidenceChannel(judge: JudgeResult | null | undefined): boolean {
     return false
   }
   const backend = trimText(judge?.backend).toLowerCase()
-  if (["structured", "responses", "aws", "jev", "skip"].includes(backend)) {
+  if (["structured", "responses", "aws", "jev", "clef", "skip"].includes(backend)) {
     return false
   }
   const provider = trimText(judge?.provider).toLowerCase()
-  if (provider === "jev" || provider === "aws" || provider === "skip") {
+  if (provider === "jev" || provider === "clef" || provider === "aws" || provider === "skip") {
     return false
   }
   return provider === "openai" || backend === "decisions"

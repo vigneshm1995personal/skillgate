@@ -24,7 +24,7 @@ From a clone of this repo, `pip install -e .` works the same once the virtualenv
 
 Optional local UI (same engine, no account): `skillgate ui` → http://127.0.0.1:8765. See [`docs/ui.md`](docs/ui.md). Docker still runs `skillgate check /pack` (exit 2 until a key is mounted). Everything the UI can do has a CLI command (`skillgate login` for Sign in).
 
-- **Bring your own judge** — pick OpenAI, Jev, AWS, or Other in Settings (`skillgate judge provider set`). Skill Gate does not ship a scorer account. See [`docs/judge.md`](docs/judge.md).
+- **Bring your own judge.** Pick OpenAI Decisions, Jev, or Clef in Settings (`skillgate judge provider set`). Auto leaves scoring off. Skill Gate does not ship a scorer account. See [`docs/judge.md`](docs/judge.md).
 - **Custom scoring questions** — add extras on top of Skill Gate’s six (`skillgate judge add-question`). Built-ins stay.
 
 `--expect-fail` inverts the exit code (CI for a skill that should fail):

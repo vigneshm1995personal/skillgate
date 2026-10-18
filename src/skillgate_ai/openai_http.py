@@ -9,7 +9,7 @@ from typing import Any, Callable, Mapping
 
 import httpx
 
-from skillgate_ai.errors import OFFLINE_MESSAGE
+from skillgate_ai.errors import OFFLINE_MESSAGE, SkillGateError
 from skillgate_ai.judge_bank import UNUSABLE_ANSWER
 
 _LOG = logging.getLogger(__name__)
@@ -152,6 +152,19 @@ def post_openai(
     raise last_exc
 
 
+_CHAT_JUDGE_URLS = ("/responses", "/chat/completions", "/v1/chat")
+
+
+def refuse_chat_judge_url(url: str) -> None:
+    """Scoring posts go to a decision endpoint. Chat and Responses URLs fail closed."""
+    for fragment in _CHAT_JUDGE_URLS:
+        if fragment in url:
+            raise SkillGateError(
+                "Scoring uses a decision model. Chat and Responses scoring was removed.",
+                exit_code=2,
+            )
+
+
 def post_openai_json(
     url: str,
     *,
@@ -164,6 +177,7 @@ def post_openai_json(
     who: str = "the judge",
 ) -> dict[str, Any]:
     """POST JSON. Transport/HTTP/parse failures return ``status=error``."""
+    refuse_chat_judge_url(url)
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",

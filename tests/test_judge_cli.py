@@ -123,12 +123,16 @@ def test_judge_provider_set_help_is_neutral(tmp_path: Path, monkeypatch) -> None
     out = plain_text(result.stdout + result.stderr)
     assert result.exit_code == 0, out
     assert "--decisions-path" not in out
-    assert "compatible" not in out.lower()
-    assert "other" in out.lower()
+    assert "--account-id" in out
+    assert "clef" in out.lower()
+    assert "jev" in out.lower()
+    assert "openai" in out.lower()
+    assert "aws" not in out.lower()
+    assert "other" not in out.lower()
     saved = runner.invoke(app, ["judge", "provider", "set", "other"])
-    assert saved.exit_code == 0, saved.stdout
-    settings = load_judge_settings(tmp_path)
-    assert settings.provider == "compatible"
+    saved_out = plain_text(saved.stdout + saved.stderr)
+    assert saved.exit_code != 0
+    assert "removed" in saved_out.lower()
 
 
 def test_case_add_expected_without_output_pins_text_check(tmp_path: Path, monkeypatch) -> None:

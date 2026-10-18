@@ -185,6 +185,7 @@ export const api = {
         region: string | null
         model: string | null
         base_url: string | null
+        account_id: string | null
       }
     }>("/api/settings/judge"),
   setSettingsJudge: (body: {
@@ -192,6 +193,7 @@ export const api = {
     region?: string | null
     model?: string | null
     base_url?: string | null
+    account_id?: string | null
   }) =>
     request<{
       judge: {
@@ -200,6 +202,7 @@ export const api = {
         region: string | null
         model: string | null
         base_url: string | null
+        account_id: string | null
       }
     }>("/api/settings/judge", {
       method: "PUT",

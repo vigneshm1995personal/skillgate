@@ -790,7 +790,7 @@ judge_app = typer.Typer(
 judge_provider_app = typer.Typer(
     add_completion=False,
     no_args_is_help=True,
-    help="Who scores live checks (auto or a configured judge).",
+    help="Who scores live checks (auto, openai, jev, or clef).",
 )
 app.add_typer(judge_app, name="judge")
 judge_app.add_typer(judge_provider_app, name="provider")
@@ -994,7 +994,8 @@ def judge_provider_show() -> None:
 
     root = _boot()
     cfg = get_llm_config(root)
-    if cfg.judge_chosen or cfg.openai_api_key or cfg.gateway_api_key:
+    provider = (cfg.judge_provider or "auto").strip().lower()
+    if cfg.judge_chosen and provider in {"openai", "jev", "clef"}:
         console.print(f"Scoring with {DEFAULT_NAME}")
         return
     console.print("No scoring provider — file checks only.")
@@ -1002,10 +1003,13 @@ def judge_provider_show() -> None:
 
 @judge_provider_app.command("set")
 def judge_provider_set(
-    provider: str = typer.Argument(..., help="auto, openai, jev, aws, or other"),
+    provider: str = typer.Argument(..., help="auto, openai, jev, or clef"),
     base_url: str | None = typer.Option(None, "--base-url"),
     region: str | None = typer.Option(None, "--region"),
     model: str | None = typer.Option(None, "--model"),
+    account_id: str | None = typer.Option(
+        None, "--account-id", help="Cloudflare account id for Clef"
+    ),
     decisions_path: str | None = typer.Option(None, "--decisions-path", hidden=True),
     key_env: list[str] | None = typer.Option(None, "--key-env", help=_KEY_ENV_HELP),
 ) -> None:
@@ -1027,6 +1031,7 @@ def judge_provider_set(
             base_url=base_url,
             decisions_path=decisions_path,
             key_env=key_env,
+            account_id=account_id,
         )
     except SkillGateError as exc:
         console.print(exc.render())
