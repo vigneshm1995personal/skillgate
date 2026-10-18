@@ -11,7 +11,7 @@ from skillgate_ai.judge import SkipJudge, resolve_judge
 from skillgate_ai.judge_openai import OutcomeJudge, make_openai_judge
 from skillgate_ai.judge_providers.aws import AwsBackend
 from skillgate_ai.judge_providers.compatible import CompatibleBackend
-from skillgate_ai.judge_providers.jev import JEV_EXTRAS_NOTE, JevBackend
+from skillgate_ai.judge_providers.jev import JevBackend
 from skillgate_ai.judge_settings import save_judge_settings
 from skillgate_ai.judge_spec import resolve_judge_spec
 from skillgate_ai.keys import reset_key_env_bindings
@@ -106,14 +106,15 @@ def test_openai_key_not_reused_for_jev() -> None:
     assert "Jev" in caught.value.message
 
 
-def test_jev_skips_extras_with_plain_note() -> None:
+def test_jev_scores_extra_questions_and_a_low_answer_fails() -> None:
+    ask = "Totals match?"
     spec = resolve_judge_spec(
         pack={
             "extra_questions": [
                 {
                     "id": "numbers_match",
                     "type": "predicate",
-                    "ask": "Totals match?",
+                    "ask": ask,
                     "pass_if": {"gte": 0.8},
                 }
             ]
@@ -124,12 +125,6 @@ def test_jev_skips_extras_with_plain_note() -> None:
     def post(url, headers=None, json=None, timeout=None):
         del url, headers, timeout
         posted.append(json or {})
-        names = [row["name"] for row in (json or {}).get("questions") or []]
-        answers = [
-            {"name": name, "choice": "Fully completed" if name != "path_efficiency" else "Efficient"}
-            for name in names
-        ]
-        # Map to pass-lock enums for built-ins.
         mapping = {
             "task_completion": "Fully completed",
             "correctness": "Correct",
@@ -139,6 +134,7 @@ def test_jev_skips_extras_with_plain_note() -> None:
             "path_efficiency": "Efficient",
         }
         answers = [{"name": key, "choice": value} for key, value in mapping.items()]
+        answers.append({"name": "numbers_match", "noul": 0.1})
         return FakeResponse(200, {"answers": answers, "model": "jev"})
 
     backend = JevBackend(api_key="jev-key", base_url="https://jev.example/v1", post=post)
@@ -150,15 +146,13 @@ def test_jev_skips_extras_with_plain_note() -> None:
         supports_why=False,
         supports_confidence=False,
     ).judge("goal", [], "tail", spec=spec, path={"had_path": True, "steps": 2})
-    assert judged["status"] == "completed"
-    assert judged["passed"] is True
-    assert not any("Totals match" in str(item) for item in judged.get("reasons") or [])
-    assert judged.get("extra_failures") == []
-    assert JEV_EXTRAS_NOTE in judged["warnings"]
-    assert "Jev" not in JEV_EXTRAS_NOTE
-    assert "numbers_match" not in (posted[0].get("questions") or [{}])[0].get("name", "")
     names = [row["name"] for row in posted[0]["questions"]]
-    assert "numbers_match" not in names
+    assert "numbers_match" in names
+    assert judged["status"] == "completed"
+    assert judged["passed"] is False
+    assert judged.get("extra_failures") == [f"{ask} No"]
+    assert judged["cells"]["numbers_match"]["choice"] == "No"
+    assert judged["warnings"] == []
     assert judged.get("why") is None
 
 

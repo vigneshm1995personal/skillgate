@@ -344,6 +344,13 @@ def scored_by_line(report: SuiteReport) -> str:
 
 def _task_fail_line(task: TaskReport) -> str:
     judge = task.judge if isinstance(task.judge, dict) else {}
+    if isinstance(judge, dict):
+        extras = judge.get("extra_failures")
+        if isinstance(extras, list):
+            for item in extras:
+                text = str(item).strip()
+                if text:
+                    return text
     why = judge.get("why") if isinstance(judge, dict) else None
     if isinstance(why, str) and why.strip():
         return why.strip()

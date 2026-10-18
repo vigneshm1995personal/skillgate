@@ -348,10 +348,25 @@ def _answers_from_decisions_list(payload: Mapping[str, Any]) -> dict[str, Any]:
                 continue
             name = item.get("name")
             if isinstance(name, str) and name.strip():
-                mapped[name] = dict(item)
+                mapped[name] = _lift_decision_answer(item)
     elif isinstance(rows, Mapping):
-        mapped = dict(rows)
+        mapped = {str(key): _lift_decision_answer(item) for key, item in rows.items()}
     return mapped
+
+
+def _lift_decision_answer(item: Any) -> Any:
+    """Copy ``noul`` onto ``probability`` so predicate checks can read it."""
+    if not isinstance(item, Mapping):
+        return item
+    data = dict(item)
+    if "probability" in data or "noul" not in data:
+        return data
+    noul = data.get("noul")
+    if isinstance(noul, bool):
+        data["probability"] = 1.0 if noul else 0.0
+    elif isinstance(noul, (int, float)):
+        data["probability"] = float(noul)
+    return data
 
 
 def _output_text(payload: Mapping[str, Any]) -> tuple[str | None, bool]:
@@ -767,6 +782,8 @@ class OutcomeJudge:
             elif isinstance(raw, Mapping) and raw.get("score") is not None:
                 cell["score"] = raw.get("score")
                 cell["choice"] = str(raw.get("score"))
+            if cell.get("choice"):
+                cell["reason"] = f"{question.ask} {cell['choice']}"
             cells[question.id] = cell
         merged_answers = {**pass_answers, **extra_answers}
         extra_questions = {q.id: {"instructions": q.ask, "type": q.type} for q in resolved.extras}

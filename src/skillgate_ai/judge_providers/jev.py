@@ -1,11 +1,10 @@
-"""Jev adapter. Built-in six only; extras are skipped with a plain note."""
+"""Jev adapter. Built-in questions and the case's extra questions."""
 
 from __future__ import annotations
 
 from typing import Any, Mapping
 from urllib.parse import urlparse
 
-from skillgate_ai.judge_bank import decisions_questions
 from skillgate_ai.judge_openai import (
     DEFAULT_TIMEOUT_SEC,
     _answers_from_decisions_list,
@@ -13,13 +12,11 @@ from skillgate_ai.judge_openai import (
     _path_is_recorded,
     _state_text,
 )
+from skillgate_ai.judge_spec import builtin_spec, spec_decisions_questions
 from skillgate_ai.openai_http import PostFn, post_openai_json
 
 DISPLAY_NAME = "the judge"
 OPENROUTER_DECISIONS_URL = "https://openrouter.ai/api/alpha/decisions"
-JEV_EXTRAS_NOTE = (
-    "Extra questions were skipped. Only the built-in questions were scored."
-)
 
 
 class JevBackend:
@@ -50,9 +47,7 @@ class JevBackend:
     ) -> dict[str, Any]:
         del images
         include_path = _path_is_recorded(state.get("path"))
-        extras = []
-        if spec is not None:
-            extras = [q.id for q in getattr(spec, "extras", ()) if not q.builtin]
+        resolved = spec if spec is not None else builtin_spec()
         result = post_openai_json(
             _score_url(self.base_url),
             api_key=self.api_key,
@@ -60,7 +55,7 @@ class JevBackend:
                 self.base_url,
                 model=self.model,
                 text=_state_text(state),
-                questions=decisions_questions(include_path=include_path),
+                questions=spec_decisions_questions(resolved, include_path=include_path),
             ),
             timeout_sec=timeout_sec,
             model=self.model,
@@ -74,15 +69,14 @@ class JevBackend:
         answers = _normalize_answers(
             _answers_from_decisions_list(data),
             include_path=include_path,
+            spec=resolved,
         )
-        warnings = [JEV_EXTRAS_NOTE] if extras else []
         return {
             "status": "completed",
             "model": str(data.get("model") or self.model),
             "answers": answers,
             "usage": usage,
-            "warnings": warnings,
-            "skipped": extras,
+            "warnings": [],
         }
 
     def ping(self, *, timeout_sec: float = DEFAULT_TIMEOUT_SEC) -> dict[str, Any]:
@@ -110,6 +104,20 @@ class JevBackend:
         if result.get("status") == "ok":
             return {"ok": True, "message": "Connected to the judge."}
         return {"ok": False, "message": _public_failure(result)}
+
+
+def _score_levels(levels: Any) -> list[str]:
+    if not isinstance(levels, list):
+        return []
+    labels: list[str] = []
+    for level in levels:
+        if isinstance(level, Mapping):
+            label = str(level.get("label") or level.get("value") or "").strip()
+        else:
+            label = str(level or "").strip()
+        if label:
+            labels.append(label)
+    return labels
 
 
 def _openrouter_host(base_url: str) -> bool:
@@ -173,10 +181,21 @@ def _openrouter_questions(questions: list[dict[str, Any]]) -> dict[str, dict[str
                 "criteria": criteria,
             }
             continue
+        if str(question.get("type") or "") == "score" or question.get("levels"):
+            levels = _score_levels(question.get("levels"))
+            mapped[name] = {
+                "type": "score",
+                "instructions": instructions,
+                "criteria": levels or ["1", "2", "3", "4", "5"],
+            }
+            continue
         mapped[name] = {
             "type": "noul",
             "instructions": instructions,
-            "criteria": {"true": "Yes.", "false": "No."},
+            "criteria": {
+                "true": "Yes. The instructions are satisfied.",
+                "false": "No. The instructions are not satisfied.",
+            },
         }
     return mapped
 
