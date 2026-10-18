@@ -99,7 +99,24 @@ def test_fake_home_import_list_open_run_deploy(tmp_path: Path, monkeypatch) -> N
     assert listed.status_code == 200
     body = listed.json()
     assert body.get("catalog_error") is None
-    assert body["skills"] == []
+    before_import = body["skills"]
+    slugs = {item.get("slug") or item["id"] for item in before_import}
+    assert "pdf" in slugs
+    assert "idea-brainstorming" in slugs
+    assert "vercel-react-best-practices" in slugs
+    assert "web-design-guidelines" in slugs
+    labels = {item.get("source_label") for item in before_import}
+    assert "Cursor" in labels
+    assert "Codex" in labels
+    assert "Claude Code" in labels
+    by_slug = {item.get("slug"): item for item in before_import}
+    assert by_slug["pdf"]["source"] == "cursor"
+    idea = client.get("/api/skills/idea-brainstorming")
+    assert idea.status_code == 200
+    from skillgate_ai.catalog import find_skill
+
+    found = find_skill(paths["root"], str(paths["cursor"] / "web-design-guidelines"))
+    assert found == (paths["cursor"] / "web-design-guidelines").resolve()
 
     status = client.get("/api/status")
     assert status.status_code == 200
@@ -163,6 +180,10 @@ def test_fake_home_import_list_open_run_deploy(tmp_path: Path, monkeypatch) -> N
     assert "vercel-react-best-practices" in slugs
     broken = next(item for item in listed_skills if item.get("slug") == "broken-notes")
     assert broken.get("warning")
+    pdf_row = next(item for item in listed_skills if item.get("slug") == "pdf")
+    assert pdf_row.get("source") == "workspace"
+    assert pdf_row.get("source_label") == "This project"
+    assert len(listed_skills) == len(before_import)
     first_count = len(listed_skills)
 
     again = client.post("/api/skills/import", json={"sources": ["cursor"]})

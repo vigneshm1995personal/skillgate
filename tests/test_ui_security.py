@@ -63,6 +63,9 @@ def test_bad_host_is_forbidden(tmp_path: Path, monkeypatch) -> None:
 
 
 def test_pack_path_outside_project_is_rejected(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("SKILLGATE_CURSOR_SKILLS", str(tmp_path / "cursor-skills"))
+    monkeypatch.setenv("SKILLGATE_CODEX_SKILLS", str(tmp_path / "codex-skills"))
+    monkeypatch.setenv("SKILLGATE_CLAUDE_SKILLS", str(tmp_path / "claude-skills"))
     outside = tmp_path / "outside" / "pdf"
     write_skill_md(outside, name="pdf", description="Outside.", body="# Outside\n")
     workspace = tmp_path / "project"
