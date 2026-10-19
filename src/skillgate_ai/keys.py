@@ -207,6 +207,7 @@ def _require_name(name: str) -> str:
         raise SkillGateError(
             "Unknown key name.",
             hint="Use CURSOR_API_KEY, CODEX_API_KEY, OPENAI_API_KEY, "
+            "JEV_API_KEY, CLOUDFLARE_API_TOKEN, CUSTOM_DECISION_API_KEY, "
             "AI_GATEWAY_API_KEY (AI Gateway key), or ANTHROPIC_API_KEY.",
         )
     return key

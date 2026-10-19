@@ -200,11 +200,16 @@ def history_row_to_run(row: dict[str, Any], skill_path: Path) -> dict[str, Any]:
     tryout = row_is_tryout(row, report)
     decision, reason = run_gate_decision(row)
     cfg = row.get("config") if isinstance(row.get("config"), dict) else None
-    label = customer_config_label(cfg, str(harness or ""))
+    if passed is None:
+        label = "Not scored"
+        status = "not_run"
+    else:
+        label = customer_config_label(cfg, str(harness or ""))
+        status = "error" if error else "done"
     return scrub_browser_payload(
         {
             "id": row.get("run_id"),
-            "status": "error" if error else "done",
+            "status": status,
             "passed": passed,
             "gate": row.get("gate")
             if row.get("gate") is not None

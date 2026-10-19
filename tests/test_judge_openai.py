@@ -305,7 +305,7 @@ def test_http_errors_fail_and_never_log_key(caplog: pytest.LogCaptureFixture) ->
     cases = {
         401: "The judge did not accept this API key.",
         403: "The judge scoring is not enabled for this key.",
-        404: "The judge has no scoring endpoint for this key.",
+        404: "This key is for a different endpoint.",
         400: "The judge rejected this scoring request.",
         429: "The judge rate-limited this request. Wait and retry, or check billing.",
     }

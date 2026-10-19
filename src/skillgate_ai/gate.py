@@ -102,6 +102,7 @@ def resolve_pack_and_spec(target: Path, root: Path):
     raise SkillGateError(
         f"Not a skill pack or suite: {target}",
         hint="Pass a skill folder with SKILL.md, or a suite YAML.",
+        exit_code=2 if not path.exists() else 1,
     )
 
 
@@ -248,6 +249,10 @@ def _execute_check(
             source=source,
         )
         cfg = apply_eval_config(cfg, run_cfg)
+        if source == "cli" and skill_path is not None:
+            from skillgate_ai.ingest import ingest_skill
+
+            ingest_skill(skill_path, strict=True)
         resolved = live_harness_or_error(harness_pref, cfg)
         run_cfg = stamp_resolved(run_cfg, resolved.name, cfg)
         outcome_judge = (
@@ -310,7 +315,7 @@ def _execute_check(
         err = {"message": exc.message, "hint": exc.hint}
         if persist_root and run_cfg is not None:
             if isinstance(exc, (EvalConfigError, MissingLLMKeyError)):
-                if tryout or started:
+                if started:
                     persist_eval(
                         pack_root=persist_root,
                         run_id=rid,

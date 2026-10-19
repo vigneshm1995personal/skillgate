@@ -128,7 +128,17 @@ def ingest_skill(path: str | Path, *, strict: bool = True) -> Skill:
         extra_frontmatter=extra,
     )
     _attach_tool_warnings(skill)
+    _require_cases_match(folder)
     return skill
+
+
+def _require_cases_match(folder: Path) -> None:
+    for name in ("cases.yaml", "cases.yml"):
+        if (folder / "evals" / name).is_file():
+            from skillgate_ai.case_pack import load_case_pack
+
+            load_case_pack(folder)
+            return
 
 
 def ingest_skills(paths: list[str | Path], *, strict: bool = True) -> list[Skill]:

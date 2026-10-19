@@ -68,7 +68,7 @@ class ClefBackend:
             who=DISPLAY_NAME,
         )
         if result.get("status") != "ok":
-            return result
+            return _missing_account(self, result)
         data = _unwrap(result["data"])
         if data is None:
             return {
@@ -115,9 +115,10 @@ class ClefBackend:
         )
         if result.get("status") == "ok":
             return {"ok": True, "message": "Connected to the judge."}
+        missed = _missing_account(self, result)
         return {
             "ok": False,
-            "message": str(result.get("reason") or "The judge couldn't score this check."),
+            "message": str(missed.get("reason") or "The judge couldn't score this check."),
         }
 
     def _url(self) -> str:
@@ -128,11 +129,19 @@ class ClefBackend:
 
 def _require_account(account_id: str) -> str:
     account = (account_id or "").strip()
-    if not account or not _ACCOUNT_ID.fullmatch(account):
-        from skillgate_ai.judge_providers.decision import NEEDS_ACCOUNT
+    from skillgate_ai.judge_providers.decision import ACCOUNT_ID_FORMAT, NEEDS_ACCOUNT
 
+    if not account:
         raise SkillGateError(NEEDS_ACCOUNT, exit_code=2)
+    if not _ACCOUNT_ID.fullmatch(account):
+        raise SkillGateError(ACCOUNT_ID_FORMAT, exit_code=2)
     return account
+
+
+def _missing_account(backend: ClefBackend, result: Mapping[str, Any]) -> dict[str, Any]:
+    if result.get("http_status") == 404 and not backend.base_url:
+        return {**result, "reason": "That account id wasn't found."}
+    return dict(result)
 
 
 def _model_slug(model: str) -> str:

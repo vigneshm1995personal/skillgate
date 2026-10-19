@@ -204,8 +204,10 @@ def _public_failure(result: Mapping[str, Any]) -> str:
     """Say what failed. Never name a scoring provider."""
     status = result.get("http_status")
     reason = str(result.get("reason") or "")
-    if status == 404:
-        return "No scoring endpoint at this URL."
+    if status in {404, 405}:
+        from skillgate_ai.judge_setup import WRONG_ENDPOINT
+
+        return WRONG_ENDPOINT
     if status == 401:
         return "This API key was not accepted."
     if status == 403:
@@ -217,7 +219,7 @@ def _public_failure(result: Mapping[str, Any]) -> str:
     if status == 400:
         return "This scoring request was rejected."
     if isinstance(status, int):
-        return f"Scoring failed (HTTP {status})."
+        return "Scoring failed."
     return "Could not connect."
 
 

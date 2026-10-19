@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.7.9
+
+- A check that never starts is not saved. History, Home, and the heatmap do not show it as a failed scored run. A stored row with no result reads "not run" and "Not scored".
+- `skillgate import` of a skill already in this project stops and leaves the files alone.
+- A decision-model key is not an agent credential. `doctor` and `login --status` do not treat it as a Terminal agent API key. An `agent` binary that is not signed in is not "logged in".
+- `skillgate judge provider show` and `set` print the option id, its model, and its base URL.
+- Scoring errors do not include HTTP codes. A 404 or 405 from a non-scoring URL says the key is for a different endpoint. A Cloudflare 404 says that account id wasn't found. An account id that is not letters and digits has its own message. A chat model on a custom endpoint is refused.
+- Settings clears the Test line when the option changes or on Save. Switch saves the decision model.
+- `skillgate keys set` lists `JEV_API_KEY`, `CLOUDFLARE_API_TOKEN`, and `CUSTOM_DECISION_API_KEY`.
+- `skillgate case remove` keeps the original checks of the bundled examples.
+- `skillgate judge add-question` needs a skill pack.
+- The Gate tab keeps the selected skill. A draft-only pack does not offer "Run 1 case". A missing expected-output file fails when the pack loads. `ingest` rejects a `cases.yaml` skill mismatch, and `check` reports a `SKILL.md` name mismatch before the no-agent error.
+- `docker run` with no pack mounted exits 2. `skillgate example` writes `skills/NAME`. `--model CLEF` is stored as `clef`.
+- Duplicate check ids use a plain sentence. `check --harness llm` and `byollm` exit 2.
+
 ## 0.7.8
 
 - A decision model shows only the fields it scores with. OpenRouter (Jev) defaults to `https://openrouter.ai/api/v1` and `typesafe/jev-1.14`. OpenAI takes a key. Cloudflare takes an account id, `clef` or `clef-flash`, and a token. A custom endpoint takes a URL, a model, and a key.

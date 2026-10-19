@@ -35,6 +35,7 @@ NEEDS_ACCOUNT = (
     "This decision model needs an account id. "
     "Set it with `skillgate judge provider set` and `--account-id`."
 )
+ACCOUNT_ID_FORMAT = "An account id uses letters and digits only."
 
 CHAT_BACKENDS = frozenset({"chat", "completions", "responses", "structured"})
 REMOVED_BACKENDS = frozenset({"other", "compatible", "aws", "unknown"})

@@ -57,7 +57,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
 import { canPinCheck, pinnedCaseCount } from "@/lib/case-pack"
 import { PackScoringExtras } from "@/components/dashboard/scoring-questions"
-import { runButtonLabel } from "@/lib/run-label"
+import { runButtonLabel, runButtonTotal } from "@/lib/run-label"
 import { useDashboard } from "@/lib/dashboard-provider"
 import { runBelongsToSkill } from "@/lib/eval-row-state"
 import type { RunRecord } from "@/lib/types"
@@ -241,10 +241,15 @@ export function EvalPage() {
           ? startBlockReason || START_NEEDS_UPLOAD
           : undefined
   const runAgent = harnessPref === "auto" ? resolvedHarness : harnessPref
+  const idleTotal = runButtonTotal({
+    running: false,
+    taskCount: checks.length,
+    checks,
+  })
   const runLabel = runButtonLabel({
     running,
     completed: lastResult?.completed_count ?? 0,
-    total: running ? (lastResult?.task_count ?? checks.length) : checks.length,
+    total: running ? (lastResult?.task_count ?? idleTotal) : idleTotal,
     agent: runAgent,
   })
   const runHelp = !skill

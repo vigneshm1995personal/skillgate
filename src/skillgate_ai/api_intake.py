@@ -139,7 +139,11 @@ def import_skill_folder(root: Path, source: str | Path) -> Path:
     parent.mkdir(parents=True, exist_ok=True)
     dest = _inside(parent, parent / slug)
     if dest.exists():
-        shutil.rmtree(dest)
+        raise SkillGateError(
+            f"{slug} is already in this project.",
+            hint="Leave that folder as it is, or import a different skill.",
+            exit_code=2,
+        )
     copy_skill_pack(src, dest, include_goldens=True)
     ingest_skill(dest, strict=False)
     return dest

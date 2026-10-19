@@ -33,7 +33,7 @@ skillgate check skills/json-response
 skillgate check skills/json-response-sabotaged
 ```
 
-`skillgate examples install` writes six skills under `skills/`. Files already in that folder stay as they are. `skills/json-response` exits 0 when the live run is green. `skills/json-response-sabotaged` exits 1: the JSON checks fail, and the unrelated check can pass. Both checks exit 2 until an agent is available and a decision model is selected. Use `skillgate login` or `skillgate keys set` for the agent, and `skillgate judge provider set` for the decision model. These commands match release 0.7.8.
+`skillgate examples install` writes six skills under `skills/`. Files already in that folder stay as they are. `skills/json-response` exits 0 when the live run is green. `skills/json-response-sabotaged` exits 1: the JSON checks fail, and the unrelated check can pass. Both checks exit 2 until an agent is available and a decision model is selected. Use `skillgate login` or `skillgate keys set` for the agent, and `skillgate judge provider set` for the decision model. These commands match release 0.7.9. A check that never starts is not saved. `skillgate import` of a skill already in this project stops and leaves the files alone. A decision-model key is not an agent login.
 
 The same steps in the local UI:
 
@@ -119,8 +119,12 @@ skillgate judge test
 - This decision model needs an API key. Add it in Settings, or with `skillgate keys set`. Save the key named above.
 - `This decision model needs a base URL.` Pass `--base-url`. OpenRouter's is `https://openrouter.ai/api/v1`.
 - This decision model needs an account id. Set it with `skillgate judge provider set` and `--account-id`. Cloudflare needs that flag.
+- `An account id uses letters and digits only.` A hyphen is not a missing account id.
+- `That account id wasn't found.` The account id in the URL does not exist.
+- `gpt-4o isn't a decision model.` A chat model on a custom endpoint is refused. Scoring errors do not include HTTP codes.
 - `This decision model needs a model.` Pass `--model`, or pick one from the list.
 - `Pick a decision model before running a live check.` Run one `skillgate judge provider set` command above.
+- `skillgate judge provider show` prints the option id, its model, and its base URL.
 
 ## Features
 
@@ -149,12 +153,12 @@ skillgate example pdf-sabotaged
 skillgate check skills/pdf-sabotaged --expect-fail
 skillgate deploy skills/pdf
 skillgate judge provider show
-skillgate judge add-question --ask "Did the answer follow the requested format?"
+skillgate judge add-question skills/pdf --ask "Did the answer follow the requested format?"
 skillgate compare versions skills/pdf --dry-run
 skillgate ui
 ```
 
-`--expect-fail` exits 0 only when the live run is red. `skillgate deploy` copies the skill files after this pack already has a passing check. It does not run check for you. Deploy stays blocked until an agent is available, even after a green check. `skillgate ui` serves the local UI at http://127.0.0.1:8765. A version compare takes two `--run` ids or two `--git` refs.
+`--expect-fail` exits 0 only when the live run is red. `skillgate deploy` copies the skill files after this pack already has a passing check. It does not run check for you. Deploy stays blocked until an agent is available, even after a green check. `skillgate ui` serves the local UI at http://127.0.0.1:8765. A version compare takes two `--run` ids or two `--git` refs. `skillgate example NAME` writes `skills/NAME`. `skillgate judge add-question` needs a skill pack. `skillgate case remove` keeps the original checks of the bundled examples.
 
 Create a workspace and a skill:
 
@@ -185,7 +189,7 @@ The full guide, with a copy-paste pack and the mistakes that reject a dataset, i
 docker compose run --rm --no-TTY skillgate
 ```
 
-The image entrypoint is `skillgate`. The default command is `check /pack`. With nothing configured, that exits 2.
+The image entrypoint is `skillgate`. The default command is `check /pack`. With no pack mounted, that path is missing and the command exits 2.
 
 ## Documentation
 

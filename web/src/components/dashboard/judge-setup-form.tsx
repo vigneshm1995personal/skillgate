@@ -18,6 +18,7 @@ import {
   judgeSaveBody,
   mismatchCopy,
   showsField,
+  switchSaveBody,
   type DecisionJudge,
   type JudgeDraft,
 } from "@/lib/judge-setup"
@@ -410,6 +411,7 @@ export function JudgeSetupCard({
   const chosen = provider !== "" && provider !== NOT_SELECTED
 
   const applyProvider = (next: string) => {
+    setTestMessage("")
     setProvider(next)
     setRemovedNote("")
     setSwitchTo("")
@@ -436,11 +438,36 @@ export function JudgeSetupCard({
   }
 
   const onSave = async () => {
+    setTestMessage("")
     setBusy(true)
     try {
       await persist()
       await refreshStatus()
       toast.add({ title: "Saved", type: "success" })
+    } catch (err) {
+      const message = err instanceof ApiError ? err.message : "Could not save."
+      toast.add({ title: message, type: "error" })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const saveSwitch = async (next: string) => {
+    setTestMessage("")
+    setSwitchTo("")
+    setBusy(true)
+    try {
+      const saved = await api.setSettingsJudge(switchSaveBody(judges, next, savedProvider, savedDraft))
+      const nextDraft = {
+        baseUrl: saved.judge.base_url || "",
+        model: saved.judge.model || "",
+        accountId: saved.judge.account_id || "",
+      }
+      setSavedProvider(saved.judge.provider || NOT_SELECTED)
+      setSavedDraft(nextDraft)
+      setDraft(nextDraft)
+      setProvider(saved.judge.provider || next)
+      await refreshStatus()
     } catch (err) {
       const message = err instanceof ApiError ? err.message : "Could not save."
       toast.add({ title: message, type: "error" })
@@ -556,7 +583,7 @@ export function JudgeSetupCard({
       testMessage={testMessage}
       testOk={testOk}
       switchTo={switchTo}
-      onSwitch={applyProvider}
+      onSwitch={(next) => void saveSwitch(next)}
       onSave={() => void onSave()}
       onTest={() => void onTest()}
       onClear={() => void onClear()}

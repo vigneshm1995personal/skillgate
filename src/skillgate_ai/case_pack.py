@@ -143,7 +143,8 @@ class CasePack(BaseModel):
         ids = [case.id for case in self.cases]
         dupes = sorted({item for item in ids if ids.count(item) > 1})
         if dupes:
-            raise ValueError(f"duplicate case ids: {dupes}")
+            names = ", ".join(dupes)
+            raise ValueError(f"These checks use the same id: {names}")
         return self
 
 
@@ -836,8 +837,14 @@ def _validate_pack_on_disk(root: Path, pack: CasePack) -> None:
                     f"Couldn't find {item.src} (listed as an input file for {case.id}).",
                     hint="Add the file under evals/fixtures/, or remove it from input.files.",
                 )
-        # Missing expected-output files fail that check at run time.
-        # Do not abort the whole suite here.
+        if (
+            case.status == "pinned"
+            and case.should_trigger
+            and case.golden is not None
+            and not case.output_optional
+            and not (root / case.golden.path).is_file()
+        ):
+            raise SuiteError(f"{case.id}: {MISSING_GOLDEN_REASON}")
 
 
 MISSING_GOLDEN_REASON = "This check is missing its expected output file."

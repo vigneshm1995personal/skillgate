@@ -51,6 +51,18 @@ describe("historyMeta", () => {
     expect(skipped.config).not.toMatch(/via gateway|openai\/|GPT-4o/)
   })
 
+  it("shows a run that did not score as not scored", () => {
+    expect(
+      historyMeta({
+        kind: "run",
+        skill: "pdf",
+        passed: null,
+        status: "not_run",
+        config_label: "Scored by the judge",
+      }).config
+    ).toBe("Not scored")
+  })
+
   it("renders leftover skip-judge rows as an older run", () => {
     expect(
       historyMeta({

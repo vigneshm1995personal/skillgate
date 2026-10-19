@@ -67,8 +67,10 @@ def user_message_for_status(
         return f"{label} did not accept this API key."
     if status == 403:
         return f"{label} scoring is not enabled for this key."
-    if status == 404:
-        return f"{label} has no scoring endpoint for this key."
+    if status in {404, 405}:
+        from skillgate_ai.judge_setup import WRONG_ENDPOINT
+
+        return WRONG_ENDPOINT
     if status in {402, 429} and error_code in _QUOTA_CODES:
         if who == "OpenAI":
             return OUT_OF_CREDITS
@@ -79,7 +81,7 @@ def user_message_for_status(
         return f"{label} rate-limited this request. Wait and retry, or check billing."
     if status == 400:
         return f"{label} rejected this scoring request."
-    return f"{label} couldn't score this check (HTTP {status})."
+    return f"{label} couldn't score this check."
 
 
 def _status_error(
@@ -91,9 +93,9 @@ def _status_error(
     code = openai_error_code(response)
     reason = user_message_for_status(response.status_code, error_code=code, who=who)
     if response.status_code == 404:
-        _LOG.debug("scoring HTTP %s", response.status_code)
+        _LOG.debug("scoring request failed")
     else:
-        _LOG.warning("scoring HTTP %s", response.status_code)
+        _LOG.warning("scoring request failed")
     return {
         "status": "error",
         "reason": reason,
@@ -137,8 +139,7 @@ def post_openai(
             and not is_quota_exhausted(response)
         ):
             _LOG.warning(
-                "scoring HTTP %s (attempt %s/%s)",
-                response.status_code,
+                "scoring request failed (attempt %s/%s)",
                 attempt + 1,
                 attempts,
             )

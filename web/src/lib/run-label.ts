@@ -6,6 +6,17 @@ const AGENT_NAMES: Record<string, string> = {
   claude: agentLabel("claude"),
 }
 
+export function runButtonTotal(opts: {
+  running: boolean
+  taskCount: number
+  checks: { bank_status?: string | null }[]
+}): number {
+  if (opts.running) {
+    return opts.taskCount
+  }
+  return opts.checks.filter((check) => check.bank_status === "pinned").length
+}
+
 export function runButtonLabel(opts: {
   running: boolean
   completed: number
