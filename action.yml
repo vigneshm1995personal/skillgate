@@ -46,6 +46,9 @@ outputs:
   result:
     description: pass, fail, or cannot-run
     value: ${{ steps.check.outputs.result }}
+  detail:
+    description: First line of the check result, with keys removed
+    value: ${{ steps.check.outputs.detail }}
 runs:
   using: composite
   steps:

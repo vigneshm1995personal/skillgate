@@ -99,8 +99,9 @@ def test_self_test_workflow_expects_cannot_run_without_a_paid_key() -> None:
     assert "secrets." not in text
     assert "OPENAI" not in text
     joined = "\n".join(step.get("run", "") for step in steps if "run" in step)
-    assert 'exit-code' in joined
+    assert "exit-code" in joined
     assert '"2"' in joined or "'2'" in joined
+    assert "cannot-run" in joined
     assert "No agent is available to run checks." in joined
 
 

@@ -139,7 +139,7 @@ def run_command(cmd: list[str]) -> tuple[int, str]:
 def finish(code: int, detail: str = "") -> int:
     print(status_line(code), flush=True)
     write_summary(code, detail)
-    write_output(code)
+    write_output(code, detail)
     return code
 
 
@@ -170,13 +170,18 @@ def write_summary(code: int, detail: str) -> None:
         handle.write("\n".join(lines) + "\n")
 
 
-def write_output(code: int) -> None:
+def write_output(code: int, detail: str = "") -> None:
     path = os.environ.get("GITHUB_OUTPUT", "").strip()
     if not path:
         return
+    first = ""
+    public = redact(detail).strip()
+    if public:
+        first = public.splitlines()[0].replace("\r", " ").replace("%", "")
     with open(path, "a", encoding="utf-8") as handle:
         handle.write(f"exit-code={code}\n")
         handle.write(f"result={result_name(code)}\n")
+        handle.write(f"detail={first}\n")
 
 
 def mask_skillgate_secrets() -> None:

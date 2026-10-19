@@ -22,10 +22,10 @@ jobs:
       - name: Assert keyless check exits 2
         run: |
           code="${{ steps.gate.outputs.exit-code }}"
-          echo "skillgate check exit ${code}"
+          result="${{ steps.gate.outputs.result }}"
+          detail="${{ steps.gate.outputs.detail }}"
+          echo "skillgate check exit ${code} (${result})"
+          echo "detail: ${detail}"
           test "$code" = "2"
-          grep -F "No agent is available to run checks." "$GITHUB_STEP_SUMMARY"
-          if grep -F "No such option" "$GITHUB_STEP_SUMMARY"; then
-            echo "skillgate check rejected a flag"
-            exit 1
-          fi
+          test "$result" = "cannot-run"
+          test "$detail" = "No agent is available to run checks."
