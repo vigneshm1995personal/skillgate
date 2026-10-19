@@ -111,6 +111,7 @@ def ensure_builtin_decision_endpoints() -> None:
     register_decision_endpoint(DecisionEndpoint("openai", _openai_from_cfg))
     register_decision_endpoint(DecisionEndpoint("jev", _jev_from_cfg))
     register_decision_endpoint(DecisionEndpoint("clef", _clef_from_cfg))
+    register_decision_endpoint(DecisionEndpoint("custom", _custom_from_cfg))
     _builtins_ready = True
 
 
@@ -166,6 +167,10 @@ def _clef_from_cfg(cfg: LLMConfig) -> Judge:
     return _clef_judge(cfg, chosen=True)
 
 
+def _custom_from_cfg(cfg: LLMConfig) -> Judge:
+    return _custom_judge(cfg, chosen=True)
+
+
 def _openai_judge(cfg: LLMConfig, *, chosen: bool) -> Judge:
     from skillgate_ai.judge_openai import DEFAULT_BASE_URL, make_openai_judge
 
@@ -188,17 +193,17 @@ def _openai_judge(cfg: LLMConfig, *, chosen: bool) -> Judge:
 
 def _jev_judge(cfg: LLMConfig, *, chosen: bool) -> Judge:
     from skillgate_ai.judge_openai import OutcomeJudge
+    from skillgate_ai.judge_providers.decision import NEEDS_BASE_URL
     from skillgate_ai.judge_providers.jev import JevBackend
+    from skillgate_ai.judge_setup import resolve_base_url, resolve_model
 
     key = (getattr(cfg, "jev_api_key", None) or "").strip()
-    base_url = (getattr(cfg, "judge_endpoint", None) or "").strip()
     if not key:
         raise missing_provider_key("jev")
+    base_url = resolve_base_url("jev", getattr(cfg, "judge_endpoint", None))
     if not base_url:
-        from skillgate_ai.judge_providers.decision import NEEDS_BASE_URL
-
         raise SkillGateError(NEEDS_BASE_URL, exit_code=2)
-    model = (getattr(cfg, "judge_provider_model", None) or "").strip() or "jev"
+    model = resolve_model("jev", getattr(cfg, "judge_provider_model", None))
     backend = JevBackend(api_key=key, base_url=base_url, model=model)
     return OutcomeJudge(
         backend,
@@ -225,7 +230,9 @@ def _clef_judge(cfg: LLMConfig, *, chosen: bool) -> Judge:
         from skillgate_ai.judge_providers.decision import NEEDS_ACCOUNT
 
         raise SkillGateError(NEEDS_ACCOUNT, exit_code=2)
-    model = (getattr(cfg, "judge_provider_model", None) or "").strip() or "clef"
+    from skillgate_ai.judge_setup import resolve_model
+
+    model = resolve_model("clef", getattr(cfg, "judge_provider_model", None))
     backend = ClefBackend(api_key=key, account_id=account, model=model)
     return OutcomeJudge(
         backend,
@@ -240,21 +247,65 @@ def _clef_judge(cfg: LLMConfig, *, chosen: bool) -> Judge:
     )
 
 
+def _custom_judge(cfg: LLMConfig, *, chosen: bool) -> Judge:
+    from skillgate_ai.judge_openai import OutcomeJudge
+    from skillgate_ai.judge_providers.decision import NEEDS_BASE_URL
+    from skillgate_ai.judge_providers.jev import JevBackend
+    from skillgate_ai.judge_setup import resolve_base_url, resolve_model
+
+    key = (getattr(cfg, "custom_api_key", None) or "").strip()
+    if not key:
+        raise missing_decision_key()
+    base_url = resolve_base_url("custom", getattr(cfg, "judge_endpoint", None))
+    if not base_url:
+        raise SkillGateError(NEEDS_BASE_URL, exit_code=2)
+    model = resolve_model("custom", getattr(cfg, "judge_provider_model", None))
+    backend = JevBackend(api_key=key, base_url=base_url, model=model)
+    return OutcomeJudge(
+        backend,
+        min_confidence=cfg.judge_min_confidence,
+        why_enabled=False,
+        timeout_sec=cfg.judge_timeout_sec,
+        display_name=_display_name("custom", chosen=chosen),
+        provider="custom",
+        chosen=chosen,
+        supports_why=False,
+        supports_confidence=False,
+    )
+
+
 def ping_judge(cfg: LLMConfig) -> dict[str, str | bool]:
+    from skillgate_ai.judge_setup import classify_test_result, configured_key, key_mismatch
+    from skillgate_ai.openai_http import redact_secrets
+
+    provider = (getattr(cfg, "judge_provider", None) or "auto").strip().lower() or "auto"
+    secret = configured_key(cfg, provider)
+    mismatch = key_mismatch(provider, secret)
+    if mismatch is not None:
+        return {
+            "ok": False,
+            "message": redact_secrets(str(mismatch["message"]), secret),
+            "switch_to": str(mismatch["switch_to"]),
+        }
     judge = resolve_judge(cfg, harness_name="cursor-agent")
     if isinstance(judge, SkipJudge):
         return {"ok": False, "message": "Pick a decision model before running a live check."}
     backend = getattr(judge, "backend", None)
     display = str(getattr(judge, "display_name", None) or DEFAULT_NAME)
+    raw: dict[str, Any]
     if backend is not None and hasattr(backend, "ping"):
         result = backend.ping()
-        if isinstance(result, dict):
-            return {"ok": bool(result.get("ok")), "message": str(result.get("message") or "")}
-    from skillgate_ai.judge_openai import ping_openai_backend
+        raw = result if isinstance(result, dict) else {"ok": False, "message": ""}
+    else:
+        from skillgate_ai.judge_openai import ping_openai_backend
 
-    if backend is not None and hasattr(backend, "post_json"):
-        return ping_openai_backend(backend, display_name=display)
-    return {"ok": False, "message": "This decision model cannot be tested."}
+        if backend is not None and hasattr(backend, "post_json"):
+            raw = ping_openai_backend(backend, display_name=display)
+        else:
+            raw = {"ok": False, "message": "This decision model cannot be tested."}
+    ok = bool(raw.get("ok"))
+    message = redact_secrets(classify_test_result(ok, str(raw.get("message") or "")), secret)
+    return {"ok": ok, "message": message}
 
 
 def judge_stamp(judge: Judge | None) -> dict[str, str]:

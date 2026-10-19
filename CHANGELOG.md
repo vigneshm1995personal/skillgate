@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.7.8
+
+- A decision model shows only the fields it scores with. OpenRouter (Jev) defaults to `https://openrouter.ai/api/v1` and `typesafe/jev-1.14`. OpenAI takes a key. Cloudflare takes an account id, `clef` or `clef-flash`, and a token. A custom endpoint takes a URL, a model, and a key.
+- `skillgate judge provider set` rejects flags that option does not use. `skillgate judge test` reports a rejected key, the wrong endpoint, no credits, or a working model. A key prefix for another option says which command to switch to.
+- The model list is a dropdown. An unknown model names the valid models and the option that accepts it.
+
 ## 0.7.7
 
 - `skillgate examples list` and `skillgate examples install` copy dataset examples into `skills/`. Files already there stay as they are.

@@ -119,6 +119,7 @@ class LLMConfig:
     judge_decisions_path: str | None = None
     judge_key_env: tuple[str, ...] = ()
     judge_account_id: str | None = None
+    custom_api_key: str | None = None
 
     @property
     def has_any_key(self) -> bool:
@@ -196,6 +197,7 @@ def get_llm_config(root: Path | None = None) -> LLMConfig:
         or DEFAULT_JUDGE_REASONING_EFFORT,
         jev_api_key=keys.get("JEV_API_KEY"),
         clef_api_key=keys.get("CLOUDFLARE_API_TOKEN"),
+        custom_api_key=keys.get("CUSTOM_DECISION_API_KEY"),
         aws_access_key_id=keys.get("AWS_ACCESS_KEY_ID"),
         aws_secret_access_key=keys.get("AWS_SECRET_ACCESS_KEY"),
         aws_session_token=keys.get("AWS_SESSION_TOKEN"),

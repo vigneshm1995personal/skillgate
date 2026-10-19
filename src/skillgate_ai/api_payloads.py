@@ -33,6 +33,7 @@ SETTINGS_KEYS = (
     "ANTHROPIC_API_KEY",
     "JEV_API_KEY",
     "CLOUDFLARE_API_TOKEN",
+    "CUSTOM_DECISION_API_KEY",
     "AWS_ACCESS_KEY_ID",
     "AWS_SECRET_ACCESS_KEY",
     "AWS_SESSION_TOKEN",
@@ -69,7 +70,12 @@ def keys_payload(state: AppState) -> dict[str, Any]:
     from skillgate_ai.keys import CUSTOMER_SETTINGS_KEYS, key_presence
 
     presence = key_presence(state.root)
-    names = (*CUSTOMER_SETTINGS_KEYS, "JEV_API_KEY", "CLOUDFLARE_API_TOKEN")
+    names = (
+        *CUSTOMER_SETTINGS_KEYS,
+        "JEV_API_KEY",
+        "CLOUDFLARE_API_TOKEN",
+        "CUSTOM_DECISION_API_KEY",
+    )
     return {name: presence[name] for name in names}
 
 

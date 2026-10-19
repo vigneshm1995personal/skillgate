@@ -924,7 +924,7 @@ export function EvalPage() {
           <CardHeader>
             <CardTitle id="eval-step-judge">Judge</CardTitle>
             <CardDescription>
-              Decision models only. Pick one, or leave this unset.
+              A decision model scores each live check, and one is required.
             </CardDescription>
           </CardHeader>
           <CardContent>

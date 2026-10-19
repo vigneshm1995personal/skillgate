@@ -28,6 +28,8 @@ os.environ["SKILLGATE_ANTHROPIC_API_KEY"] = ""
 os.environ["SKILLGATE_JEV_API_KEY"] = ""
 os.environ["SKILLGATE_CLOUDFLARE_API_TOKEN"] = ""
 os.environ["CLOUDFLARE_API_TOKEN"] = ""
+os.environ["SKILLGATE_CUSTOM_DECISION_API_KEY"] = ""
+os.environ["CUSTOM_DECISION_API_KEY"] = ""
 os.environ["SKILLGATE_AWS_ACCESS_KEY_ID"] = ""
 os.environ["SKILLGATE_AWS_SECRET_ACCESS_KEY"] = ""
 os.environ["SKILLGATE_AWS_SESSION_TOKEN"] = ""
@@ -58,6 +60,8 @@ def _no_live_keys(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("SKILLGATE_JEV_API_KEY", "")
     monkeypatch.setenv("SKILLGATE_CLOUDFLARE_API_TOKEN", "")
     monkeypatch.setenv("CLOUDFLARE_API_TOKEN", "")
+    monkeypatch.setenv("SKILLGATE_CUSTOM_DECISION_API_KEY", "")
+    monkeypatch.setenv("CUSTOM_DECISION_API_KEY", "")
     monkeypatch.setenv("SKILLGATE_AWS_ACCESS_KEY_ID", "")
     monkeypatch.setenv("SKILLGATE_AWS_SECRET_ACCESS_KEY", "")
     monkeypatch.setenv("SKILLGATE_AWS_SESSION_TOKEN", "")

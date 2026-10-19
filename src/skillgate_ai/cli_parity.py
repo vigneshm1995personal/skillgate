@@ -18,7 +18,7 @@ WRITE_ROUTE_CLI: dict[tuple[str, str], str] = {
     ("PUT", "/api/settings/keys/{name}"): "keys set",
     ("DELETE", "/api/settings/keys/{name}"): "keys clear",
     ("PUT", "/api/settings/judge"): "judge provider set",
-    ("POST", "/api/judge/ping"): "judge provider test",
+    ("POST", "/api/judge/ping"): "judge test",
     ("POST", "/api/examples/install"): "examples install",
     ("POST", "/api/skills/import"): "import",
     ("POST", "/api/skills/pack-file"): "skill write",

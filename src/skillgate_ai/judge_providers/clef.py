@@ -19,7 +19,6 @@ from skillgate_ai.openai_http import PostFn, post_openai_json
 
 DISPLAY_NAME = "the judge"
 _ACCOUNT_ID = re.compile(r"^[A-Za-z0-9]+$")
-_MODELS = frozenset({"clef", "clef-flash"})
 _WORKERS_AI = "https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/run/@cf/cloudflare/{model}"
 
 
@@ -137,13 +136,9 @@ def _require_account(account_id: str) -> str:
 
 
 def _model_slug(model: str) -> str:
-    slug = (model or "clef").strip().lower()
-    if slug not in _MODELS:
-        raise SkillGateError(
-            "This endpoint only scores with its decision models.",
-            exit_code=2,
-        )
-    return slug
+    from skillgate_ai.judge_setup import resolve_model
+
+    return resolve_model("clef", (model or "").strip() or "clef")
 
 
 def _unwrap(data: Any) -> Mapping[str, Any] | None:

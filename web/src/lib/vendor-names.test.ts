@@ -49,7 +49,11 @@ function jsxText(source: string): string[] {
   return found
 }
 
-/** Ids, env keys, and package names stay. Display words do not. */
+/**
+ * Ids, env keys, and package names stay. Display words do not.
+ * Key-source names (which key a decision model takes) are server copy from
+ * decision_judges(). This file still rejects those words in UI source.
+ */
 function renderedResidue(literal: string): string {
   return literal
     .replace(/@[a-z0-9._-]+\/[a-z0-9._-]+/gi, " ")

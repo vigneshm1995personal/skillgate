@@ -1119,11 +1119,7 @@ def judge_provider_set(
         console.print(NEEDS_DECISION_MODEL)
 
 
-@judge_provider_app.command("test")
-def judge_provider_test(
-    key_env: list[str] | None = typer.Option(None, "--key-env", help=_KEY_ENV_HELP),
-) -> None:
-    """Test the scoring connection. Never prints the key."""
+def _run_judge_test(key_env: list[str] | None) -> None:
     from skillgate_ai.config import get_llm_config
     from skillgate_ai.judge import ping_judge
 
@@ -1134,8 +1130,24 @@ def judge_provider_test(
     except SkillGateError as exc:
         console.print(exc.render())
         raise typer.Exit(exc.exit_code) from None
-    console.print(str(result.get("message") or ""))
+    console.print(str(result.get("message") or ""), soft_wrap=True)
     raise typer.Exit(0 if result.get("ok") else 1)
+
+
+@judge_app.command("test")
+def judge_test(
+    key_env: list[str] | None = typer.Option(None, "--key-env", help=_KEY_ENV_HELP),
+) -> None:
+    """Test the scoring connection. Never prints the key."""
+    _run_judge_test(key_env)
+
+
+@judge_provider_app.command("test")
+def judge_provider_test(
+    key_env: list[str] | None = typer.Option(None, "--key-env", help=_KEY_ENV_HELP),
+) -> None:
+    """Test the scoring connection. Never prints the key."""
+    _run_judge_test(key_env)
 
 
 @app.command("ui")
