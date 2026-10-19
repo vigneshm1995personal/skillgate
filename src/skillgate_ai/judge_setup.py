@@ -202,7 +202,7 @@ def prepare_option_fields(
     if "model" in option.fields and not resolved["model"]:
         resolved["model"] = option.default("model")
     if "model" in option.fields:
-        _require_model(option, resolved["model"])
+        resolved["model"] = resolve_model(name, resolved["model"]) or None
     if "base_url" in option.fields and not resolved["base_url"]:
         from skillgate_ai.judge_providers.decision import NEEDS_BASE_URL
 
@@ -214,10 +214,26 @@ def prepare_option_fields(
     return resolved["region"], resolved["model"], resolved["base_url"], resolved["account_id"]
 
 
+def _is_chat_model(model: str) -> bool:
+    leaf = (model or "").strip().split("/")[-1].lower()
+    if not leaf or leaf.endswith("-decisions"):
+        return False
+    if leaf in {"gpt-6-luna", "clef", "clef-flash"} or leaf.startswith("jev"):
+        return False
+    if leaf.startswith(("gpt-3.5", "gpt-4", "gpt-5")) or "claude" in leaf:
+        return True
+    return any(
+        leaf == token or leaf.startswith((f"{token}-", f"{token}."))
+        for token in ("o1", "o3", "o4")
+    )
+
+
 def _require_model(option: DecisionOption, model: str | None) -> None:
     if option.model_free:
         if not model:
             raise SkillGateError(NEEDS_MODEL, exit_code=2)
+        if _is_chat_model(model):
+            raise SkillGateError(f"{model.strip()} isn't a decision model.", exit_code=2)
         return
     if not option.models:
         return
@@ -287,6 +303,43 @@ def key_mismatch(provider: str, secret: str) -> dict[str, Any] | None:
         ),
         "switch_to": owner,
     }
+
+
+def format_provider_selection(settings: Any) -> str:
+    """Option id, model, and base URL for `judge provider show` and `set`."""
+    from skillgate_ai.judge_providers.decision import NEEDS_DECISION_MODEL
+
+    provider = str(getattr(settings, "provider", "") or "auto").strip().lower() or "auto"
+    if provider in {"", "auto", "skip"}:
+        return NEEDS_DECISION_MODEL
+    model = resolve_model(provider, getattr(settings, "model", None))
+    if provider == "openai" and not model:
+        from skillgate_ai.judge_openai import DEFAULT_MODEL
+
+        model = DEFAULT_MODEL
+    base = _selection_base_url(provider, settings, model)
+    parts = ["the judge", provider]
+    if model:
+        parts.append(model)
+    if base:
+        parts.append(base)
+    return "\n".join(parts)
+
+
+def _selection_base_url(provider: str, settings: Any, model: str) -> str:
+    if provider == "openai":
+        from skillgate_ai.judge_openai import DEFAULT_BASE_URL
+
+        return DEFAULT_BASE_URL
+    stored = str(getattr(settings, "base_url", "") or "").strip()
+    if provider == "clef" and not stored:
+        account = str(getattr(settings, "account_id", "") or "").strip()
+        slug = model or "clef"
+        return (
+            "https://api.cloudflare.com/client/v4/accounts/"
+            f"{account}/ai/run/@cf/cloudflare/{slug}"
+        )
+    return resolve_base_url(provider, stored or None)
 
 
 def classify_test_result(ok: bool, message: str) -> str:

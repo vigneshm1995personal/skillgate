@@ -421,7 +421,7 @@ def check_pack(
         help="Allow a run without a scoring key (exit 0 even when quality is not scored).",
     ),
 ) -> None:
-    """Run pack-local evals/cases.yaml. Exit 0 if green, 1 if red, 2 if no agent."""
+    """Exit 0 if green, 1 if red, 2 if it cannot run. Runs pack-local evals/cases.yaml."""
     _run_gate(
         target=pack,
         skill=None,
@@ -654,7 +654,12 @@ app.add_typer(keys_app, name="keys")
 @keys_app.command("set")
 def keys_set(
     name: str = typer.Argument(
-        ..., help="CURSOR_API_KEY | CODEX_API_KEY | OPENAI_API_KEY | AI Gateway key | …"
+        ...,
+        help=(
+            "CURSOR_API_KEY | CODEX_API_KEY | OPENAI_API_KEY | "
+            "JEV_API_KEY | CLOUDFLARE_API_TOKEN | CUSTOM_DECISION_API_KEY | "
+            "AI Gateway key | …"
+        ),
     ),
     value: str | None = typer.Argument(
         None,
@@ -663,7 +668,8 @@ def keys_set(
 ) -> None:
     """Write a key into `.skillgate/keys` (mode 0600).
 
-    Names include CURSOR_API_KEY, CODEX_API_KEY, OPENAI_API_KEY, and AI Gateway key
+    Names include CURSOR_API_KEY, CODEX_API_KEY, OPENAI_API_KEY, JEV_API_KEY,
+    CLOUDFLARE_API_TOKEN, CUSTOM_DECISION_API_KEY, and AI Gateway key
     (AI_GATEWAY_API_KEY).
     """
     from skillgate_ai.keys import public_key_name, set_vault_key
@@ -767,7 +773,7 @@ def new_cmd(
 @app.command("example")
 def example_cmd(
     name: str = typer.Argument(..., help="pdf | pdf-sabotaged"),
-    dest: Path | None = typer.Option(None, "--dest", help="Folder to write (default: ./NAME)"),
+    dest: Path | None = typer.Option(None, "--dest", help="Folder to write (default: skills/NAME)"),
 ) -> None:
     """Copy a packaged example skill into this folder."""
     from skillgate_ai.examples import copy_example
@@ -848,13 +854,13 @@ checks_app = typer.Typer(
 app.add_typer(checks_app, name="checks")
 
 
-def _resolve_pack_arg(pack: Path | None) -> Path:
+def _resolve_pack_arg(pack: Path | None, *, default_pdf: bool = True) -> Path:
     root = _boot()
     if pack is not None:
         dest = resolve_user_path(pack, root)
     elif is_skill_pack(root):
         dest = root
-    else:
+    elif default_pdf:
         pdf = root / "skills" / "pdf"
         if is_skill_pack(pdf):
             dest = pdf
@@ -863,6 +869,11 @@ def _resolve_pack_arg(pack: Path | None) -> Path:
                 "Pass a skill pack (folder with SKILL.md and evals/).",
                 exit_code=2,
             )
+    else:
+        raise SkillGateError(
+            "Pass a skill pack (folder with SKILL.md and evals/).",
+            exit_code=2,
+        )
     if not (dest / "SKILL.md").is_file():
         raise SkillGateError(
             f"Not a skill pack: {dest}",
@@ -990,7 +1001,7 @@ def judge_add_question_cmd(
     from skillgate_ai.pack_edit import add_judge_question
 
     try:
-        dest = _resolve_pack_arg(pack)
+        dest = _resolve_pack_arg(pack, default_pdf=False)
         add_judge_question(
             dest,
             ask=ask,
@@ -1066,17 +1077,11 @@ def case_add_cmd(
 @judge_provider_app.command("show")
 def judge_provider_show() -> None:
     """Who scores live checks."""
-    from skillgate_ai.config import get_llm_config
-    from skillgate_ai.judge_copy import DEFAULT_NAME
+    from skillgate_ai.judge_settings import load_judge_settings
+    from skillgate_ai.judge_setup import format_provider_selection
 
     root = _boot()
-    cfg = get_llm_config(root)
-    if cfg.judge_chosen:
-        console.print(f"Scoring with {DEFAULT_NAME}")
-        return
-    from skillgate_ai.judge_providers.decision import NEEDS_DECISION_MODEL
-
-    console.print(NEEDS_DECISION_MODEL)
+    console.print(format_provider_selection(load_judge_settings(root)))
 
 
 @judge_provider_app.command("set")
@@ -1111,12 +1116,9 @@ def judge_provider_set(
     except SkillGateError as exc:
         console.print(exc.render())
         raise typer.Exit(exc.exit_code) from None
-    if settings.chosen:
-        console.print("Scoring with the judge")
-    else:
-        from skillgate_ai.judge_providers.decision import NEEDS_DECISION_MODEL
+    from skillgate_ai.judge_setup import format_provider_selection
 
-        console.print(NEEDS_DECISION_MODEL)
+    console.print(format_provider_selection(settings))
 
 
 def _run_judge_test(key_env: list[str] | None) -> None:

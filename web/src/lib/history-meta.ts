@@ -27,6 +27,9 @@ export function historyMeta(
   }
   const skill = item.skill || "—"
   const version = item.semver ? `v${item.semver}` : ""
+  if (item.passed === null || item.status === "not_run") {
+    return { skill, version, config: "Not scored", configRaw: "", fingerprint: "" }
+  }
   const stamped =
     item.config_label ||
     harnessDisplayName(item.harness || "", item.harness || "") ||

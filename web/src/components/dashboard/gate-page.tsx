@@ -71,6 +71,14 @@ import {
   type Usage,
 } from "@/lib/types"
 
+export function GateSkillLine({ name }: { name: string }) {
+  return (
+    <p id="gate-skill" className="text-sm font-medium">
+      {name}
+    </p>
+  )
+}
+
 export function GatePage({ embedded = false }: { embedded?: boolean }) {
   const {
     running,
@@ -224,6 +232,7 @@ export function GatePage({ embedded = false }: { embedded?: boolean }) {
 
   return (
     <div className="flex max-w-full min-w-0 flex-col gap-8 overflow-x-clip">
+      {skill?.name ? <GateSkillLine name={skill.name} /> : null}
       {embedded ? null : (
         <PageHeader
           title="Gate"

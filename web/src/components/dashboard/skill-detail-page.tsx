@@ -37,6 +37,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { api, ApiError } from "@/lib/api"
 import { useDashboard } from "@/lib/dashboard-provider"
 import { customerConfigLabel, harnessDisplayName } from "@/lib/eval-config"
+import { historyResultLabel } from "@/lib/history-result"
 import { skillDetailStatus } from "@/lib/skill-detail-state"
 import { isTryoutRun } from "@/lib/skill-run-state"
 import { absoluteTime, relativeTime } from "@/lib/time"
@@ -383,8 +384,16 @@ export function SkillDetailPage({ name }: { name: string }) {
                       <TableCell>
                         {isTryoutRun(run) ? (
                           <div className="flex flex-wrap items-center gap-1">
-                            <Badge variant={run.passed ? "secondary" : "destructive"}>
-                              {run.passed ? "Pass" : "Fail"}
+                            <Badge
+                              variant={
+                                historyResultLabel(run.passed).tone === "pass"
+                                  ? "secondary"
+                                  : historyResultLabel(run.passed).tone === "not-run"
+                                    ? "outline"
+                                    : "destructive"
+                              }
+                            >
+                              {historyResultLabel(run.passed).text}
                             </Badge>
                             <Badge variant="outline">Single check</Badge>
                           </div>
@@ -401,10 +410,12 @@ export function SkillDetailPage({ name }: { name: string }) {
                       <TableCell>
                         <div className="flex flex-col gap-1">
                           <span className="truncate">
-                            {customerConfigLabel(run.config, run.harness) ||
-                              run.config_label ||
-                              run.harness ||
-                              "—"}
+                            {run.passed == null
+                              ? "Not scored"
+                              : customerConfigLabel(run.config, run.harness) ||
+                                run.config_label ||
+                                run.harness ||
+                                "—"}
                           </span>
                           {run.config_changed ? (
                             <Badge variant="warning">

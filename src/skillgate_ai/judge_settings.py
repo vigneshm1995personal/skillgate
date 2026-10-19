@@ -247,9 +247,9 @@ def _account_id(value: Any, *, required: bool) -> str | None:
     if text is None:
         return None
     if not _ACCOUNT_ID.fullmatch(text):
-        from skillgate_ai.judge_providers.decision import NEEDS_ACCOUNT
+        from skillgate_ai.judge_providers.decision import ACCOUNT_ID_FORMAT
 
-        raise SkillGateError(NEEDS_ACCOUNT, exit_code=2)
+        raise SkillGateError(ACCOUNT_ID_FORMAT, exit_code=2)
     del required
     return text
 

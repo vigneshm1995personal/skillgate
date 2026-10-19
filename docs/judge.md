@@ -8,7 +8,7 @@ When a decision model is on and you run a live check (`skillgate check`, or Run 
 
 Scorers such as "does the output contain this text?" and page counts still apply beside that decision model. Scoring does not compare the full output to the expected file. It reads the expected and actual text (and a few images) and judges whether the work is done. Pass `--no-judge` only when you mean to run without a decision model.
 
-Add extra scoring questions on top of Skill Gate's six (`skillgate judge add-question`, or the Checks editor). Built-in questions cannot be deleted. They can be Warn only. Seed pdf cases cannot be removed.
+Add extra scoring questions on top of Skill Gate's six (`skillgate judge add-question PACK`, or the Checks editor). Pass a skill pack. With none, the command stops and does not write to `skills/pdf`. Built-in questions cannot be deleted. They can be Warn only. Original checks in the bundled examples, including pdf, cannot be removed.
 
 ## Set up a decision model
 
@@ -88,8 +88,13 @@ skillgate judge test
 - This decision model needs an API key. Add it in Settings, or with `skillgate keys set`. Save the key named above.
 - `This decision model needs a base URL.` Pass `--base-url`. OpenRouter's is `https://openrouter.ai/api/v1`.
 - This decision model needs an account id. Set it with `skillgate judge provider set` and `--account-id`. Cloudflare needs that flag.
+- `An account id uses letters and digits only.` A hyphen is not a missing account id.
+- `That account id wasn't found.` A Cloudflare 404 means that account id does not exist. It is not "this key is for a different endpoint."
+- `gpt-4o isn't a decision model.` A chat model on a custom endpoint is refused.
+- Scoring errors do not include HTTP codes. A 404 or 405 from a non-scoring URL says this key is for a different endpoint.
+- `skillgate judge provider show` and `set` print the option id, its model, and its base URL.
 - `This decision model needs a model.` Pass `--model`, or pick one from the list.
-- `Pick a decision model before running a live check.` Run one `skillgate judge provider set` command above.
+- `Pick a decision model before running a live check.` Run one `skillgate judge provider set` command above. A check that never starts is not saved as a scored failure.
 
 A bad endpoint, rejected key, or empty balance fails that check. Chat and Responses completion models are not judges. Setting the judge backend to `responses`, `chat`, or `completions` fails the run. Older chat-style scoring setups fail until you pick a registered decision model.
 
@@ -109,7 +114,7 @@ If the scorer is not very sure about a pass, the check still passes. You will se
 ```yaml
 - uses: actions/setup-python@v5
   with: { python-version: "3.12" }
-- run: pip install skillgate-ai==0.7.8
+- run: pip install skillgate-ai==0.7.9
 - run: skillgate check . --key-env DECISION_MODEL_API_KEY
   env:
     DECISION_MODEL_API_KEY: ${{ secrets.DECISION_MODEL_API_KEY }}

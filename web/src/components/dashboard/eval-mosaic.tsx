@@ -42,6 +42,16 @@ function dayKey(date: Date) {
   return `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`
 }
 
+export function paintOf(run: {
+  passed?: boolean | null
+  status?: string
+}): "skip" | "fail" | "pass" {
+  if (run.passed == null) {
+    return "skip"
+  }
+  return run.passed ? "pass" : "fail"
+}
+
 function levelOf(day: Day): Level {
   const total = day.pass + day.fail + day.error
   if (total === 0) {
@@ -81,12 +91,15 @@ function buildWeeks(runs: AnalyticsRun[]): Day[][] {
       day = { date: at, pass: 0, fail: 0, error: 0, latest: null }
       byDay.set(key, day)
     }
-    if (run.status === "error" || run.passed == null) {
-      day.error += 1
-    } else if (run.passed) {
+    const paint = paintOf(run)
+    if (paint === "pass") {
       day.pass += 1
-    } else {
-      day.fail += 1
+    } else if (paint === "fail") {
+      if (run.status === "error") {
+        day.error += 1
+      } else {
+        day.fail += 1
+      }
     }
     if (!day.latest || Date.parse(day.latest.created_at ?? "") < time) {
       day.latest = run

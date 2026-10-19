@@ -770,6 +770,7 @@ def _named_harness(kind: str, cfg: LLMConfig) -> Harness:
         raise HarnessError(
             f"The {kind!r} harness was removed.",
             hint="Use auto, cursor-agent, codex, or claude.",
+            exit_code=2,
         )
     raise HarnessError(
         f"Unknown harness {kind!r}",
@@ -824,6 +825,7 @@ def live_harness_or_error(kind: str, cfg: LLMConfig) -> Harness:
         raise HarnessError(
             f"The {kind!r} harness was removed.",
             hint="Use auto, cursor-agent, codex, or claude.",
+            exit_code=2,
         )
     if kind not in _LIVE_HARNESS_KINDS:
         return _named_harness(kind, cfg)
@@ -1042,7 +1044,9 @@ def _cursor_login_status_authenticated(returncode: int, stdout: str, stderr: str
         return False
     if "not logged in" in text or "not authenticated" in text:
         return False
-    return True
+    if "logged in" in text or "authenticated" in text:
+        return True
+    return "account:" in text
 
 
 def _probe_cursor_login_status(binary: str) -> bool:

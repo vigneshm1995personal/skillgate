@@ -157,15 +157,20 @@ def register_pack_commands(app: typer.Typer, case_app: typer.Typer, judge_app: t
             return
         for row in reversed(rows):
             report = row.get("report") if isinstance(row.get("report"), dict) else {}
-            who = report.get("scored_by") if isinstance(report.get("scored_by"), str) else ""
-            if not who or "openai decisions" in who.lower() or "vercel ai gateway" in who.lower():
-                stamp = None
-                if isinstance(report.get("config"), dict):
-                    stamp = report["config"].get("judge")
-                who = scored_by_phrase(
-                    customer_scorer_name(stamp if isinstance(stamp, dict) else None)
-                )
-            gate = ("pass" if row.get("passed") else "fail").ljust(4)
+            passed = row.get("passed")
+            if passed is None:
+                gate = "not run"
+                who = "Not scored"
+            else:
+                who = report.get("scored_by") if isinstance(report.get("scored_by"), str) else ""
+                if not who or "openai decisions" in who.lower() or "vercel ai gateway" in who.lower():
+                    stamp = None
+                    if isinstance(report.get("config"), dict):
+                        stamp = report["config"].get("judge")
+                    who = scored_by_phrase(
+                        customer_scorer_name(stamp if isinstance(stamp, dict) else None)
+                    )
+                gate = ("pass" if passed else "fail").ljust(4)
             passed = report.get("passed_count")
             total = report.get("task_count")
             if passed is not None and total is not None:
@@ -266,7 +271,13 @@ def register_pack_commands(app: typer.Typer, case_app: typer.Typer, judge_app: t
             _emit_json(history_row_to_run(row, skill_path or Path(".")))
             return
         report = row.get("report") if isinstance(row.get("report"), dict) else {}
-        gate = "pass" if row.get("passed") else "fail"
+        passed_flag = row.get("passed")
+        if passed_flag is True:
+            gate = "pass"
+        elif passed_flag is False:
+            gate = "fail"
+        else:
+            gate = "not run"
         passed = report.get("passed_count")
         total = report.get("task_count")
         counts = f"  {passed}/{total}" if passed is not None and total is not None else ""

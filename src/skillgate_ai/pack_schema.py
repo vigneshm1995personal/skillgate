@@ -37,6 +37,18 @@ SEED_CASE_IDS = {
             "rotate-hello",
         }
     ),
+    "json-response": frozenset({"flatten-orders", "edge-empty", "no-trigger-unrelated"}),
+    "json-response-sabotaged": frozenset(
+        {"flatten-orders", "edge-empty", "no-trigger-unrelated"}
+    ),
+    "readme-writer": frozenset({"write-readme", "edge-no-license", "no-trigger-unrelated"}),
+    "log-summarizer": frozenset(
+        {"summarize-errors", "edge-no-errors", "no-trigger-unrelated"}
+    ),
+    "sql-writer": frozenset({"open-orders", "edge-unknown-column", "no-trigger-unrelated"}),
+    "receipt-extractor": frozenset(
+        {"extract-total", "edge-missing-total", "no-trigger-unrelated"}
+    ),
 }
 
 CASES_RELS = frozenset({"evals/cases.yaml", "evals/cases.yml"})

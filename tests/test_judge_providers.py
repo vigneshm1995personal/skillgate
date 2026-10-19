@@ -480,7 +480,7 @@ def test_jev_openrouter_parses_choice_answers() -> None:
 @pytest.mark.parametrize(
     ("status", "code", "snippet"),
     [
-        (404, None, "scoring endpoint"),
+        (404, None, "different endpoint"),
         (401, None, "api key"),
         (429, "insufficient_quota", "out of credits"),
     ],

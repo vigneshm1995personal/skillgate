@@ -50,6 +50,16 @@ export function judgeSaveBody(
   }
 }
 
+export function switchSaveBody(
+  judges: DecisionJudge[],
+  next: string,
+  savedProvider: string,
+  saved: JudgeDraft
+) {
+  const option = judges.find((row) => row.id === next)
+  return judgeSaveBody(option, next, draftForSelection(option, savedProvider, saved, next))
+}
+
 export function draftForSelection(
   option: DecisionJudge | undefined,
   savedProvider: string,

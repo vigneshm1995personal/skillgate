@@ -27,6 +27,7 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { PageHeader } from "@/components/dashboard/chrome"
 import { useDashboard } from "@/lib/dashboard-provider"
+import { historyResultLabel } from "@/lib/history-result"
 import { historyMeta } from "@/lib/history-meta"
 import { absoluteTime, relativeTime } from "@/lib/time"
 
@@ -112,6 +113,7 @@ export function HistoryList() {
           {filtered.map((item, index) => {
             const canOpen = item.kind === "run" && Boolean(item.id)
             const meta = historyMeta(item)
+            const result = historyResultLabel(item.passed)
             return (
               <TableRow
                 key={`${item.kind}-${item.at}-${index}`}
@@ -131,8 +133,16 @@ export function HistoryList() {
                 <TableCell>
                   {item.kind === "run" ? (
                     <div className="flex flex-wrap items-center gap-1">
-                      <Badge variant={item.passed ? "secondary" : "destructive"}>
-                        {item.passed ? "Pass" : "Fail"}
+                      <Badge
+                        variant={
+                          result.tone === "pass"
+                            ? "secondary"
+                            : result.tone === "not-run"
+                              ? "outline"
+                              : "destructive"
+                        }
+                      >
+                        {result.text}
                       </Badge>
                       {item.tryout ? (
                         <Badge variant="outline">Single check</Badge>
