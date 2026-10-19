@@ -1,0 +1,31 @@
+name: skillgate-action
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  action:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - id: gate
+        continue-on-error: true
+        uses: ./
+        with:
+          path: skills/pdf
+          args: --no-judge
+      - name: Assert keyless check exits 2
+        run: |
+          code="${{ steps.gate.outputs.exit-code }}"
+          echo "skillgate check exit ${code}"
+          test "$code" = "2"
+          grep -F "No agent is available to run checks." "$GITHUB_STEP_SUMMARY"
+          if grep -F "No such option" "$GITHUB_STEP_SUMMARY"; then
+            echo "skillgate check rejected a flag"
+            exit 1
+          fi
