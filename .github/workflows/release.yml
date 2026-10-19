@@ -7,13 +7,17 @@
 # First publish: after merging this workflow to main AND registering the
 # pending publisher on pypi.org, run Actions → release → Run workflow
 # with tag v0.4.2. Do not put PYPI_API_TOKEN in repo secrets.
+#
+# PyPI and GHCR stay on the 0.x package tags (v0.*.*). v1.x.y and the
+# floating v1 tag are the GitHub Action (uses: vigneshm1995personal/skillgate@v1).
+# Those tags do not publish skillgate-ai.
 
 name: release
 
 on:
   push:
     tags:
-      - "v*.*.*"
+      - "v0.*.*"
   workflow_dispatch:
     inputs:
       tag:
@@ -25,6 +29,9 @@ permissions: {}
 
 jobs:
   build:
+    if: >-
+      (github.event_name == 'push' && startsWith(github.ref_name, 'v0.'))
+      || (github.event_name == 'workflow_dispatch' && startsWith(github.event.inputs.tag, 'v0.'))
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -57,7 +64,10 @@ jobs:
   pypi:
     needs: build
     runs-on: ubuntu-latest
-    if: github.repository == 'vigneshm1995personal/skillgate'
+    if: >-
+      github.repository == 'vigneshm1995personal/skillgate'
+      && ((github.event_name == 'push' && startsWith(github.ref_name, 'v0.'))
+      || (github.event_name == 'workflow_dispatch' && startsWith(github.event.inputs.tag, 'v0.')))
     environment:
       name: pypi
       url: https://pypi.org/p/skillgate-ai
@@ -75,7 +85,10 @@ jobs:
 
   ghcr:
     runs-on: ubuntu-latest
-    if: github.repository == 'vigneshm1995personal/skillgate'
+    if: >-
+      github.repository == 'vigneshm1995personal/skillgate'
+      && ((github.event_name == 'push' && startsWith(github.ref_name, 'v0.'))
+      || (github.event_name == 'workflow_dispatch' && startsWith(github.event.inputs.tag, 'v0.')))
     permissions:
       contents: read
       packages: write

@@ -140,8 +140,6 @@ docker compose run --rm --no-TTY skillgate example pdf --dest /tmp/pdf
 
 ## Copy-paste Action
 
-Put this in a skill repo whose working directory is the pack (folder with `SKILL.md`). Needs Python 3.11+ and a key.
-
 ```yaml
 name: skillgate
 on: [push, pull_request]
@@ -150,12 +148,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with: { python-version: "3.12" }
-      - run: pip install skillgate-ai==0.7.9
-      - run: skillgate check . --key-env OPENAI_API_KEY
+      - uses: vigneshm1995personal/skillgate@v1
+        with:
+          path: skills/pdf
+          version: 0.7.9
+          judge: jev
         env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          SKILLGATE_JEV_API_KEY: ${{ secrets.SKILLGATE_JEV_API_KEY }}
 ```
 
-Or set `SKILLGATE_OPENAI_API_KEY` instead of `--key-env`. The `SKILLGATE_*` key names are the documented CI/Docker path and are always read.
+`version: 0.7.9` installs `skillgate-ai==0.7.9`. Leave `version` unset for the latest release. Pass keys as `SKILLGATE_*` variables. Or set `SKILLGATE_OPENAI_API_KEY` instead of `--key-env`. The `SKILLGATE_*` key names are the documented CI/Docker path and are always read.

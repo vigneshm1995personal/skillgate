@@ -1,0 +1,71 @@
+name: Skill Gate
+description: >-
+  Check an agent skill pack. Exit 0 passes, exit 1 fails, and exit 2 means
+  the check cannot run.
+branding:
+  icon: shield
+  color: black
+inputs:
+  path:
+    description: Skill pack directory or suite file
+    required: false
+    default: skills
+  version:
+    description: skillgate-ai release to install. Defaults to the latest release.
+    required: false
+    default: latest
+  judge:
+    description: >-
+      Decision model id. The action does not switch to another decision model.
+    required: false
+    default: ""
+  model:
+    description: Optional model id for the decision model
+    required: false
+    default: ""
+  base-url:
+    description: Optional base URL for the decision model
+    required: false
+    default: ""
+  account-id:
+    description: Optional account id for the decision model
+    required: false
+    default: ""
+  harness:
+    description: Optional harness passed to skillgate check
+    required: false
+    default: ""
+  args:
+    description: Extra flags for skillgate check, such as --no-judge or --expect-fail
+    required: false
+    default: ""
+outputs:
+  exit-code:
+    description: skillgate check exit code (0 pass, 1 fail, 2 cannot run)
+    value: ${{ steps.check.outputs.exit-code }}
+  result:
+    description: pass, fail, or cannot-run
+    value: ${{ steps.check.outputs.result }}
+  detail:
+    description: First line of the check result, with keys removed
+    value: ${{ steps.check.outputs.detail }}
+runs:
+  using: composite
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.11"
+    - name: Check the skill pack
+      id: check
+      shell: bash
+      env:
+        INPUT_PATH: ${{ inputs.path }}
+        INPUT_VERSION: ${{ inputs.version }}
+        INPUT_JUDGE: ${{ inputs.judge }}
+        INPUT_MODEL: ${{ inputs.model }}
+        INPUT_BASE_URL: ${{ inputs.base-url }}
+        INPUT_ACCOUNT_ID: ${{ inputs.account-id }}
+        INPUT_HARNESS: ${{ inputs.harness }}
+        INPUT_ARGS: ${{ inputs.args }}
+      run: python "${{ github.action_path }}/scripts/skillgate_action.py"

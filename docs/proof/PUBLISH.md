@@ -73,7 +73,7 @@ The workflow job uses `environment: pypi`. Create it so a required reviewer must
 2. **New environment**
 3. Name: `pypi` (exactly)
 4. **Required reviewers**: add Cal and/or Vignesh
-5. Optional: limit to tags `v*.*.*`
+5. Optional: limit to tags `v0.*.*`. v1 tags are the GitHub Action and do not publish PyPI.
 6. **Save protection rules**
 7. Do **not** add a `PYPI_API_TOKEN` secret. Trusted Publishing uses OIDC (`id-token: write`) only.
 

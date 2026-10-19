@@ -191,6 +191,30 @@ docker compose run --rm --no-TTY skillgate
 
 The image entrypoint is `skillgate`. The default command is `check /pack`. With no pack mounted, that path is missing and the command exits 2.
 
+## GitHub Action
+
+```yaml
+name: skillgate
+on: [push, pull_request]
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: vigneshm1995personal/skillgate@v1
+        with:
+          path: skills/pdf
+          judge: jev
+        env:
+          SKILLGATE_JEV_API_KEY: ${{ secrets.SKILLGATE_JEV_API_KEY }}
+```
+
+`path` is a skill pack or a suite file. The default is `skills`. `version` is the `skillgate-ai` release to install. The default is the latest release. `judge` is the decision model id. `model`, `base-url`, and `account-id` are optional. `harness` is optional. `args` holds extra flags, such as `--no-judge` or `--expect-fail`.
+
+Pass keys as `SKILLGATE_*` environment variables from the caller secrets. The action does not print those values. It does not switch to another decision model when `judge` is set.
+
+Exit 0 passes, exit 1 fails, and exit 2 means the check cannot run. The job summary records that result.
+
 ## Documentation
 
 [Documentation](https://www.skill-gate-ai.app/docs)
