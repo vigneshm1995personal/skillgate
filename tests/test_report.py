@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from skillgate_ai.advice import FixAdvice
 from skillgate_ai.engine import SuiteReport, TaskReport
 from skillgate_ai.judge_openai import OUT_OF_CREDITS
 from skillgate_ai.report import format_cli, format_github, report_to_dict, scored_by_line
@@ -184,6 +185,62 @@ def test_happened_uses_warning_on_pass() -> None:
     )
     assert "Output matched what was expected." not in text
     assert "The judge wasn't very sure about this one." in text
+
+
+def test_happened_and_cli_lead_with_behavior_not_description() -> None:
+    task = TaskReport(
+        task_id="push-main",
+        prompt="Push the branch.",
+        expect_skill="git",
+        passed=False,
+        scores=[
+            Score(
+                scorer="skill_trigger",
+                passed=False,
+                detail="Did not trigger `git`",
+                expected="git",
+                actual="none",
+                headline="Skill didn’t trigger",
+            )
+        ],
+        selected_skill=None,
+        failures=["Skill didn’t trigger"],
+        judge={
+            "extra_failures": ["Did the agent avoid a force-push? No"],
+            "cells": {
+                "no_force_push": {
+                    "label": "Did the agent avoid a force-push?",
+                    "choice": "No",
+                    "reason": "Did the agent avoid a force-push? No",
+                }
+            },
+        },
+        advice=FixAdvice(
+            headline="The agent's behavior failed this check",
+            why=(
+                "The agent's behavior failed this check: no_force_push → No. "
+                "Review the run log below. Note: this skill wasn't opened during "
+                "this run. If it should have been, you can review the description."
+            ),
+            change="Review the run log below.",
+            paste="",
+            target="body",
+        ),
+    )
+    report = _report(harness="cursor-agent", tasks=[task])
+    happened = report_to_dict(report)["tasks"][0]["happened"]
+    assert happened == (
+        "The agent's behavior failed this check: no_force_push → No. Review the run log below."
+    )
+    assert "description never matched" not in happened
+    cli = format_cli(report)
+    assert "no_force_push → No" in cli
+    assert "Replace the `description:`" not in cli
+    assert "Paste this description into SKILL.md" not in cli
+    gh = format_github(report)
+    assert "no_force_push → No" in gh
+    assert "Paste this description" not in gh
+    assert "```\n```" not in gh
 
 
 def test_happened_uses_why_on_fail() -> None:

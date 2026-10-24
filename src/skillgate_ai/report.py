@@ -104,11 +104,16 @@ def format_github(report: SuiteReport) -> str:
                 lines.append("")
                 lines.append(task.advice.why)
                 lines.append("")
-                lines.append(f"Change this in SKILL.md ({task.advice.target}): {task.advice.change}")
-                lines.append("")
-                lines.append("```")
-                lines.append(task.advice.paste.rstrip())
-                lines.append("```")
+                if task.advice.target == "description" and task.advice.paste:
+                    lines.append(
+                        f"Change this in SKILL.md ({task.advice.target}): {task.advice.change}"
+                    )
+                    lines.append("")
+                    lines.append("```")
+                    lines.append(task.advice.paste.rstrip())
+                    lines.append("```")
+                elif task.advice.change:
+                    lines.append(task.advice.change)
                 lines.append("")
     else:
         lines += ["", "All tasks passed."]
@@ -345,6 +350,11 @@ def scored_by_line(report: SuiteReport) -> str:
 def _task_fail_line(task: TaskReport) -> str:
     judge = task.judge if isinstance(task.judge, dict) else {}
     if isinstance(judge, dict):
+        from skillgate_ai.advice import behavior_fail_line, behavior_question_ids
+
+        questions = behavior_question_ids(judge)
+        if questions:
+            return behavior_fail_line(questions[0])
         extras = judge.get("extra_failures")
         if isinstance(extras, list):
             for item in extras:

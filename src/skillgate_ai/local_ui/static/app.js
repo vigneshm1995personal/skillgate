@@ -857,14 +857,16 @@ async function paintResult(snap, path, opts) {
   const advice = report.advice;
   let adviceHtml = "";
   if (advice && gate === "red") {
+    const paste = String(advice.paste || advice.description || "").trim();
+    const offerDescription = Boolean(paste) && advice.target !== "body";
     adviceHtml = `<div class="card">
       <h2>${esc(advice.headline || "Fix")}</h2>
       <p>${esc(advice.why || "")}</p>
       <p>${esc(advice.change || "")}</p>
       ${advice.demo_note ? `<p class="muted">${esc(advice.demo_note)}</p>` : ""}
-      <p>Paste this description into SKILL.md:</p>
-      <pre id="paste">${esc(advice.paste || advice.description || "")}</pre>
-      <button type="button" id="apply">Apply description fix on this pack</button>
+      ${offerDescription ? `<p>Paste this description into SKILL.md:</p>
+      <pre id="paste">${esc(paste)}</pre>
+      <button type="button" id="apply">Apply description fix on this pack</button>` : ""}
     </div>`;
   }
   const headline = gate === "green" ? "Passed" : "Failed";

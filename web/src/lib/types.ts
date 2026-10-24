@@ -281,6 +281,7 @@ export type JudgeResult = {
   blocks_deploy?: boolean
   require_artifacts?: boolean
   skipped_questions?: string[]
+  extra_failures?: string[]
   cells?: Record<
     string,
     {
@@ -446,6 +447,7 @@ export type Advice = {
   why: string
   change?: string
   paste: string
+  target?: string
   demo_note?: string
   restore_scripts_from?: string | null
 }

@@ -542,23 +542,27 @@ export function GatePage({ embedded = false }: { embedded?: boolean }) {
               <span className="font-medium">What to change: </span>
               {plainAdviceCopy(lastAdvice.change)}
             </p>
-            <div className="flex flex-col gap-1">
-              <p className="text-sm font-medium">Suggested new description</p>
-              <pre
-                id="paste-fix"
-                className="max-h-64 max-w-full overflow-auto rounded-xl border bg-muted/40 p-3 font-mono text-xs break-words whitespace-pre-wrap"
-              >
-                {lastAdvice.paste}
-              </pre>
-            </div>
+            {lastAdvice.paste ? (
+              <div className="flex flex-col gap-1">
+                <p className="text-sm font-medium">Suggested new description</p>
+                <pre
+                  id="paste-fix"
+                  className="max-h-64 max-w-full overflow-auto rounded-xl border bg-muted/40 p-3 font-mono text-xs break-words whitespace-pre-wrap"
+                >
+                  {lastAdvice.paste}
+                </pre>
+              </div>
+            ) : null}
           </CardContent>
           <CardFooter className="flex flex-wrap gap-2">
-            <Button id="btn-copy" size="lg" onClick={() => void copyFix()}>
-              <CopyIcon data-icon="inline-start" />
-              {copiedFix
-                ? "Copied into the skill — now click Run"
-                : "Copy this into the skill"}
-            </Button>
+            {lastAdvice.paste ? (
+              <Button id="btn-copy" size="lg" onClick={() => void copyFix()}>
+                <CopyIcon data-icon="inline-start" />
+                {copiedFix
+                  ? "Copied into the skill — now click Run"
+                  : "Copy this into the skill"}
+              </Button>
+            ) : null}
             <Button
               id="btn-fix-run"
               variant={copiedFix ? "default" : "outline"}

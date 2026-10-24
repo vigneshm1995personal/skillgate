@@ -131,7 +131,9 @@ def test_openrouter_sends_custom_questions_and_a_no_fails() -> None:
         failures=["Followed the rules? Major deviation"],
         judge=judged,
     )
-    assert _task_happened(task) == f"{ASK} No"
+    assert _task_happened(task) == (
+        "The agent's behavior failed this check: tests_unchanged → No. Review the run log below."
+    )
     assert "—" not in json.dumps(judged["cells"]["tests_unchanged"])
 
 

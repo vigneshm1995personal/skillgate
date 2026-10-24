@@ -35,6 +35,8 @@ const SCORER_CODE =
   /^(?:Checks:\s+)?([a-z_]+)\s+([a-z0-9_-]+)(?:\s+\(need\s+([a-z0-9_-]+)\))?$/i
 const SKILL_DIDNT_START =
   "The skill didn't start for this request — its description doesn't match what was asked."
+const TRIGGER_SECONDARY_NOTE =
+  "Note: this skill wasn't opened during this run. If it should have been, you can review the description."
 const FILE_WARN =
   /did not finish a file this skill is supposed to write|meant to write a file/i
 const DRAFT_WARN = /used draft checks, not the saved Dataset/i
@@ -61,6 +63,67 @@ function isGenericFail(text: string): boolean {
 
 function mentionsPdf(hint: string): boolean {
   return /\bpdf\b|\.pdf\b/i.test(hint)
+}
+
+function reservedQuestionId(id: string): boolean {
+  return (CHECK_QUESTION_ORDER as readonly string[]).includes(id) || id === "path_efficiency"
+}
+
+function extraFailureTexts(task: TaskResult): string[] {
+  const extras = task.judge?.extra_failures
+  if (!Array.isArray(extras)) {
+    return []
+  }
+  return extras.map((item) => trimText(item)).filter(Boolean)
+}
+
+export function behaviorQuestionIds(task: TaskResult): string[] {
+  const extras = extraFailureTexts(task)
+  const cells = task.judge?.cells ?? {}
+  const questions = task.judge?.questions ?? {}
+  const found: string[] = []
+  const add = (id: string) => {
+    const name = trimText(id)
+    if (name && !found.includes(name) && !reservedQuestionId(name)) {
+      found.push(name)
+    }
+  }
+  for (const text of extras) {
+    let matched = false
+    for (const [id, cell] of Object.entries(cells)) {
+      if (trimText(cell?.reason) === text) {
+        add(id)
+        matched = true
+        break
+      }
+    }
+    if (!matched) {
+      for (const [id, question] of Object.entries(questions)) {
+        const ask = trimText(question?.instructions)
+        if (ask && (text === `${ask} No` || text.startsWith(ask))) {
+          add(id)
+          matched = true
+          break
+        }
+      }
+    }
+    if (!matched) {
+      add(text.replace(/\s+No$/i, "").trim() || text)
+    }
+  }
+  return found
+}
+
+export function behaviorFailLine(question: string): string {
+  return `The agent's behavior failed this check: ${question} → No. Review the run log below.`
+}
+
+function skillWasNotOpened(task: TaskResult): boolean {
+  if (skillPathRan(task)) {
+    return false
+  }
+  const selected = trimText(task.selected_skill).toLowerCase()
+  return !selected || selected === "none"
 }
 
 function looksLikeTriggerMiss(text: string): boolean {
@@ -213,6 +276,10 @@ export function happenedLine(task: TaskResult): string {
     }
     return "Output matched what was expected."
   }
+  const behavior = behaviorQuestionIds(task)
+  if (behavior.length) {
+    return behaviorFailLine(behavior[0])
+  }
   const stamped = trimText(task.happened)
   if (stamped && !isGenericFail(stamped) && !isChecksDump(stamped)) {
     return scorerCodeToPlain(stamped, hint)
@@ -241,6 +308,10 @@ export function happenedLine(task: TaskResult): string {
 export function extraFailWhy(task: TaskResult): string | null {
   if (task.passed !== false || task.skipped) {
     return null
+  }
+  const behavior = behaviorQuestionIds(task)
+  if (behavior.length) {
+    return skillWasNotOpened(task) ? TRIGGER_SECONDARY_NOTE : null
   }
   const happened = happenedLine(task)
   const hint = `${task.prompt || ""} ${task.id || ""}`
@@ -444,10 +515,16 @@ export function openedCheckAnswers(task: TaskResult): OpenedAnswer[] {
   const hasCells = Boolean(
     cells && CHECK_QUESTION_ORDER.some((id) => id in cells)
   )
-  if (!hasAnswers && !hasCells) {
+  const extraKeys = [
+    ...Object.keys(answers ?? {}),
+    ...Object.keys(cells ?? {}),
+    ...Object.keys(task.judge?.questions ?? {}),
+  ].some((id) => !reservedQuestionId(id))
+  if (!hasAnswers && !hasCells && !extraKeys) {
     return []
   }
   const unchecked = workDidNotHappen(task)
+  const failedBehavior = new Set(behaviorQuestionIds(task))
   const builtins = CHECK_QUESTION_ORDER.map((id) => {
     const question = task.judge?.questions?.[id]
     const choice =
@@ -489,7 +566,7 @@ export function openedCheckAnswers(task: TaskResult): OpenedAnswer[] {
         trimText(question?.instructions) ||
         trimText(cell?.label) ||
         id,
-      answer: unchecked ? "Not checked" : choice || "—",
+      answer: unchecked && !failedBehavior.has(id) ? "Not checked" : choice || "—",
     })
   }
   return [...builtins, ...extras]

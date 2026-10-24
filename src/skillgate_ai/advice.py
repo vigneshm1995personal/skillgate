@@ -11,8 +11,16 @@ import yaml
 
 from skillgate_ai.harness import select_skill_from_descriptions, tokenize
 from skillgate_ai.ingest import FRONTMATTER_RE, Skill
+from skillgate_ai.judge_bank import CHECK_CELL_ORDER, SOFT_CELL_ORDER
 from skillgate_ai.scorers import Score
 from skillgate_ai.suite import TaskSpec
+
+BEHAVIOR_FAIL_LEAD = (
+    "The agent's behavior failed this check: {question} → No. Review the run log below."
+)
+TRIGGER_SECONDARY_NOTE = (
+    "Note: this skill wasn't opened during this run. If it should have been, you can review the description."
+)
 
 _MEAL_NOISE = {
     "dinner",
@@ -51,6 +59,7 @@ def advise_task(
     sibling_prompts: list[str] | None = None,
     returncode: int | None = None,
     stderr: str = "",
+    judge: dict | None = None,
 ) -> FixAdvice | None:
     failed = [s for s in scores if not s.passed]
     if not failed:
@@ -59,8 +68,14 @@ def advise_task(
     completion = next((s for s in failed if s.scorer == "task_completion"), None)
     rubric = next((s for s in failed if s.scorer == "rubric"), None)
     prompts = list(sibling_prompts or [task.prompt])
+    trigger_unopened = bool(
+        trigger and task.expect_skill and (trigger.actual or "none") == "none"
+    )
+    behavior = behavior_question_ids(judge)
+    if trigger_unopened and behavior:
+        return _behavior_fix(behavior[0], skill_unopened=True)
 
-    if trigger and task.expect_skill and (trigger.actual or "none") == "none":
+    if trigger_unopened:
         description = synthesize_trigger_description(skill, prompts, reference)
         return _trigger_fix(skill, task.prompt, description, reference)
 
@@ -132,12 +147,26 @@ def advise_suite(
     failed = [t for t in tasks if not t.passed]
     if not failed:
         return None
+    behavior_first = next(
+        (t for t in failed if behavior_question_ids(getattr(t, "judge", None))),
+        None,
+    )
+    if behavior_first is not None:
+        if behavior_first.advice and behavior_first.advice.target != "description":
+            return behavior_first.advice
+        questions = behavior_question_ids(getattr(behavior_first, "judge", None))
+        unopened = behavior_first.selected_skill in {None, "none"} and any(
+            s.scorer == "skill_trigger" and not s.passed for s in behavior_first.scores
+        )
+        if questions:
+            return _behavior_fix(questions[0], skill_unopened=unopened)
     trigger_misses = [
         t
         for t in failed
         if t.expect_skill
         and any(s.scorer == "skill_trigger" and not s.passed for s in t.scores)
         and (t.selected_skill in {None, "none"} or t.selected_skill is None)
+        and not behavior_question_ids(getattr(t, "judge", None))
     ]
     if trigger_misses:
         prompts = [t.prompt for t in trigger_misses]
@@ -145,6 +174,63 @@ def advise_suite(
         first = trigger_misses[0]
         return _trigger_fix(skill, first.prompt, description, reference)
     return failed[0].advice
+
+
+def behavior_fail_line(question: str) -> str:
+    return BEHAVIOR_FAIL_LEAD.format(question=question)
+
+
+def behavior_question_ids(judge: dict | None) -> list[str]:
+    """Ids (or labels) of extra behavior questions that failed this run."""
+    if not isinstance(judge, dict):
+        return []
+    reserved = set(CHECK_CELL_ORDER) | set(SOFT_CELL_ORDER)
+    extras = [
+        str(item).strip()
+        for item in (judge.get("extra_failures") or [])
+        if str(item).strip()
+    ]
+    cells = judge.get("cells") if isinstance(judge.get("cells"), dict) else {}
+    questions = judge.get("questions") if isinstance(judge.get("questions"), dict) else {}
+    found: list[str] = []
+
+    def add(qid: str) -> None:
+        name = str(qid).strip()
+        if name and name not in found and name not in reserved:
+            found.append(name)
+
+    for text in extras:
+        matched = False
+        for qid, cell in cells.items():
+            if isinstance(cell, dict) and str(cell.get("reason") or "").strip() == text:
+                add(str(qid))
+                matched = True
+                break
+        if not matched:
+            for qid, meta in questions.items():
+                ask = ""
+                if isinstance(meta, dict):
+                    ask = str(meta.get("instructions") or "").strip()
+                if ask and (text == f"{ask} No" or text.startswith(ask)):
+                    add(str(qid))
+                    matched = True
+                    break
+        if not matched:
+            add(text[:-3].rstrip() if text.endswith(" No") else text)
+    return found
+
+
+def _behavior_fix(question: str, *, skill_unopened: bool) -> FixAdvice:
+    why = behavior_fail_line(question)
+    if skill_unopened:
+        why = f"{why} {TRIGGER_SECONDARY_NOTE}"
+    return FixAdvice(
+        headline="The agent's behavior failed this check",
+        why=why,
+        change="Review the run log below.",
+        paste="",
+        target="body",
+    )
 
 
 def synthesize_trigger_description(

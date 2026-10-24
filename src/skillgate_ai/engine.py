@@ -832,6 +832,7 @@ def _run_task(
                     sibling_prompts=sibling_prompts,
                     returncode=result.returncode,
                     stderr=result.stderr or "",
+                    judge=judged,
                 )
                 if primary
                 else None
