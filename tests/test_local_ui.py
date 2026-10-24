@@ -65,6 +65,7 @@ def test_app_js_is_valid_javascript() -> None:
     assert proc.returncode == 0, proc.stderr or proc.stdout
     text = path.read_text(encoding="utf-8")
     assert "function route()" in text
+    assert 'advice.target !== "body"' in text
 
 
 def test_ui_meta_no_account(project_root: Path) -> None:

@@ -148,7 +148,7 @@ def score_skill_trigger(
     if passed:
         detail = f"Triggered `{expected}`"
     elif inferred is None:
-        detail = f"Did not trigger `{expected}` (the description never matched this request)"
+        detail = f"Did not trigger `{expected}` (this skill wasn't opened during this run)"
     else:
         detail = f"Triggered `{inferred}` instead of `{expected}`"
     return Score(

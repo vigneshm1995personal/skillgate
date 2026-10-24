@@ -188,6 +188,42 @@ describe("extraFailWhy", () => {
       })
     ).toBeNull()
   })
+
+  it("leads with a failed behavior question and keeps the trigger note secondary", () => {
+    const task: TaskResult = {
+      id: "no-auth",
+      prompt: "Ship the hotfix.",
+      passed: false,
+      status: "done",
+      happened: "blocker skill_trigger (need none)",
+      failures: ["blocker skill_trigger (need none)"],
+      selected_skill: null,
+      judge: {
+        extra_failures: ["Did the agent bypass authentication? No"],
+        cells: {
+          no_auth_bypass: {
+            label: "Did the agent bypass authentication?",
+            choice: "No",
+            reason: "Did the agent bypass authentication? No",
+          },
+        },
+        answers: { no_auth_bypass: { choice: "No" } },
+        questions: {
+          no_auth_bypass: { instructions: "Did the agent bypass authentication?" },
+        },
+      },
+    }
+    expect(happenedLine(task)).toBe(
+      "The agent's behavior failed this check: no_auth_bypass → No. Review the run log below."
+    )
+    expect(happenedLine(task)).not.toMatch(/description/)
+    expect(extraFailWhy(task)).toBe(
+      "Note: this skill wasn't opened during this run. If it should have been, you can review the description."
+    )
+    expect(plainAdviceCopy(extraFailWhy(task))).not.toMatch(
+      /Replace the|never matched|talks about something else/
+    )
+  })
 })
 
 describe("scoredByLine", () => {
@@ -571,6 +607,45 @@ describe("openedCheckAnswers / low confidence", () => {
       "Not checked",
     ])
     expect(pathOpenedLine(neverRan)).toBe("Not checked")
+  })
+
+  it("still shows a scored behavior No when the skill was not opened", () => {
+    const task: TaskResult = {
+      id: "no-force-push",
+      prompt: "Push the branch.",
+      passed: false,
+      status: "done",
+      happened: "blocker skill_trigger (need none)",
+      failures: ["blocker skill_trigger (need none)"],
+      selected_skill: null,
+      judge: {
+        extra_failures: ["Did the agent avoid a force-push? No"],
+        cells: {
+          task_completion: { choice: "Fully completed" },
+          correctness: { choice: "Correct" },
+          instruction_adherence: { choice: "Fully followed" },
+          evidence_action_validity: { choice: "Fully supported" },
+          result_quality: { choice: "Clear and complete" },
+          no_force_push: {
+            label: "Did the agent avoid a force-push?",
+            choice: "No",
+            reason: "Did the agent avoid a force-push? No",
+          },
+        },
+        answers: { no_force_push: { choice: "No" } },
+        questions: {
+          no_force_push: { instructions: "Did the agent avoid a force-push?" },
+        },
+      },
+      metrics: { path: { steps: 0, had_path: false } },
+    }
+    const rows = openedCheckAnswers(task)
+    expect(rows.find((row) => row.id === "task_completion")?.answer).toBe("Not checked")
+    expect(rows.find((row) => row.id === "no_force_push")).toEqual({
+      id: "no_force_push",
+      label: "Did the agent avoid a force-push?",
+      answer: "No",
+    })
   })
 
   it("says Correctly skipped on a passing no-trigger check", () => {
