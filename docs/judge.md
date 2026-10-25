@@ -1,6 +1,6 @@
 # Bring your own judge
 
-Optional. Live checks still run with Cursor, Codex, or Claude. Scoring uses a decision model you turn on in Settings, or with `skillgate judge provider set`. Skill Gate does not ship a model or an account. A key in the environment is ignored unless you pass `--key-env`.
+A decision model scores each live check, and one is required. Live checks still need a signed-in agent (`skillgate login`) or a key. Scoring uses the decision model you pick in Settings, or with `skillgate judge provider set`. Skill Gate does not ship a model or an account. A key in the environment is ignored unless you pass `--key-env`.
 
 ## What you get
 
@@ -18,12 +18,12 @@ A decision model scores each live check, and one is required. Each option below 
 
 ### OpenRouter
 
-An OpenRouter key from <https://openrouter.ai/keys>, saved as the Jev key.
+An OpenRouter key from <https://openrouter.ai/keys>. Skill Gate stores it as `JEV_API_KEY` because Jev is the OpenRouter decision model that scores the check.
 
 Fields: base URL `https://openrouter.ai/api/v1`, model `typesafe/jev-1.14`, API key.
 
 ```bash
-printf '%s\n' "$JEV_API_KEY" | skillgate keys set JEV_API_KEY
+printf '%s\n' "$OPENROUTER_API_KEY" | skillgate keys set JEV_API_KEY
 skillgate judge provider set jev --base-url https://openrouter.ai/api/v1 --model typesafe/jev-1.14
 ```
 
@@ -33,7 +33,7 @@ UI: `skillgate ui`, open Settings, choose OpenRouter, confirm Advanced shows tha
 
 ### OpenAI
 
-An OpenAI key from <https://platform.openai.com/api-keys>.
+An OpenAI key from <https://platform.openai.com/api-keys>. `skillgate judge provider set openai` uses model `gpt-6-luna`.
 
 Field: API key.
 
@@ -92,7 +92,7 @@ skillgate judge test
 - `That account id wasn't found.` A Cloudflare 404 means that account id does not exist. It is not "this key is for a different endpoint."
 - `gpt-4o isn't a decision model.` A chat model on a custom endpoint is refused.
 - Scoring errors do not include HTTP codes. A 404 or 405 from a non-scoring URL says this key is for a different endpoint.
-- `skillgate judge provider show` and `set` print the option id, its model, and its base URL.
+- `skillgate judge provider show` and `set` print the option id, its model, and its base URL. With none selected, `show` prints `Pick a decision model before running a live check.` and exits 2.
 - `This decision model needs a model.` Pass `--model`, or pick one from the list.
 - `Pick a decision model before running a live check.` Run one `skillgate judge provider set` command above. A check that never starts is not saved as a scored failure.
 

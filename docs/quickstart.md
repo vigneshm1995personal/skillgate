@@ -41,18 +41,22 @@ Files already in the destination stay as they are. A second install prints `Left
 
 ## Keys
 
-Sign in with the agent CLI (subscription login) or set a key. Skill Gate does not read `OPENAI_API_KEY` from the shell unless you pass `--key-env`. CI and Docker still use a key (vault, Settings, or the `SKILLGATE_*` prefix):
+Sign in with the agent CLI (subscription login) or set a key. `skillgate login --status` labels them Editor agent, Code agent, and Terminal agent. Skill Gate does not read `OPENAI_API_KEY` from the shell unless you pass `--key-env`. CI and Docker still use a key (vault, Settings, or the `SKILLGATE_*` prefix):
 
 ```bash
 skillgate login                  # cursor | claude | codex; omit to sign in missing agents
 skillgate login --status         # installed / logged in / API key / none
-# or a key: skillgate keys set OPENAI_API_KEY
-# hidden prompt; or pipe stdin: printf '%s\n' "$OPENAI_API_KEY" | skillgate keys set OPENAI_API_KEY
+# Editor agent:
+printf '%s\n' "$CURSOR_API_KEY" | skillgate keys set CURSOR_API_KEY
+# Code agent:
+printf '%s\n' "$ANTHROPIC_API_KEY" | skillgate keys set ANTHROPIC_API_KEY
+# Terminal agent:
+printf '%s\n' "$CODEX_API_KEY" | skillgate keys set CODEX_API_KEY
 # or paste in Settings (`skillgate ui`)
 skillgate judge provider set <endpoint>
 ```
 
-Pick a decision model before a live check. With none selected, `skillgate check` exits 2 and asks you to pick one. Commands for each option are in [Set up a decision model](judge.md#set-up-a-decision-model). Every check is a live agent run. Without `skillgate login` or a key, `skillgate check` exits 2. Default results say "Scored by the judge" when a decision model scored the run.
+A decision-model key is not an agent login. Pick a decision model before a live check. With none selected, `skillgate check` exits 2 and asks you to pick one. Commands for each option are in [Set up a decision model](judge.md#set-up-a-decision-model). Every check is a live agent run. Without `skillgate login` or a key, `skillgate check` exits 2. Default results say "Scored by the judge" when a decision model scored the run.
 
 ## A pass and a fail
 
@@ -121,7 +125,7 @@ echo $?    # 0 only when that live run is red
 
 ## Deploy (after a green check)
 
-`skillgate deploy` copies **only the skill files** (not `evals/`) into Cursor, Claude, or Codex. It refuses unless this pack already has a passing check **and an agent is available** (`skillgate login`, vault, Settings, or `SKILLGATE_*`). It does not run check for you. Without an agent, Deploy stays blocked even after a green check; the pointer is `skillgate login` or Settings / `skillgate keys set`.
+`skillgate deploy` copies **only the skill files** (not `evals/`) into the signed-in agent's skills folder (Editor agent, Code agent, or Terminal agent). It refuses unless this pack already has a passing check **and an agent is available** (`skillgate login`, vault, Settings, or `SKILLGATE_*`). It does not run check for you. Without an agent, Deploy stays blocked even after a green check; the pointer is `skillgate login` or Settings / `skillgate keys set`.
 
 ```bash
 skillgate check skills/pdf
@@ -132,9 +136,11 @@ skillgate deploy skills/pdf --targets cursor,codex
 
 ## Docker (optional)
 
-Multi-stage image, non-root UID 1001, `ENTRYPOINT ["skillgate"]`, `CMD ["check", "/pack"]`. Keyless `check` exits 2.
+Multi-stage image, non-root UID 1001, `ENTRYPOINT ["skillgate"]`, `CMD ["check", "/pack"]`. Keyless `check` exits 2. Clone this repo first (`compose.yaml` lives here):
 
 ```bash
+git clone https://github.com/vigneshm1995personal/skillgate.git
+cd skillgate
 docker compose run --rm --no-TTY skillgate example pdf --dest /tmp/pdf
 ```
 

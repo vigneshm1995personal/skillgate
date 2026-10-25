@@ -27,6 +27,10 @@ def format_compare_cli(payload: dict[str, Any]) -> str:
         git_refs = picker.get("git_refs") or []
         if git_refs:
             lines.append(f"Git refs: {', '.join(str(r) for r in git_refs)}")
+        if not arms:
+            if not recent and not git_refs:
+                lines.append("A version compare needs two --run ids or two --git refs.")
+            return "\n".join(lines)
     fp = str(data.get("pack_fingerprint") or "")
     if fp:
         lines.append(f"Dataset fingerprint  {fp[:12]}…")

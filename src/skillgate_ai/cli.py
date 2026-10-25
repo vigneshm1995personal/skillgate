@@ -1077,11 +1077,17 @@ def case_add_cmd(
 @judge_provider_app.command("show")
 def judge_provider_show() -> None:
     """Who scores live checks."""
+    from skillgate_ai.judge_providers.decision import NEEDS_DECISION_MODEL_HINT
     from skillgate_ai.judge_settings import load_judge_settings
     from skillgate_ai.judge_setup import format_provider_selection
 
     root = _boot()
-    console.print(format_provider_selection(load_judge_settings(root)))
+    settings = load_judge_settings(root)
+    console.print(format_provider_selection(settings))
+    provider = str(getattr(settings, "provider", "") or "auto").strip().lower() or "auto"
+    if provider in {"", "auto", "skip"}:
+        console.print(NEEDS_DECISION_MODEL_HINT)
+        raise typer.Exit(2)
 
 
 @judge_provider_app.command("set")

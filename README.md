@@ -24,16 +24,19 @@ skillgate checks an agent skill that lives in a folder on your machine. A pack i
 
 ## Quickstart
 
-In an empty directory:
+Python 3.11+. On Debian, Ubuntu, and Homebrew Python, `pip install` needs a virtualenv or pipx (PEP 668). Longer walkthrough: [10-minute quickstart](docs/quickstart.md).
 
 ```bash
+python3 -m venv .venv
+source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install skillgate-ai
+# or: pipx install skillgate-ai
 skillgate examples install
 skillgate check skills/json-response
 skillgate check skills/json-response-sabotaged
 ```
 
-`skillgate examples install` writes six skills under `skills/`. Files already in that folder stay as they are. `skills/json-response` exits 0 when the live run is green. `skills/json-response-sabotaged` exits 1: the JSON checks fail, and the unrelated check can pass. Both checks exit 2 until an agent is available and a decision model is selected. Use `skillgate login` or `skillgate keys set` for the agent, and `skillgate judge provider set` for the decision model. These commands match release 0.7.9. A check that never starts is not saved. `skillgate import` of a skill already in this project stops and leaves the files alone. A decision-model key is not an agent login.
+`skillgate examples install` writes six skills under `skills/`. Files already in that folder stay as they are. `skills/json-response` exits 0 when the live run is green. `skills/json-response-sabotaged` exits 1: the JSON checks fail, and the unrelated check can pass. Both checks exit 2 until an agent is available and a decision model is selected. Use `skillgate login` or `skillgate keys set` for the agent ([Sign in an agent](#sign-in-an-agent)), and `skillgate judge provider set` for the decision model. These commands match release 0.7.9. A check that never starts is not saved. `skillgate import` of a skill already in this project stops and leaves the files alone. A decision-model key is not an agent login.
 
 The same steps in the local UI:
 
@@ -43,18 +46,30 @@ skillgate ui
 
 Open http://127.0.0.1:8765. Click **Skills**. On Skill Repository, click **Examples**, then **Install**. The toast reads `Installed 6 examples (47 files).` Open `json-response`, click **Evaluate this skill**, then **Run**. The button reads `Run 3 cases`. Until you sign in or add a key, the line above it is `Next: sign in or add a key in Settings, then press Run.` Repeat for `json-response-sabotaged` to see the failing checks.
 
+## Sign in an agent
+
+A live check needs a signed-in agent. `skillgate login --status` labels them Editor agent, Code agent, and Terminal agent. Save one of these keys, or run `skillgate login`:
+
+```bash
+printf '%s\n' "$CURSOR_API_KEY" | skillgate keys set CURSOR_API_KEY
+# or: printf '%s\n' "$ANTHROPIC_API_KEY" | skillgate keys set ANTHROPIC_API_KEY
+# or: printf '%s\n' "$CODEX_API_KEY" | skillgate keys set CODEX_API_KEY
+```
+
+`skillgate keys set` prompts, or reads the value from stdin. Do not put the key on the command line.
+
 ## Set up a decision model
 
 A decision model scores each live check, and one is required. Each option below takes one key and only the fields listed. `skillgate keys set` prompts, or reads the value from stdin. Do not put the key on the command line.
 
 ### OpenRouter
 
-An OpenRouter key from <https://openrouter.ai/keys>, saved as the Jev key.
+An OpenRouter key from <https://openrouter.ai/keys>. Skill Gate stores it as `JEV_API_KEY` because Jev is the OpenRouter decision model that scores the check.
 
 Fields: base URL `https://openrouter.ai/api/v1`, model `typesafe/jev-1.14`, API key.
 
 ```bash
-printf '%s\n' "$JEV_API_KEY" | skillgate keys set JEV_API_KEY
+printf '%s\n' "$OPENROUTER_API_KEY" | skillgate keys set JEV_API_KEY
 skillgate judge provider set jev --base-url https://openrouter.ai/api/v1 --model typesafe/jev-1.14
 ```
 
@@ -64,7 +79,7 @@ UI: `skillgate ui`, open Settings, choose OpenRouter, confirm Advanced shows tha
 
 ### OpenAI
 
-An OpenAI key from <https://platform.openai.com/api-keys>.
+An OpenAI key from <https://platform.openai.com/api-keys>. `skillgate judge provider set openai` uses model `gpt-6-luna`.
 
 Field: API key.
 
@@ -124,7 +139,7 @@ skillgate judge test
 - `gpt-4o isn't a decision model.` A chat model on a custom endpoint is refused. Scoring errors do not include HTTP codes.
 - `This decision model needs a model.` Pass `--model`, or pick one from the list.
 - `Pick a decision model before running a live check.` Run one `skillgate judge provider set` command above.
-- `skillgate judge provider show` prints the option id, its model, and its base URL.
+- `skillgate judge provider show` prints the option id, its model, and its base URL. With none selected, it prints `Pick a decision model before running a live check.` and exits 2.
 
 ## Features
 
@@ -185,7 +200,11 @@ The full guide, with a copy-paste pack and the mistakes that reject a dataset, i
 
 ## Docker
 
+Clone this repo first (`compose.yaml` lives here), then:
+
 ```bash
+git clone https://github.com/vigneshm1995personal/skillgate.git
+cd skillgate
 docker compose run --rm --no-TTY skillgate
 ```
 
