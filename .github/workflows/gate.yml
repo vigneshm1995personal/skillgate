@@ -100,7 +100,7 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install -e ".[dev]"
-      - run: pytest -q tests/test_oss_surface.py tests/test_dockerfile.py
+      - run: pytest -q tests/test_oss_surface.py tests/test_dockerfile.py tests/test_editor_integrations.py tests/test_mcp_smoke.py
 
   docker:
     runs-on: ubuntu-latest

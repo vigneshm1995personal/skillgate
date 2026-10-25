@@ -35,15 +35,20 @@ def test_public_docs_drop_internal_words() -> None:
         assert word not in blob, word
 
 
-def _readme_outside_decision_setup(text: str) -> str:
-    """Key-source names belong in the setup section. The rest of the README stays free of them."""
-    start = text.find("## Set up a decision model")
+def _strip_readme_section(text: str, heading: str) -> str:
+    start = text.find(heading)
     if start < 0:
         return text
     rest = text[start:]
     end_rel = rest.find("\n## ", 1)
     end = len(text) if end_rel < 0 else start + end_rel
     return text[:start] + text[end:]
+
+
+def _readme_outside_decision_setup(text: str) -> str:
+    """Key-source names belong in named sections. The rest of the README stays free of them."""
+    text = _strip_readme_section(text, "## Set up a decision model")
+    return _strip_readme_section(text, "## Editor MCP")
 
 
 def test_readme_points_at_docs() -> None:

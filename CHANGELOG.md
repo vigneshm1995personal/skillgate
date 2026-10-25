@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Editor MCP for Cursor (Add to Cursor deeplink, `mcp.json`, `/gate-skill`) and Claude Code (plugin marketplace, `claude mcp add`, `/skillgate`, optional pre-commit hook). Token is `SKILLGATE_TOKEN`. Local CLI stays the offline bring-your-own-key path.
+
 ## 0.7.9
 
 - A check that never starts is not saved. History, Home, and the heatmap do not show it as a failed scored run. A stored row with no result reads "not run" and "Not scored".
