@@ -1,0 +1,15 @@
+{
+  "name": "skillgate",
+  "description": "Skill Gate editor plugins",
+  "owner": {
+    "name": "Skill Gate AI contributors",
+    "url": "https://github.com/vigneshm1995personal/skillgate"
+  },
+  "plugins": [
+    {
+      "name": "skillgate",
+      "source": "./plugins/skillgate",
+      "description": "Skill Gate MCP tools (check_skill, run_eval, gate), /skillgate, and an optional pre-commit hook."
+    }
+  ]
+}

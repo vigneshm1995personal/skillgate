@@ -1,0 +1,61 @@
+#!/usr/bin/env bash
+# Optional Skill Gate pre-commit. Off unless installed as a git hook,
+# CLAUDE_PLUGIN_OPTION_PRECOMMIT=true, or SKILLGATE_PRECOMMIT=1.
+set -euo pipefail
+
+claude_hook=0
+if [[ "${1:-}" == "--claude-hook" ]]; then
+  claude_hook=1
+fi
+
+if [[ "$claude_hook" -eq 1 ]]; then
+  enabled="${CLAUDE_PLUGIN_OPTION_PRECOMMIT:-false}"
+  if [[ "${SKILLGATE_PRECOMMIT:-}" == "1" ]]; then
+    enabled=true
+  fi
+  if [[ "$enabled" != "true" ]]; then
+    exit 0
+  fi
+  payload="$(cat || true)"
+  if ! grep -qiE 'git[[:space:]]+commit' <<<"$payload"; then
+    exit 0
+  fi
+fi
+
+if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  exit 0
+fi
+
+root="$(git rev-parse --show-toplevel)"
+uniq_packs="$(
+  git diff --cached --name-only --diff-filter=ACMR | while IFS= read -r rel; do
+    [ "$(basename "$rel")" = "SKILL.md" ] || continue
+    echo "$root/$(dirname "$rel")"
+  done | sort -u
+)"
+
+if [[ -z "$uniq_packs" ]]; then
+  exit 0
+fi
+
+if ! command -v skillgate >/dev/null 2>&1; then
+  echo "skillgate CLI not on PATH; skip pre-commit (pip install skillgate-ai, or run /skillgate)." >&2
+  exit 0
+fi
+
+fail=0
+while IFS= read -r pack; do
+  [[ -n "$pack" ]] || continue
+  if ! skillgate check "$pack"; then
+    fail=1
+  fi
+done <<EOF
+$uniq_packs
+EOF
+
+if [[ "$fail" -ne 0 ]]; then
+  if [[ "$claude_hook" -eq 1 ]]; then
+    exit 2
+  fi
+  exit 1
+fi

@@ -1,0 +1,22 @@
+{
+  "name": "skillgate",
+  "displayName": "Skill Gate",
+  "version": "0.1.0",
+  "description": "Skill Gate MCP server, /skillgate, and an optional pre-commit hook.",
+  "author": {
+    "name": "Skill Gate AI contributors",
+    "url": "https://github.com/vigneshm1995personal/skillgate"
+  },
+  "homepage": "https://github.com/vigneshm1995personal/skillgate/blob/main/docs/editors.md",
+  "repository": "https://github.com/vigneshm1995personal/skillgate",
+  "license": "Apache-2.0",
+  "keywords": ["skills", "evals", "mcp"],
+  "userConfig": {
+    "precommit": {
+      "type": "boolean",
+      "title": "Pre-commit gate",
+      "description": "When true, run Skill Gate before git commit. Default is off.",
+      "default": false
+    }
+  }
+}

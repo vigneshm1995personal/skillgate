@@ -215,6 +215,61 @@ Pass keys as `SKILLGATE_*` environment variables from the caller secrets. The ac
 
 Exit 0 passes, exit 1 fails, and exit 2 means the check cannot run. The job summary records that result.
 
+## Editor MCP
+
+Connect an editor to the Skill Gate MCP server `skill-gate` at `https://mcp.skill-gate-ai.app/mcp` (`check_skill`, `run_eval`, `gate`). Auth is a Skill Gate token (`sgt_…`) from GitHub sign-in at [Connect](https://www.skill-gate-ai.app/connect), passed as `Authorization: Bearer` from `SKILLGATE_TOKEN`. Full steps: [Editor MCP](docs/editors.md).
+
+### Cursor
+
+[Add to Cursor](https://cursor.com/install-mcp?name=skill-gate&config=eyJ1cmwiOiJodHRwczovL21jcC5za2lsbC1nYXRlLWFpLmFwcC9tY3AiLCJoZWFkZXJzIjp7IkF1dGhvcml6YXRpb24iOiJCZWFyZXIgJHtlbnY6U0tJTExHQVRFX1RPS0VOfSJ9fQ==)
+
+```
+cursor://anysphere.cursor-deeplink/mcp/install?name=skill-gate&config=eyJ1cmwiOiJodHRwczovL21jcC5za2lsbC1nYXRlLWFpLmFwcC9tY3AiLCJoZWFkZXJzIjp7IkF1dGhvcml6YXRpb24iOiJCZWFyZXIgJHtlbnY6U0tJTExHQVRFX1RPS0VOfSJ9fQ==
+```
+
+```json
+{
+  "mcpServers": {
+    "skill-gate": {
+      "url": "https://mcp.skill-gate-ai.app/mcp",
+      "headers": {
+        "Authorization": "Bearer ${env:SKILLGATE_TOKEN}"
+      }
+    }
+  }
+}
+```
+
+`/gate-skill` runs `check_skill` on the open `SKILL.md`.
+
+### Claude Code
+
+```bash
+claude mcp add --transport http skill-gate https://mcp.skill-gate-ai.app/mcp --header "Authorization: Bearer ${SKILLGATE_TOKEN}"
+```
+
+This repo is a plugin marketplace (`claude plugin marketplace add vigneshm1995personal/skillgate`, then `claude plugin install skillgate@skillgate`). `/skillgate` runs the gate tools. An optional pre-commit hook ships with the plugin (off by default).
+
+### Claude Desktop
+
+```json
+{
+  "mcpServers": {
+    "skill-gate": {
+      "type": "http",
+      "url": "https://mcp.skill-gate-ai.app/mcp",
+      "headers": {
+        "Authorization": "Bearer sgt_YOUR_TOKEN"
+      }
+    }
+  }
+}
+```
+
+### Offline
+
+No Skill Gate token: the local CLI is the offline bring-your-own-key path (`pip install skillgate-ai`, then `skillgate keys set` and `skillgate check`).
+
 ## Documentation
 
 [Documentation](https://www.skill-gate-ai.app/docs)
