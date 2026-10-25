@@ -207,6 +207,27 @@ def test_readme_lists_agent_key_names_and_set_command() -> None:
     assert "printf '%s\\n' \"$CURSOR_API_KEY\" | skillgate keys set CURSOR_API_KEY" in text
 
 
+def test_readme_maps_cli_labels_to_tools_and_deploy_folders() -> None:
+    text = README.read_text(encoding="utf-8")
+    start = text.find("## Sign in an agent")
+    end = text.find("\n## ", start + 1)
+    section = text[start:end]
+    assert "Editor agent is Cursor" in section
+    assert "`~/.cursor/skills`" in section
+    assert "Code agent is Claude Code" in section
+    assert "`~/.claude/skills`" in section
+    assert "Terminal agent is Codex" in section
+    assert "`~/.codex/skills`" in section
+
+
+def test_readme_examples_toast_matches_install_count() -> None:
+    from skillgate_ai.examples import DATASET_EXAMPLES, _example_files
+
+    total = sum(len(_example_files(ROOT / "skills" / name)) for name in DATASET_EXAMPLES)
+    text = README.read_text(encoding="utf-8")
+    assert f"Installed 6 examples ({total} files)." in text
+
+
 def test_openrouter_docs_pipe_openrouter_key_and_explain_jev() -> None:
     for path in (README, ROOT / "docs" / "judge.md"):
         text = path.read_text(encoding="utf-8")

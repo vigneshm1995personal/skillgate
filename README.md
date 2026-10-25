@@ -44,11 +44,17 @@ The same steps in the local UI:
 skillgate ui
 ```
 
-Open http://127.0.0.1:8765. Click **Skills**. On Skill Repository, click **Examples**, then **Install**. The toast reads `Installed 6 examples (47 files).` Open `json-response`, click **Evaluate this skill**, then **Run**. The button reads `Run 3 cases`. Until you sign in or add a key, the line above it is `Next: sign in or add a key in Settings, then press Run.` Repeat for `json-response-sabotaged` to see the failing checks.
+Open http://127.0.0.1:8765. Click **Skills**. On Skill Repository, click **Examples**, then **Install**. The toast reads `Installed 6 examples (53 files).` Open `json-response`, click **Evaluate this skill**, then **Run**. The button reads `Run 3 cases`. Until you sign in or add a key, the line above it is `Next: sign in or add a key in Settings, then press Run.` Repeat for `json-response-sabotaged` to see the failing checks.
 
 ## Sign in an agent
 
-A live check needs a signed-in agent. `skillgate login --status` labels them Editor agent, Code agent, and Terminal agent. Save one of these keys, or run `skillgate login`:
+A live check needs a signed-in agent. `skillgate login --status` and `skillgate deploy` use these labels:
+
+- Editor agent is Cursor. Deploy installs into `~/.cursor/skills`.
+- Code agent is Claude Code. Deploy installs into `~/.claude/skills`.
+- Terminal agent is Codex. Deploy installs into `~/.codex/skills`.
+
+Save one of these keys, or run `skillgate login`:
 
 ```bash
 printf '%s\n' "$CURSOR_API_KEY" | skillgate keys set CURSOR_API_KEY
@@ -173,7 +179,7 @@ skillgate compare versions skills/pdf --dry-run
 skillgate ui
 ```
 
-`--expect-fail` exits 0 only when the live run is red. `skillgate deploy` copies the skill files after this pack already has a passing check. It does not run check for you. Deploy stays blocked until an agent is available, even after a green check. `skillgate ui` serves the local UI at http://127.0.0.1:8765. A version compare takes two `--run` ids or two `--git` refs. `skillgate example NAME` writes `skills/NAME`. `skillgate judge add-question` needs a skill pack. `skillgate case remove` keeps the original checks of the bundled examples.
+`--expect-fail` exits 0 only when the live run is red. `skillgate deploy` copies the skill files after this pack already has a passing check. It does not run check for you. Deploy stays blocked until an agent is available, even after a green check. The folder for each agent is listed under [Sign in an agent](#sign-in-an-agent). `skillgate ui` serves the local UI at http://127.0.0.1:8765. A version compare takes two `--run` ids or two `--git` refs. `skillgate example NAME` writes `skills/NAME`. `skillgate judge add-question` needs a skill pack. `skillgate case remove` keeps the original checks of the bundled examples.
 
 Create a workspace and a skill:
 
