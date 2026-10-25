@@ -1,7 +1,7 @@
 {
   "mcpServers": {
-    "skillgate": {
-      "url": "https://mcp.skill-gate-ai.app",
+    "skill-gate": {
+      "url": "https://mcp.skill-gate-ai.app/mcp",
       "headers": {
         "Authorization": "Bearer ${env:SKILLGATE_TOKEN}"
       }

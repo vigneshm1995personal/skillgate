@@ -9,9 +9,12 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 ROOT = Path(__file__).resolve().parents[1]
-MCP_URL = "https://mcp.skill-gate-ai.app"
-SERVER_NAME = "skillgate"
+MCP_URL = "https://mcp.skill-gate-ai.app/mcp"
+SERVER_NAME = "skill-gate"
+PLUGIN_NAME = "skillgate"
 TOKEN_ENV = "SKILLGATE_TOKEN"
+TOKEN_PREFIX = "sgt_"
+CONNECT_URL = "https://www.skill-gate-ai.app/connect"
 TOOLS = ("check_skill", "run_eval", "gate")
 PROVIDER_NAMES = (
     "openai",
@@ -77,14 +80,14 @@ def test_cursor_gate_skill_command_runs_check_skill_on_open_skill_md() -> None:
 def test_claude_marketplace_lists_skillgate_plugin() -> None:
     data = _load_json(MARKETPLACE)
     assert isinstance(data, dict)
-    assert data["name"] == SERVER_NAME
+    assert data["name"] == PLUGIN_NAME
     owner = data["owner"]
     assert isinstance(owner, dict)
     assert owner["name"]
     plugins = data["plugins"]
     assert isinstance(plugins, list) and len(plugins) == 1
     entry = plugins[0]
-    assert entry["name"] == SERVER_NAME
+    assert entry["name"] == PLUGIN_NAME
     assert entry["source"] == "./plugins/skillgate"
     assert (ROOT / entry["source"].lstrip("./")).is_dir()
 
@@ -92,7 +95,7 @@ def test_claude_marketplace_lists_skillgate_plugin() -> None:
 def test_claude_plugin_manifest_and_mcp_config() -> None:
     manifest = _load_json(PLUGIN_MANIFEST)
     assert isinstance(manifest, dict)
-    assert manifest["name"] == SERVER_NAME
+    assert manifest["name"] == PLUGIN_NAME
     assert manifest["license"] == "Apache-2.0"
     precommit = manifest["userConfig"]["precommit"]
     assert precommit["type"] == "boolean"
@@ -141,7 +144,11 @@ def test_docs_cover_both_installs_without_provider_names() -> None:
         lowered = blob.lower()
         assert "add to cursor" in lowered
         assert "claude mcp add" in lowered
+        assert "claude desktop" in lowered
         assert TOKEN_ENV in blob
+        assert TOKEN_PREFIX in blob
+        assert CONNECT_URL in blob
+        assert SERVER_NAME in blob
         assert MCP_URL in blob
         assert "/gate-skill" in blob
         assert "/skillgate" in blob
@@ -150,6 +157,7 @@ def test_docs_cover_both_installs_without_provider_names() -> None:
         for name in PROVIDER_NAMES:
             assert name not in lowered, name
         assert "sk-" not in blob
+        assert "sgt_" in blob
 
 
 def test_docs_deeplink_matches_cursor_mcp_json() -> None:
@@ -172,3 +180,16 @@ def test_docs_deeplink_matches_cursor_mcp_json() -> None:
         found = True
     assert found
     assert encoded in doc
+
+
+def test_claude_desktop_snippet_matches_hosted_server() -> None:
+    doc = EDITORS_DOC.read_text(encoding="utf-8")
+    assert '"type": "http"' in doc or '"type":"http"' in doc
+    lowered = doc.lower()
+    assert "claude desktop" in lowered
+    idx = lowered.index("claude desktop")
+    window = doc[idx : idx + 1200]
+    assert SERVER_NAME in window
+    assert MCP_URL in window
+    assert "Authorization" in window
+    assert "Bearer" in window

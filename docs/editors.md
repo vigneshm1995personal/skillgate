@@ -1,23 +1,23 @@
 # Editor MCP
 
-The Skill Gate MCP server is remote streamable HTTP at `https://mcp.skill-gate-ai.app`. Tools: `check_skill`, `run_eval`, `gate`.
+The Skill Gate MCP server is remote streamable HTTP at `https://mcp.skill-gate-ai.app/mcp`. Server name: `skill-gate`. Tools: `check_skill`, `run_eval`, `gate`.
 
-Auth is a Skill Gate token from GitHub sign-in on [skill-gate-ai.app](https://www.skill-gate-ai.app). Pass it as a bearer header from the `SKILLGATE_TOKEN` environment variable. Do not put the token in a committed file.
+Auth is a Skill Gate token (`sgt_…`) issued at [Connect](https://www.skill-gate-ai.app/connect) after GitHub sign-in. Pass it as `Authorization: Bearer` from the `SKILLGATE_TOKEN` environment variable. Do not put the token in a committed file.
 
 ```bash
-export SKILLGATE_TOKEN=your-token
+export SKILLGATE_TOKEN=sgt_YOUR_TOKEN
 ```
 
 Without a Skill Gate token, use the local CLI as the offline bring-your-own-key path: `pip install skillgate-ai`, then `skillgate keys set` and `skillgate check`.
 
 ## Cursor
 
-[Add to Cursor](https://cursor.com/install-mcp?name=skillgate&config=eyJ1cmwiOiJodHRwczovL21jcC5za2lsbC1nYXRlLWFpLmFwcCIsImhlYWRlcnMiOnsiQXV0aG9yaXphdGlvbiI6IkJlYXJlciAke2VudjpTS0lMTEdBVEVfVE9LRU59In19)
+[Add to Cursor](https://cursor.com/install-mcp?name=skill-gate&config=eyJ1cmwiOiJodHRwczovL21jcC5za2lsbC1nYXRlLWFpLmFwcC9tY3AiLCJoZWFkZXJzIjp7IkF1dGhvcml6YXRpb24iOiJCZWFyZXIgJHtlbnY6U0tJTExHQVRFX1RPS0VOfSJ9fQ==)
 
 Deeplink:
 
 ```
-cursor://anysphere.cursor-deeplink/mcp/install?name=skillgate&config=eyJ1cmwiOiJodHRwczovL21jcC5za2lsbC1nYXRlLWFpLmFwcCIsImhlYWRlcnMiOnsiQXV0aG9yaXphdGlvbiI6IkJlYXJlciAke2VudjpTS0lMTEdBVEVfVE9LRU59In19
+cursor://anysphere.cursor-deeplink/mcp/install?name=skill-gate&config=eyJ1cmwiOiJodHRwczovL21jcC5za2lsbC1nYXRlLWFpLmFwcC9tY3AiLCJoZWFkZXJzIjp7IkF1dGhvcml6YXRpb24iOiJCZWFyZXIgJHtlbnY6U0tJTExHQVRFX1RPS0VOfSJ9fQ==
 ```
 
 Or save this as `.cursor/mcp.json` (project) or `~/.cursor/mcp.json` (every project):
@@ -25,8 +25,8 @@ Or save this as `.cursor/mcp.json` (project) or `~/.cursor/mcp.json` (every proj
 ```json
 {
   "mcpServers": {
-    "skillgate": {
-      "url": "https://mcp.skill-gate-ai.app",
+    "skill-gate": {
+      "url": "https://mcp.skill-gate-ai.app/mcp",
       "headers": {
         "Authorization": "Bearer ${env:SKILLGATE_TOKEN}"
       }
@@ -42,7 +42,7 @@ Or save this as `.cursor/mcp.json` (project) or `~/.cursor/mcp.json` (every proj
 One-line install (token already exported):
 
 ```bash
-claude mcp add --transport http skillgate https://mcp.skill-gate-ai.app --header "Authorization: Bearer ${SKILLGATE_TOKEN}"
+claude mcp add --transport http skill-gate https://mcp.skill-gate-ai.app/mcp --header "Authorization: Bearer ${SKILLGATE_TOKEN}"
 ```
 
 This repository is a plugin marketplace. The plugin bundles the same MCP server, a `/skillgate` slash command, and an optional pre-commit hook (off until you turn it on):
@@ -59,6 +59,26 @@ ln -s ../../plugins/skillgate/scripts/pre-commit .git/hooks/pre-commit
 ```
 
 The hook runs `skillgate check` on staged `SKILL.md` packs when the local CLI is installed. It does not read your Skill Gate token.
+
+## Claude Desktop
+
+Save this as Claude Desktop MCP config (`claude_desktop_config.json`):
+
+```json
+{
+  "mcpServers": {
+    "skill-gate": {
+      "type": "http",
+      "url": "https://mcp.skill-gate-ai.app/mcp",
+      "headers": {
+        "Authorization": "Bearer sgt_YOUR_TOKEN"
+      }
+    }
+  }
+}
+```
+
+Replace `sgt_YOUR_TOKEN` with the token from [Connect](https://www.skill-gate-ai.app/connect). Prefer `SKILLGATE_TOKEN` in Cursor and Claude Code so the value is not stored in a file.
 
 ## Offline (local CLI)
 

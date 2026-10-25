@@ -11,7 +11,7 @@ import os
 import httpx
 import pytest
 
-MCP_URL = "https://mcp.skill-gate-ai.app"
+MCP_URL = "https://mcp.skill-gate-ai.app/mcp"
 EXPECTED_TOOLS = frozenset({"check_skill", "run_eval", "gate"})
 
 pytestmark = pytest.mark.skipif(

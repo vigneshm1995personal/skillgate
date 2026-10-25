@@ -4,7 +4,7 @@ description: Run Skill Gate check_skill, run_eval, or gate on a skill pack
 
 # Skill Gate
 
-Use the `skillgate` MCP server. Auth is the `SKILLGATE_TOKEN` bearer token already configured for that server.
+Use the `skill-gate` MCP server. Auth is the `SKILLGATE_TOKEN` bearer token (`sgt_…`) already configured for that server.
 
 1. Resolve the skill pack. Prefer the nearest `SKILL.md` to the open file or a path the user named. The pack is that file's parent folder.
 2. Default: call `check_skill` on that pack.

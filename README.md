@@ -217,21 +217,21 @@ Exit 0 passes, exit 1 fails, and exit 2 means the check cannot run. The job summ
 
 ## Editor MCP
 
-Connect an editor to the Skill Gate MCP server at `https://mcp.skill-gate-ai.app` (`check_skill`, `run_eval`, `gate`). Auth is a Skill Gate token from GitHub sign-in on [skill-gate-ai.app](https://www.skill-gate-ai.app), passed as `Authorization: Bearer` from `SKILLGATE_TOKEN`. Full steps: [Editor MCP](docs/editors.md).
+Connect an editor to the Skill Gate MCP server `skill-gate` at `https://mcp.skill-gate-ai.app/mcp` (`check_skill`, `run_eval`, `gate`). Auth is a Skill Gate token (`sgt_…`) from GitHub sign-in at [Connect](https://www.skill-gate-ai.app/connect), passed as `Authorization: Bearer` from `SKILLGATE_TOKEN`. Full steps: [Editor MCP](docs/editors.md).
 
 ### Cursor
 
-[Add to Cursor](https://cursor.com/install-mcp?name=skillgate&config=eyJ1cmwiOiJodHRwczovL21jcC5za2lsbC1nYXRlLWFpLmFwcCIsImhlYWRlcnMiOnsiQXV0aG9yaXphdGlvbiI6IkJlYXJlciAke2VudjpTS0lMTEdBVEVfVE9LRU59In19)
+[Add to Cursor](https://cursor.com/install-mcp?name=skill-gate&config=eyJ1cmwiOiJodHRwczovL21jcC5za2lsbC1nYXRlLWFpLmFwcC9tY3AiLCJoZWFkZXJzIjp7IkF1dGhvcml6YXRpb24iOiJCZWFyZXIgJHtlbnY6U0tJTExHQVRFX1RPS0VOfSJ9fQ==)
 
 ```
-cursor://anysphere.cursor-deeplink/mcp/install?name=skillgate&config=eyJ1cmwiOiJodHRwczovL21jcC5za2lsbC1nYXRlLWFpLmFwcCIsImhlYWRlcnMiOnsiQXV0aG9yaXphdGlvbiI6IkJlYXJlciAke2VudjpTS0lMTEdBVEVfVE9LRU59In19
+cursor://anysphere.cursor-deeplink/mcp/install?name=skill-gate&config=eyJ1cmwiOiJodHRwczovL21jcC5za2lsbC1nYXRlLWFpLmFwcC9tY3AiLCJoZWFkZXJzIjp7IkF1dGhvcml6YXRpb24iOiJCZWFyZXIgJHtlbnY6U0tJTExHQVRFX1RPS0VOfSJ9fQ==
 ```
 
 ```json
 {
   "mcpServers": {
-    "skillgate": {
-      "url": "https://mcp.skill-gate-ai.app",
+    "skill-gate": {
+      "url": "https://mcp.skill-gate-ai.app/mcp",
       "headers": {
         "Authorization": "Bearer ${env:SKILLGATE_TOKEN}"
       }
@@ -245,10 +245,26 @@ cursor://anysphere.cursor-deeplink/mcp/install?name=skillgate&config=eyJ1cmwiOiJ
 ### Claude Code
 
 ```bash
-claude mcp add --transport http skillgate https://mcp.skill-gate-ai.app --header "Authorization: Bearer ${SKILLGATE_TOKEN}"
+claude mcp add --transport http skill-gate https://mcp.skill-gate-ai.app/mcp --header "Authorization: Bearer ${SKILLGATE_TOKEN}"
 ```
 
 This repo is a plugin marketplace (`claude plugin marketplace add vigneshm1995personal/skillgate`, then `claude plugin install skillgate@skillgate`). `/skillgate` runs the gate tools. An optional pre-commit hook ships with the plugin (off by default).
+
+### Claude Desktop
+
+```json
+{
+  "mcpServers": {
+    "skill-gate": {
+      "type": "http",
+      "url": "https://mcp.skill-gate-ai.app/mcp",
+      "headers": {
+        "Authorization": "Bearer sgt_YOUR_TOKEN"
+      }
+    }
+  }
+}
+```
 
 ### Offline
 

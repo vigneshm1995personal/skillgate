@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- Editor MCP for Cursor (Add to Cursor deeplink, `mcp.json`, `/gate-skill`) and Claude Code (plugin marketplace, `claude mcp add`, `/skillgate`, optional pre-commit hook). Token is `SKILLGATE_TOKEN`. Local CLI stays the offline bring-your-own-key path.
+- Editor MCP for Cursor (Add to Cursor deeplink, `mcp.json`, `/gate-skill`), Claude Code (`claude mcp add`, plugin marketplace, `/skillgate`, optional pre-commit hook), and Claude Desktop. Server `skill-gate` at `https://mcp.skill-gate-ai.app/mcp`. Tokens (`sgt_…`) come from `/connect` and are passed as `Authorization: Bearer` via `SKILLGATE_TOKEN`. Local CLI stays the offline bring-your-own-key path.
 
 ## 0.7.9
 
