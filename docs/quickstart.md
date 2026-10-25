@@ -41,7 +41,13 @@ Files already in the destination stay as they are. A second install prints `Left
 
 ## Keys
 
-Sign in with the agent CLI (subscription login) or set a key. `skillgate login --status` labels them Editor agent, Code agent, and Terminal agent. Skill Gate does not read `OPENAI_API_KEY` from the shell unless you pass `--key-env`. CI and Docker still use a key (vault, Settings, or the `SKILLGATE_*` prefix):
+Sign in with the agent CLI (subscription login) or set a key. `skillgate login --status` labels them Editor agent, Code agent, and Terminal agent:
+
+- Editor agent is Cursor. Deploy installs into `~/.cursor/skills`.
+- Code agent is Claude Code. Deploy installs into `~/.claude/skills`.
+- Terminal agent is Codex. Deploy installs into `~/.codex/skills`.
+
+Skill Gate does not read `OPENAI_API_KEY` from the shell unless you pass `--key-env`. CI and Docker still use a key (vault, Settings, or the `SKILLGATE_*` prefix):
 
 ```bash
 skillgate login                  # cursor | claude | codex; omit to sign in missing agents
@@ -125,7 +131,13 @@ echo $?    # 0 only when that live run is red
 
 ## Deploy (after a green check)
 
-`skillgate deploy` copies **only the skill files** (not `evals/`) into the signed-in agent's skills folder (Editor agent, Code agent, or Terminal agent). It refuses unless this pack already has a passing check **and an agent is available** (`skillgate login`, vault, Settings, or `SKILLGATE_*`). It does not run check for you. Without an agent, Deploy stays blocked even after a green check; the pointer is `skillgate login` or Settings / `skillgate keys set`.
+`skillgate deploy` copies **only the skill files** (not `evals/`) into the signed-in agent's skills folder:
+
+- Editor agent is Cursor. Deploy installs into `~/.cursor/skills`.
+- Code agent is Claude Code. Deploy installs into `~/.claude/skills`.
+- Terminal agent is Codex. Deploy installs into `~/.codex/skills`.
+
+It refuses unless this pack already has a passing check **and an agent is available** (`skillgate login`, vault, Settings, or `SKILLGATE_*`). It does not run check for you. Without an agent, Deploy stays blocked even after a green check; the pointer is `skillgate login` or Settings / `skillgate keys set`.
 
 ```bash
 skillgate check skills/pdf

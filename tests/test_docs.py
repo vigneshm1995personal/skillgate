@@ -261,6 +261,19 @@ def test_deploy_docs_use_cli_agent_labels() -> None:
     assert "into Cursor, Claude, or Codex" not in deploy
 
 
+def test_quickstart_maps_cli_labels_to_tools_and_deploy_folders() -> None:
+    text = QUICKSTART.read_text(encoding="utf-8")
+    keys = text.split("## Keys", 1)[-1].split("## ", 1)[0]
+    deploy = text.split("## Deploy", 1)[-1]
+    for section in (keys, deploy):
+        assert "Editor agent is Cursor" in section
+        assert "`~/.cursor/skills`" in section
+        assert "Code agent is Claude Code" in section
+        assert "`~/.claude/skills`" in section
+        assert "Terminal agent is Codex" in section
+        assert "`~/.codex/skills`" in section
+
+
 def test_docker_docs_clone_before_compose() -> None:
     for path in (README, QUICKSTART):
         text = path.read_text(encoding="utf-8")
