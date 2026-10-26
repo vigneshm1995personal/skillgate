@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- README install uses a venv or pipx, lists agent key names, maps Editor/Code/Terminal agent to Cursor / Claude Code / Codex and their skills folders, pipes `$OPENROUTER_API_KEY` into `JEV_API_KEY`, names the default OpenAI model `gpt-6-luna`, and clones before `docker compose`. The examples toast is `Installed 6 examples (53 files).`
+- `skillgate compare versions --dry-run` with no refs prints a hint instead of an empty table.
+- `skillgate judge provider show` with no decision model selected exits 2.
+
 ## 0.7.9
 
 - A check that never starts is not saved. History, Home, and the heatmap do not show it as a failed scored run. A stored row with no result reads "not run" and "Not scored".

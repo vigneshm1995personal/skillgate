@@ -35,15 +35,22 @@ def test_public_docs_drop_internal_words() -> None:
         assert word not in blob, word
 
 
-def _readme_outside_decision_setup(text: str) -> str:
-    """Key-source names belong in the setup section. The rest of the README stays free of them."""
-    start = text.find("## Set up a decision model")
+def _strip_heading_section(text: str, heading: str) -> str:
+    start = text.find(heading)
     if start < 0:
         return text
     rest = text[start:]
     end_rel = rest.find("\n## ", 1)
     end = len(text) if end_rel < 0 else start + end_rel
     return text[:start] + text[end:]
+
+
+def _readme_outside_decision_setup(text: str) -> str:
+    """Vendor names belong in the agent-key and decision-model setup sections."""
+    out = text
+    for heading in ("## Sign in an agent", "## Set up a decision model"):
+        out = _strip_heading_section(out, heading)
+    return out
 
 
 def test_readme_points_at_docs() -> None:
@@ -184,6 +191,105 @@ def test_pack_docs_drop_demo_harness() -> None:
     assert "demo harness" not in text
     assert "openai-compatible" not in text
     assert "llm harness" not in text
+
+
+def test_readme_installs_with_venv_or_pipx_and_links_quickstart() -> None:
+    text = README.read_text(encoding="utf-8")
+    assert "python3 -m venv .venv" in text
+    assert "pipx install skillgate-ai" in text
+    assert "docs/quickstart.md" in text
+
+
+def test_readme_lists_agent_key_names_and_set_command() -> None:
+    text = README.read_text(encoding="utf-8")
+    for name in ("CURSOR_API_KEY", "ANTHROPIC_API_KEY", "CODEX_API_KEY"):
+        assert name in text
+    assert "printf '%s\\n' \"$CURSOR_API_KEY\" | skillgate keys set CURSOR_API_KEY" in text
+
+
+def test_readme_maps_cli_labels_to_tools_and_deploy_folders() -> None:
+    text = README.read_text(encoding="utf-8")
+    start = text.find("## Sign in an agent")
+    end = text.find("\n## ", start + 1)
+    section = text[start:end]
+    assert "Editor agent is Cursor" in section
+    assert "`~/.cursor/skills`" in section
+    assert "Code agent is Claude Code" in section
+    assert "`~/.claude/skills`" in section
+    assert "Terminal agent is Codex" in section
+    assert "`~/.codex/skills`" in section
+
+
+def test_readme_examples_toast_matches_install_count() -> None:
+    from skillgate_ai.examples import DATASET_EXAMPLES, _example_files
+
+    total = sum(len(_example_files(ROOT / "skills" / name)) for name in DATASET_EXAMPLES)
+    text = README.read_text(encoding="utf-8")
+    assert f"Installed 6 examples ({total} files)." in text
+
+
+def test_openrouter_docs_pipe_openrouter_key_and_explain_jev() -> None:
+    for path in (README, ROOT / "docs" / "judge.md"):
+        text = path.read_text(encoding="utf-8")
+        start = text.find("### OpenRouter")
+        end = text.find("### OpenAI")
+        section = text[start:end]
+        assert start >= 0, path.name
+        assert (
+            "printf '%s\\n' \"$OPENROUTER_API_KEY\" | skillgate keys set JEV_API_KEY"
+            in section
+        )
+        assert "$JEV_API_KEY" not in section
+        assert "Jev" in section
+
+
+def test_judge_docs_require_a_decision_model() -> None:
+    judge = (ROOT / "docs" / "judge.md").read_text(encoding="utf-8")
+    head = "\n".join(judge.splitlines()[:8])
+    assert "Optional." not in head
+    assert "one is required" in judge
+    readme = README.read_text(encoding="utf-8")
+    assert "one is required" in readme
+
+
+def test_deploy_docs_use_cli_agent_labels() -> None:
+    quickstart = QUICKSTART.read_text(encoding="utf-8")
+    assert "Editor agent" in quickstart
+    assert "Code agent" in quickstart
+    assert "Terminal agent" in quickstart
+    deploy = quickstart.split("## Deploy", 1)[-1]
+    assert "into Cursor, Claude, or Codex" not in deploy
+
+
+def test_quickstart_maps_cli_labels_to_tools_and_deploy_folders() -> None:
+    text = QUICKSTART.read_text(encoding="utf-8")
+    keys = text.split("## Keys", 1)[-1].split("## ", 1)[0]
+    deploy = text.split("## Deploy", 1)[-1]
+    for section in (keys, deploy):
+        assert "Editor agent is Cursor" in section
+        assert "`~/.cursor/skills`" in section
+        assert "Code agent is Claude Code" in section
+        assert "`~/.claude/skills`" in section
+        assert "Terminal agent is Codex" in section
+        assert "`~/.codex/skills`" in section
+
+
+def test_docker_docs_clone_before_compose() -> None:
+    for path in (README, QUICKSTART):
+        text = path.read_text(encoding="utf-8")
+        clone_at = text.find("git clone")
+        compose_at = text.find("docker compose run")
+        assert clone_at >= 0, path.name
+        assert compose_at >= 0, path.name
+        assert clone_at < compose_at, path.name
+
+
+def test_openai_judge_docs_name_default_model() -> None:
+    blob = README.read_text(encoding="utf-8") + "\n" + (ROOT / "docs" / "judge.md").read_text(
+        encoding="utf-8"
+    )
+    openai = blob[blob.find("### OpenAI") : blob.find("### Cloudflare")]
+    assert "gpt-6-luna" in openai
 
 
 def test_oct_extract_plans_are_marked_historical() -> None:
