@@ -734,19 +734,18 @@ def test_http_error_with_missing_output_names_both() -> None:
     assert len(post.calls) == 1
 
 
-def test_http_500_is_not_retried() -> None:
+def test_http_500_is_retried(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("skillgate_ai.openai_http.time.sleep", lambda _s: None)
     post = FakePost(
         [
             FakeResponse(500, {"error": "nope"}),
             FakeResponse(200, decisions_payload()),
         ]
     )
-    passed, failures, judged = _gated(_judge(post))
-    assert passed is False
-    assert judged["status"] == "error"
-    assert judged.get("quality_unscored") is True
-    assert judged["why"] is None
-    assert len(post.calls) == 1
+    judged = _score(_judge(post))
+    assert judged["status"] == "completed"
+    assert judged["passed"] is True
+    assert len(post.calls) == 2
 
 
 def test_why_call_includes_expected_and_actual_text() -> None:

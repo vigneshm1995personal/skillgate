@@ -643,7 +643,7 @@ def test_auth_error_fails_fast(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) 
     assert "not logged in" in result.transcript
 
 
-def test_red_check_exits_1_when_judge_errors(
+def test_red_check_exits_2_when_judge_errors(
     project_root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     import shutil
@@ -690,7 +690,7 @@ def test_red_check_exits_1_when_judge_errors(
     result = run_check(dest, source="test", root=tmp_path)
     assert result.report is not None
     assert result.report.passed is False
-    assert result.exit_code == 1
+    assert result.exit_code == 2
 
 
 def test_login_cursor_says_already_signed_in(monkeypatch: pytest.MonkeyPatch) -> None:

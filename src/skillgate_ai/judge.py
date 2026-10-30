@@ -214,7 +214,7 @@ def _jev_judge(cfg: LLMConfig, *, chosen: bool) -> Judge:
         provider="jev",
         chosen=chosen,
         supports_why=False,
-        supports_confidence=False,
+        supports_confidence=True,
     )
 
 
@@ -270,7 +270,7 @@ def _custom_judge(cfg: LLMConfig, *, chosen: bool) -> Judge:
         provider="custom",
         chosen=chosen,
         supports_why=False,
-        supports_confidence=False,
+        supports_confidence=True,
     )
 
 

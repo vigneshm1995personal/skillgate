@@ -6,7 +6,7 @@ A decision model scores each live check, and one is required. Live checks still 
 
 When a decision model is on and you run a live check (`skillgate check`, or Run in the local UI), Skill Gate asks the same fixed questions on each live task. The check passes only when those answers meet the bar (job done, correct, followed the rules, and so on). Every check still needs a signed-in agent (`skillgate login`) or a key. Without one, `skillgate check` exits 2. A live check also needs a decision model. With none selected, the check exits 2 and asks you to pick one. It does not fall back to another model.
 
-Scorers such as "does the output contain this text?" and page counts still apply beside that decision model. Scoring does not compare the full output to the expected file. It reads the expected and actual text (and a few images) and judges whether the work is done. Built-in checks grade against the test's expected outcome (golden / contains). If that outcome is an escalation or refusal — a refund that cannot be issued, a column the schema does not list — doing it is Fully completed, not unfinished. Pass `--no-judge` only when you mean to skip the decision model. It still needs a signed-in agent. Without one, `skillgate check --no-judge` exits 2. To see a named red from a saved run with no agent, use `skillgate history show RUN`.
+Scorers such as "does the output contain this text?" and page counts still apply beside that decision model. Scoring does not compare the full output to the expected file. It reads the expected and actual text (and a few images) and judges whether the work is done. Built-in checks grade against the test's expected outcome (golden / contains). If that outcome is an escalation or refusal — a refund that cannot be issued, a column the schema does not list — doing it is Fully completed, not unfinished. Pass `--no-judge` only when you mean to skip the decision model. It still needs a signed-in agent. Without one, `skillgate check --no-judge` exits 2. To see a named red from a saved run with no agent, list run ids with `skillgate history --pack skills/json-response`, then `skillgate history show RUN --pack skills/json-response`.
 
 Add extra scoring questions on top of Skill Gate's six (`skillgate judge add-question PACK`, or the Checks editor). Pass a skill pack. With none, the command stops and does not write to `skills/pdf`. Built-in questions cannot be deleted. They can be Warn only. Original checks in the bundled examples, including pdf, cannot be removed.
 
@@ -95,6 +95,7 @@ skillgate judge test
 - `skillgate judge provider show` and `set` print the option id, its model, and its base URL. With none selected, `show` prints `Pick a decision model before running a live check.` and exits 2.
 - `This decision model needs a model.` Pass `--model`, or pick one from the list.
 - `Pick a decision model before running a live check.` Run one `skillgate judge provider set` command above. A check that never starts is not saved as a scored failure.
+- `The judge couldn't score this check. Retry — this is often temporary.` The scoring endpoint had a temporary error. Skill Gate retries those. If it still cannot score, the check cannot run (exit 2), not a quality red (exit 1). Run `skillgate judge test` again. The message never includes HTTP codes or a provider name.
 
 A bad endpoint, rejected key, or empty balance fails that check. Chat and Responses completion models are not judges. Setting the judge backend to `responses`, `chat`, or `completions` fails the run. Older chat-style scoring setups fail until you pick a registered decision model.
 
@@ -105,11 +106,13 @@ A bad endpoint, rejected key, or empty balance fails that check. Chat and Respon
 | unset, `auto`, or `skip` | No decision model. A live check exits 2 and asks you to pick one. A saved key does not turn scoring on. |
 | a decision-model endpoint id | Score with that decision model. A missing key exits 2. |
 
-Bad key, no credits, 403, 400, or timeout fails the check (exit 1) with a plain error. It never silently passes. The key is never printed or stored in history.
+Bad key, no credits, 403, 400, timeout, or a scoring outage fails closed with a plain error. It never silently passes. When scoring cannot run, `skillgate check` exits 2, not 1 (a quality red). The key is never printed or stored in history.
 
 If the scorer is not very sure about a pass, the check still passes. You will see: *The judge wasn't very sure about this one.* That warning does not change exit 0/1.
 
 When a blocking answer's confidence is below 0.5, Skill Gate re-asks up to 3 times and takes a majority vote instead of failing on one unsure call. High-confidence fails still fail in one call. Custom checks and the pass mark are unchanged. The majority answer is what the check cells use. Individual votes are in `skillgate check --json` and `skillgate history show RUN --json` under `tasks[].judge.votes` (choice and confidence for each ask). The UI shows the majority result, not each ask.
+
+Blocking questions fail the check (`on_fail` is Fail the check). By default that is the five built-in checks: **Got the job done?**, **Got it right?**, **Followed the rules?**, **Used the right evidence/actions?**, and **Delivered a good result?**. **How it ran** is Warn only. Extra questions you add default to Fail the check. A 0.33 on **Followed the rules?** is blocking, so it is re-asked.
 
 A red names the failing check and includes the judge's reason. Example: `Got the job done? Not completed (need Fully completed) — The refund is impossible, so the bot told the customer.` CLI, GitHub summary, and the What happened column all use that line. After a run is saved, `skillgate history show RUN` prints it without calling an agent.
 

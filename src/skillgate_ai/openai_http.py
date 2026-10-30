@@ -15,7 +15,7 @@ from skillgate_ai.judge_bank import UNUSABLE_ANSWER
 _LOG = logging.getLogger(__name__)
 
 DEFAULT_BASE_URL = "https://api.openai.com/v1"
-_TRANSIENT = frozenset({429, 502, 503, 504})
+_TRANSIENT = frozenset({429, 500, 502, 503, 504})
 _QUOTA_CODES = frozenset({"insufficient_quota", "credit_balance_exhausted"})
 _RETRY_BACKOFF_SEC = (0.5, 1.0, 2.0)
 _MAX_ATTEMPTS = 3
@@ -81,6 +81,8 @@ def user_message_for_status(
         return f"{label} rate-limited this request. Wait and retry, or check billing."
     if status == 400:
         return f"{label} rejected this scoring request."
+    if status in {500, 502, 503, 504}:
+        return f"{label} couldn't score this check. Retry — this is often temporary."
     return f"{label} couldn't score this check."
 
 

@@ -498,8 +498,13 @@ class OutcomeJudge:
         self.name = provider
         self.chosen = chosen
         self.supports_why = True if supports_why is None else supports_why
-        default_conf = getattr(backend, "name", "") == "decisions"
-        self.supports_confidence = default_conf if supports_confidence is None else supports_confidence
+        backend_conf = getattr(backend, "supports_confidence", None)
+        if supports_confidence is not None:
+            self.supports_confidence = supports_confidence
+        elif isinstance(backend_conf, bool):
+            self.supports_confidence = backend_conf
+        else:
+            self.supports_confidence = getattr(backend, "name", "") == "decisions"
 
     @property
     def model(self) -> str:
@@ -579,8 +584,6 @@ class OutcomeJudge:
         spec: JudgeSpec,
         first: Mapping[str, Any],
     ) -> dict[str, Any]:
-        if not self.supports_confidence:
-            return dict(first)
         if first.get("status") != "completed":
             return dict(first)
         answers = first.get("answers") if isinstance(first.get("answers"), dict) else {}

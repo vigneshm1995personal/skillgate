@@ -9,6 +9,7 @@
 - Every red names the failing check and includes the judge's reason in the CLI and the UI.
 - Low-confidence majority votes are recorded on the run as `tasks[].judge.votes` (`skillgate check --json`, `skillgate history show RUN --json`). `skillgate history show` prints the named red from a saved run with no agent. `--no-judge` still needs a signed-in agent.
 - Docs: how to write an escalation or refusal expected outcome; where to read majority votes; how a red names the check. Until 0.7.10 is published, install from source.
+- Scoring outages (including HTTP 500) are retried. The error names a retryable cause instead of `Scoring failed.` A scoring failure exits 2 (cannot run), not 1. Low-confidence re-ask uses numeric confidence on blocking answers even when the provider flag was off. `skillgate history --pack` is documented.
 - README install uses a venv or pipx, lists agent key names, maps Editor/Code/Terminal agent to Cursor / Claude Code / Codex and their skills folders, pipes `$OPENROUTER_API_KEY` into `JEV_API_KEY`, names the default OpenAI model `gpt-6-luna`, and clones before `docker compose`. The examples toast is `Installed 6 examples (53 files).`
 - `skillgate compare versions --dry-run` with no refs prints a hint instead of an empty table.
 - `skillgate judge provider show` with no decision model selected exits 2.

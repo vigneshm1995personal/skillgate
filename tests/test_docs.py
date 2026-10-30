@@ -260,6 +260,11 @@ def test_docs_cover_escalation_majority_named_reds_and_no_judge() -> None:
     assert "--no-judge" in judge
     assert "still needs" in judge.lower() and "agent" in judge.lower()
     assert "history show" in blob.lower()
+    assert "history --pack" in blob
+    assert "Followed the rules?" in judge
+    assert "Fail the check" in judge
+    assert "exit 2" in judge.lower()
+    assert "Scoring failed." not in judge
 
 
 def test_judge_docs_require_a_decision_model() -> None:

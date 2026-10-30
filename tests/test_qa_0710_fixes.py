@@ -221,3 +221,238 @@ def test_history_show_prints_named_red_offline(
     assert "Got the job done?" in out
     assert "refund is impossible" in out
     assert "This check did not pass." not in out
+
+
+def _jev_choice_answers(
+    choices: dict[str, str] | None = None, *, confidence: float = 0.9
+) -> dict[str, dict[str, object]]:
+    from test_judge_openai import PASS_CHOICES
+
+    merged = {**PASS_CHOICES, **(choices or {})}
+    return {
+        key: {"type": "choice", "choice": value, "confidence": confidence}
+        for key, value in merged.items()
+    }
+
+
+def _jev_judge(post: FakePost):
+    from skillgate_ai.judge_openai import OutcomeJudge
+    from skillgate_ai.judge_providers.jev import JevBackend
+
+    backend = JevBackend(
+        api_key="jev-key",
+        base_url="https://openrouter.ai/api/v1",
+        model="typesafe/jev-1.14",
+        post=post,
+    )
+    return OutcomeJudge(
+        backend,
+        display_name="the judge",
+        provider="jev",
+        chosen=True,
+        supports_why=False,
+        supports_confidence=False,
+    )
+
+
+def test_jev_500_is_retried_and_then_scores(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from skillgate_ai.judge_spec import resolve_judge_spec
+
+    monkeypatch.setattr("skillgate_ai.openai_http.time.sleep", lambda _s: None)
+    post = FakePost(
+        [
+            FakeResponse(500, {"error": {"message": "upstream"}}),
+            FakeResponse(200, {"model": "typesafe/jev-1.14", "answers": _jev_choice_answers()}),
+        ]
+    )
+    judged = _jev_judge(post).judge(
+        "goal",
+        [],
+        "tail",
+        spec=resolve_judge_spec(),
+        path={"had_path": True, "steps": 1},
+    )
+    assert judged["status"] == "completed"
+    assert judged["passed"] is True
+    assert len(post.calls) == 2
+    blob = json.dumps(judged)
+    assert "Scoring failed." not in blob
+    assert "OpenRouter" not in blob
+    assert "Jev" not in blob
+
+
+def test_jev_scoring_failure_names_a_retryable_cause_not_scoring_failed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from skillgate_ai.judge_providers.jev import _public_failure
+    from skillgate_ai.judge_spec import resolve_judge_spec
+
+    monkeypatch.setattr("skillgate_ai.openai_http.time.sleep", lambda _s: None)
+    post = FakePost(
+        [
+            FakeResponse(500, {"error": {"message": "upstream"}}),
+            FakeResponse(502, {"error": {"message": "bad gateway"}}),
+            FakeResponse(503, {"error": {"message": "unavailable"}}),
+        ]
+    )
+    judged = _jev_judge(post).judge(
+        "goal",
+        [],
+        "tail",
+        spec=resolve_judge_spec(),
+        path={"had_path": True, "steps": 1},
+    )
+    assert judged["status"] == "error"
+    reasons = " ".join(str(item) for item in (judged.get("reasons") or []))
+    reason = str(judged.get("reason") or "")
+    blob = f"{reasons} {reason}"
+    assert "Scoring failed." not in blob
+    assert "couldn't score" in blob.lower() or "temporary" in blob.lower()
+    assert "500" not in blob
+    assert "HTTP" not in blob
+    assert "OpenRouter" not in blob
+    assert "Jev" not in blob
+    assert len(post.calls) == 3
+    public = _public_failure({"http_status": 500, "reason": "The judge couldn't score this check."})
+    assert public != "Scoring failed."
+    assert "500" not in public
+
+
+def test_jev_ping_retries_transient_500(monkeypatch: pytest.MonkeyPatch) -> None:
+    from skillgate_ai.judge_providers.jev import JevBackend
+
+    monkeypatch.setattr("skillgate_ai.openai_http.time.sleep", lambda _s: None)
+    post = FakePost(
+        [
+            FakeResponse(500, {"error": {"message": "upstream"}}),
+            FakeResponse(200, {"model": "typesafe/jev-1.14", "answers": {}}),
+        ]
+    )
+    result = JevBackend(
+        api_key="jev-key",
+        base_url="https://openrouter.ai/api/v1",
+        model="typesafe/jev-1.14",
+        post=post,
+    ).ping()
+    assert result["ok"] is True
+    assert len(post.calls) == 2
+
+
+def test_scoring_error_exits_2_not_a_quality_red(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import shutil
+
+    from conftest import enable_cursor_agent
+    from skillgate_ai.gate import run_check
+    from skillgate_ai.scorers import Score
+
+    root = Path(__file__).resolve().parents[1]
+    enable_cursor_agent(monkeypatch, tmp_path)
+    dest = tmp_path / "pdf"
+    shutil.copytree(root / "skills" / "pdf", dest)
+
+    class StubHarness:
+        name = "cursor-agent"
+
+        def run(self, *args, **kwargs):
+            raise AssertionError("run_eval is stubbed")
+
+    def fake_run_eval(*_args, **_kwargs) -> SuiteReport:
+        task = TaskReport(
+            task_id="escalate-refund",
+            prompt="Refund this order.",
+            expect_skill="pdf",
+            passed=False,
+            scores=[
+                Score(
+                    scorer="skill_trigger",
+                    passed=True,
+                    detail="Triggered `pdf`",
+                    expected="pdf",
+                    actual="pdf",
+                )
+            ],
+            selected_skill="pdf",
+            failures=["Scoring failed."],
+            judge={
+                "status": "error",
+                "provider": "jev",
+                "passed": None,
+                "quality_unscored": True,
+                "reasons": ["Scoring failed."],
+                "reason": "Scoring failed.",
+            },
+        )
+        return SuiteReport(
+            suite="pdf-pack",
+            title="Dataset",
+            skill="pdf",
+            harness="cursor-agent",
+            sandbox="local",
+            passed=False,
+            tasks=[task],
+            skill_path=str(dest),
+            config={"judge": {"provider": "jev", "display_name": "the judge"}},
+        )
+
+    class StubJudge:
+        name = "jev"
+        display_name = "the judge"
+
+    monkeypatch.setattr("skillgate_ai.gate.live_harness_or_error", lambda *_a, **_k: StubHarness())
+    monkeypatch.setattr("skillgate_ai.gate.resolve_judge", lambda *_a, **_k: StubJudge())
+    monkeypatch.setattr("skillgate_ai.gate.judge_stamp", lambda _j: {"provider": "jev"})
+    monkeypatch.setattr("skillgate_ai.gate.run_eval", fake_run_eval)
+    result = run_check(dest, source="test", root=tmp_path)
+    assert result.exit_code == 2
+    assert result.report is not None
+    assert result.report.passed is False
+
+
+def test_jev_low_confidence_blocking_adherence_is_reasked_and_records_votes() -> None:
+    from skillgate_ai.judge_spec import resolve_judge_spec
+
+    post = FakePost(
+        [
+            FakeResponse(
+                200,
+                {
+                    "model": "typesafe/jev-1.14",
+                    "answers": _jev_choice_answers(
+                        {"instruction_adherence": "Major deviation"}, confidence=0.33
+                    ),
+                },
+            ),
+            FakeResponse(
+                200,
+                {
+                    "model": "typesafe/jev-1.14",
+                    "answers": _jev_choice_answers(confidence=0.86),
+                },
+            ),
+            FakeResponse(
+                200,
+                {
+                    "model": "typesafe/jev-1.14",
+                    "answers": _jev_choice_answers(confidence=0.91),
+                },
+            ),
+        ]
+    )
+    judged = _jev_judge(post).judge(
+        "goal",
+        [],
+        "tail",
+        spec=resolve_judge_spec(),
+        path={"had_path": True, "steps": 1},
+    )
+    assert judged["passed"] is True
+    assert judged["answers"]["instruction_adherence"]["choice"] == "Fully followed"
+    assert len(post.calls) == 3
+    votes = judged["votes"]
+    assert len(votes) == 3
+    assert votes[0]["instruction_adherence"]["choice"] == "Major deviation"
+    assert votes[0]["instruction_adherence"]["confidence"] == 0.33

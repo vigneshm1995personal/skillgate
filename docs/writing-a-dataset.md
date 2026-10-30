@@ -135,7 +135,7 @@ skillgate ui
 
 `skillgate case list` and **View Dataset** on the skill page show the same cases. A live result comes from **Run** or `skillgate check`.
 
-A red names the failing check and includes the judge's reason, for example `Got the job done? Not completed (need Fully completed) — …`. How majority re-asking works, where to read `tasks[].judge.votes`, and that `--no-judge` still needs an agent are in [Bring your own judge](judge.md).
+A red names the failing check and includes the judge's reason, for example `Got the job done? Not completed (need Fully completed) — …`. How majority re-asking works, which questions are blocking (`Followed the rules?` is one), where to read `tasks[].judge.votes`, and that `--no-judge` still needs an agent are in [Bring your own judge](judge.md). List saved run ids with `skillgate history --pack skills/json-response`.
 
 ## Common mistakes
 
