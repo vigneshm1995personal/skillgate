@@ -40,6 +40,17 @@ describe("happenedLine", () => {
     expect(happenedLine(passTask)).toBe("Output matched what was expected.")
   })
 
+  it("shows unsure, needs review instead of fail on a review task", () => {
+    expect(
+      happenedLine({
+        id: "c6-success",
+        passed: true,
+        review: true,
+        status: "unsure",
+      })
+    ).toBe("unsure, needs review")
+  })
+
   it("says no skill was picked on a passing no-trigger check", () => {
     expect(
       happenedLine({
@@ -520,7 +531,7 @@ describe("openedCheckAnswers / low confidence", () => {
           },
         },
       })
-    ).toBe("The judge wasn't sure about this one")
+    ).toBe("unsure, needs review")
     expect(
       suiteUnsureWarning({
         tasks: [
@@ -536,7 +547,7 @@ describe("openedCheckAnswers / low confidence", () => {
           },
         ],
       })
-    ).toBe("The judge wasn't sure about this one")
+    ).toBe("unsure, needs review")
     expect(
       lowConfidenceWarning({
         ...passTask,
@@ -603,7 +614,7 @@ describe("openedCheckAnswers / low confidence", () => {
         },
       },
     })
-    expect(warning).toBe("The judge wasn't sure about this one")
+    expect(warning).toBe("unsure, needs review")
     expect(warning).not.toMatch(/0\.13|OpenAI was unsure/)
   })
 

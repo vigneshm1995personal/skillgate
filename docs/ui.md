@@ -26,7 +26,7 @@ The React app in `web/` is the only Skill Gate UI (`@skillgate/ui`). `skillgate 
 
 **Deploy** copies a green-gated skill (skill files only, not `evals/`) into those same agent folders. Install stays disabled without an agent (`skillgate login` or Settings → Sign in), even after a passing check. The decision-model key lives in this project’s `.skillgate/keys`, or CI/Docker can set `SKILLGATE_*` (always read). A live check with no decision model fails and asks you to pick one. `skillgate check` still exits 0, 1, or 2 with no account.
 
-The result panel names who scored the run in plain words (`Scored by the judge` when a decision model scored the run, or `Checks scored this run.` when scoring is off). A historical other stamp says `Scored by your judge`. Checking → slide → drawn Passed/Failed is unchanged.
+The result panel names who scored the run in plain words (`Scored by the judge` when a decision model scored the run, or `Checks scored this run.` when scoring is off). A historical other stamp says `Scored by your judge`. Checking → slide → drawn Passed / Needs review / Failed. A low-confidence verdict after majority voting is Needs review, not Failed, and does not unlock Deploy.
 
 ## Intentional red path
 

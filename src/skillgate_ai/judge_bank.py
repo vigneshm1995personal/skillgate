@@ -187,7 +187,8 @@ SOFT_OUTCOME_QUESTIONS: dict[str, dict[str, Any]] = {
 }
 
 UNUSABLE_ANSWER = "The judge returned an unusable answer."
-LOW_CONFIDENCE_WARNING = "The judge wasn't very sure about this one."
+UNSURE_REVIEW = "unsure, needs review"
+LOW_CONFIDENCE_WARNING = UNSURE_REVIEW
 DEFAULT_MIN_CONFIDENCE = 0.5
 LOW_CONFIDENCE_MAX_ASKS = 3
 

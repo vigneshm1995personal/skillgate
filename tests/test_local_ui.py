@@ -636,6 +636,8 @@ def test_app_js_check_detail_helpers_run_in_node(project_root: Path, tmp_path: P
         + """
 const pass = happenedLine({passed: true, happened: "Output matched what was expected."});
 if (pass !== "Output matched what was expected.") process.exit(2);
+const review = happenedLine({passed: true, review: true, status: "unsure"});
+if (review !== "unsure, needs review") process.exit(19);
 const warned = happenedLine({
   passed: true,
   happened: "The judge wasn't very sure about this one."

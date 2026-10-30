@@ -82,6 +82,8 @@ export function ChecksResultsTable({
                 ? "PASS"
                 : chip === "fail"
                   ? "FAIL"
+                  : chip === "review"
+                    ? "REVIEW"
                   : chip === "running"
                     ? "Running"
                     : chip === "skipped"
@@ -193,6 +195,7 @@ function CheckPair({
             "w-[5.5rem] py-2 pr-3 align-top font-semibold whitespace-nowrap",
             chip === "pass" && "text-success",
             chip === "fail" && "text-destructive",
+            chip === "review" && "text-warning",
             (chip === "queued" || chip === "running" || chip === "skipped") &&
               "text-muted-foreground font-medium"
           )}

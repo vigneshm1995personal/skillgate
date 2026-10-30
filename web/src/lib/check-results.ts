@@ -27,6 +27,7 @@ const PASS_LOCK: Record<string, string[]> = {
 }
 
 export const CONFIDENCE_WARN = 0.5
+export const UNSURE_REVIEW = "unsure, needs review"
 
 const CHECKS_DUMP = /^Checks:\s+/i
 const GENERIC_FAIL = "This check did not pass."
@@ -252,6 +253,12 @@ export function happenedLine(task: TaskResult): string {
   }
   if (task.status === "running") {
     return "In progress"
+  }
+  if (
+    (task.review === true || task.status === "unsure") &&
+    task.passed !== false
+  ) {
+    return UNSURE_REVIEW
   }
   if (task.skipped) {
     for (const item of task.failures ?? []) {
@@ -492,18 +499,24 @@ export function lowConfidenceWarning(task: TaskResult): string | null {
     }
     missing = true
   }
+  if (task.review || task.status === "unsure") {
+    return UNSURE_REVIEW
+  }
   if (numeric != null || missing) {
-    return "The judge wasn't sure about this one"
+    return UNSURE_REVIEW
   }
   return null
 }
 
 export function suiteUnsureWarning(
-  report?: Pick<Report, "tasks"> | null
+  report?: Pick<Report, "tasks" | "gate"> | null
 ): string | null {
+  if (report?.gate === "needs review") {
+    return UNSURE_REVIEW
+  }
   for (const task of report?.tasks ?? []) {
     if (lowConfidenceWarning(task)) {
-      return "The judge wasn't sure about this one"
+      return UNSURE_REVIEW
     }
   }
   return null
@@ -532,10 +545,15 @@ export function openedCheckAnswers(task: TaskResult): OpenedAnswer[] {
     const question = task.judge?.questions?.[id]
     const choice =
       trimText(answers?.[id]?.choice) || trimText(cells?.[id]?.choice)
+    const unsure = cells?.[id]?.status === "unsure"
     return {
       id,
       label: trimText(question?.instructions) || CHECK_QUESTION_LABELS[id] || id,
-      answer: unchecked ? "Not checked" : choice || "—",
+      answer: unchecked
+        ? "Not checked"
+        : unsure
+          ? UNSURE_REVIEW
+          : choice || "—",
     }
   })
   const seen = new Set<string>(CHECK_QUESTION_ORDER)

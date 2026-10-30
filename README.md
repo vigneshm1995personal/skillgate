@@ -36,7 +36,7 @@ skillgate check skills/json-response
 skillgate check skills/json-response-sabotaged
 ```
 
-`skillgate examples install` writes six skills under `skills/`. Files already in that folder stay as they are. `skills/json-response` exits 0 when the live run is green. `skills/json-response-sabotaged` exits 1: the JSON checks fail, and the unrelated check can pass. Both checks exit 2 until an agent is available and a decision model is selected. Use `skillgate login` or `skillgate keys set` for the agent ([Sign in an agent](#sign-in-an-agent)), and `skillgate judge provider set` for the decision model. This repo is 0.7.10. Until 0.7.10 is published, install from source (`pip install -e .`) after cloning. A check that never starts is not saved. `skillgate import` of a skill already in this project stops and leaves the files alone. A decision-model key is not an agent login.
+`skillgate examples install` writes six skills under `skills/`. Files already in that folder stay as they are. `skills/json-response` exits 0 when the live run is green. `skills/json-response-sabotaged` exits 1: the JSON checks fail, and the unrelated check can pass. Both checks exit 2 until an agent is available and a decision model is selected. Use `skillgate login` or `skillgate keys set` for the agent ([Sign in an agent](#sign-in-an-agent)), and `skillgate judge provider set` for the decision model. This repo is 0.7.11. Until 0.7.11 is published, install from source (`pip install -e .`) after cloning. A check that never starts is not saved. `skillgate import` of a skill already in this project stops and leaves the files alone. A decision-model key is not an agent login.
 
 The same steps in the local UI:
 
@@ -237,7 +237,7 @@ jobs:
           SKILLGATE_JEV_API_KEY: ${{ secrets.SKILLGATE_JEV_API_KEY }}
 ```
 
-`path` is a skill pack or a suite file. The default is `skills`. `version` is the `skillgate-ai` release to install. The default is the latest release. Until 0.7.10 is published, leave `version` unset or install from source (`pip install -e .`). `judge` is the decision model id. `model`, `base-url`, and `account-id` are optional. `harness` is optional. `args` holds extra flags, such as `--no-judge` or `--expect-fail`. `--no-judge` skips scoring and still needs a signed-in agent.
+`path` is a skill pack or a suite file. The default is `skills`. `version` is the `skillgate-ai` release to install. The default is the latest release. Until 0.7.11 is published, leave `version` unset or install from source (`pip install -e .`). `judge` is the decision model id. `model`, `base-url`, and `account-id` are optional. `harness` is optional. `args` holds extra flags, such as `--no-judge` or `--expect-fail`. `--no-judge` skips scoring and still needs a signed-in agent.
 
 Pass keys as `SKILLGATE_*` environment variables from the caller secrets. The action does not print those values. It does not switch to another decision model when `judge` is set.
 

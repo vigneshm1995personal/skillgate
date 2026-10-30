@@ -1,3 +1,3 @@
 """Skill Gate — skill-native sandbox evals + CI."""
 
-__version__ = "0.7.10"
+__version__ = "0.7.11"
