@@ -311,6 +311,28 @@ def majority_vote_answers(rounds: list[Mapping[str, Any]]) -> dict[str, Any]:
     return merged
 
 
+def vote_round_summaries(rounds: list[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    """Choice and confidence per question for each ask."""
+    out: list[dict[str, Any]] = []
+    for blob in rounds:
+        if not isinstance(blob, Mapping):
+            continue
+        round_map: dict[str, Any] = {}
+        for key, answer in blob.items():
+            entry: dict[str, Any] = {}
+            choice = extract_choice(answer)
+            if choice:
+                entry["choice"] = choice
+            confidence = extract_confidence(answer)
+            if confidence is not None:
+                entry["confidence"] = confidence
+            if entry:
+                round_map[str(key)] = entry
+        if round_map:
+            out.append(round_map)
+    return out
+
+
 def _vote_token(answer: Any) -> str:
     choice = extract_choice(answer)
     if choice:

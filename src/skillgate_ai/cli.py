@@ -418,7 +418,7 @@ def check_pack(
     no_judge: bool = typer.Option(
         False,
         "--no-judge",
-        help="Allow a run without a scoring key (exit 0 even when quality is not scored).",
+        help="Skip the decision model (quality is not scored). Still needs a signed-in agent.",
     ),
 ) -> None:
     """Exit 0 if green, 1 if red, 2 if it cannot run. Runs pack-local evals/cases.yaml."""

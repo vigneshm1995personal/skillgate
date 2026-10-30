@@ -81,6 +81,12 @@ def test_low_confidence_fail_is_reasked_and_majority_passes() -> None:
     assert judged["passed"] is True
     assert judged["answers"]["task_completion"]["choice"] == "Fully completed"
     assert len(post.calls) == 3
+    votes = judged["votes"]
+    assert len(votes) == 3
+    assert votes[0]["task_completion"]["choice"] == "Not completed"
+    assert votes[0]["task_completion"]["confidence"] == 0.2
+    assert votes[1]["task_completion"]["choice"] == "Fully completed"
+    assert votes[2]["task_completion"]["choice"] == "Fully completed"
 
 
 def test_low_confidence_majority_fail_keeps_the_pass_mark() -> None:
@@ -171,3 +177,47 @@ def test_red_names_failing_check_and_includes_judge_reason() -> None:
         assert "This check did not pass." not in blob
     assert "OpenAI" not in cli
     assert "Jev" not in cli
+
+
+def test_history_show_prints_named_red_offline(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from conftest import plain_text
+    from typer.testing import CliRunner
+
+    from skillgate_ai.cli import app
+    from skillgate_ai.history import append_eval
+
+    pack = tmp_path / "skills" / "refunds"
+    (pack / "evals").mkdir(parents=True)
+    (pack / "SKILL.md").write_text(
+        "---\nname: refunds\ndescription: Handle refunds.\n---\n# refunds\n",
+        encoding="utf-8",
+    )
+    append_eval(
+        pack,
+        run_id="red-1",
+        passed=False,
+        report={
+            "tasks": [
+                {
+                    "id": "escalate-refund",
+                    "passed": False,
+                    "failures": ["This check did not pass."],
+                    "happened": (
+                        "Got the job done? Not completed (need Fully completed) — "
+                        "The refund is impossible, so the bot told the customer."
+                    ),
+                }
+            ],
+            "task_count": 1,
+            "passed_count": 0,
+        },
+    )
+    monkeypatch.setenv("SKILLGATE_ROOT", str(tmp_path))
+    result = CliRunner().invoke(app, ["history", "show", "red-1", "--pack", str(pack)])
+    out = plain_text(result.stdout + result.stderr)
+    assert result.exit_code == 0, out
+    assert "Got the job done?" in out
+    assert "refund is impossible" in out
+    assert "This check did not pass." not in out

@@ -6,7 +6,7 @@ A decision model scores each live check, and one is required. Live checks still 
 
 When a decision model is on and you run a live check (`skillgate check`, or Run in the local UI), Skill Gate asks the same fixed questions on each live task. The check passes only when those answers meet the bar (job done, correct, followed the rules, and so on). Every check still needs a signed-in agent (`skillgate login`) or a key. Without one, `skillgate check` exits 2. A live check also needs a decision model. With none selected, the check exits 2 and asks you to pick one. It does not fall back to another model.
 
-Scorers such as "does the output contain this text?" and page counts still apply beside that decision model. Scoring does not compare the full output to the expected file. It reads the expected and actual text (and a few images) and judges whether the work is done. Pass `--no-judge` only when you mean to run without a decision model.
+Scorers such as "does the output contain this text?" and page counts still apply beside that decision model. Scoring does not compare the full output to the expected file. It reads the expected and actual text (and a few images) and judges whether the work is done. Built-in checks grade against the test's expected outcome (golden / contains). If that outcome is an escalation or refusal — a refund that cannot be issued, a column the schema does not list — doing it is Fully completed, not unfinished. Pass `--no-judge` only when you mean to skip the decision model. It still needs a signed-in agent. Without one, `skillgate check --no-judge` exits 2. To see a named red from a saved run with no agent, use `skillgate history show RUN`.
 
 Add extra scoring questions on top of Skill Gate's six (`skillgate judge add-question PACK`, or the Checks editor). Pass a skill pack. With none, the command stops and does not write to `skills/pdf`. Built-in questions cannot be deleted. They can be Warn only. Original checks in the bundled examples, including pdf, cannot be removed.
 
@@ -109,30 +109,35 @@ Bad key, no credits, 403, 400, or timeout fails the check (exit 1) with a plain 
 
 If the scorer is not very sure about a pass, the check still passes. You will see: *The judge wasn't very sure about this one.* That warning does not change exit 0/1.
 
+When a blocking answer's confidence is below 0.5, Skill Gate re-asks up to 3 times and takes a majority vote instead of failing on one unsure call. High-confidence fails still fail in one call. Custom checks and the pass mark are unchanged. The majority answer is what the check cells use. Individual votes are in `skillgate check --json` and `skillgate history show RUN --json` under `tasks[].judge.votes` (choice and confidence for each ask). The UI shows the majority result, not each ask.
+
+A red names the failing check and includes the judge's reason. Example: `Got the job done? Not completed (need Fully completed) — The refund is impossible, so the bot told the customer.` CLI, GitHub summary, and the What happened column all use that line. After a run is saved, `skillgate history show RUN` prints it without calling an agent.
+
 ## GitHub Action (optional secret)
 
 ```yaml
 - uses: vigneshm1995personal/skillgate@v1
   with:
     path: skills/pdf
-    version: 0.7.10
     judge: jev
   env:
     SKILLGATE_JEV_API_KEY: ${{ secrets.SKILLGATE_JEV_API_KEY }}
 ```
 
-`version: 0.7.10` installs `skillgate-ai==0.7.10`. The action reads `SKILLGATE_*` variables and does not print them. It does not switch to another decision model. Do not add a required scoring secret to merge CI.
+Leave `version` unset for the latest release. Until 0.7.10 is published, install from source (`pip install -e .`) instead of pinning that version. The action reads `SKILLGATE_*` variables and does not print them. It does not switch to another decision model. Do not add a required scoring secret to merge CI.
 
 A manual install still works:
 
 ```yaml
 - uses: actions/setup-python@v5
   with: { python-version: "3.12" }
-- run: pip install skillgate-ai==0.7.10
+- run: pip install skillgate-ai
 - run: skillgate check . --key-env DECISION_MODEL_API_KEY
   env:
     DECISION_MODEL_API_KEY: ${{ secrets.DECISION_MODEL_API_KEY }}
 ```
+
+Until 0.7.10 is published, replace that install with `pip install -e .` from a clone of this repo.
 
 ## Live smoke (not CI)
 

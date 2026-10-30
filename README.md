@@ -36,7 +36,7 @@ skillgate check skills/json-response
 skillgate check skills/json-response-sabotaged
 ```
 
-`skillgate examples install` writes six skills under `skills/`. Files already in that folder stay as they are. `skills/json-response` exits 0 when the live run is green. `skills/json-response-sabotaged` exits 1: the JSON checks fail, and the unrelated check can pass. Both checks exit 2 until an agent is available and a decision model is selected. Use `skillgate login` or `skillgate keys set` for the agent ([Sign in an agent](#sign-in-an-agent)), and `skillgate judge provider set` for the decision model. These commands match release 0.7.10. A check that never starts is not saved. `skillgate import` of a skill already in this project stops and leaves the files alone. A decision-model key is not an agent login.
+`skillgate examples install` writes six skills under `skills/`. Files already in that folder stay as they are. `skills/json-response` exits 0 when the live run is green. `skills/json-response-sabotaged` exits 1: the JSON checks fail, and the unrelated check can pass. Both checks exit 2 until an agent is available and a decision model is selected. Use `skillgate login` or `skillgate keys set` for the agent ([Sign in an agent](#sign-in-an-agent)), and `skillgate judge provider set` for the decision model. This repo is 0.7.10. Until 0.7.10 is published, install from source (`pip install -e .`) after cloning. A check that never starts is not saved. `skillgate import` of a skill already in this project stops and leaves the files alone. A decision-model key is not an agent login.
 
 The same steps in the local UI:
 
@@ -190,7 +190,9 @@ skillgate new notes-helper
 
 ## Writing a dataset
 
-A dataset is `evals/cases.yaml` plus small files in `evals/fixtures/` and expected files in `evals/goldens/`. The folder name, the `name` in `SKILL.md`, and `skill` in `cases.yaml` are the same string. Start with 3 to 6 pinned cases: one behavior, one edge, and one unrelated prompt (`should_trigger: false`). Keep the expected sentence out of the prompt. The examples do this: `json-response` flattens an API body, `readme-writer` turns a brief into a README, `log-summarizer` counts errors, `sql-writer` writes a query from a schema, and `receipt-extractor` reads a fictional receipt. `json-response-sabotaged` uses the same JSON cases and fails them.
+A dataset is `evals/cases.yaml` plus small files in `evals/fixtures/` and expected files in `evals/goldens/`. The folder name, the `name` in `SKILL.md`, and `skill` in `cases.yaml` are the same string. Start with 3 to 6 pinned cases: one behavior, one edge, and one unrelated prompt (`should_trigger: false`). Keep the expected sentence out of the prompt. If the right answer is an escalation or refusal, put that in the golden: built-in checks grade against that expected outcome, so doing it is Fully completed. The examples do this: `json-response` flattens an API body, `readme-writer` turns a brief into a README, `log-summarizer` counts errors, `sql-writer` writes a query from a schema (and refuses a missing column), and `receipt-extractor` reads a fictional receipt. `json-response-sabotaged` uses the same JSON cases and fails them.
+
+A red names the failing check and includes the judge's reason (`Got the job done? …`). When a blocking answer's confidence is below 0.5, the judge is re-asked up to 3 times and the majority wins. Individual votes are in `tasks[].judge.votes` (`skillgate check --json` or `skillgate history show RUN --json`). `--no-judge` still needs a signed-in agent; `skillgate history show RUN` reprints a saved named red offline. Details: [Bring your own judge](docs/judge.md).
 
 Check a dataset on disk, then run it:
 
@@ -234,7 +236,7 @@ jobs:
           SKILLGATE_JEV_API_KEY: ${{ secrets.SKILLGATE_JEV_API_KEY }}
 ```
 
-`path` is a skill pack or a suite file. The default is `skills`. `version` is the `skillgate-ai` release to install. The default is the latest release. `judge` is the decision model id. `model`, `base-url`, and `account-id` are optional. `harness` is optional. `args` holds extra flags, such as `--no-judge` or `--expect-fail`.
+`path` is a skill pack or a suite file. The default is `skills`. `version` is the `skillgate-ai` release to install. The default is the latest release. Until 0.7.10 is published, leave `version` unset or install from source (`pip install -e .`). `judge` is the decision model id. `model`, `base-url`, and `account-id` are optional. `harness` is optional. `args` holds extra flags, such as `--no-judge` or `--expect-fail`. `--no-judge` skips scoring and still needs a signed-in agent.
 
 Pass keys as `SKILLGATE_*` environment variables from the caller secrets. The action does not print those values. It does not switch to another decision model when `judge` is set.
 

@@ -299,9 +299,13 @@ def register_pack_commands(app: typer.Typer, case_app: typer.Typer, judge_app: t
             mark = "pass" if ok is True else "fail" if ok is False else "—"
             reason = ""
             if ok is False:
-                failures = task.get("failures")
-                if isinstance(failures, list) and failures:
-                    reason = f"  {failures[0]}"
+                happened = str(task.get("happened") or "").strip()
+                if happened:
+                    reason = f"  {happened}"
+                else:
+                    failures = task.get("failures")
+                    if isinstance(failures, list) and failures:
+                        reason = f"  {failures[0]}"
             console.print(f"  {tid}  {mark}{reason}")
 
     @case_app.command("list")

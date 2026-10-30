@@ -10,10 +10,10 @@ Requires **Python 3.11+**.
 python3 -m venv .venv
 source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install skillgate-ai
-skillgate version           # 0.7.10
+skillgate version
 ```
 
-(`pip install skillgate` is a different product.) From a clone of this repo you can use `pip install -e .` instead.
+(`pip install skillgate` is a different product.) Until 0.7.10 is published, install from source instead: clone this repo and `pip install -e .`.
 
 Skill scripts run with that same Python — install the skill’s own packages there too (the pdf example needs `pypdf`).
 
@@ -169,10 +169,9 @@ jobs:
       - uses: vigneshm1995personal/skillgate@v1
         with:
           path: skills/pdf
-          version: 0.7.10
           judge: jev
         env:
           SKILLGATE_JEV_API_KEY: ${{ secrets.SKILLGATE_JEV_API_KEY }}
 ```
 
-`version: 0.7.10` installs `skillgate-ai==0.7.10`. Leave `version` unset for the latest release. Pass keys as `SKILLGATE_*` variables. Or set `SKILLGATE_OPENAI_API_KEY` instead of `--key-env`. The `SKILLGATE_*` key names are the documented CI/Docker path and are always read.
+Leave `version` unset for the latest release. Until 0.7.10 is published, install from source (`pip install -e .`) instead of pinning that version. Pass keys as `SKILLGATE_*` variables. Or set `SKILLGATE_OPENAI_API_KEY` instead of `--key-env`. The `SKILLGATE_*` key names are the documented CI/Docker path and are always read.

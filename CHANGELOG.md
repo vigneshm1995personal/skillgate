@@ -7,6 +7,8 @@
 - Built-in checks grade against the test's expected outcome. An honest escalation or refusal (refund impossible, tell the customer, write an owner report) is Fully completed, not unfinished.
 - When a blocking answer's confidence is below 0.5, re-ask the judge up to 3 times and take the majority instead of failing on one unsure call. Custom checks and the pass mark are unchanged.
 - Every red names the failing check and includes the judge's reason in the CLI and the UI.
+- Low-confidence majority votes are recorded on the run as `tasks[].judge.votes` (`skillgate check --json`, `skillgate history show RUN --json`). `skillgate history show` prints the named red from a saved run with no agent. `--no-judge` still needs a signed-in agent.
+- Docs: how to write an escalation or refusal expected outcome; where to read majority votes; how a red names the check. Until 0.7.10 is published, install from source.
 - README install uses a venv or pipx, lists agent key names, maps Editor/Code/Terminal agent to Cursor / Claude Code / Codex and their skills folders, pipes `$OPENROUTER_API_KEY` into `JEV_API_KEY`, names the default OpenAI model `gpt-6-luna`, and clones before `docker compose`. The examples toast is `Installed 6 examples (53 files).`
 - `skillgate compare versions --dry-run` with no refs prints a hint instead of an empty table.
 - `skillgate judge provider show` with no decision model selected exits 2.

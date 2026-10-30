@@ -26,6 +26,7 @@ from skillgate_ai.judge_bank import (
     extract_reason,
     majority_vote_answers,
     unusable_answers,
+    vote_round_summaries,
 )
 from skillgate_ai.judge_images import IMAGE_MAX_BYTES, IMAGE_MAX_COUNT, collect_images
 from skillgate_ai.judge_spec import (
@@ -609,6 +610,10 @@ class OutcomeJudge:
         )
         last = dict(rounds[-1])
         last["answers"] = merged
+        if len(rounds) > 1:
+            last["votes"] = vote_round_summaries(
+                [blob for blob in blobs if isinstance(blob, dict)]
+            )
         usage = _sum_judge_usage(rounds)
         if usage is not None:
             last["usage"] = usage
@@ -758,7 +763,7 @@ class OutcomeJudge:
         merged_answers = {**pass_answers, **extra_answers}
         extra_questions = {q.id: {"instructions": q.ask, "type": q.type} for q in resolved.extras}
         extra_failures = extra_block_failures(resolved, answers, skipped=skipped)
-        return self._finish_payload(
+        payload = self._finish_payload(
             self._payload(
                 status="completed",
                 model=model,
@@ -779,6 +784,10 @@ class OutcomeJudge:
             confidence=confidence,
             extra_failures=extra_failures,
         )
+        votes = evaluated.get("votes")
+        if isinstance(votes, list) and votes:
+            payload["votes"] = votes
+        return payload
 
     def _finish_payload(
         self,
