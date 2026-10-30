@@ -645,6 +645,26 @@ const fail = happenedLine({passed: false, happened: "Wrong file."});
 if (fail !== "Wrong file.") process.exit(4);
 const blankFail = happenedLine({passed: false});
 if (blankFail !== "This check did not pass.") process.exit(5);
+const namedRed = happenedLine({
+  passed: false,
+  happened: "This check did not pass.",
+  judge: {
+    reasons: [
+      "Got the job done? Not completed (need Fully completed) — The refund is impossible, so the bot told the customer and wrote an owner report."
+    ],
+    cells: {
+      task_completion: {
+        label: "Got the job done?",
+        choice: "Not completed",
+        reason: "The refund is impossible, so the bot told the customer and wrote an owner report."
+      }
+    }
+  },
+  failures: ["This check did not pass."]
+});
+if (!namedRed.includes("Got the job done?")) process.exit(16);
+if (!namedRed.includes("refund is impossible")) process.exit(17);
+if (namedRed === "This check did not pass.") process.exit(18);
 const html = detailInnerHtml({
   passed: true,
   check_kind: "openai",

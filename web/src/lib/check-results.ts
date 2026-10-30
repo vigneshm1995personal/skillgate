@@ -204,12 +204,15 @@ export function plainFailReason(raw: string, hint = ""): string | null {
     return rest ? scorerCodeToPlain(rest, hint) : null
   }
   const afterDash = trimText(match[4])
-  if (afterDash) {
-    return afterDash
-  }
   const key = trimText(match[1]).toLowerCase()
   const label = CHECK_QUESTION_LABELS[key]
   const choice = trimText(match[2]).replace(/\s+\(need\s+.+\)$/i, "")
+  if (label && choice && afterDash) {
+    return `${label} ${choice} — ${afterDash}`
+  }
+  if (afterDash) {
+    return afterDash
+  }
   if (label && choice) {
     return `${label} ${choice}.`
   }

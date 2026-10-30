@@ -250,13 +250,13 @@ def test_fail_lock_does_not_fail_on_wasteful_path() -> None:
 
 
 def test_low_confidence_keeps_pass_and_warns() -> None:
-    post = FakePost([FakeResponse(200, decisions_payload(confidence=0.2))])
+    post = FakePost([FakeResponse(200, decisions_payload(confidence=0.2))] * 3)
     judged = _score(_judge(post))
     assert judged["status"] == "completed"
     assert judged["passed"] is True
     assert judged["warnings"] == [LOW_CONFIDENCE_WARNING]
     assert judged["answers"]["correctness"]["confidence"] == 0.2
-    assert len(post.calls) == 1
+    assert len(post.calls) == 3
     assert post.calls[0]["url"].endswith("/v1/decisions")
 
 
@@ -436,12 +436,12 @@ def test_why_call_skipped_on_pass() -> None:
 
 
 def test_why_call_skipped_on_low_confidence_pass() -> None:
-    post = FakePost([FakeResponse(200, decisions_payload(confidence=0.1))])
+    post = FakePost([FakeResponse(200, decisions_payload(confidence=0.1))] * 3)
     passed, _failures, judged = _gated(_judge(post))
     assert passed is True
     assert judged["passed"] is True
     assert judged["why"] is None
-    assert len(post.calls) == 1
+    assert len(post.calls) == 3
 
 
 def test_responses_backend_does_not_post() -> None:

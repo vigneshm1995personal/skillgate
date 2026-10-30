@@ -152,9 +152,37 @@ describe("happenedLine", () => {
       ],
     }
     expect(happenedLine(fail)).toBe(
-      'The file was expected to contain "Goodbye Skill Gate."'
+      'Got it right? Incorrect — The file was expected to contain "Goodbye Skill Gate."'
     )
     expect(happenedLine(fail)).not.toBe("This check did not pass.")
+  })
+
+  it("names the failing check and includes the judge reason", () => {
+    const fail: TaskResult = {
+      id: "escalate-refund",
+      prompt: "Refund this order.",
+      passed: false,
+      status: "done",
+      happened: "This check did not pass.",
+      judge: {
+        reasons: [
+          "Got the job done? Not completed (need Fully completed) — The refund is impossible, so the bot told the customer and wrote an owner report.",
+        ],
+        cells: {
+          task_completion: {
+            label: "Got the job done?",
+            choice: "Not completed",
+            reason:
+              "The refund is impossible, so the bot told the customer and wrote an owner report.",
+          },
+        },
+      },
+      failures: ["This check did not pass."],
+    }
+    const line = happenedLine(fail)
+    expect(line).toContain("Got the job done?")
+    expect(line).toContain("refund is impossible")
+    expect(line).not.toBe("This check did not pass.")
   })
 })
 

@@ -115,20 +115,20 @@ If the scorer is not very sure about a pass, the check still passes. You will se
 - uses: vigneshm1995personal/skillgate@v1
   with:
     path: skills/pdf
-    version: 0.7.9
+    version: 0.7.10
     judge: jev
   env:
     SKILLGATE_JEV_API_KEY: ${{ secrets.SKILLGATE_JEV_API_KEY }}
 ```
 
-`version: 0.7.9` installs `skillgate-ai==0.7.9`. The action reads `SKILLGATE_*` variables and does not print them. It does not switch to another decision model. Do not add a required scoring secret to merge CI.
+`version: 0.7.10` installs `skillgate-ai==0.7.10`. The action reads `SKILLGATE_*` variables and does not print them. It does not switch to another decision model. Do not add a required scoring secret to merge CI.
 
 A manual install still works:
 
 ```yaml
 - uses: actions/setup-python@v5
   with: { python-version: "3.12" }
-- run: pip install skillgate-ai==0.7.9
+- run: pip install skillgate-ai==0.7.10
 - run: skillgate check . --key-env DECISION_MODEL_API_KEY
   env:
     DECISION_MODEL_API_KEY: ${{ secrets.DECISION_MODEL_API_KEY }}

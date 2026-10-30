@@ -347,6 +347,14 @@ def scored_by_line(report: SuiteReport) -> str:
     return ""
 
 
+_GENERIC_FAILS = frozenset(
+    {
+        "this check did not pass.",
+        "the judge couldn't score this check.",
+    }
+)
+
+
 def _task_fail_line(task: TaskReport) -> str:
     judge = task.judge if isinstance(task.judge, dict) else {}
     if isinstance(judge, dict):
@@ -361,10 +369,50 @@ def _task_fail_line(task: TaskReport) -> str:
                 text = str(item).strip()
                 if text:
                     return text
+        named = _named_builtin_fail(judge)
+        if named:
+            return named
     why = judge.get("why") if isinstance(judge, dict) else None
     if isinstance(why, str) and why.strip():
         return why.strip()
-    return task.failures[0] if task.failures else "This check did not pass."
+    for item in task.failures:
+        text = str(item).strip()
+        if text and text.lower() not in _GENERIC_FAILS:
+            return text
+    return "This check did not pass."
+
+
+def _named_builtin_fail(judge: dict[str, Any]) -> str | None:
+    from skillgate_ai.judge_bank import (
+        CHECK_CELL_LABELS,
+        PASS_LOCK,
+        canonical_choice,
+        extract_choice,
+    )
+
+    for item in judge.get("reasons") or []:
+        text = str(item).strip()
+        if not text or text.lower() in _GENERIC_FAILS:
+            continue
+        if any(text.startswith(label) for label in CHECK_CELL_LABELS.values()):
+            return text
+    cells = judge.get("cells") if isinstance(judge.get("cells"), dict) else {}
+    for key, label in CHECK_CELL_LABELS.items():
+        cell = cells.get(key) if isinstance(cells, dict) else None
+        if not isinstance(cell, dict):
+            continue
+        choice = str(cell.get("choice") or extract_choice(cell) or "").strip()
+        if not choice:
+            continue
+        canonical = canonical_choice(key, choice)
+        if canonical and canonical.strip().lower() in PASS_LOCK[key]:
+            continue
+        reason = str(cell.get("reason") or "").strip()
+        line = f"{label} {choice}"
+        if reason and reason not in line:
+            line = f"{line} — {reason}"
+        return line
+    return None
 
 
 def _task_happened(task: TaskReport) -> str:

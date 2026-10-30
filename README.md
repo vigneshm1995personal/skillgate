@@ -36,7 +36,7 @@ skillgate check skills/json-response
 skillgate check skills/json-response-sabotaged
 ```
 
-`skillgate examples install` writes six skills under `skills/`. Files already in that folder stay as they are. `skills/json-response` exits 0 when the live run is green. `skills/json-response-sabotaged` exits 1: the JSON checks fail, and the unrelated check can pass. Both checks exit 2 until an agent is available and a decision model is selected. Use `skillgate login` or `skillgate keys set` for the agent ([Sign in an agent](#sign-in-an-agent)), and `skillgate judge provider set` for the decision model. These commands match release 0.7.9. A check that never starts is not saved. `skillgate import` of a skill already in this project stops and leaves the files alone. A decision-model key is not an agent login.
+`skillgate examples install` writes six skills under `skills/`. Files already in that folder stay as they are. `skills/json-response` exits 0 when the live run is green. `skills/json-response-sabotaged` exits 1: the JSON checks fail, and the unrelated check can pass. Both checks exit 2 until an agent is available and a decision model is selected. Use `skillgate login` or `skillgate keys set` for the agent ([Sign in an agent](#sign-in-an-agent)), and `skillgate judge provider set` for the decision model. These commands match release 0.7.10. A check that never starts is not saved. `skillgate import` of a skill already in this project stops and leaves the files alone. A decision-model key is not an agent login.
 
 The same steps in the local UI:
 

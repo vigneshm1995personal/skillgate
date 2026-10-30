@@ -11,16 +11,20 @@ from skillgate_ai.judge_bank import (
     CHECK_CELL_LABELS,
     CHECK_CELL_ORDER,
     DEFAULT_MIN_CONFIDENCE,
+    LOW_CONFIDENCE_MAX_ASKS,
     PATH_NOT_AVAILABLE,
     SOFT_CELL_LABELS,
     SOFT_CELL_ORDER,
     UNUSABLE_ANSWER,
     all_questions,
+    answers_have_low_confidence,
     canonical_choice,
     criteria_text,
     extract_choice,
     extract_confidence,
     extract_probabilities,
+    extract_reason,
+    majority_vote_answers,
     unusable_answers,
 )
 from skillgate_ai.judge_images import IMAGE_MAX_BYTES, IMAGE_MAX_COUNT, collect_images
@@ -142,7 +146,7 @@ def _cell_entry(key: str, answer: Any, labels: Mapping[str, str]) -> dict[str, A
     cell: dict[str, Any] = {
         "label": labels[key],
         "choice": choice,
-        "reason": criteria_text(key, choice),
+        "reason": extract_reason(answer) or criteria_text(key, choice),
     }
     confidence = extract_confidence(answer)
     if confidence is not None:
@@ -168,6 +172,7 @@ def _state_text(state: Mapping[str, Any]) -> str:
             artifacts if isinstance(artifacts, list) else None
         ),
         "artifacts": _artifacts_without_bodies(artifacts),
+        "expected_outcome": _expected_outcome_text(state),
         "golden": _text_blob(state.get("golden")),
         "actual_output": _text_blob(state.get("actual_output")),
         "path": state.get("path"),
@@ -199,6 +204,27 @@ def _artifacts_without_bodies(raw: Any) -> list[dict[str, Any]]:
             }
         )
     return out
+
+
+def _expected_outcome_text(state: Mapping[str, Any]) -> str | None:
+    raw = state.get("expected_outcome")
+    if isinstance(raw, str) and raw.strip():
+        return raw.strip()
+    if raw not in (None, "") and not isinstance(raw, Mapping):
+        return str(raw)
+    golden = state.get("golden")
+    if not isinstance(golden, Mapping):
+        return None
+    bits: list[str] = []
+    body = golden.get("body") or golden.get("extracted_text")
+    if isinstance(body, str) and body.strip():
+        bits.append(body.strip())
+    contains = golden.get("contains")
+    if isinstance(contains, list):
+        needles = [str(item).strip() for item in contains if str(item).strip()]
+        if needles:
+            bits.append("Required: " + "; ".join(needles))
+    return "\n".join(bits) or None
 
 
 def _text_blob(raw: Any) -> Any:
@@ -267,6 +293,9 @@ def _answer_row(key: str, item: Any) -> dict[str, Any]:
     confidence = extract_confidence(mapping)
     if confidence is not None:
         row["confidence"] = confidence
+    reason = extract_reason(mapping)
+    if reason:
+        row["reason"] = reason
     probabilities = extract_probabilities(mapping)
     if probabilities:
         row["probabilities"] = probabilities
@@ -515,6 +544,13 @@ class OutcomeJudge:
         }
         spec = kwargs.get("spec")
         resolved = spec if isinstance(spec, JudgeSpec) else builtin_spec()
+        expected = kwargs.get("expected_outcome")
+        if isinstance(expected, str) and expected.strip():
+            state["expected_outcome"] = expected.strip()
+        elif state.get("expected_outcome") in (None, ""):
+            derived = _expected_outcome_text(state)
+            if derived:
+                state["expected_outcome"] = derived
         evaluate = self.backend.evaluate
         try:
             evaluated = evaluate(
@@ -522,6 +558,9 @@ class OutcomeJudge:
             )
         except TypeError:
             evaluated = evaluate(state=state, images=images, timeout_sec=self.timeout_sec)
+        evaluated = self._majority_reask(
+            evaluate, state=state, images=images, spec=resolved, first=evaluated
+        )
         return self._stamp(
             evaluated,
             artifacts=artifacts,
@@ -529,6 +568,51 @@ class OutcomeJudge:
             include_path=_path_is_recorded(path),
             spec=resolved,
         )
+
+    def _majority_reask(
+        self,
+        evaluate: Any,
+        *,
+        state: Mapping[str, Any],
+        images: list[dict[str, str]],
+        spec: JudgeSpec,
+        first: Mapping[str, Any],
+    ) -> dict[str, Any]:
+        if not self.supports_confidence:
+            return dict(first)
+        if first.get("status") != "completed":
+            return dict(first)
+        answers = first.get("answers") if isinstance(first.get("answers"), dict) else {}
+        blocking = [q.id for q in spec.questions if q.on_fail == "block"]
+        if not answers_have_low_confidence(
+            answers, min_confidence=self.min_confidence, keys=blocking
+        ):
+            return dict(first)
+        rounds: list[Mapping[str, Any]] = [first]
+        while len(rounds) < LOW_CONFIDENCE_MAX_ASKS:
+            try:
+                again = evaluate(
+                    state=state, images=images, timeout_sec=self.timeout_sec, spec=spec
+                )
+            except TypeError:
+                again = evaluate(state=state, images=images, timeout_sec=self.timeout_sec)
+            if again.get("status") != "completed":
+                break
+            rounds.append(again)
+        blobs = [
+            row.get("answers")
+            for row in rounds
+            if isinstance(row.get("answers"), dict)
+        ]
+        merged = majority_vote_answers(
+            [blob for blob in blobs if isinstance(blob, dict)]
+        )
+        last = dict(rounds[-1])
+        last["answers"] = merged
+        usage = _sum_judge_usage(rounds)
+        if usage is not None:
+            last["usage"] = usage
+        return last
 
     def _payload(
         self,
@@ -729,6 +813,34 @@ def _scoring_endpoint(evaluated: Mapping[str, Any]) -> str | None:
     if isinstance(raw, str) and raw.strip():
         return raw.strip()
     return None
+
+
+def _sum_judge_usage(rounds: list[Mapping[str, Any]]) -> dict[str, Any] | None:
+    from skillgate_ai.usage import usage_from_mapping
+
+    tokens_in = tokens_out = tokens_total = cost = None
+    known = False
+    for row in rounds:
+        parsed = usage_from_mapping(row.get("usage") if isinstance(row, Mapping) else None)
+        if parsed is None:
+            continue
+        known = True
+        if parsed.tokens_in is not None:
+            tokens_in = (tokens_in or 0) + parsed.tokens_in
+        if parsed.tokens_out is not None:
+            tokens_out = (tokens_out or 0) + parsed.tokens_out
+        if parsed.tokens_total is not None:
+            tokens_total = (tokens_total or 0) + parsed.tokens_total
+        if parsed.cost_usd is not None:
+            cost = (cost or 0.0) + parsed.cost_usd
+    if not known:
+        return None
+    return {
+        "tokens_in": tokens_in,
+        "tokens_out": tokens_out,
+        "tokens_total": tokens_total,
+        "cost_usd": cost,
+    }
 
 
 def _as_path(value: Any) -> Path | None:
