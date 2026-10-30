@@ -51,14 +51,18 @@ export function failedHudCount(
 }
 
 export function taskState(task: TaskResult): "queued" | "running" | "done" {
-  if (
-    task.status === "queued" ||
-    task.status === "running" ||
-    task.status === "done"
-  ) {
+  if (task.status === "queued" || task.status === "running") {
     return task.status
   }
-  if (typeof task.passed === "boolean") {
+  if (
+    task.status === "done" ||
+    task.status === "unsure" ||
+    task.status === "pass" ||
+    task.status === "fail"
+  ) {
+    return "done"
+  }
+  if (typeof task.passed === "boolean" || task.review === true) {
     return "done"
   }
   return "queued"
@@ -67,13 +71,20 @@ export function taskState(task: TaskResult): "queued" | "running" | "done" {
 /** Pass/Fail only after the task is actually done. Running/queued never inherit a prior verdict. */
 export function taskChip(
   task: TaskResult
-): "queued" | "running" | "pass" | "fail" | "skipped" {
+): "queued" | "running" | "pass" | "fail" | "skipped" | "review" {
   const state = taskState(task)
   if (state === "running") {
     return "running"
   }
   if (task.skipped) {
     return "skipped"
+  }
+  if (
+    state === "done" &&
+    (task.review === true || task.status === "unsure") &&
+    task.passed !== false
+  ) {
+    return "review"
   }
   if (state === "done" && task.passed === true) {
     return "pass"
@@ -84,7 +95,7 @@ export function taskChip(
   return "queued"
 }
 
-export type SuiteResultKind = "idle" | "checking" | "pass" | "fail" | "error"
+export type SuiteResultKind = "idle" | "checking" | "pass" | "fail" | "error" | "review"
 
 /** GREEN/RED stamp + suite tokens/path/cost — only after the run has actually finished. */
 export function suiteStampReady(
@@ -95,7 +106,7 @@ export function suiteStampReady(
 
 /** Suite result shell. Checking until the run is actually done; Pass if checks passed. */
 export function suiteResultKind(
-  record: Pick<RunRecord, "status"> | null | undefined,
+  record: Pick<RunRecord, "status" | "gate" | "report"> | null | undefined,
   reportPassed: boolean | null | undefined,
   evaluating: boolean,
   hasTasks = false
@@ -107,6 +118,10 @@ export function suiteResultKind(
     return hasTasks ? "fail" : "error"
   }
   if (record?.status === "done") {
+    const gate = record.gate || record.report?.gate
+    if (gate === "needs review") {
+      return "review"
+    }
     return reportPassed === true ? "pass" : "fail"
   }
   return "idle"

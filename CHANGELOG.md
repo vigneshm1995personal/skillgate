@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 0.7.11
+
+- After majority voting, a blocking verdict whose confidence is still below 0.5 is **unsure, needs review**. It is not a gate fail (exit 0, `gate: needs review`, task `status: unsure`). Deploy stays pending. High-confidence fails still fail in one call. The pass mark is unchanged.
+- Custom checks about log facts (tool-call counts and duplicates, whether a tool was called, what a tool returned) are scored from the spans when that is possible. The judge is used only when the check cannot be computed. A duplicate refund in the log still fails. CLI, JSON, and the UI say whether each custom check was computed from the log or by the judge.
+- A sabotaged description cannot pass or land in review: skill trigger still requires a progressive-disclosure match, and a trigger miss fails the check even if the judge is green. Followed the rules? is given the skill's rules and the run evidence so correct runs stay confident. An invalid extra-question `--id` is rejected (the question is not added). Predicate answers use `probability`, not `noul`.
+- CLI prints `NEEDS REVIEW` / `REVIEW`. JSON has `gate`, `tasks[].status`, `tasks[].review`, and `review_task_ids`. The local UI shows the same status. Until 0.7.11 is published, install from source.
+
 ## 0.7.10
 
 - Built-in checks grade against the test's expected outcome. An honest escalation or refusal (refund impossible, tell the customer, write an owner report) is Fully completed, not unfinished.

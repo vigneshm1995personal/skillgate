@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, Mapping, Protocol
+from typing import Any, Protocol
 
-from skillgate_ai.judge_context import workspace_files_for_judge
 from skillgate_ai.judge_bank import (
     CHECK_CELL_LABELS,
     CHECK_CELL_ORDER,
@@ -28,7 +28,9 @@ from skillgate_ai.judge_bank import (
     unusable_answers,
     vote_round_summaries,
 )
+from skillgate_ai.judge_context import attach_adherence_context, workspace_files_for_judge
 from skillgate_ai.judge_images import IMAGE_MAX_BYTES, IMAGE_MAX_COUNT, collect_images
+from skillgate_ai.judge_providers.decision import DecisionModel, require_decision_model
 from skillgate_ai.judge_spec import (
     JudgeSpec,
     builtin_spec,
@@ -37,7 +39,6 @@ from skillgate_ai.judge_spec import (
     spec_decisions_questions,
     spec_verdict,
 )
-from skillgate_ai.judge_providers.decision import DecisionModel, require_decision_model
 from skillgate_ai.openai_http import (
     DEFAULT_BASE_URL,
     OUT_OF_CREDITS,
@@ -46,6 +47,7 @@ from skillgate_ai.openai_http import (
     redact_secrets,
     user_message_for_status,
 )
+from skillgate_ai.span_facts import resolve_log_facts
 
 DEFAULT_MODEL = "gpt-6-luna"
 GATEWAY_DECISIONS_MODEL = "openai/gpt-6-luna-decisions"
@@ -345,13 +347,15 @@ def _lift_decision_answer(item: Any) -> Any:
     if not isinstance(item, Mapping):
         return item
     data = dict(item)
-    if "probability" in data or "noul" not in data:
-        return data
-    noul = data.get("noul")
-    if isinstance(noul, bool):
-        data["probability"] = 1.0 if noul else 0.0
-    elif isinstance(noul, (int, float)):
-        data["probability"] = float(noul)
+    if "probability" not in data and "noul" in data:
+        noul = data.get("noul")
+        if isinstance(noul, bool):
+            data["probability"] = 1.0 if noul else 0.0
+        elif isinstance(noul, (int, float)):
+            data["probability"] = float(noul)
+    data.pop("noul", None)
+    if data.get("type") == "noul":
+        data["type"] = "predicate"
     return data
 
 
@@ -420,7 +424,10 @@ class DecisionsBackend(_OpenAIPosted):
             {
                 "model": self.model,
                 "input": payload_input,
-                "questions": spec_decisions_questions(resolved, include_path=include_path),
+                "questions": attach_adherence_context(
+                    spec_decisions_questions(resolved, include_path=include_path),
+                    state,
+                ),
             },
             timeout_sec=timeout_sec,
         )
@@ -557,16 +564,37 @@ class OutcomeJudge:
             derived = _expected_outcome_text(state)
             if derived:
                 state["expected_outcome"] = derived
+        trajectory = (
+            kwargs.get("agent_trajectory")
+            if isinstance(kwargs.get("agent_trajectory"), Mapping)
+            else None
+        )
+        spans = kwargs.get("spans") if isinstance(kwargs.get("spans"), list) else None
+        facts = resolve_log_facts(resolved, spans, trajectory=trajectory)
+        ask_spec = resolved
+        if facts:
+            ask_spec = resolved.with_questions(
+                [question for question in resolved.questions if question.id not in facts]
+            )
         evaluate = self.backend.evaluate
         try:
             evaluated = evaluate(
-                state=state, images=images, timeout_sec=self.timeout_sec, spec=resolved
+                state=state, images=images, timeout_sec=self.timeout_sec, spec=ask_spec
             )
         except TypeError:
             evaluated = evaluate(state=state, images=images, timeout_sec=self.timeout_sec)
         evaluated = self._majority_reask(
-            evaluate, state=state, images=images, spec=resolved, first=evaluated
+            evaluate, state=state, images=images, spec=ask_spec, first=evaluated
         )
+        if facts and evaluated.get("status") == "completed":
+            answers = (
+                dict(evaluated.get("answers"))
+                if isinstance(evaluated.get("answers"), dict)
+                else {}
+            )
+            answers.update(facts)
+            evaluated = dict(evaluated)
+            evaluated["answers"] = answers
         return self._stamp(
             evaluated,
             artifacts=artifacts,
@@ -662,6 +690,7 @@ class OutcomeJudge:
             "warnings": warnings,
             "min_confidence": self.min_confidence,
             "supports_confidence": self.supports_confidence,
+            "review": False,
         }
         if scoring_endpoint:
             payload["scoring_endpoint"] = scoring_endpoint
@@ -734,6 +763,10 @@ class OutcomeJudge:
         cells: dict[str, dict[str, Any]] = {}
         for key in CHECK_CELL_ORDER:
             cells[key] = _cell_entry(key, pass_answers.get(key), CHECK_CELL_LABELS)
+            if confidence:
+                conf = extract_confidence(pass_answers.get(key))
+                if conf is not None and conf < self.min_confidence:
+                    cells[key]["status"] = "unsure"
         for key in SOFT_CELL_ORDER:
             if include_path:
                 cells[key] = _cell_entry(key, soft_answers.get(key), SOFT_CELL_LABELS)
@@ -764,9 +797,20 @@ class OutcomeJudge:
             elif isinstance(raw, Mapping) and raw.get("score") is not None:
                 cell["score"] = raw.get("score")
                 cell["choice"] = str(raw.get("score"))
+            source = "judge"
+            if isinstance(raw, Mapping) and raw.get("source"):
+                source = str(raw.get("source"))
+            cell["source"] = source
             if cell.get("choice"):
                 cell["reason"] = f"{question.ask} {cell['choice']}"
             cells[question.id] = cell
+            if isinstance(raw, Mapping):
+                cleaned = dict(raw)
+                cleaned.pop("noul", None)
+                if cleaned.get("type") == "noul":
+                    cleaned["type"] = "predicate"
+                cleaned.setdefault("source", source)
+                extra_answers[question.id] = cleaned
         merged_answers = {**pass_answers, **extra_answers}
         extra_questions = {q.id: {"instructions": q.ask, "type": q.type} for q in resolved.extras}
         extra_failures = extra_block_failures(resolved, answers, skipped=skipped)
@@ -790,6 +834,10 @@ class OutcomeJudge:
             spec=resolved,
             confidence=confidence,
             extra_failures=extra_failures,
+        )
+        payload["review"] = bool(passed) and any(
+            isinstance(cell, dict) and cell.get("status") == "unsure"
+            for cell in cells.values()
         )
         votes = evaluated.get("votes")
         if isinstance(votes, list) and votes:

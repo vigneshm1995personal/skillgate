@@ -2,19 +2,34 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any
 
 from skillgate_ai.engine import EvalProgress, SuiteReport, TaskProgress, TaskReport
 from skillgate_ai.eval_config import customer_run_details
 from skillgate_ai.harness import is_live_harness
+from skillgate_ai.judge_bank import UNSURE_REVIEW
 from skillgate_ai.metrics import suite_metrics_summary
 
 
+def _report_gate(report: SuiteReport) -> str:
+    if report.passed is False:
+        return "red"
+    if report.passed is None:
+        return "not scored"
+    if any(getattr(task, "review", False) for task in report.tasks):
+        return "needs review"
+    return "green"
+
+
 def format_cli(report: SuiteReport) -> str:
-    if report.passed is True:
+    raw_gate = _report_gate(report)
+    if raw_gate == "green":
         gate = "GREEN"
-    elif report.passed is False:
+    elif raw_gate == "red":
         gate = "RED"
+    elif raw_gate == "needs review":
+        gate = "NEEDS REVIEW"
     else:
         gate = "NOT SCORED"
     lines = [
@@ -32,21 +47,34 @@ def format_cli(report: SuiteReport) -> str:
         lines.append(cost)
     lines.append("")
     for task in report.tasks:
+        if task.passed is True and getattr(task, "review", False):
+            lines.append(f"  REVIEW  {task.task_id} — {UNSURE_REVIEW}")
+            lines.extend(f"       {item}" for item in _extra_source_lines(task))
+            continue
         if task.passed is True:
             lines.append(f"  PASS  {task.task_id}")
             for warning in _task_warnings(task):
+                if warning == UNSURE_REVIEW:
+                    continue
                 lines.append(f"       {warning}")
+            lines.extend(f"       {item}" for item in _extra_source_lines(task))
             continue
         if task.passed is None:
             lines.append(f"  NOT SCORED  {task.task_id}")
             continue
         why = _task_fail_line(task)
         lines.append(f"  FAIL  {task.task_id} — {why}")
+        lines.extend(f"       {item}" for item in _extra_source_lines(task))
         if task.advice:
             lines.append(f"       why:  {task.advice.why}")
             lines.append(f"       fix:  {task.advice.change}")
     lines.append("")
-    if report.passed is True:
+    if raw_gate == "needs review":
+        unsure = ", ".join(
+            t.task_id for t in report.tasks if getattr(t, "review", False)
+        )
+        lines.append(f"Gate needs review. Unsure tasks: {unsure}")
+    elif report.passed is True:
         lines.append("Gate is green.")
     elif report.passed is None:
         lines.append("Quality was not scored.")
@@ -75,12 +103,16 @@ def _cost_line(report: SuiteReport) -> str:
 
 
 def format_github(report: SuiteReport) -> str:
-    if report.passed is True:
+    raw_gate = _report_gate(report)
+    if raw_gate == "green":
         gate = "GREEN"
         emoji = "🟢"
-    elif report.passed is False:
+    elif raw_gate == "red":
         gate = "RED"
         emoji = "🔴"
+    elif raw_gate == "needs review":
+        gate = "NEEDS REVIEW"
+        emoji = "⚪"
     else:
         gate = "NOT SCORED"
         emoji = "⚪"
@@ -102,7 +134,9 @@ def format_github(report: SuiteReport) -> str:
         "| --- | --- | --- |",
     ]
     for task in report.tasks:
-        if task.passed is True:
+        if task.passed is True and getattr(task, "review", False):
+            result = "review"
+        elif task.passed is True:
             result = "pass"
         elif task.passed is False:
             result = "FAIL"
@@ -179,16 +213,13 @@ def report_to_dict(report: SuiteReport) -> dict:
         "harness": report.harness,
         "sandbox": report.sandbox,
         "passed": report.passed,
-        "gate": (
-            "green"
-            if report.passed is True
-            else "red"
-            if report.passed is False
-            else "not scored"
-        ),
+        "gate": _report_gate(report),
         "passed_count": report.passed_count,
         "task_count": len(report.tasks),
         "failed_task_ids": [t.task_id for t in report.failed_tasks],
+        "review_task_ids": [
+            t.task_id for t in report.tasks if getattr(t, "review", False)
+        ],
         "tasks": tasks,
         "advice": primary,
         "note": report.note,
@@ -232,6 +263,7 @@ def _progress_task_to_dict(task: TaskProgress) -> dict:
             passed=task.passed,
             scores=list(task.scores),
             selected_skill=task.selected_skill,
+            review=bool(getattr(task, "review", False)),
             failures=list(task.failures),
             transcript=task.transcript,
             judge=task.judge,
@@ -240,7 +272,8 @@ def _progress_task_to_dict(task: TaskProgress) -> dict:
             usage=task.usage,
         )
     )
-    payload["status"] = "done"
+    payload["status"] = task.status
+    payload["review"] = bool(getattr(task, "review", False))
     payload["skipped"] = bool(task.skipped)
     payload.pop("advice", None)
     return payload
@@ -271,12 +304,24 @@ def hydrate_report_spans(payload: dict) -> dict:
     return payload
 
 
+def _task_status(task: TaskReport) -> str:
+    if task.passed is None:
+        return "not scored"
+    if task.passed is False:
+        return "fail"
+    if getattr(task, "review", False):
+        return "unsure"
+    return "pass"
+
+
 def _task_to_dict(task: TaskReport) -> dict:
     answers, kind = _task_check_answers(task)
     return {
         "id": task.task_id,
         "prompt": task.prompt,
         "passed": task.passed,
+        "review": bool(getattr(task, "review", False)),
+        "status": _task_status(task),
         "skipped": task.skipped,
         "expect_skill": task.expect_skill,
         "selected_skill": task.selected_skill,
@@ -473,6 +518,10 @@ def _cell_answer(cell: dict, answer: Any = None) -> str:
         for key in ("choice", "probability", "score"):
             if merged.get(key) in (None, "") and answer.get(key) is not None:
                 merged[key] = answer[key]
+        if answer.get("status"):
+            merged["status"] = answer.get("status")
+    if str(merged.get("status") or "") == "unsure":
+        return UNSURE_REVIEW
     choice = str(merged.get("choice") or "").strip()
     if choice:
         return choice
@@ -512,12 +561,14 @@ def _task_check_answers(task: TaskReport) -> tuple[list[dict[str, str]], str]:
         else:
             pairs = ((str(cell.get("label") or ""), cell) for cell in cells)
         for key, cell in pairs:
-            rows.append(
-                {
-                    "label": str(cell.get("label") or "").strip() or "Check",
-                    "answer": _cell_answer(cell, answers_map.get(key)),
-                }
-            )
+            row = {
+                "label": str(cell.get("label") or "").strip() or "Check",
+                "answer": _cell_answer(cell, answers_map.get(key)),
+            }
+            source = _check_source(cell, answers_map.get(key), key)
+            if source:
+                row["source"] = source
+            rows.append(row)
         return rows, "openai"
     rows: list[dict[str, str]] = []
     for score in task.scores:
@@ -528,6 +579,49 @@ def _task_check_answers(task: TaskReport) -> tuple[list[dict[str, str]], str]:
             extra = f" — {score.detail}"
         rows.append({"label": title, "answer": f"{mark}{extra}"})
     return rows, "builtin"
+
+
+def _source_label(source: str | None) -> str | None:
+    raw = str(source or "").strip().lower()
+    if raw == "log":
+        return "from the log"
+    if raw == "judge":
+        return "from the judge"
+    return None
+
+
+def _check_source(cell: Mapping[str, Any] | None, answer: Any, key: str) -> str | None:
+    from skillgate_ai.judge_bank import CHECK_CELL_ORDER, SOFT_CELL_ORDER
+
+    if key in CHECK_CELL_ORDER or key in SOFT_CELL_ORDER:
+        return None
+    for blob in (cell, answer if isinstance(answer, dict) else None):
+        if isinstance(blob, dict):
+            raw = str(blob.get("source") or "").strip().lower()
+            if raw in {"log", "judge"}:
+                return raw
+    return "judge"
+
+
+def _extra_source_lines(task: TaskReport) -> list[str]:
+    from skillgate_ai.judge_bank import CHECK_CELL_ORDER, SOFT_CELL_ORDER
+
+    judge = task.judge if isinstance(task.judge, dict) else {}
+    cells = judge.get("cells") if isinstance(judge.get("cells"), dict) else {}
+    answers = judge.get("answers") if isinstance(judge.get("answers"), dict) else {}
+    lines: list[str] = []
+    for key, cell in cells.items():
+        if key in CHECK_CELL_ORDER or key in SOFT_CELL_ORDER:
+            continue
+        if not isinstance(cell, dict):
+            continue
+        source = _source_label(_check_source(cell, answers.get(key), key))
+        if not source:
+            continue
+        label = str(cell.get("label") or key).strip()
+        choice = _cell_answer(cell, answers.get(key))
+        lines.append(f"{label}  {choice}  ({source})")
+    return lines
 
 
 def _task_warnings(task: TaskReport) -> list[str]:

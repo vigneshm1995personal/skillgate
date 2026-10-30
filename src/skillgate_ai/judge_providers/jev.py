@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any, Mapping
 from urllib.parse import urlparse
 
+from skillgate_ai.judge_context import attach_adherence_context
 from skillgate_ai.judge_openai import (
     DEFAULT_TIMEOUT_SEC,
     _answers_from_decisions_list,
@@ -55,7 +56,10 @@ class JevBackend:
                 self.base_url,
                 model=self.model,
                 text=_state_text(state),
-                questions=spec_decisions_questions(resolved, include_path=include_path),
+                questions=attach_adherence_context(
+                    spec_decisions_questions(resolved, include_path=include_path),
+                    state,
+                ),
             ),
             timeout_sec=timeout_sec,
             model=self.model,

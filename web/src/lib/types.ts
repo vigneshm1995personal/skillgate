@@ -243,6 +243,7 @@ export type JudgeAnswer = {
   probabilities?: Record<string, number>
   reason?: string
   confidence?: number | null
+  source?: string
 }
 
 export type JudgeUsage = {
@@ -282,6 +283,7 @@ export type JudgeResult = {
   require_artifacts?: boolean
   skipped_questions?: string[]
   extra_failures?: string[]
+  review?: boolean
   cells?: Record<
     string,
     {
@@ -289,6 +291,9 @@ export type JudgeResult = {
       choice?: string | null
       reason?: string | null
       probability?: number
+      status?: string
+      confidence?: number
+      source?: string
     }
   >
   citations?: { artifacts?: JudgeCitationArtifact[] }
@@ -386,7 +391,8 @@ export type SkillUpdatesPayload = {
 export type TaskResult = {
   id: string
   passed?: boolean | null
-  status?: "queued" | "running" | "done"
+  review?: boolean
+  status?: "queued" | "running" | "done" | "unsure" | "pass" | "fail"
   skipped?: boolean
   prompt?: string
   happened?: string

@@ -36,10 +36,12 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 .gate { font-size: 1.4rem; font-weight: 700; letter-spacing: 0.04em; }
 .gate.green { color: var(--green); }
 .gate.red { color: var(--red); }
+.gate.review { color: var(--muted); }
 table { width: 100%; border-collapse: collapse; }
 th, td { text-align: left; padding: 0.4rem 0.3rem; border-bottom: 1px solid var(--line); vertical-align: top; }
 .pass { color: var(--green); font-weight: 600; }
 .fail { color: var(--red); font-weight: 600; }
+.review { color: var(--muted); font-weight: 600; }
 pre { background: #f0ece3; padding: 0.75rem; overflow: auto; border-radius: 4px; white-space: pre-wrap; }
 .banner { margin: 0; padding: 0.6rem 1.25rem; background: #ece8dd; color: var(--muted); }
 .hidden { display: none; }
@@ -213,6 +215,7 @@ pre { background: #f0ece3; padding: 0.75rem; overflow: auto; border-radius: 4px;
   transform-origin: 36px 36px;
 }
 .check-pop.fail { color: var(--red); }
+.check-pop.review { color: var(--muted); }
 .check-pop path {
   stroke-dasharray: 48;
   stroke-dashoffset: 48;

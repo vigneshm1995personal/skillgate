@@ -337,7 +337,7 @@ export function GatePage({ embedded = false }: { embedded?: boolean }) {
                         hint={customerGateCopy(scopedResult?.error?.hint || "")}
                         stampLine={stampLine}
                       />
-                    ) : kind === "pass" || kind === "fail" ? (
+                    ) : kind === "pass" || kind === "fail" || kind === "review" ? (
                       <EvalPassFailPanel
                         kind={kind}
                         mode={mode}

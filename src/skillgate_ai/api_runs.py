@@ -114,7 +114,9 @@ def start_run(state: AppState, body: dict[str, Any]) -> dict[str, Any]:
             status = "error" if result.error else "done"
             passed = None if result.report is None else result.report.passed
             harness = (report or {}).get("harness") or record.get("harness")
-            decision, reason = local_gate(passed, status=status, tryout=tryout)
+            decision, reason = local_gate(
+                passed, status=status, tryout=tryout, report=report
+            )
             record.update(
                 {
                     "status": status,

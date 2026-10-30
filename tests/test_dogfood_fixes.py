@@ -19,7 +19,7 @@ from skillgate_ai.workspace_outputs import collect_workspace_outputs
 runner = CliRunner()
 
 
-def test_correct_skill_passes_even_if_description_would_not_match() -> None:
+def test_wrong_description_fails_trigger_even_if_selected() -> None:
     from skillgate_ai.ingest import Skill
 
     skill = Skill(
@@ -36,7 +36,8 @@ def test_correct_skill_passes_even_if_description_would_not_match() -> None:
     )
     evidence = TriggerEvidence(selected_skill="memo", read_paths=[], transcript="")
     score = score_skill_trigger(task, evidence, skills=[skill])
-    assert score.passed
+    assert score.passed is False
+    assert "description" in score.detail.lower()
     assert select_skill_from_descriptions(task.prompt, [skill]) != "memo"
 
 

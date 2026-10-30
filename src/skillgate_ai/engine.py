@@ -55,6 +55,7 @@ class TaskReport:
     spans: list[dict[str, Any]] | None = None
     metrics: dict[str, Any] | None = None
     model: str | None = None
+    review: bool = False
 
     def failed_scorers(self) -> list[Score]:
         return [s for s in self.scores if not s.passed]
@@ -76,6 +77,7 @@ class TaskProgress:
     usage: dict[str, Any] | None = None
     expect_skill: str | None = None
     selected_skill: str | None = None
+    review: bool = False
 
 
 @dataclass
@@ -483,6 +485,7 @@ def _run_outcome_judge(
         spec=spec,
         skill_instructions=instructions,
         agent_trajectory=trajectory,
+        spans=spans,
     )
     mismatch = expected_output_mismatch_reason(
         golden=golden_payload if isinstance(golden_payload, dict) else None,
@@ -544,10 +547,20 @@ def _live_verdict(
     det_passed: bool,
     det_failures: list[str],
     mismatch: str | None = None,
+    trigger_passed: bool | None = None,
 ) -> tuple[bool, list[str], dict[str, Any] | None]:
     """Skip leaves det in charge. Errors fail closed. No-trigger keeps det.
     A completed bool ``passed`` overrides, including a low-confidence Pass.
-    Gate ``passed`` is the return value. Cell ``passed`` stays on the judge dict."""
+    A failed skill trigger cannot pass or review. Gate ``passed`` is the
+    return value. Cell ``passed`` stays on the judge dict."""
+    if trigger_passed is False:
+        reasons = list(det_failures) or [
+            "Did not trigger (description does not match this request)"
+        ]
+        if not isinstance(judge, dict):
+            return False, reasons, judge
+        stamped = {**judge, "passed": False, "review": False}
+        return False, reasons, stamped
     if not isinstance(judge, dict):
         return det_passed, det_failures, judge
     warnings = [
@@ -768,6 +781,10 @@ def _run_task(
             steps, errors, had_path = count_path_steps(spans, result.transcript)
             det_passed = all(s.passed for s in scores)
             det_failures = [s.headline or s.detail for s in scores if not s.passed]
+            trigger_passed = all(
+                s.passed for s in scores if s.scorer == "skill_trigger"
+            )
+            review = False
             if task.expect_skill is None:
                 judged = (
                     _no_trigger_skipped_judge(judge)
@@ -795,6 +812,10 @@ def _run_task(
                     det_passed=det_passed,
                     det_failures=det_failures,
                     mismatch=mismatch,
+                    trigger_passed=trigger_passed,
+                )
+                review = bool(passed) and bool(
+                    isinstance(judged, dict) and judged.get("review")
                 )
                 judged = _maybe_explain_fail(
                     judge,
@@ -885,6 +906,7 @@ def _run_task(
                 judge=judged,
                 metrics=metrics,
                 model=result.model,
+                review=review,
             )
     finally:
         if control is not None:
@@ -1033,6 +1055,7 @@ def _eval_progress(
                     usage=getattr(done, "usage", None),
                     expect_skill=done.expect_skill,
                     selected_skill=done.selected_skill,
+                    review=bool(getattr(done, "review", False)),
                 )
             )
             continue

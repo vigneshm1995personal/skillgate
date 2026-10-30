@@ -108,9 +108,9 @@ A bad endpoint, rejected key, or empty balance fails that check. Chat and Respon
 
 Bad key, no credits, 403, 400, timeout, or a scoring outage fails closed with a plain error. It never silently passes. When scoring cannot run, `skillgate check` exits 2, not 1 (a quality red). The key is never printed or stored in history.
 
-If the scorer is not very sure about a pass, the check still passes. You will see: *The judge wasn't very sure about this one.* That warning does not change exit 0/1.
+If a blocking verdict's confidence is still below 0.5 after that majority, the check is **unsure, needs review**. It is not a gate fail: `skillgate check` exits 0, the JSON `gate` is `needs review`, the task `status` is `unsure`, and Deploy stays pending. High-confidence fails still fail in one call. Custom checks and the pass mark are unchanged.
 
-When a blocking answer's confidence is below 0.5, Skill Gate re-asks up to 3 times and takes a majority vote instead of failing on one unsure call. High-confidence fails still fail in one call. Custom checks and the pass mark are unchanged. The majority answer is what the check cells use. Individual votes are in `skillgate check --json` and `skillgate history show RUN --json` under `tasks[].judge.votes` (choice and confidence for each ask). The UI shows the majority result, not each ask.
+When a blocking answer's confidence is below 0.5, Skill Gate re-asks up to 3 times and takes a majority vote instead of failing on one unsure call. High-confidence fails still fail in one call. Custom checks about facts in the log — tool-call counts and duplicates, whether a tool was called, what a tool returned — are scored from the spans when that is possible. The judge is used only when the check cannot be computed. A duplicate refund in the log still fails. CLI, JSON (`tasks[].judge.cells[].source` and `check_answers[].source`), and the local UI say whether each custom check was computed `from the log` or `from the judge`. Word the ask as a log fact when you want span scoring: "more than once" / "duplicate" / "second call" for counts, "called `tool_name`" for whether a tool ran, or "returned" / "result" for a tool's output. Use a backtick or snake_case tool name. A question that is about the customer's reply is scored by the judge. The majority answer is what the check cells use. Individual votes are in `skillgate check --json` and `skillgate history show RUN --json` under `tasks[].judge.votes` (choice and confidence for each ask). The UI shows the majority result, not each ask. A review run is `NEEDS REVIEW` in the CLI and `gate: needs review` in JSON. Predicate answers use `probability` (not `noul`).
 
 Blocking questions fail the check (`on_fail` is Fail the check). By default that is the five built-in checks: **Got the job done?**, **Got it right?**, **Followed the rules?**, **Used the right evidence/actions?**, and **Delivered a good result?**. **How it ran** is Warn only. Extra questions you add default to Fail the check. A 0.33 on **Followed the rules?** is blocking, so it is re-asked.
 
@@ -127,7 +127,7 @@ A red names the failing check and includes the judge's reason. Example: `Got the
     SKILLGATE_JEV_API_KEY: ${{ secrets.SKILLGATE_JEV_API_KEY }}
 ```
 
-Leave `version` unset for the latest release. Until 0.7.10 is published, install from source (`pip install -e .`) instead of pinning that version. The action reads `SKILLGATE_*` variables and does not print them. It does not switch to another decision model. Do not add a required scoring secret to merge CI.
+Leave `version` unset for the latest release. Until 0.7.11 is published, install from source (`pip install -e .`) instead of pinning that version. The action reads `SKILLGATE_*` variables and does not print them. It does not switch to another decision model. Do not add a required scoring secret to merge CI.
 
 A manual install still works:
 
@@ -140,7 +140,7 @@ A manual install still works:
     DECISION_MODEL_API_KEY: ${{ secrets.DECISION_MODEL_API_KEY }}
 ```
 
-Until 0.7.10 is published, replace that install with `pip install -e .` from a clone of this repo.
+Until 0.7.11 is published, replace that install with `pip install -e .` from a clone of this repo.
 
 ## Live smoke (not CI)
 
