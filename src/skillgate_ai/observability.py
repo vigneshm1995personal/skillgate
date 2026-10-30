@@ -25,7 +25,7 @@ def span(_name: str, *_args: Any, **_kwargs: Any) -> Iterator[None]:
     yield
 
 
-def set_eval_passed(_passed: bool) -> None:
+def set_eval_passed(_passed: bool | None) -> None:
     return None
 
 

@@ -225,7 +225,7 @@ def test_live_verdict_error_is_not_passed_when_det_green() -> None:
         det_passed=True,
         det_failures=[],
     )
-    assert passed is False
+    assert passed is None
     assert failures == ["The judge couldn't score this check (HTTP 402)."]
     assert stamped is not None
     assert stamped.get("quality_unscored") is True

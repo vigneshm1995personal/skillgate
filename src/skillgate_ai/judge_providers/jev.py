@@ -98,11 +98,16 @@ class JevBackend:
             timeout_sec=timeout_sec,
             model=self.model,
             post=self._post,
+            retries=False,
             who=DISPLAY_NAME,
         )
         if result.get("status") == "ok":
             return {"ok": True, "message": "Connected to the judge."}
-        return {"ok": False, "message": _public_failure(result)}
+        payload: dict[str, Any] = {"ok": False, "message": _public_failure(result)}
+        upstream = result.get("upstream")
+        if isinstance(upstream, str) and upstream.strip():
+            payload["upstream"] = upstream.strip()
+        return payload
 
 
 def _score_levels(levels: Any) -> list[str]:

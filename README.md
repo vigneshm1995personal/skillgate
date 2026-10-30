@@ -146,6 +146,7 @@ skillgate judge test
 - `This decision model needs a model.` Pass `--model`, or pick one from the list.
 - `Pick a decision model before running a live check.` Run one `skillgate judge provider set` command above.
 - `skillgate judge provider show` prints the option id, its model, and its base URL. With none selected, it prints `Pick a decision model before running a live check.` and exits 2.
+- A scoring outage is **not scored** in `--json` and history, not a red or fail, and still exits 2. `skillgate judge test --verbose` (or `skillgate check --verbose`) prints the sanitized upstream reason. The message never includes HTTP codes, keys, or a provider name.
 
 ## Features
 

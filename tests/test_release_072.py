@@ -467,7 +467,7 @@ def test_judge_provider_test_accepts_key_env(
     monkeypatch.delenv("SKILLGATE_OPENAI_API_KEY", raising=False)
     seen: dict[str, str] = {}
 
-    def fake_ping(cfg):
+    def fake_ping(cfg, **_kwargs):
         seen["key"] = cfg.openai_api_key or ""
         return {"ok": True, "message": "Connected via the Decisions API.", "scoring_endpoint": "decisions"}
 

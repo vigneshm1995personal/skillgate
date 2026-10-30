@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -320,7 +321,7 @@ def test_jev_scoring_failure_names_a_retryable_cause_not_scoring_failed(
     assert "500" not in public
 
 
-def test_jev_ping_retries_transient_500(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_jev_ping_does_not_retry_transient_500(monkeypatch: pytest.MonkeyPatch) -> None:
     from skillgate_ai.judge_providers.jev import JevBackend
 
     monkeypatch.setattr("skillgate_ai.openai_http.time.sleep", lambda _s: None)
@@ -336,8 +337,8 @@ def test_jev_ping_retries_transient_500(monkeypatch: pytest.MonkeyPatch) -> None
         model="typesafe/jev-1.14",
         post=post,
     ).ping()
-    assert result["ok"] is True
-    assert len(post.calls) == 2
+    assert result["ok"] is False
+    assert len(post.calls) == 1
 
 
 def test_scoring_error_exits_2_not_a_quality_red(
@@ -456,3 +457,295 @@ def test_jev_low_confidence_blocking_adherence_is_reasked_and_records_votes() ->
     assert len(votes) == 3
     assert votes[0]["instruction_adherence"]["choice"] == "Major deviation"
     assert votes[0]["instruction_adherence"]["confidence"] == 0.33
+
+
+def _official_openrouter_200(answers: dict[str, dict[str, object]]) -> dict[str, object]:
+    """Documented Decisions 200: top-level answers, dict probabilities, usage.cost."""
+    return {
+        "id": "gen-dec-1790265859-EaXKST7hul1Wcqots1ZK",
+        "model": "typesafe/jev-1.14-20261001",
+        "provider": "TypeSafe",
+        "answers": answers,
+        "usage": {"input_tokens": 476, "output_tokens": 70, "cost": 0.000019992},
+    }
+
+
+def _official_choice_answers(choices: dict[str, str] | None = None) -> dict[str, dict[str, object]]:
+    from test_judge_openai import PASS_CHOICES
+
+    merged = {**PASS_CHOICES, **(choices or {})}
+    rows: dict[str, dict[str, object]] = {}
+    for key, value in merged.items():
+        rows[key] = {
+            "type": "choice",
+            "choice": value,
+            "confidence": 0.91,
+            "probabilities": {value: 0.91},
+        }
+    return rows
+
+
+def _production_jev(post: FakePost):
+    from skillgate_ai.judge_openai import OutcomeJudge
+    from skillgate_ai.judge_providers.jev import JevBackend
+
+    backend = JevBackend(
+        api_key="jev-key",
+        base_url="https://openrouter.ai/api/v1",
+        model="typesafe/jev-1.14",
+        post=post,
+    )
+    return OutcomeJudge(
+        backend,
+        display_name="the judge",
+        provider="jev",
+        chosen=True,
+        supports_why=False,
+        supports_confidence=True,
+    )
+
+
+def test_jev_official_200_scores_the_real_openrouter_request_shape() -> None:
+    calls: list[dict] = []
+
+    def post(url, headers=None, json=None, timeout=None):
+        del headers, timeout
+        body = json or {}
+        calls.append({"url": str(url), "json": body})
+        questions = body.get("questions") if isinstance(body.get("questions"), dict) else {}
+        if "connection_test" in questions and set(questions) == {"connection_test"}:
+            return FakeResponse(
+                200,
+                _official_openrouter_200(
+                    {"connection_test": {"type": "noul", "noul": 0.99}}
+                ),
+            )
+        return FakeResponse(200, _official_openrouter_200(_official_choice_answers()))
+
+    from skillgate_ai.judge_providers.jev import JevBackend
+    from skillgate_ai.judge_spec import resolve_judge_spec
+
+    backend = JevBackend(
+        api_key="jev-key",
+        base_url="https://openrouter.ai/api/v1",
+        model="typesafe/jev-1.14",
+        post=post,
+    )
+    ping = backend.ping()
+    assert ping["ok"] is True, ping
+    ping_body = calls[0]["json"]
+    assert calls[0]["url"] == "https://openrouter.ai/api/alpha/decisions"
+    assert ping_body["model"] == "typesafe/jev-1.14"
+    assert ping_body["state"] == "ping"
+    assert "input" not in ping_body
+    assert ping_body["questions"]["connection_test"]["type"] == "noul"
+    assert set(ping_body["questions"]["connection_test"]["criteria"]) == {"true", "false"}
+    assert "supports_confidence" not in ping_body
+
+    judged = _production_jev(post).judge(
+        "goal",
+        [],
+        "tail",
+        spec=resolve_judge_spec(),
+        path={"had_path": True, "steps": 1},
+    )
+    eval_body = calls[1]["json"]
+    assert isinstance(eval_body["state"], str) and eval_body["state"]
+    assert eval_body["questions"]["task_completion"]["type"] == "choice"
+    assert "Fully completed" in eval_body["questions"]["task_completion"]["criteria"]
+    assert "supports_confidence" not in eval_body
+    assert judged["status"] == "completed"
+    assert judged["passed"] is True
+    task = judged["answers"]["task_completion"]
+    assert task["choice"] == "Fully completed"
+    assert task["confidence"] == 0.91
+    assert task["probabilities"][0]["value"] == "Fully completed"
+    blob = json.dumps(judged)
+    assert "TypeSafe" not in blob
+    assert "OpenRouter" not in blob
+    assert "Jev" not in blob
+    assert len(calls) == 2
+
+
+def test_jev_200_error_envelope_is_a_scoring_failure_not_connected() -> None:
+    from skillgate_ai.judge_spec import resolve_judge_spec
+
+    payload = {
+        "id": "gen-dec-error",
+        "error": {
+            "message": "OpenRouter: Invalid schema for questions.connection_test sk-or-v1-secret",
+            "code": 400,
+        },
+    }
+    post = FakePost([FakeResponse(200, payload), FakeResponse(200, payload)])
+    from skillgate_ai.judge_providers.jev import JevBackend
+
+    ping = JevBackend(
+        api_key="sk-or-v1-secret",
+        base_url="https://openrouter.ai/api/v1",
+        model="typesafe/jev-1.14",
+        post=post,
+    ).ping()
+    assert ping["ok"] is False
+    message = str(ping.get("message") or "")
+    assert "OpenRouter" not in message
+    assert "sk-or-v1-secret" not in message
+    judged = _production_jev(post).judge(
+        "goal",
+        [],
+        "tail",
+        spec=resolve_judge_spec(),
+        path={"had_path": True, "steps": 1},
+    )
+    assert judged["status"] == "error"
+    blob = json.dumps(judged)
+    assert "OpenRouter" not in blob
+    assert "sk-or-v1-secret" not in blob
+
+
+def test_jev_verbose_shows_sanitized_upstream_reason(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from conftest import plain_text
+    from typer.testing import CliRunner
+
+    from skillgate_ai.cli import app
+    from skillgate_ai.keys import set_vault_key
+
+    monkeypatch.setenv("SKILLGATE_ROOT", str(tmp_path))
+    set_vault_key(tmp_path, "JEV_API_KEY", "sk-or-v1-secret")
+    runner = CliRunner()
+    saved = runner.invoke(app, ["judge", "provider", "set", "jev"])
+    assert saved.exit_code == 0, saved.stdout + saved.stderr
+
+    def post(url, headers=None, json=None, timeout=None):
+        del url, headers, json, timeout
+        return FakeResponse(
+            400,
+            {
+                "error": {
+                    "message": "OpenRouter rejected questions.task_completion criteria sk-or-v1-secret"
+                }
+            },
+        )
+
+    monkeypatch.setattr("skillgate_ai.openai_http.httpx.post", post)
+    quiet = runner.invoke(app, ["judge", "test"])
+    quiet_out = plain_text(quiet.stdout + quiet.stderr)
+    assert quiet.exit_code == 1, quiet_out
+    assert "OpenRouter" not in quiet_out
+    assert "sk-or-v1-secret" not in quiet_out
+    verbose = runner.invoke(app, ["judge", "test", "--verbose"])
+    verbose_out = plain_text(verbose.stdout + verbose.stderr)
+    assert verbose.exit_code == 1, verbose_out
+    assert "criteria" in verbose_out.lower()
+    assert "OpenRouter" not in verbose_out
+    assert "sk-or-v1-secret" not in verbose_out
+    assert "Jev" not in verbose_out
+
+
+def test_scoring_outage_json_and_history_say_not_scored_not_fail(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from conftest import enable_cursor_agent, plain_text
+    from typer.testing import CliRunner
+
+    from skillgate_ai.cli import app
+    from skillgate_ai.engine import _live_verdict
+    from skillgate_ai.gate import persist_eval
+    from skillgate_ai.history import load_history
+    from skillgate_ai.report import format_cli, report_to_dict
+    from skillgate_ai.scorers import Score
+
+    passed, failures, judged = _live_verdict(
+        {
+            "status": "error",
+            "provider": "jev",
+            "reasons": ["The judge couldn't score this check. Retry — this is often temporary."],
+            "upstream": "Invalid schema for questions.task_completion criteria",
+        },
+        "pdf",
+        det_passed=True,
+        det_failures=[],
+    )
+    assert passed is None
+    assert judged is not None
+    assert judged.get("quality_unscored") is True
+    task = TaskReport(
+        task_id="extract-pdf",
+        prompt="extract",
+        expect_skill="pdf",
+        passed=passed,
+        scores=[
+            Score(
+                scorer="skill_trigger",
+                passed=True,
+                detail="Triggered `pdf`",
+                expected="pdf",
+                actual="pdf",
+            )
+        ],
+        selected_skill="pdf",
+        failures=failures,
+        judge=judged,
+    )
+    report = SuiteReport(
+        suite="pdf-pack",
+        title="Dataset",
+        skill="pdf",
+        harness="cursor-agent",
+        sandbox="local",
+        passed=None,
+        tasks=[task],
+        skill_path=str(tmp_path / "pdf"),
+        config={"judge": {"provider": "jev", "display_name": "the judge"}},
+    )
+    payload = report_to_dict(report)
+    assert payload["passed"] is None
+    assert payload["gate"] == "not scored"
+    assert payload["tasks"][0]["passed"] is None
+    happened = str(payload["tasks"][0].get("happened") or "").lower()
+    assert happened == "not scored"
+    assert payload["gate"] != "red"
+    text = format_cli(report).lower()
+    assert "not scored" in text
+    assert "gate is red" not in text
+
+    pack = tmp_path / "skills" / "pdf"
+    (pack / "evals").mkdir(parents=True)
+    (pack / "SKILL.md").write_text(
+        "---\nname: pdf\ndescription: Read PDFs.\n---\n# pdf\n",
+        encoding="utf-8",
+    )
+    persist_eval(
+        pack_root=pack,
+        run_id="outage-1",
+        passed=None,
+        report=payload,
+        config={"judge": {"provider": "jev"}},
+    )
+    rows = load_history(pack, limit=1)
+    assert rows
+    assert rows[0].get("passed") is None
+    monkeypatch.setenv("SKILLGATE_ROOT", str(tmp_path))
+    enable_cursor_agent(monkeypatch, tmp_path)
+    shown = CliRunner().invoke(app, ["history", "show", "outage-1", "--pack", str(pack)])
+    listed = CliRunner().invoke(app, ["history", "--pack", str(pack)])
+    shown_out = plain_text(shown.stdout + shown.stderr)
+    listed_out = plain_text(listed.stdout + listed.stderr)
+    assert shown.exit_code == 0, shown_out
+    assert listed.exit_code == 0, listed_out
+    assert "not scored" in shown_out.lower()
+    assert "not scored" in listed_out.lower()
+    assert "  fail" not in shown_out.lower()
+    assert re.search(r"\bfail\b", listed_out.lower()) is None
+    json_shown = CliRunner().invoke(
+        app, ["history", "show", "outage-1", "--pack", str(pack), "--json"]
+    )
+    json_blob = json_shown.stdout or ""
+    assert "not scored" in json_blob.lower()
+    parsed = json.loads(json_blob)
+    assert parsed.get("passed") is None
+    assert parsed.get("gate") != "red"
+    report_gate = (parsed.get("report") or {}).get("gate")
+    assert report_gate == "not scored"

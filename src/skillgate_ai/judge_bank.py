@@ -359,15 +359,25 @@ def extract_probabilities(answer: Any) -> list[dict[str, Any]] | None:
     if not isinstance(answer, Mapping):
         return None
     raw = answer.get("probabilities")
+    rows: list[dict[str, Any]] = []
+    if isinstance(raw, Mapping):
+        for value, probability in raw.items():
+            row: dict[str, Any] = {}
+            if value is not None:
+                row["value"] = value
+            if isinstance(probability, (int, float)) and not isinstance(probability, bool):
+                row["probability"] = float(probability)
+            if row:
+                rows.append(row)
+        return rows or None
     if not isinstance(raw, list):
         return None
-    rows: list[dict[str, Any]] = []
     for item in raw:
         if not isinstance(item, Mapping):
             continue
         value = item.get("value")
         probability = item.get("probability")
-        row: dict[str, Any] = {}
+        row = {}
         if value is not None:
             row["value"] = value
         if isinstance(probability, (int, float)) and not isinstance(probability, bool):

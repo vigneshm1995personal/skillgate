@@ -265,6 +265,10 @@ def test_docs_cover_escalation_majority_named_reds_and_no_judge() -> None:
     assert "Fail the check" in judge
     assert "exit 2" in judge.lower()
     assert "Scoring failed." not in judge
+    assert "--verbose" in judge
+    assert "not scored" in judge.lower()
+    assert "--verbose" in readme
+    assert "not scored" in readme.lower()
 
 
 def test_judge_docs_require_a_decision_model() -> None:

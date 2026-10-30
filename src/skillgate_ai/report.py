@@ -11,7 +11,12 @@ from skillgate_ai.metrics import suite_metrics_summary
 
 
 def format_cli(report: SuiteReport) -> str:
-    gate = "GREEN" if report.passed else "RED"
+    if report.passed is True:
+        gate = "GREEN"
+    elif report.passed is False:
+        gate = "RED"
+    else:
+        gate = "NOT SCORED"
     lines = [
         f"Skill Gate  ·  {report.title}  ·  {gate}",
         f"skill `{report.skill}`  ·  {report.passed_count}/{len(report.tasks)} tasks passed",
@@ -27,20 +32,24 @@ def format_cli(report: SuiteReport) -> str:
         lines.append(cost)
     lines.append("")
     for task in report.tasks:
-        mark = "PASS" if task.passed else "FAIL"
-        if task.passed:
-            lines.append(f"  {mark}  {task.task_id}")
+        if task.passed is True:
+            lines.append(f"  PASS  {task.task_id}")
             for warning in _task_warnings(task):
                 lines.append(f"       {warning}")
             continue
+        if task.passed is None:
+            lines.append(f"  NOT SCORED  {task.task_id}")
+            continue
         why = _task_fail_line(task)
-        lines.append(f"  {mark}  {task.task_id} — {why}")
+        lines.append(f"  FAIL  {task.task_id} — {why}")
         if task.advice:
             lines.append(f"       why:  {task.advice.why}")
             lines.append(f"       fix:  {task.advice.change}")
     lines.append("")
-    if report.passed:
+    if report.passed is True:
         lines.append("Gate is green.")
+    elif report.passed is None:
+        lines.append("Quality was not scored.")
     else:
         failed = ", ".join(t.task_id for t in report.failed_tasks)
         lines.append(f"Gate is red. Failed tasks: {failed}")
@@ -66,8 +75,15 @@ def _cost_line(report: SuiteReport) -> str:
 
 
 def format_github(report: SuiteReport) -> str:
-    gate = "GREEN" if report.passed else "RED"
-    emoji = "🟢" if report.passed else "🔴"
+    if report.passed is True:
+        gate = "GREEN"
+        emoji = "🟢"
+    elif report.passed is False:
+        gate = "RED"
+        emoji = "🔴"
+    else:
+        gate = "NOT SCORED"
+        emoji = "⚪"
     lines = [
         f"## {emoji} Skill Gate · {gate}",
         "",
@@ -86,14 +102,19 @@ def format_github(report: SuiteReport) -> str:
         "| --- | --- | --- |",
     ]
     for task in report.tasks:
-        result = "pass" if task.passed else "FAIL"
-        if task.passed:
-            what = _task_happened(task)
+        if task.passed is True:
+            result = "pass"
+        elif task.passed is False:
+            result = "FAIL"
         else:
+            result = "not scored"
+        if task.passed is False:
             what = _task_fail_line(task)
             extra = "; ".join(task.failures[1:]) if len(task.failures) > 1 else ""
             if extra:
                 what = f"{what}; {extra}"
+        else:
+            what = _task_happened(task)
         lines.append(f"| `{task.task_id}` | **{result}** | {what} |")
     failed = report.failed_tasks
     if failed:
@@ -133,7 +154,7 @@ def progress_to_dict(progress: EvalProgress) -> dict:
         "task_count": progress.task_count,
         "completed_count": progress.completed_count,
         "current_task_id": progress.current_task_id,
-        "failed_task_ids": [task.task_id for task in done if not task.passed],
+        "failed_task_ids": [task.task_id for task in done if task.passed is False],
         "tasks": [_progress_task_to_dict(task) for task in progress.tasks],
         "advice": None,
         "config": progress.config,
@@ -158,7 +179,13 @@ def report_to_dict(report: SuiteReport) -> dict:
         "harness": report.harness,
         "sandbox": report.sandbox,
         "passed": report.passed,
-        "gate": "green" if report.passed else "red",
+        "gate": (
+            "green"
+            if report.passed is True
+            else "red"
+            if report.passed is False
+            else "not scored"
+        ),
         "passed_count": report.passed_count,
         "task_count": len(report.tasks),
         "failed_task_ids": [t.task_id for t in report.failed_tasks],
@@ -202,7 +229,7 @@ def _progress_task_to_dict(task: TaskProgress) -> dict:
             task_id=task.task_id,
             prompt=task.prompt,
             expect_skill=task.expect_skill,
-            passed=bool(task.passed),
+            passed=task.passed,
             scores=list(task.scores),
             selected_skill=task.selected_skill,
             failures=list(task.failures),
@@ -417,6 +444,8 @@ def _named_builtin_fail(judge: dict[str, Any]) -> str | None:
 
 def _task_happened(task: TaskReport) -> str:
     """Plain What happened line. Never blank."""
+    if task.passed is None:
+        return "not scored"
     if task.passed:
         warnings = _task_warnings(task)
         if warnings:

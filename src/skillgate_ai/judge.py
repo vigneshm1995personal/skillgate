@@ -274,7 +274,7 @@ def _custom_judge(cfg: LLMConfig, *, chosen: bool) -> Judge:
     )
 
 
-def ping_judge(cfg: LLMConfig) -> dict[str, str | bool]:
+def ping_judge(cfg: LLMConfig, *, verbose: bool = False) -> dict[str, str | bool]:
     from skillgate_ai.judge_setup import classify_test_result, configured_key, key_mismatch
     from skillgate_ai.openai_http import redact_secrets
 
@@ -305,6 +305,10 @@ def ping_judge(cfg: LLMConfig) -> dict[str, str | bool]:
             raw = {"ok": False, "message": "This decision model cannot be tested."}
     ok = bool(raw.get("ok"))
     message = redact_secrets(classify_test_result(ok, str(raw.get("message") or "")), secret)
+    if verbose and not ok:
+        extra = redact_secrets(str(raw.get("upstream") or ""), secret)
+        if extra and extra.lower() not in message.lower():
+            message = f"{message} {extra}".strip()
     return {"ok": ok, "message": message}
 
 

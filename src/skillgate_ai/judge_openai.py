@@ -687,7 +687,7 @@ class OutcomeJudge:
         ]
         if evaluated.get("status") != "completed":
             reason = str(evaluated.get("reason") or "The judge couldn't score this check.")
-            return self._finish_payload(
+            payload = self._finish_payload(
                 self._payload(
                     status="error",
                     model=model,
@@ -709,6 +709,10 @@ class OutcomeJudge:
                     getattr(self.backend, "supports_confidence", self.supports_confidence)
                 ),
             )
+            upstream = evaluated.get("upstream")
+            if isinstance(upstream, str) and upstream.strip():
+                payload["upstream"] = upstream.strip()
+            return payload
         answers = evaluated.get("answers") if isinstance(evaluated.get("answers"), dict) else {}
         if not include_path:
             answers = {key: value for key, value in answers.items() if key not in SOFT_CELL_ORDER}
@@ -887,7 +891,11 @@ def ping_openai_backend(backend: JudgeBackend, *, display_name: str = DISPLAY_NA
             "message": "Connected to the judge.",
             "scoring_endpoint": "decisions",
         }
-    return {"ok": False, "message": str(result.get("reason") or "Could not connect.")}
+    payload = {"ok": False, "message": str(result.get("reason") or "Could not connect.")}
+    upstream = result.get("upstream")
+    if isinstance(upstream, str) and upstream.strip():
+        payload["upstream"] = upstream.strip()
+    return payload
 
 
 def make_openai_judge(

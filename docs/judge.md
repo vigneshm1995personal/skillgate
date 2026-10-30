@@ -95,7 +95,7 @@ skillgate judge test
 - `skillgate judge provider show` and `set` print the option id, its model, and its base URL. With none selected, `show` prints `Pick a decision model before running a live check.` and exits 2.
 - `This decision model needs a model.` Pass `--model`, or pick one from the list.
 - `Pick a decision model before running a live check.` Run one `skillgate judge provider set` command above. A check that never starts is not saved as a scored failure.
-- `The judge couldn't score this check. Retry — this is often temporary.` The scoring endpoint had a temporary error. Skill Gate retries those. If it still cannot score, the check cannot run (exit 2), not a quality red (exit 1). Run `skillgate judge test` again. The message never includes HTTP codes or a provider name.
+- `The judge couldn't score this check. Retry — this is often temporary.` The scoring endpoint had a temporary error. Skill Gate retries those on a scored check. `skillgate judge test` is a single connection probe and does not retry. If it still cannot score, the check cannot run (exit 2), not a quality red (exit 1). `--json` and history record that run as **not scored**, not fail or red. Run `skillgate judge test --verbose` (or `skillgate check --verbose`) to print the sanitized upstream reason. The message never includes HTTP codes, keys, or a provider name.
 
 A bad endpoint, rejected key, or empty balance fails that check. Chat and Responses completion models are not judges. Setting the judge backend to `responses`, `chat`, or `completions` fails the run. Older chat-style scoring setups fail until you pick a registered decision model.
 

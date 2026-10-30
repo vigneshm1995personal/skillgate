@@ -15,6 +15,7 @@ from skillgate_ai.ingest import Skill, ingest_skill, ingest_skills
 from skillgate_ai.judge import Judge, SkipJudge, default_judge, judge_stamp
 from skillgate_ai.live import KILL, CheckAborted, RunControl
 from skillgate_ai.observability import breadcrumb_task, report_eval_outcome, set_eval_passed, span
+from skillgate_ai.judge_bank import UNUSABLE_ANSWER
 from skillgate_ai.output_match import expected_output_mismatch_reason
 from skillgate_ai.pack import resolve_input_file
 from skillgate_ai.sandbox import Sandbox, open_sandbox, prepare_workspace
@@ -25,12 +26,20 @@ SKIP_FAILURE = "Skipped by user"
 KILL_FAILURE = "Killed by user"
 
 
+def _suite_passed(tasks: list[TaskReport]) -> bool | None:
+    if any(task.passed is False for task in tasks):
+        return False
+    if any(task.passed is None for task in tasks):
+        return None
+    return True
+
+
 @dataclass
 class TaskReport:
     task_id: str
     prompt: str
     expect_skill: str | None
-    passed: bool
+    passed: bool | None
     scores: list[Score]
     selected_skill: str | None
     failures: list[str] = field(default_factory=list)
@@ -91,7 +100,7 @@ class SuiteReport:
     skill: str
     harness: str
     sandbox: str
-    passed: bool
+    passed: bool | None
     tasks: list[TaskReport]
     note: str | None = None
     skill_description: str = ""
@@ -111,7 +120,7 @@ class SuiteReport:
 
     @property
     def failed_tasks(self) -> list[TaskReport]:
-        return [t for t in self.tasks if not t.passed]
+        return [t for t in self.tasks if t.passed is False]
 
     @property
     def usage_totals(self) -> dict[str, Any] | None:
@@ -294,7 +303,7 @@ def run_eval(
             pack_fingerprint=stamp_fp,
             pack_case_ids=stamp_ids,
         )
-    passed = all(t.passed for t in reports)
+    passed = _suite_passed(reports)
     primary_skill = skills[0] if skills else None
     suite_advice = advise_suite(primary_skill, reports, reference=reference) if primary_skill else None
     set_eval_passed(passed)
@@ -568,8 +577,11 @@ def _live_verdict(
             "quality_unscored": True,
             "reason": reason,
         }
-        failures = list(det_failures) if not det_passed else [reason]
-        return False, failures, unscored
+        if not det_passed:
+            return False, list(det_failures), unscored
+        if reason == UNUSABLE_ANSWER:
+            return False, [reason], {**unscored, "passed": False}
+        return None, [reason], unscored
     if judge.get("status") == "skip" or judge.get("passed") is None:
         return det_passed, det_failures, judge
     passed = bool(judge.get("passed"))
