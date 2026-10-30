@@ -206,8 +206,15 @@ def parse_extra_question(raw: Mapping[str, Any] | Any) -> JudgeQuestion:
         raise SuiteError("Each extra question must be a mapping.", exit_code=2)
     qid = str(raw.get("id") or "").strip()
     if not qid or not QUESTION_ID_RE.match(qid) or len(qid) > 64:
+        suggested = re.sub(r"[^a-z0-9]+", "_", qid.lower()).strip("_")[:64]
+        hint = "The question was not added. Fix the id before running a check."
+        if suggested and suggested != qid and QUESTION_ID_RE.match(suggested):
+            hint = f"Use underscores: {suggested}. {hint}"
+        elif "-" in qid:
+            hint = f"Use underscores, not hyphens. {hint}"
         raise SuiteError(
             "Extra question id must be lowercase letters, digits, and underscores (max 64).",
+            hint=hint,
             exit_code=2,
         )
     if qid in RESERVED_IDS:

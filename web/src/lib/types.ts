@@ -243,6 +243,7 @@ export type JudgeAnswer = {
   probabilities?: Record<string, number>
   reason?: string
   confidence?: number | null
+  source?: string
 }
 
 export type JudgeUsage = {
@@ -292,6 +293,7 @@ export type JudgeResult = {
       probability?: number
       status?: string
       confidence?: number
+      source?: string
     }
   >
   citations?: { artifacts?: JudgeCitationArtifact[] }

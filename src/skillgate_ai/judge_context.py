@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
@@ -342,3 +343,103 @@ def _cap_instructions(text: str) -> str | None:
     if len(cleaned) <= GOLDEN_TAIL_CHARS:
         return cleaned
     return cleaned[:GOLDEN_TAIL_CHARS]
+
+
+_RULES_CAP = 2500
+_EVIDENCE_CAP = 1500
+_ADHERENCE_NOTE = (
+    "Grade only against the listed rules and the evidence below. "
+    "When the listed rules show no violation and the deterministic scorers passed, "
+    "answer Fully followed with high confidence. Use Minor deviation only when a "
+    "listed rule was skipped in a small way. Do not hedge or split confidence "
+    "between Fully followed and Minor deviation when no listed rule was broken."
+)
+
+
+def attach_adherence_context(
+    questions: list[dict[str, Any]],
+    state: Mapping[str, Any] | None,
+) -> list[dict[str, Any]]:
+    """Put the skill's rules and the run evidence on Followed the rules?"""
+    if not questions or not isinstance(state, Mapping):
+        return questions
+    extra = _adherence_extra(state)
+    if not extra:
+        return questions
+    out: list[dict[str, Any]] = []
+    for question in questions:
+        if not isinstance(question, dict) or question.get("name") != "instruction_adherence":
+            out.append(question)
+            continue
+        item = dict(question)
+        instructions = str(item.get("instructions") or "Followed the rules?").rstrip()
+        if instructions.endswith("Pick exactly one."):
+            instructions = instructions[: -len("Pick exactly one.")].rstrip()
+        item["instructions"] = f"{instructions} {extra} Pick exactly one."
+        choices = item.get("choices")
+        if isinstance(choices, list):
+            item["choices"] = [
+                _enrich_adherence_choice(choice) if isinstance(choice, dict) else choice
+                for choice in choices
+            ]
+        out.append(item)
+    return out
+
+
+def _adherence_extra(state: Mapping[str, Any]) -> str:
+    rules = _excerpt(state.get("skill_instructions"), _RULES_CAP)
+    evidence = _evidence_excerpt(state)
+    if not rules and not evidence:
+        return ""
+    parts = [_ADHERENCE_NOTE]
+    if rules:
+        parts.append(f"Rules:\n{rules}")
+    if evidence:
+        parts.append(f"Evidence:\n{evidence}")
+    return "\n\n".join(parts)
+
+
+def _evidence_excerpt(state: Mapping[str, Any]) -> str:
+    bits: list[str] = []
+    scores = state.get("scorer_results")
+    if isinstance(scores, list):
+        for item in scores:
+            if not isinstance(item, Mapping):
+                continue
+            name = str(item.get("scorer") or "").strip()
+            detail = str(item.get("detail") or item.get("headline") or "").strip()
+            if name:
+                mark = "passed" if item.get("passed") else "failed"
+                bits.append(f"{name} {mark}" + (f" — {detail}" if detail else ""))
+    expected = state.get("expected_outcome")
+    if isinstance(expected, str) and expected.strip():
+        bits.append(f"expected outcome: {expected.strip()}")
+    files = state.get("workspace_files") or state.get("artifacts")
+    if isinstance(files, list):
+        names = [
+            str(row.get("path"))
+            for row in files
+            if isinstance(row, Mapping) and row.get("path")
+        ]
+        if names:
+            bits.append("workspace files: " + ", ".join(names[:12]))
+    return _excerpt("\n".join(bits), _EVIDENCE_CAP)
+
+
+def _excerpt(raw: Any, cap: int) -> str:
+    text = str(raw or "").strip()
+    if not text:
+        return ""
+    return text if len(text) <= cap else text[:cap]
+
+
+def _enrich_adherence_choice(choice: dict[str, Any]) -> dict[str, Any]:
+    value = str(choice.get("value") or "")
+    if value != "Fully followed":
+        return choice
+    item = dict(choice)
+    description = str(item.get("description") or "").rstrip()
+    note = "When listed rules show no violation, pick this with high confidence."
+    if note.lower() not in description.lower():
+        item["description"] = f"{description} {note}".strip()
+    return item

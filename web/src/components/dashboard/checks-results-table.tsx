@@ -303,7 +303,10 @@ function OpenedDetails({
           {answers.map((item) => (
             <div key={item.id} className="mb-2">
               <dt className="font-medium">{item.label}</dt>
-              <dd className="text-muted-foreground m-0">{item.answer}</dd>
+              <dd className="text-muted-foreground m-0">
+                {item.answer}
+                {item.source ? ` (${item.source})` : ""}
+              </dd>
             </div>
           ))}
         </dl>

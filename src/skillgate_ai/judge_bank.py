@@ -83,9 +83,11 @@ OUTCOME_SCORING_NOTES = (
     "tells the customer and writes an owner report — doing that is Fully completed, not "
     "unfinished. "
     "When workspace_files show the expected deliverable (letter, spreadsheet, export, etc.) "
-    "with correct substance and task_completion is Fully completed, use Minor deviation (or "
-    "Fully followed) for instruction_adherence when the only gap is style, tool choice, or "
-    "cosmetic steps — do not label those Major deviation. Major deviation fails the check. "
+    "with correct substance and the listed SKILL.md rules show no violation, answer Fully "
+    "followed for instruction_adherence. Use Minor deviation only when a listed rule was "
+    "skipped in a small way. Do not hedge or split confidence between Fully followed and "
+    "Minor deviation when no listed rule was broken. Style, tool choice, or cosmetic steps "
+    "that are not listed rules are not a deviation. Major deviation fails the check. "
     "Use Fully supported / Partially supported for evidence_action_validity when outputs "
     "substantiate the result. "
     "instruction_adherence: Violated and Major deviation fail; only Minor deviation or Fully "
@@ -128,14 +130,19 @@ OUTCOME_QUESTIONS: dict[str, dict[str, Any]] = {
         "instructions": "Followed the rules?",
         "criteria": {
             "Fully followed": (
-                "Followed the user check and the skill's SKILL.md instructions fully. "
-                "Refusing a shortcut or requiring tests when SKILL.md demands it counts as following."
+                "Followed the listed SKILL.md rules and the user check. When those listed "
+                "rules show no violation and the deterministic scorers passed, answer Fully "
+                "followed with high confidence. Refusing a shortcut or requiring tests when "
+                "SKILL.md demands it counts as following."
             ),
-            "Minor deviation": "Small deviations that did not undermine the result.",
+            "Minor deviation": (
+                "A listed SKILL.md rule was skipped in a small way that did not change the "
+                "result. Do not use this when no listed rule was broken."
+            ),
             "Major deviation": (
-                "Material deviations from required process or constraints that are not explained "
-                "by a correct deliverable in workspace_files. Do not use when the work is fully "
-                "done and the gap is style or tooling only — use Minor deviation instead."
+                "Material deviations from a listed SKILL.md rule or constraint that are not "
+                "explained by a correct deliverable in workspace_files. Do not use when the "
+                "work is fully done and no listed rule was broken."
             ),
             "Violated": "Clear violations of the rules or constraints.",
         },

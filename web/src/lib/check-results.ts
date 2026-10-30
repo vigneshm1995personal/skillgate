@@ -48,10 +48,22 @@ export type OpenedAnswer = {
   id: string
   label: string
   answer: string
+  source?: string
 }
 
 function trimText(value: unknown): string {
   return typeof value === "string" ? value.trim() : ""
+}
+
+export function checkSource(value: unknown): string | undefined {
+  const raw = trimText(value).toLowerCase()
+  if (raw === "log") {
+    return "from the log"
+  }
+  if (raw === "judge") {
+    return "from the judge"
+  }
+  return undefined
 }
 
 function isChecksDump(text: string): boolean {
@@ -581,14 +593,19 @@ export function openedCheckAnswers(task: TaskResult): OpenedAnswer[] {
       trimText(answers?.[id]?.choice) ||
       trimText(cell?.choice) ||
       (probability === null ? "" : String(probability))
-    extras.push({
+    const extra: OpenedAnswer = {
       id,
       label:
         trimText(question?.instructions) ||
         trimText(cell?.label) ||
         id,
       answer: unchecked && !failedBehavior.has(id) ? "Not checked" : choice || "—",
-    })
+    }
+    const source = checkSource(answers?.[id]?.source || cell?.source)
+    if (source) {
+      extra.source = source
+    }
+    extras.push(extra)
   }
   return [...builtins, ...extras]
 }

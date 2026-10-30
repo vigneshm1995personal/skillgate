@@ -28,7 +28,7 @@ from skillgate_ai.judge_bank import (
     unusable_answers,
     vote_round_summaries,
 )
-from skillgate_ai.judge_context import workspace_files_for_judge
+from skillgate_ai.judge_context import attach_adherence_context, workspace_files_for_judge
 from skillgate_ai.judge_images import IMAGE_MAX_BYTES, IMAGE_MAX_COUNT, collect_images
 from skillgate_ai.judge_providers.decision import DecisionModel, require_decision_model
 from skillgate_ai.judge_spec import (
@@ -347,13 +347,15 @@ def _lift_decision_answer(item: Any) -> Any:
     if not isinstance(item, Mapping):
         return item
     data = dict(item)
-    if "probability" in data or "noul" not in data:
-        return data
-    noul = data.get("noul")
-    if isinstance(noul, bool):
-        data["probability"] = 1.0 if noul else 0.0
-    elif isinstance(noul, (int, float)):
-        data["probability"] = float(noul)
+    if "probability" not in data and "noul" in data:
+        noul = data.get("noul")
+        if isinstance(noul, bool):
+            data["probability"] = 1.0 if noul else 0.0
+        elif isinstance(noul, (int, float)):
+            data["probability"] = float(noul)
+    data.pop("noul", None)
+    if data.get("type") == "noul":
+        data["type"] = "predicate"
     return data
 
 
@@ -422,7 +424,10 @@ class DecisionsBackend(_OpenAIPosted):
             {
                 "model": self.model,
                 "input": payload_input,
-                "questions": spec_decisions_questions(resolved, include_path=include_path),
+                "questions": attach_adherence_context(
+                    spec_decisions_questions(resolved, include_path=include_path),
+                    state,
+                ),
             },
             timeout_sec=timeout_sec,
         )
@@ -792,11 +797,20 @@ class OutcomeJudge:
             elif isinstance(raw, Mapping) and raw.get("score") is not None:
                 cell["score"] = raw.get("score")
                 cell["choice"] = str(raw.get("score"))
+            source = "judge"
             if isinstance(raw, Mapping) and raw.get("source"):
-                cell["source"] = raw.get("source")
+                source = str(raw.get("source"))
+            cell["source"] = source
             if cell.get("choice"):
                 cell["reason"] = f"{question.ask} {cell['choice']}"
             cells[question.id] = cell
+            if isinstance(raw, Mapping):
+                cleaned = dict(raw)
+                cleaned.pop("noul", None)
+                if cleaned.get("type") == "noul":
+                    cleaned["type"] = "predicate"
+                cleaned.setdefault("source", source)
+                extra_answers[question.id] = cleaned
         merged_answers = {**pass_answers, **extra_answers}
         extra_questions = {q.id: {"instructions": q.ask, "type": q.type} for q in resolved.extras}
         extra_failures = extra_block_failures(resolved, answers, skipped=skipped)

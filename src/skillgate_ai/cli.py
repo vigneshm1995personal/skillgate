@@ -428,7 +428,9 @@ def check_pack(
         None, "--reasoning-effort", help="Reasoning effort: low | medium | high | ultra"
     ),
     key_env: list[str] | None = typer.Option(None, "--key-env", help=_KEY_ENV_HELP),
-    case_id: str | None = typer.Option(None, "--case", help="Run this check only (try-out)"),
+    case_id: str | None = typer.Option(
+        None, "--case", "--id", help="Run this check only (try-out)"
+    ),
     no_judge: bool = typer.Option(
         False,
         "--no-judge",

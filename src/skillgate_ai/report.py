@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any
 
 from skillgate_ai.engine import EvalProgress, SuiteReport, TaskProgress, TaskReport
@@ -48,6 +49,7 @@ def format_cli(report: SuiteReport) -> str:
     for task in report.tasks:
         if task.passed is True and getattr(task, "review", False):
             lines.append(f"  REVIEW  {task.task_id} — {UNSURE_REVIEW}")
+            lines.extend(f"       {item}" for item in _extra_source_lines(task))
             continue
         if task.passed is True:
             lines.append(f"  PASS  {task.task_id}")
@@ -55,12 +57,14 @@ def format_cli(report: SuiteReport) -> str:
                 if warning == UNSURE_REVIEW:
                     continue
                 lines.append(f"       {warning}")
+            lines.extend(f"       {item}" for item in _extra_source_lines(task))
             continue
         if task.passed is None:
             lines.append(f"  NOT SCORED  {task.task_id}")
             continue
         why = _task_fail_line(task)
         lines.append(f"  FAIL  {task.task_id} — {why}")
+        lines.extend(f"       {item}" for item in _extra_source_lines(task))
         if task.advice:
             lines.append(f"       why:  {task.advice.why}")
             lines.append(f"       fix:  {task.advice.change}")
@@ -557,12 +561,14 @@ def _task_check_answers(task: TaskReport) -> tuple[list[dict[str, str]], str]:
         else:
             pairs = ((str(cell.get("label") or ""), cell) for cell in cells)
         for key, cell in pairs:
-            rows.append(
-                {
-                    "label": str(cell.get("label") or "").strip() or "Check",
-                    "answer": _cell_answer(cell, answers_map.get(key)),
-                }
-            )
+            row = {
+                "label": str(cell.get("label") or "").strip() or "Check",
+                "answer": _cell_answer(cell, answers_map.get(key)),
+            }
+            source = _check_source(cell, answers_map.get(key), key)
+            if source:
+                row["source"] = source
+            rows.append(row)
         return rows, "openai"
     rows: list[dict[str, str]] = []
     for score in task.scores:
@@ -573,6 +579,49 @@ def _task_check_answers(task: TaskReport) -> tuple[list[dict[str, str]], str]:
             extra = f" — {score.detail}"
         rows.append({"label": title, "answer": f"{mark}{extra}"})
     return rows, "builtin"
+
+
+def _source_label(source: str | None) -> str | None:
+    raw = str(source or "").strip().lower()
+    if raw == "log":
+        return "from the log"
+    if raw == "judge":
+        return "from the judge"
+    return None
+
+
+def _check_source(cell: Mapping[str, Any] | None, answer: Any, key: str) -> str | None:
+    from skillgate_ai.judge_bank import CHECK_CELL_ORDER, SOFT_CELL_ORDER
+
+    if key in CHECK_CELL_ORDER or key in SOFT_CELL_ORDER:
+        return None
+    for blob in (cell, answer if isinstance(answer, dict) else None):
+        if isinstance(blob, dict):
+            raw = str(blob.get("source") or "").strip().lower()
+            if raw in {"log", "judge"}:
+                return raw
+    return "judge"
+
+
+def _extra_source_lines(task: TaskReport) -> list[str]:
+    from skillgate_ai.judge_bank import CHECK_CELL_ORDER, SOFT_CELL_ORDER
+
+    judge = task.judge if isinstance(task.judge, dict) else {}
+    cells = judge.get("cells") if isinstance(judge.get("cells"), dict) else {}
+    answers = judge.get("answers") if isinstance(judge.get("answers"), dict) else {}
+    lines: list[str] = []
+    for key, cell in cells.items():
+        if key in CHECK_CELL_ORDER or key in SOFT_CELL_ORDER:
+            continue
+        if not isinstance(cell, dict):
+            continue
+        source = _source_label(_check_source(cell, answers.get(key), key))
+        if not source:
+            continue
+        label = str(cell.get("label") or key).strip()
+        choice = _cell_answer(cell, answers.get(key))
+        lines.append(f"{label}  {choice}  ({source})")
+    return lines
 
 
 def _task_warnings(task: TaskReport) -> list[str]:

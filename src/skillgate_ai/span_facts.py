@@ -18,12 +18,13 @@ _SNAKE = re.compile(r"\b([a-z][a-z0-9]*_[a-z0-9_]+)\b")
 _MORE_THAN_ONCE = re.compile(r"more than once|duplicate|second (?:call|refund)", re.IGNORECASE)
 _ANSWER_NO_IF = re.compile(r"answer\s+no\s+if", re.IGNORECASE)
 _REPLY = re.compile(r"\breply\b|\bcustomer (?:says|said|reply)\b", re.IGNORECASE)
-_RETURN = re.compile(r"\breturned?\b|\breturns\b|\bresult\b", re.IGNORECASE)
+_RETURN = re.compile(r"\breturns?\b|\breturned\b|\bresult\b", re.IGNORECASE)
 _STATUS = re.compile(
     r"\b(succeeded|success|timeout|timed out|failed|502|error)\b",
     re.IGNORECASE,
 )
 _WORD = r"(?<![A-Za-z0-9_]){name}(?![A-Za-z0-9_])"
+LOG_FACT_KINDS = frozenset({"count", "called", "return"})
 _STOP = frozenset(
     {
         "times",
@@ -194,9 +195,14 @@ def _compute_question(
     return None
 
 
+def log_fact_kind(ask: str) -> str | None:
+    """Which log-fact shape this extra check is, or None if the judge must score it."""
+    return _fact_kind(ask)
+
+
 def _predicate(yes: bool, *, source: str) -> dict[str, Any]:
     value = 1.0 if yes else 0.0
-    return {"probability": value, "noul": value, "source": source}
+    return {"probability": value, "source": source}
 
 
 def _primary_tool(

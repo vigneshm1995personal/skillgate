@@ -587,6 +587,13 @@ function namedFailLine(task) {
   return "";
 }
 
+function sourceLabel(value) {
+  const raw = String(value || "").trim().toLowerCase();
+  if (raw === "log" || raw === "from the log") return "from the log";
+  if (raw === "judge" || raw === "from the judge") return "from the judge";
+  return "";
+}
+
 function detailInnerHtml(task) {
   const judge = (task && task.judge) || {};
   const answers = Array.isArray(task && task.check_answers) ? task.check_answers : [];
@@ -598,7 +605,10 @@ function detailInnerHtml(task) {
       rows.forEach((item) => {
         const label = String(item.label || "").trim() || "Check";
         const answer = String(item.answer || "").trim() || "Not available";
-        parts.push(`<div><dt>${esc(label)}</dt><dd>${esc(answer)}</dd></div>`);
+        const source = sourceLabel(item.source);
+        parts.push(
+          `<div><dt>${esc(label)}</dt><dd>${esc(answer)}${source ? ` (${esc(source)})` : ""}</dd></div>`
+        );
       });
       parts.push("</dl>");
     }
@@ -609,7 +619,9 @@ function detailInnerHtml(task) {
       rows.forEach((item) => {
         const label = String(item.label || "").trim() || "Check";
         const answer = String(item.answer || "").trim();
-        parts.push(`<li>${esc(label)}${answer ? `: ${esc(answer)}` : ""}</li>`);
+        const source = sourceLabel(item.source);
+        const extra = [answer, source ? `(${source})` : ""].filter(Boolean).join(" ");
+        parts.push(`<li>${esc(label)}${extra ? `: ${esc(extra)}` : ""}</li>`);
       });
       parts.push("</ul>");
     } else {

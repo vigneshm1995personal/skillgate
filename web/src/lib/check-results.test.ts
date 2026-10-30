@@ -474,6 +474,28 @@ describe("openedCheckAnswers / low confidence", () => {
     })
   })
 
+  it("labels a custom check scored from the log", () => {
+    const rows = openedCheckAnswers({
+      ...passTask,
+      judge: {
+        ...passTask.judge,
+        cells: {
+          ...passTask.judge!.cells,
+          no_duplicate_read: {
+            label: "Did the agent read status.txt at most once?",
+            choice: "Yes",
+            source: "log",
+          },
+        },
+      },
+    })
+    expect(rows.at(-1)).toMatchObject({
+      id: "no_duplicate_read",
+      answer: "Yes",
+      source: "from the log",
+    })
+  })
+
   it("names a chosen scoring provider and not Auto OpenAI", () => {
     expect(
       scoredByFromJudge({
