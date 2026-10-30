@@ -15,11 +15,16 @@ from skillgate_ai.judge_bank import UNUSABLE_ANSWER
 _LOG = logging.getLogger(__name__)
 
 DEFAULT_BASE_URL = "https://api.openai.com/v1"
-_TRANSIENT = frozenset({429, 502, 503, 504})
+_TRANSIENT = frozenset({429, 500, 502, 503, 504})
 _QUOTA_CODES = frozenset({"insufficient_quota", "credit_balance_exhausted"})
 _RETRY_BACKOFF_SEC = (0.5, 1.0, 2.0)
 _MAX_ATTEMPTS = 3
 _SK_TOKEN = re.compile(r"sk-[A-Za-z0-9_*\-]{2,}")
+_PROVIDER_NOISE = re.compile(
+    r"\b(openrouter(?:\.ai)?|typesafe(?:-ai)?|jev(?:ex)?|openai|cloudflare|"
+    r"anthropic|aws|workers ai)\b[:\s]*",
+    re.I,
+)
 OUT_OF_CREDITS = "This account is out of credits. Add credits, then try again."
 
 PostFn = Callable[..., httpx.Response]
@@ -33,6 +38,60 @@ def redact_secrets(text: str, secret: str | None = None) -> str:
     if secret:
         out = out.replace(secret, "***")
     return _SK_TOKEN.sub("sk-***", out)
+
+
+def sanitize_upstream(text: str, secret: str | None = None) -> str:
+    """Keep the upstream reason. Never print keys or scoring-provider names."""
+    out = redact_secrets((text or "").strip(), secret)
+    out = _PROVIDER_NOISE.sub("", out)
+    return re.sub(r"\s+", " ", out).strip(" :.-")
+
+
+def openai_error_message(response: httpx.Response) -> str | None:
+    try:
+        data = response.json()
+    except ValueError:
+        return None
+    return _mapping_error_message(data)
+
+
+def _mapping_error_message(data: Any) -> str | None:
+    if not isinstance(data, Mapping):
+        return None
+    err = data.get("error")
+    if isinstance(err, str) and err.strip():
+        return err.strip()
+    if not isinstance(err, Mapping):
+        return None
+    for key in ("message", "msg"):
+        value = err.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return None
+
+
+def _mapping_error_status(data: Any) -> int | None:
+    if not isinstance(data, Mapping):
+        return None
+    err = data.get("error")
+    if not isinstance(err, Mapping):
+        return None
+    for key in ("code", "status"):
+        value = err.get(key)
+        if isinstance(value, int) and value >= 400:
+            return value
+        if isinstance(value, str) and value.isdigit():
+            parsed = int(value)
+            if parsed >= 400:
+                return parsed
+    return None
+
+
+def _payload_has_answers(data: Mapping[str, Any]) -> bool:
+    rows = data.get("answers")
+    if isinstance(rows, Mapping):
+        return bool(rows)
+    return isinstance(rows, list) and bool(rows)
 
 
 def openai_error_code(response: httpx.Response) -> str | None:
@@ -81,6 +140,8 @@ def user_message_for_status(
         return f"{label} rate-limited this request. Wait and retry, or check billing."
     if status == 400:
         return f"{label} rejected this scoring request."
+    if status in {500, 502, 503, 504}:
+        return f"{label} couldn't score this check. Retry — this is often temporary."
     return f"{label} couldn't score this check."
 
 
@@ -89,6 +150,7 @@ def _status_error(
     *,
     model: str,
     who: str = "the judge",
+    secret: str | None = None,
 ) -> dict[str, Any]:
     code = openai_error_code(response)
     reason = user_message_for_status(response.status_code, error_code=code, who=who)
@@ -96,12 +158,16 @@ def _status_error(
         _LOG.debug("scoring request failed")
     else:
         _LOG.warning("scoring request failed")
-    return {
+    out: dict[str, Any] = {
         "status": "error",
         "reason": reason,
         "model": model,
         "http_status": response.status_code,
     }
+    upstream = sanitize_upstream(openai_error_message(response) or "", secret)
+    if upstream:
+        out["upstream"] = upstream
+    return out
 
 
 def post_openai(
@@ -195,11 +261,26 @@ def post_openai_json(
     except httpx.HTTPError:
         return {"status": "error", "reason": OFFLINE_MESSAGE, "model": model}
     if response.status_code >= 400:
-        return _status_error(response, model=model, who=who)
+        return _status_error(response, model=model, who=who, secret=api_key)
     try:
         data = response.json()
     except ValueError:
         return {"status": "error", "reason": UNUSABLE_ANSWER, "model": model}
+    if isinstance(data, list):
+        data = {"answers": data}
     if not isinstance(data, Mapping):
         return {"status": "error", "reason": UNUSABLE_ANSWER, "model": model}
+    if _mapping_error_message(data) and not _payload_has_answers(data):
+        status = _mapping_error_status(data) or 400
+        reason = user_message_for_status(status, who=who)
+        upstream = sanitize_upstream(_mapping_error_message(data) or "", api_key)
+        out: dict[str, Any] = {
+            "status": "error",
+            "reason": reason,
+            "model": model,
+            "http_status": status,
+        }
+        if upstream:
+            out["upstream"] = upstream
+        return out
     return {"status": "ok", "data": data}

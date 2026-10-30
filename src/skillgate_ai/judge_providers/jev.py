@@ -21,7 +21,7 @@ OPENROUTER_DECISIONS_URL = "https://openrouter.ai/api/alpha/decisions"
 
 class JevBackend:
     name = "jev"
-    supports_confidence = False
+    supports_confidence = True
     supports_why = False
 
     def __init__(
@@ -103,7 +103,11 @@ class JevBackend:
         )
         if result.get("status") == "ok":
             return {"ok": True, "message": "Connected to the judge."}
-        return {"ok": False, "message": _public_failure(result)}
+        payload: dict[str, Any] = {"ok": False, "message": _public_failure(result)}
+        upstream = result.get("upstream")
+        if isinstance(upstream, str) and upstream.strip():
+            payload["upstream"] = upstream.strip()
+        return payload
 
 
 def _score_levels(levels: Any) -> list[str]:
@@ -218,8 +222,12 @@ def _public_failure(result: Mapping[str, Any]) -> str:
         return "This request was rate-limited. Wait and retry, or check billing."
     if status == 400:
         return "This scoring request was rejected."
+    if status in {500, 502, 503, 504}:
+        return "The judge couldn't score this check. Retry — this is often temporary."
+    if reason:
+        return reason
     if isinstance(status, int):
-        return "Scoring failed."
+        return "The judge couldn't score this check."
     return "Could not connect."
 
 

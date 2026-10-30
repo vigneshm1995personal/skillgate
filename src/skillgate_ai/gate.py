@@ -365,6 +365,13 @@ def _execute_check(
         )
     exit_code = 0 if report.passed else 1
     if (
+        not no_judge
+        and not tryout
+        and is_live_harness(report.harness)
+        and _quality_scoring_errored(report)
+    ):
+        exit_code = 2
+    elif (
         report.passed
         and not no_judge
         and not tryout
@@ -378,6 +385,14 @@ def _execute_check(
         demo_notice=demo_notice,
         run_id=rid,
     )
+
+
+def _quality_scoring_errored(report: SuiteReport) -> bool:
+    for task in report.tasks:
+        judge = task.judge if isinstance(task.judge, dict) else None
+        if isinstance(judge, dict) and str(judge.get("status") or "") == "error":
+            return True
+    return False
 
 
 def _quality_scoring_was_skipped(report: SuiteReport) -> bool:

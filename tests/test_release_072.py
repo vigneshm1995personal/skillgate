@@ -467,7 +467,7 @@ def test_judge_provider_test_accepts_key_env(
     monkeypatch.delenv("SKILLGATE_OPENAI_API_KEY", raising=False)
     seen: dict[str, str] = {}
 
-    def fake_ping(cfg):
+    def fake_ping(cfg, **_kwargs):
         seen["key"] = cfg.openai_api_key or ""
         return {"ok": True, "message": "Connected via the Decisions API.", "scoring_endpoint": "decisions"}
 
@@ -643,7 +643,7 @@ def test_auth_error_fails_fast(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) 
     assert "not logged in" in result.transcript
 
 
-def test_red_check_exits_1_when_judge_errors(
+def test_red_check_exits_2_when_judge_errors(
     project_root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     import shutil
@@ -690,7 +690,7 @@ def test_red_check_exits_1_when_judge_errors(
     result = run_check(dest, source="test", root=tmp_path)
     assert result.report is not None
     assert result.report.passed is False
-    assert result.exit_code == 1
+    assert result.exit_code == 2
 
 
 def test_login_cursor_says_already_signed_in(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -711,7 +711,7 @@ def test_login_cursor_says_already_signed_in(monkeypatch: pytest.MonkeyPatch) ->
 
 
 def test_version_is_078() -> None:
-    assert __version__ == "0.7.9"
+    assert __version__ == "0.7.10"
     changelog = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
     assert "## 0.7.8" in changelog
     assert "## 0.7.7" in changelog

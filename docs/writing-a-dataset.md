@@ -99,6 +99,7 @@ Start with **3 to 6 pinned cases**. Each example ships three: one main behavior,
 - **One behavior per case.** `flatten-orders` only checks the flat list. `edge-empty` only checks `[]`. A prompt that asks for both is two cases.
 - **Realistic inputs.** `orders.json` is two short API objects. `harbor-receipt.txt` is a fictional shop receipt. `schema.sql` is one table. The agent should be able to finish the task from that file.
 - **Clear expected outcomes.** Put the full expected file in `evals/goldens/` and the lines that must appear in `contains`. `readme-writer` expects the heading `Harbor Notes` and the install line `pip install harbor-notes`. `sql-writer` expects `SELECT id, total` and `status = 'open'`.
+- **Escalation or refusal is a valid expected outcome.** Put what the agent should do in the golden and `contains`, not a success the user prompt might imply. Built-in checks grade against that expected outcome. If the right answer is to refuse or escalate — a missing column, a refund that cannot be issued — doing that is Fully completed. `sql-writer` case `edge-unknown-column` expects `customer_email is missing from schema.sql`, not a query that invents the column. A refund case whose golden says tell the customer and write an owner report is done when the agent does that.
 - **An edge case.** Empty, missing, or zero. `log-summarizer` uses a log with no errors. `receipt-extractor` uses a receipt whose total line is absent. `sql-writer` asks for a column the schema does not list, and the expected file says that column is missing.
 - **One case that should fail when the skill is wrong.** Set `should_trigger: false` on a prompt from a different job. If the skill triggers, that case fails. To see a whole pack fail, check `json-response-sabotaged`. `skillgate check skills/json-response-sabotaged --expect-fail` exits 0 only when that run is red.
 - **No answer leakage.** The expected sentence stays out of the prompt. The receipt prompt says to extract the total. It does not contain `18.40`. The README edge prompt says not to invent a license. It does not contain `not specified`. That phrase is only in the golden.
@@ -133,6 +134,8 @@ skillgate ui
 5. For the red path, open `json-response-sabotaged` and press **Run**. The JSON checks fail. The unrelated check can pass.
 
 `skillgate case list` and **View Dataset** on the skill page show the same cases. A live result comes from **Run** or `skillgate check`.
+
+A red names the failing check and includes the judge's reason, for example `Got the job done? Not completed (need Fully completed) — …`. How majority re-asking works, which questions are blocking (`Followed the rules?` is one), where to read `tasks[].judge.votes`, and that `--no-judge` still needs an agent are in [Bring your own judge](judge.md). List saved run ids with `skillgate history --pack skills/json-response`.
 
 ## Common mistakes
 

@@ -216,7 +216,7 @@ def test_live_verdict_judge_error_not_counted_as_pass() -> None:
         det_passed=True,
         det_failures=[],
     )
-    assert passed is False
+    assert passed is None
     assert stamped is not None
     assert stamped.get("quality_unscored") is True
     assert stamped.get("passed") is None

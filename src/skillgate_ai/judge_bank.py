@@ -77,6 +77,11 @@ OUTCOME_SCORING_NOTES = (
     "(commands plus captured stdout/stderr) as primary evidence. Do not claim tests or "
     "files were missing when they appear there. "
     f"{EVIDENCE_RULE} {REFERENCE_EXAMPLE_NOTE} "
+    "Grade built-in checks against this test's expected outcome (expected_outcome, golden, "
+    "contains), not a different success the user prompt might imply. If the expected "
+    "outcome is an escalation or refusal — for example a refund is impossible, so the bot "
+    "tells the customer and writes an owner report — doing that is Fully completed, not "
+    "unfinished. "
     "When workspace_files show the expected deliverable (letter, spreadsheet, export, etc.) "
     "with correct substance and task_completion is Fully completed, use Minor deviation (or "
     "Fully followed) for instruction_adherence when the only gap is style, tool choice, or "
@@ -95,9 +100,12 @@ OUTCOME_QUESTIONS: dict[str, dict[str, Any]] = {
         "instructions": "Got the job done?",
         "criteria": {
             "Fully completed": (
-                "The requested work is fully done, OR the skill correctly followed SKILL.md "
-                "by refusing a shortcut, requiring tests first, or enforcing a required process "
-                "even when the user asked for something faster."
+                "The test's expected outcome is fully met. If that expected outcome is an "
+                "honest escalation or refusal (for example a refund is impossible, so the bot "
+                "tells the customer and writes an owner report), doing that is Fully completed "
+                "— not unfinished. Also Fully completed when the skill correctly followed "
+                "SKILL.md by refusing a shortcut, requiring tests first, or enforcing a "
+                "required process even when the user asked for something faster."
             ),
             "Partially completed": "Some of the requested work is done but incomplete.",
             "Not completed": "The requested work was not done.",
@@ -181,6 +189,7 @@ SOFT_OUTCOME_QUESTIONS: dict[str, dict[str, Any]] = {
 UNUSABLE_ANSWER = "The judge returned an unusable answer."
 LOW_CONFIDENCE_WARNING = "The judge wasn't very sure about this one."
 DEFAULT_MIN_CONFIDENCE = 0.5
+LOW_CONFIDENCE_MAX_ASKS = 3
 
 
 def all_questions() -> dict[str, dict[str, Any]]:
@@ -246,19 +255,129 @@ def extract_confidence(answer: Any) -> float | None:
     return float(raw)
 
 
+def extract_reason(answer: Any) -> str | None:
+    if not isinstance(answer, Mapping):
+        return None
+    for key in ("reason", "rationale", "explanation"):
+        raw = answer.get(key)
+        if isinstance(raw, str) and raw.strip():
+            return raw.strip()
+    return None
+
+
+def answers_have_low_confidence(
+    answers: Mapping[str, Any] | None,
+    *,
+    min_confidence: float = DEFAULT_MIN_CONFIDENCE,
+    keys: tuple[str, ...] | list[str] | None = None,
+) -> bool:
+    """True when a blocking cell has a numeric confidence below the cutoff."""
+    if not isinstance(answers, Mapping):
+        return False
+    for key in keys or CHECK_CELL_ORDER:
+        confidence = extract_confidence(answers.get(key))
+        if confidence is not None and confidence < min_confidence:
+            return True
+    return False
+
+
+def majority_vote_answers(rounds: list[Mapping[str, Any]]) -> dict[str, Any]:
+    """Per-question majority. Ties break toward the higher-confidence answer."""
+    usable = [dict(item) for item in rounds if isinstance(item, Mapping)]
+    if not usable:
+        return {}
+    if len(usable) == 1:
+        return dict(usable[0])
+    keys: list[str] = []
+    seen: set[str] = set()
+    for blob in usable:
+        for key in blob:
+            name = str(key)
+            if name not in seen:
+                seen.add(name)
+                keys.append(name)
+    merged: dict[str, Any] = {}
+    for key in keys:
+        groups: dict[str, list[Any]] = {}
+        for blob in usable:
+            if key not in blob:
+                continue
+            answer = blob[key]
+            groups.setdefault(_vote_token(answer), []).append(answer)
+        if not groups:
+            continue
+        winner = max(groups.values(), key=_vote_rank)
+        merged[key] = max(winner, key=_confidence_rank)
+    return merged
+
+
+def vote_round_summaries(rounds: list[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    """Choice and confidence per question for each ask."""
+    out: list[dict[str, Any]] = []
+    for blob in rounds:
+        if not isinstance(blob, Mapping):
+            continue
+        round_map: dict[str, Any] = {}
+        for key, answer in blob.items():
+            entry: dict[str, Any] = {}
+            choice = extract_choice(answer)
+            if choice:
+                entry["choice"] = choice
+            confidence = extract_confidence(answer)
+            if confidence is not None:
+                entry["confidence"] = confidence
+            if entry:
+                round_map[str(key)] = entry
+        if round_map:
+            out.append(round_map)
+    return out
+
+
+def _vote_token(answer: Any) -> str:
+    choice = extract_choice(answer)
+    if choice:
+        return f"choice:{choice.strip().lower()}"
+    if isinstance(answer, Mapping):
+        raw_prob = answer.get("probability")
+        if isinstance(raw_prob, (int, float)) and not isinstance(raw_prob, bool):
+            return "yes" if float(raw_prob) >= 0.8 else "no"
+        if answer.get("score") is not None:
+            return f"score:{answer.get('score')}"
+    return repr(answer)
+
+
+def _confidence_rank(answer: Any) -> float:
+    confidence = extract_confidence(answer)
+    return confidence if confidence is not None else -1.0
+
+
+def _vote_rank(group: list[Any]) -> tuple[int, float]:
+    return (len(group), max((_confidence_rank(item) for item in group), default=-1.0))
+
+
 def extract_probabilities(answer: Any) -> list[dict[str, Any]] | None:
     if not isinstance(answer, Mapping):
         return None
     raw = answer.get("probabilities")
+    rows: list[dict[str, Any]] = []
+    if isinstance(raw, Mapping):
+        for value, probability in raw.items():
+            row: dict[str, Any] = {}
+            if value is not None:
+                row["value"] = value
+            if isinstance(probability, (int, float)) and not isinstance(probability, bool):
+                row["probability"] = float(probability)
+            if row:
+                rows.append(row)
+        return rows or None
     if not isinstance(raw, list):
         return None
-    rows: list[dict[str, Any]] = []
     for item in raw:
         if not isinstance(item, Mapping):
             continue
         value = item.get("value")
         probability = item.get("probability")
-        row: dict[str, Any] = {}
+        row = {}
         if value is not None:
             row["value"] = value
         if isinstance(probability, (int, float)) and not isinstance(probability, bool):
@@ -301,7 +420,7 @@ def outcome_verdict(answers: Mapping[str, Any] | None) -> tuple[bool, list[str]]
         if canonical.strip().lower() not in PASS_LOCK[key]:
             display = canonical or (raw_choice or "unclear")
             reason = f"{CHECK_CELL_LABELS[key]} {display} (need {PASS_NEED_LABEL[key]})"
-            extra = criteria_text(key, display)
+            extra = extract_reason(answers.get(key)) or criteria_text(key, display)
             if extra:
                 reason += f" — {extra}"
             reasons.append(reason)

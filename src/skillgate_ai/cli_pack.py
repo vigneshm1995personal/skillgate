@@ -159,7 +159,7 @@ def register_pack_commands(app: typer.Typer, case_app: typer.Typer, judge_app: t
             report = row.get("report") if isinstance(row.get("report"), dict) else {}
             passed = row.get("passed")
             if passed is None:
-                gate = "not run"
+                gate = "not scored" if report.get("tasks") else "not run"
                 who = "Not scored"
             else:
                 who = report.get("scored_by") if isinstance(report.get("scored_by"), str) else ""
@@ -276,6 +276,8 @@ def register_pack_commands(app: typer.Typer, case_app: typer.Typer, judge_app: t
             gate = "pass"
         elif passed_flag is False:
             gate = "fail"
+        elif report.get("tasks") or str(report.get("gate") or "") == "not scored":
+            gate = "not scored"
         else:
             gate = "not run"
         passed = report.get("passed_count")
@@ -296,12 +298,16 @@ def register_pack_commands(app: typer.Typer, case_app: typer.Typer, judge_app: t
                 continue
             tid = str(task.get("id") or task.get("task_id") or "")
             ok = task.get("passed")
-            mark = "pass" if ok is True else "fail" if ok is False else "—"
+            mark = "pass" if ok is True else "fail" if ok is False else "not scored"
             reason = ""
             if ok is False:
-                failures = task.get("failures")
-                if isinstance(failures, list) and failures:
-                    reason = f"  {failures[0]}"
+                happened = str(task.get("happened") or "").strip()
+                if happened:
+                    reason = f"  {happened}"
+                else:
+                    failures = task.get("failures")
+                    if isinstance(failures, list) and failures:
+                        reason = f"  {failures[0]}"
             console.print(f"  {tid}  {mark}{reason}")
 
     @case_app.command("list")

@@ -250,13 +250,13 @@ def test_fail_lock_does_not_fail_on_wasteful_path() -> None:
 
 
 def test_low_confidence_keeps_pass_and_warns() -> None:
-    post = FakePost([FakeResponse(200, decisions_payload(confidence=0.2))])
+    post = FakePost([FakeResponse(200, decisions_payload(confidence=0.2))] * 3)
     judged = _score(_judge(post))
     assert judged["status"] == "completed"
     assert judged["passed"] is True
     assert judged["warnings"] == [LOW_CONFIDENCE_WARNING]
     assert judged["answers"]["correctness"]["confidence"] == 0.2
-    assert len(post.calls) == 1
+    assert len(post.calls) == 3
     assert post.calls[0]["url"].endswith("/v1/decisions")
 
 
@@ -327,7 +327,7 @@ def test_http_errors_fail_and_never_log_key(caplog: pytest.LogCaptureFixture) ->
         )
         with caplog.at_level("WARNING"):
             passed, failures, judged = _gated(_judge(post))
-        assert passed is False
+        assert passed is None
         assert judged["status"] == "error"
         assert judged["reasons"] == [message]
         assert judged.get("quality_unscored") is True
@@ -370,7 +370,7 @@ def test_quota_429_is_not_retried() -> None:
         ]
     )
     passed, failures, judged = _gated(_judge(post))
-    assert passed is False
+    assert passed is None
     assert judged["status"] == "error"
     assert judged.get("quality_unscored") is True
     assert judged["why"] is None
@@ -389,7 +389,7 @@ def test_credit_balance_exhausted_429_is_not_retried() -> None:
         ]
     )
     passed, failures, judged = _gated(_judge(post))
-    assert passed is False
+    assert passed is None
     assert judged["status"] == "error"
     assert judged.get("quality_unscored") is True
     assert judged["why"] is None
@@ -404,7 +404,7 @@ def test_timeout_fails_closed() -> None:
         ]
     )
     passed, failures, judged = _gated(_judge(post))
-    assert passed is False
+    assert passed is None
     assert judged["status"] == "error"
     assert judged.get("quality_unscored") is True
     assert SECRET not in json.dumps(judged)
@@ -436,12 +436,12 @@ def test_why_call_skipped_on_pass() -> None:
 
 
 def test_why_call_skipped_on_low_confidence_pass() -> None:
-    post = FakePost([FakeResponse(200, decisions_payload(confidence=0.1))])
+    post = FakePost([FakeResponse(200, decisions_payload(confidence=0.1))] * 3)
     passed, _failures, judged = _gated(_judge(post))
     assert passed is True
     assert judged["passed"] is True
     assert judged["why"] is None
-    assert len(post.calls) == 1
+    assert len(post.calls) == 3
 
 
 def test_responses_backend_does_not_post() -> None:
@@ -727,26 +727,25 @@ def test_http_error_with_missing_output_names_both() -> None:
         golden={"path": "out.json", "kind": "json", "output_path": "out.json"},
         actual_output={"path": "out.json", "present": False, "body": None},
     )
-    assert passed is False
+    assert passed is None
     assert judged["status"] == "error"
     assert judged.get("quality_unscored") is True
     assert judged["why"] is None
     assert len(post.calls) == 1
 
 
-def test_http_500_is_not_retried() -> None:
+def test_http_500_is_retried(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("skillgate_ai.openai_http.time.sleep", lambda _s: None)
     post = FakePost(
         [
             FakeResponse(500, {"error": "nope"}),
             FakeResponse(200, decisions_payload()),
         ]
     )
-    passed, failures, judged = _gated(_judge(post))
-    assert passed is False
-    assert judged["status"] == "error"
-    assert judged.get("quality_unscored") is True
-    assert judged["why"] is None
-    assert len(post.calls) == 1
+    judged = _score(_judge(post))
+    assert judged["status"] == "completed"
+    assert judged["passed"] is True
+    assert len(post.calls) == 2
 
 
 def test_why_call_includes_expected_and_actual_text() -> None:

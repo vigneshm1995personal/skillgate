@@ -549,10 +549,37 @@ function checksTable(tasks) {
 }
 
 function happenedLine(task) {
+  const generic = "This check did not pass.";
   const stamped = task && typeof task.happened === "string" ? task.happened.trim() : "";
-  if (stamped) return stamped;
+  if (stamped && stamped !== generic) return stamped;
+  const named = namedFailLine(task);
+  if (named) return named;
   if (task && task.passed) return "Output matched what was expected.";
-  return "This check did not pass.";
+  return generic;
+}
+
+function namedFailLine(task) {
+  const generic = "This check did not pass.";
+  const judge = (task && task.judge) || {};
+  const reasons = Array.isArray(judge.reasons) ? judge.reasons : [];
+  for (const item of reasons) {
+    const text = String(item || "").trim();
+    if (text && text !== generic) return text;
+  }
+  const cells = judge.cells && typeof judge.cells === "object" ? judge.cells : {};
+  const cell = cells.task_completion;
+  if (cell && cell.label && cell.choice) {
+    const reason = String(cell.reason || "").trim();
+    return reason && !String(cell.label + " " + cell.choice).includes(reason)
+      ? `${cell.label} ${cell.choice} — ${reason}`
+      : `${cell.label} ${cell.choice}`;
+  }
+  const failures = Array.isArray(task && task.failures) ? task.failures : [];
+  for (const item of failures) {
+    const text = String(item || "").trim();
+    if (text && text !== generic) return text;
+  }
+  return "";
 }
 
 function detailInnerHtml(task) {

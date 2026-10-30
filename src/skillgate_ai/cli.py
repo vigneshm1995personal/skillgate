@@ -229,7 +229,7 @@ def ingest(
         console.print(f"Warning: {loaded.warning}")
 
 
-def _present_check(result) -> None:
+def _present_check(result, *, verbose: bool = False) -> None:
     if result.error:
         console.print(result.error["message"])
         hint = result.error.get("hint")
@@ -237,6 +237,19 @@ def _present_check(result) -> None:
             console.print(hint)
     elif result.report is not None:
         console.print(format_cli(result.report))
+        if verbose:
+            for line in _verbose_scoring_lines(result.report):
+                console.print(line)
+
+
+def _verbose_scoring_lines(report) -> list[str]:
+    lines: list[str] = []
+    for task in report.tasks:
+        judge = task.judge if isinstance(task.judge, dict) else {}
+        extra = str(judge.get("upstream") or "").strip() if isinstance(judge, dict) else ""
+        if extra:
+            lines.append(f"  {task.task_id}: {extra}")
+    return lines
 
 
 def _parse_targets(*values: str | None, default: str = "cursor") -> list[str]:
@@ -287,6 +300,7 @@ def _run_gate(
     key_env: list[str] | None = None,
     case_id: str | None = None,
     no_judge: bool = False,
+    verbose: bool = False,
 ) -> None:
     _bind_key_env(key_env)
     checks = None
@@ -345,7 +359,7 @@ def _run_gate(
     )
     machine = json_out or summary == "json"
     if not machine and summary != "github":
-        _present_check(result)
+        _present_check(result, verbose=verbose)
         if result.error or result.report is None:
             raise typer.Exit(result.exit_code)
         if result.expect_fail_notice:
@@ -418,7 +432,12 @@ def check_pack(
     no_judge: bool = typer.Option(
         False,
         "--no-judge",
-        help="Allow a run without a scoring key (exit 0 even when quality is not scored).",
+        help="Skip the decision model (quality is not scored). Still needs a signed-in agent.",
+    ),
+    verbose: bool = typer.Option(
+        False,
+        "--verbose",
+        help="Print the sanitized upstream scoring reason when scoring cannot run.",
     ),
 ) -> None:
     """Exit 0 if green, 1 if red, 2 if it cannot run. Runs pack-local evals/cases.yaml."""
@@ -437,6 +456,7 @@ def check_pack(
         key_env=key_env,
         case_id=case_id,
         no_judge=no_judge,
+        verbose=verbose,
     )
 
 
@@ -1127,14 +1147,14 @@ def judge_provider_set(
     console.print(format_provider_selection(settings))
 
 
-def _run_judge_test(key_env: list[str] | None) -> None:
+def _run_judge_test(key_env: list[str] | None, *, verbose: bool = False) -> None:
     from skillgate_ai.config import get_llm_config
     from skillgate_ai.judge import ping_judge
 
     root = _boot()
     _bind_key_env(key_env)
     try:
-        result = ping_judge(get_llm_config(root))
+        result = ping_judge(get_llm_config(root), verbose=verbose)
     except SkillGateError as exc:
         console.print(exc.render())
         raise typer.Exit(exc.exit_code) from None
@@ -1142,20 +1162,25 @@ def _run_judge_test(key_env: list[str] | None) -> None:
     raise typer.Exit(0 if result.get("ok") else 1)
 
 
+_VERBOSE_HELP = "Print the sanitized upstream scoring reason when the test fails."
+
+
 @judge_app.command("test")
 def judge_test(
     key_env: list[str] | None = typer.Option(None, "--key-env", help=_KEY_ENV_HELP),
+    verbose: bool = typer.Option(False, "--verbose", help=_VERBOSE_HELP),
 ) -> None:
     """Test the scoring connection. Never prints the key."""
-    _run_judge_test(key_env)
+    _run_judge_test(key_env, verbose=verbose)
 
 
 @judge_provider_app.command("test")
 def judge_provider_test(
     key_env: list[str] | None = typer.Option(None, "--key-env", help=_KEY_ENV_HELP),
+    verbose: bool = typer.Option(False, "--verbose", help=_VERBOSE_HELP),
 ) -> None:
     """Test the scoring connection. Never prints the key."""
-    _run_judge_test(key_env)
+    _run_judge_test(key_env, verbose=verbose)
 
 
 @app.command("ui")

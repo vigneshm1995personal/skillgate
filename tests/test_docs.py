@@ -89,12 +89,16 @@ def test_package_and_docs_pin_078() -> None:
     readme = README.read_text(encoding="utf-8")
     quickstart = QUICKSTART.read_text(encoding="utf-8")
     judge = (ROOT / "docs" / "judge.md").read_text(encoding="utf-8")
-    assert 'version = "0.7.9"' in pyproject
-    assert '__version__ = "0.7.9"' in init
+    assert 'version = "0.7.10"' in pyproject
+    assert '__version__ = "0.7.10"' in init
     assert "pip install skillgate-ai" in readme
-    assert "0.7.9" in readme
-    assert "skillgate-ai==0.7.9" in quickstart
-    assert "skillgate-ai==0.7.9" in judge
+    assert "0.7.10" in readme
+    assert "Until 0.7.10 is published" in quickstart
+    assert "Until 0.7.10 is published" in judge
+    assert "skillgate-ai==0.7.10" not in quickstart
+    assert "skillgate-ai==0.7.10" not in judge
+    assert "version: 0.7.10" not in quickstart
+    assert "version: 0.7.10" not in judge
     assert "# 10-minute" in quickstart
 
 
@@ -241,6 +245,30 @@ def test_openrouter_docs_pipe_openrouter_key_and_explain_jev() -> None:
         )
         assert "$JEV_API_KEY" not in section
         assert "Jev" in section
+
+
+def test_docs_cover_escalation_majority_named_reds_and_no_judge() -> None:
+    readme = README.read_text(encoding="utf-8")
+    guide = (ROOT / "docs" / "writing-a-dataset.md").read_text(encoding="utf-8")
+    judge = (ROOT / "docs" / "judge.md").read_text(encoding="utf-8")
+    blob = readme + "\n" + guide + "\n" + judge
+    assert "escalation" in blob.lower() or "escalate" in blob.lower()
+    assert "refusal" in blob.lower()
+    assert "majority" in blob.lower()
+    assert "tasks[].judge.votes" in blob
+    assert "Got the job done?" in blob
+    assert "--no-judge" in judge
+    assert "still needs" in judge.lower() and "agent" in judge.lower()
+    assert "history show" in blob.lower()
+    assert "history --pack" in blob
+    assert "Followed the rules?" in judge
+    assert "Fail the check" in judge
+    assert "exit 2" in judge.lower()
+    assert "Scoring failed." not in judge
+    assert "--verbose" in judge
+    assert "not scored" in judge.lower()
+    assert "--verbose" in readme
+    assert "not scored" in readme.lower()
 
 
 def test_judge_docs_require_a_decision_model() -> None:
