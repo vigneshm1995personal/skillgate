@@ -564,6 +564,10 @@ class OutcomeJudge:
             derived = _expected_outcome_text(state)
             if derived:
                 state["expected_outcome"] = derived
+        files = workspace_files_for_judge(
+            artifacts if isinstance(artifacts, list) else None
+        )
+        state["workspace_files"] = files
         trajectory = (
             kwargs.get("agent_trajectory")
             if isinstance(kwargs.get("agent_trajectory"), Mapping)
@@ -574,7 +578,7 @@ class OutcomeJudge:
             resolved,
             spans,
             trajectory=trajectory,
-            outputs=state.get("workspace_files"),
+            outputs=files,
         )
         ask_spec = resolved
         if facts:

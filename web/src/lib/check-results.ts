@@ -16,6 +16,7 @@ export const CHECK_QUESTION_LABELS: Record<string, string> = {
   instruction_adherence: "Followed the rules?",
   evidence_action_validity: "Used the right evidence/actions?",
   result_quality: "Delivered a good result?",
+  path_efficiency: "How it ran",
 }
 
 const PASS_LOCK: Record<string, string[]> = {
@@ -625,7 +626,8 @@ export function openedCheckAnswers(task: TaskResult): OpenedAnswer[] {
       !label ||
       extras.some((item) => item.label === label) ||
       builtinLabels.has(label) ||
-      reservedQuestionId(trimText(row?.id))
+      reservedQuestionId(trimText(row?.id)) ||
+      label === "How it ran"
     ) {
       continue
     }

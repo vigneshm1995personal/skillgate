@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import os
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -33,6 +33,26 @@ SKIP_FAILURE = "Skipped by user"
 KILL_FAILURE = "Killed by user"
 
 
+def _extras_all_passed(judged: Mapping[str, Any]) -> bool:
+    """True when extra checks exist and none of them failed."""
+    from skillgate_ai.judge_bank import CHECK_CELL_ORDER, SOFT_CELL_ORDER
+
+    failures = judged.get("extra_failures")
+    if isinstance(failures, list) and any(str(item).strip() for item in failures):
+        return False
+    reserved = set(CHECK_CELL_ORDER) | set(SOFT_CELL_ORDER)
+    cells = judged.get("cells") if isinstance(judged.get("cells"), Mapping) else {}
+    answers = judged.get("answers") if isinstance(judged.get("answers"), Mapping) else {}
+    questions = judged.get("questions") if isinstance(judged.get("questions"), Mapping) else {}
+    extra_ids = {
+        key
+        for blob in (cells, answers, questions)
+        for key in blob
+        if key not in reserved
+    }
+    return bool(extra_ids)
+
+
 def stabilize_adherence_review(
     judged: dict[str, Any] | None,
     scores: list[Score] | list[dict[str, Any]] | None,
@@ -41,7 +61,8 @@ def stabilize_adherence_review(
 
     The 0.5 floor and the pass mark stay put. This only drops the unsure flag
     on builtin cells whose choice is already in PASS_LOCK when every
-    deterministic scorer passed. A failing choice at low confidence stays review.
+    deterministic scorer passed. A failing choice at low confidence stays review
+    unless extra checks exist, none failed, and the scorers passed.
     """
     from skillgate_ai.judge_bank import (
         CHECK_CELL_ORDER,
@@ -63,6 +84,7 @@ def stabilize_adherence_review(
     cells = judged.get("cells")
     if not isinstance(cells, dict):
         return judged
+    extras_ok = _extras_all_passed(judged)
     answers = judged.get("answers") if isinstance(judged.get("answers"), dict) else {}
     next_cells = dict(cells)
     changed = False
@@ -76,7 +98,9 @@ def stabilize_adherence_review(
             choice = raw.get("choice")
         canonical = canonical_choice(key, choice)
         allowed = PASS_LOCK.get(key) or frozenset()
-        if canonical is None or canonical.strip().lower() not in allowed:
+        if not extras_ok and (
+            canonical is None or canonical.strip().lower() not in allowed
+        ):
             continue
         cleaned = dict(cell)
         cleaned.pop("status", None)

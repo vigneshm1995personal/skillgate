@@ -508,6 +508,18 @@ describe("openedCheckAnswers / low confidence", () => {
     expect(rows.map((row) => row.label)).toContain("Did the totals match?")
   })
 
+  it("does not repeat How it ran from leftover check_answers", () => {
+    const rows = openedCheckAnswers({
+      ...passTask,
+      check_answers: [
+        { label: "How it ran", answer: "Direct" },
+        { label: "Did the totals match?", answer: "Yes" },
+      ],
+    })
+    expect(rows.filter((row) => row.label === "How it ran")).toHaveLength(0)
+    expect(rows.map((row) => row.label)).toContain("Did the totals match?")
+  })
+
   it("labels a custom check from check_answers when cells omit source", () => {
     const rows = openedCheckAnswers({
       ...passTask,
