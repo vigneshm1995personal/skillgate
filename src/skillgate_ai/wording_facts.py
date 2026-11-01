@@ -52,6 +52,11 @@ _DONE_WORDS = frozenset(
     }
 )
 _DONE_PHRASES = ("on its way", "on the way")
+_HONEST_NEGATION = re.compile(
+    r"(?i)(?:not[ \t]+(?:been[ \t]+)?submitted[ \t]+yet|"
+    r"not[ \t]+yet[ \t]+submitted|"
+    r"\bnot[ \t]+yet\b)"
+)
 _STOP = frozenset(
     {
         "the",
@@ -156,10 +161,14 @@ def resolve_wording_facts(
     _ = hedge
     violated = _violations(rules, texts, succeeded=succeeded)
     yes = not violated
-    return {
+    facts: dict[str, Any] = {
         question.id: {"probability": 1.0 if yes else 0.0, "source": "text"}
         for question in covering
     }
+    if yes and _HONEST_NEGATION.search(reply or ""):
+        for fact in facts.values():
+            fact["honest_negation"] = True
+    return facts
 
 
 def _skill_body(text: str | None) -> str:
