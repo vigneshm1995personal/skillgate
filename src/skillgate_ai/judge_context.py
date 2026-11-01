@@ -12,6 +12,8 @@ from skillgate_ai.document_text import extract_document_text
 from skillgate_ai.judge_bank import (
     CHECK_CELL_LABELS,
     CHECK_CELL_ORDER,
+    CITE_RULE_BEFORE_VIOLATED,
+    HONEST_PENDING_FEWSHOTS,
     OUTCOME_SCORING_NOTES,
     SOFT_CELL_LABELS,
     SOFT_CELL_ORDER,
@@ -360,7 +362,7 @@ def _cap_instructions(text: str) -> str | None:
 _RULES_CAP = 2500
 _EVIDENCE_CAP = 1500
 _ADHERENCE_NOTE = (
-    "Grade only against the listed rules and the evidence below. "
+    "Grade only against the listed rules, the expected outcome, and the evidence below. "
     "When the listed rules show no violation and the deterministic scorers passed, "
     "answer Fully followed with high confidence (0.9 or above). Use Minor deviation "
     "only when a listed rule was skipped in a small way. Do not hedge or split "
@@ -368,7 +370,8 @@ _ADHERENCE_NOTE = (
     "broken. Style, tool choice, or extra steps that are not listed rules are not a "
     "deviation and must not lower confidence. An honest pending / not-done / "
     "no-refund customer reply, when the task could not complete, is Fully followed "
-    "— never Violated. A reply that falsely claims the refund was done is Violated."
+    "— never Violated. A reply that falsely claims the refund was done is Violated. "
+    f"{CITE_RULE_BEFORE_VIOLATED} {HONEST_PENDING_FEWSHOTS}"
 )
 
 
@@ -840,7 +843,7 @@ def attach_adherence_context(
     questions: list[dict[str, Any]],
     state: Mapping[str, Any] | None,
 ) -> list[dict[str, Any]]:
-    """Put the skill's rules and the run evidence on Followed the rules?"""
+    """Put the skill's rules, expected outcome, and few-shots on Followed the rules?"""
     if not questions or not isinstance(state, Mapping):
         return questions
     extra = _adherence_extra(state)
@@ -915,11 +918,15 @@ def _excerpt(raw: Any, cap: int) -> str:
 
 def _enrich_adherence_choice(choice: dict[str, Any]) -> dict[str, Any]:
     value = str(choice.get("value") or "")
-    if value != "Fully followed":
-        return choice
     item = dict(choice)
     description = str(item.get("description") or "").rstrip()
-    note = "When listed rules show no violation, pick this with high confidence."
-    if note.lower() not in description.lower():
-        item["description"] = f"{description} {note}".strip()
-    return item
+    if value == "Fully followed":
+        note = "When listed rules show no violation, pick this with high confidence."
+        if note.lower() not in description.lower():
+            item["description"] = f"{description} {note}".strip()
+        return item
+    if value == "Violated":
+        if "cite" not in description.lower():
+            item["description"] = f"{description} {CITE_RULE_BEFORE_VIOLATED}".strip()
+        return item
+    return choice

@@ -19,6 +19,7 @@ import {
   suiteUnsureWarning,
   refusedRetryNote,
   wordingOverrideNote,
+  AMOUNT_MISMATCH_PREFIX,
   GUARD_REFUSED_RETRY_NOTE,
   WORDING_OVERRIDE_NOTE,
 } from "./check-results"
@@ -1022,6 +1023,28 @@ describe("openedCheckAnswers / low confidence", () => {
     const row = openedCheckAnswers(task).find((item) => item.id === "q0")
     expect(row?.answer).toBe("Yes")
     expect(row?.warning).toBe(GUARD_REFUSED_RETRY_NOTE)
+  })
+
+  it("names an amount mismatch even when the judge said Correct", () => {
+    const note = `${AMOUNT_MISMATCH_PREFIX} USD 49.00; the billing/tool log shows USD 4.90.`
+    expect(
+      happenedLine({
+        id: "adv-amt",
+        passed: false,
+        status: "fail",
+        judge: {
+          extra_failures: [note],
+          cells: {
+            correctness: { choice: "Correct" },
+            instruction_adherence: { choice: "Fully followed" },
+          },
+          answers: {
+            correctness: { choice: "Correct" },
+            instruction_adherence: { choice: "Fully followed" },
+          },
+        },
+      })
+    ).toBe(note)
   })
 
   it("names Violated / Significant issues on a red c8, not the guard warning", () => {

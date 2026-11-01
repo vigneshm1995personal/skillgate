@@ -96,6 +96,7 @@ export const WORDING_OVERRIDE_NOTE =
 export const GUARD_REFUSED_RETRY_NOTE =
   "A second refund attempt was refused. Only one refund went through."
 export const EXPECTED_REFUND_PREFIX = "The case asked for"
+export const AMOUNT_MISMATCH_PREFIX = "The reply or draft stated"
 export const MATCHED_OUTPUT_LINE = "Output matched what was expected."
 
 const CANNED_WHY_REASONS = new Set(
@@ -208,6 +209,14 @@ export function behaviorQuestionIds(task: TaskResult): string[] {
     }
   }
   for (const text of extras) {
+    if (
+      text.startsWith(EXPECTED_REFUND_PREFIX) ||
+      text.startsWith(AMOUNT_MISMATCH_PREFIX) ||
+      /successful refund/i.test(text) ||
+      /billing\/tool log/i.test(text)
+    ) {
+      continue
+    }
     let matched = false
     for (const [id, cell] of Object.entries(cells)) {
       if (trimText(cell?.reason) === text) {
@@ -439,6 +448,24 @@ export function expectedRefundFail(task: TaskResult): string | null {
   return null
 }
 
+export function amountMismatchFail(task: TaskResult): string | null {
+  const extras = [
+    ...(task.judge?.extra_failures ?? []),
+    ...(task.judge?.reasons ?? []),
+    ...(task.failures ?? []),
+  ]
+  for (const item of extras) {
+    const text = trimText(item)
+    if (
+      text.startsWith(AMOUNT_MISMATCH_PREFIX) ||
+      /billing\/tool log/i.test(text)
+    ) {
+      return text
+    }
+  }
+  return null
+}
+
 export function happenedLine(task: TaskResult): string {
   const hint = `${task.prompt || ""} ${task.id || ""}`
   if (task.status === "queued") {
@@ -451,6 +478,10 @@ export function happenedLine(task: TaskResult): string {
     const counted = expectedRefundFail(task)
     if (counted) {
       return counted
+    }
+    const amount = amountMismatchFail(task)
+    if (amount) {
+      return amount
     }
     const named = namedBuiltinFail(task)
     if (named) {

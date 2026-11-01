@@ -73,6 +73,15 @@ def advise_task(
     )
     behavior = behavior_question_ids(judge)
     if trigger_unopened and behavior:
+        named = _named_fail_lines(judge)
+        if named:
+            return FixAdvice(
+                headline="The agent's behavior failed this check",
+                why=named[0],
+                change="Review the run log below.",
+                paste="",
+                target="body",
+            )
         return _behavior_fix(behavior[0], skill_unopened=True)
 
     if trigger_unopened:
@@ -152,12 +161,28 @@ def advise_suite(
         None,
     )
     if behavior_first is not None:
-        if behavior_first.advice and behavior_first.advice.target != "description":
-            return behavior_first.advice
-        questions = behavior_question_ids(getattr(behavior_first, "judge", None))
+        named = _named_fail_lines(getattr(behavior_first, "judge", None))
+        questions = [
+            qid
+            for qid in behavior_question_ids(getattr(behavior_first, "judge", None))
+            if not named or not _is_q_digit(qid)
+        ]
         unopened = behavior_first.selected_skill in {None, "none"} and any(
             s.scorer == "skill_trigger" and not s.passed for s in behavior_first.scores
         )
+        if named:
+            advice = behavior_first.advice
+            if advice and advice.target != "description" and not _is_q0_no_line(advice.why):
+                return advice
+            return FixAdvice(
+                headline="The agent's behavior failed this check",
+                why=named[0],
+                change="Review the run log below.",
+                paste="",
+                target="body",
+            )
+        if behavior_first.advice and behavior_first.advice.target != "description":
+            return behavior_first.advice
         if questions:
             return _behavior_fix(questions[0], skill_unopened=unopened)
     trigger_misses = [
@@ -178,6 +203,26 @@ def advise_suite(
 
 def behavior_fail_line(question: str) -> str:
     return BEHAVIOR_FAIL_LEAD.format(question=question)
+
+
+def _is_q_digit(qid: str) -> bool:
+    name = str(qid or "").strip()
+    return name.startswith("q") and name[1:].isdigit()
+
+
+def _is_q0_no_line(text: str | None) -> bool:
+    raw = str(text or "")
+    if "→ No" not in raw and "-> No" not in raw:
+        return False
+    return "q0" in raw or bool(re.search(r"\bq\d+\b", raw))
+
+
+def _named_fail_lines(judge: dict | None) -> list[str]:
+    if not isinstance(judge, dict):
+        return []
+    from skillgate_ai.score import builtin_fail_lines
+
+    return builtin_fail_lines(judge)
 
 
 def behavior_question_ids(judge: dict | None) -> list[str]:

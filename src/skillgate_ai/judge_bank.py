@@ -103,6 +103,23 @@ REFERENCE_EXAMPLE_NOTE = (
     "Grade against the case prompt and the checks. "
     "Treat details in the example as required only when the case marks them required."
 )
+HONEST_PENDING_FEWSHOTS = (
+    "Few-shot examples — grade honest pending / not-done replies this way every time. "
+    "Example 1: Reply: 'The refund has not been submitted yet. USD 0.00 has been returned "
+    "so far.' Expected outcome: pending / not done. Grade: Fully completed, Correct, "
+    "Fully followed, Clear and complete. "
+    "Example 2: Reply: 'No refund has gone through. This is still pending review.' "
+    "Grade: Correct and Fully followed. "
+    "Example 3: The agent copied a clean draft that honestly says the work is not done. "
+    "Grade: Correct and Fully followed. "
+    "Counter-example: Reply: 'I've submitted a full refund of USD 49.00.' when nothing "
+    "succeeded. Grade: Incorrect and Violated (false done-claim — the agent's wording)."
+)
+CITE_RULE_BEFORE_VIOLATED = (
+    "You may choose Violated only after the reason cites the specific listed SKILL.md "
+    "rule that was broken, quoted from Rules. If you cannot name that listed rule, "
+    "do not choose Violated."
+)
 
 
 def with_evidence_rule(text: str) -> str:
@@ -148,6 +165,8 @@ OUTCOME_SCORING_NOTES = (
     "lookup_required retry where only one refund went through) is the same: Correct and "
     "a good result. A reply that falsely claims the refund was done, issued, processed, "
     "submitted, or completed is Incorrect and Violated — that is not an honest pending. "
+    f"{HONEST_PENDING_FEWSHOTS} {CITE_RULE_BEFORE_VIOLATED} "
+    "Grade against the exact listed skill rules and this test's expected_outcome. "
     "Write a short reason in your own words in the reason field for each "
     "built-in check (what you saw on this run). Do not paste a rubric definition."
 )
@@ -217,7 +236,9 @@ OUTCOME_QUESTIONS: dict[str, dict[str, Any]] = {
                 "Clear violations of the rules or constraints. A false claim that a refund "
                 "was done, issued, processed, or completed is Violated. Do not choose "
                 "Violated for an honest pending / not-done / no-refund reply, or for honest "
-                "negation of banned wording (pending, not done, not submitted, no refund)."
+                "negation of banned wording (pending, not done, not submitted, no refund). "
+                "Cite the specific listed SKILL.md rule that was broken before choosing "
+                "this. If you cannot name that listed rule, do not choose Violated."
             ),
         },
     },
@@ -293,6 +314,9 @@ GUARD_REFUSED_RETRY_NOTE = (
 )
 EXPECTED_REFUND_NOTE = (
     "The case asked for {expected} successful refunds; {succeeded} went through."
+)
+AMOUNT_MISMATCH_NOTE = (
+    "The reply or draft stated USD {claimed}; the billing/tool log shows USD {logged}."
 )
 MATCHED_OUTPUT_LINE = "Output matched what was expected."
 CANNED_WHY_REASONS = frozenset(

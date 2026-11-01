@@ -9,6 +9,7 @@ from skillgate_ai.engine import EvalProgress, SuiteReport, TaskProgress, TaskRep
 from skillgate_ai.eval_config import customer_run_details
 from skillgate_ai.harness import is_live_harness
 from skillgate_ai.judge_bank import (
+    AMOUNT_MISMATCH_NOTE,
     EXPECTED_REFUND_NOTE,
     GUARD_REFUSED_RETRY_NOTE,
     MATCHED_OUTPUT_LINE,
@@ -102,8 +103,10 @@ def format_cli(report: SuiteReport) -> str:
         lines.append(f"  FAIL  {task.task_id} — {why}")
         lines.extend(f"       {item}" for item in _extra_source_lines(task))
         if task.advice:
-            lines.append(f"       why:  {task.advice.why}")
-            lines.append(f"       fix:  {task.advice.change}")
+            advice_why = str(task.advice.why or "").strip()
+            if not _is_q0_no_summary(advice_why, task):
+                lines.append(f"       why:  {advice_why}")
+                lines.append(f"       fix:  {task.advice.change}")
     lines.append("")
     if raw_gate == "needs review":
         unsure = ", ".join(
@@ -187,7 +190,11 @@ def format_github(report: SuiteReport) -> str:
             result = "not scored"
         if task.passed is False:
             what = _task_fail_line(task)
-            extra = "; ".join(task.failures[1:]) if len(task.failures) > 1 else ""
+            extra = "; ".join(
+                str(item)
+                for item in task.failures[1:]
+                if str(item).strip() and not _is_q0_no_summary(str(item), task)
+            )
             if extra:
                 what = f"{what}; {extra}"
         else:
@@ -198,7 +205,7 @@ def format_github(report: SuiteReport) -> str:
         lines += ["", "### Failed tasks — what to change", ""]
         for task in failed:
             lines.append(f"**{task.task_id}** — {_task_fail_line(task)}")
-            if task.advice:
+            if task.advice and not _is_q0_no_summary(task.advice.why, task):
                 lines.append("")
                 lines.append(task.advice.why)
                 lines.append("")
@@ -536,6 +543,40 @@ def _expected_refund_fail(judge: Mapping[str, Any] | None) -> str | None:
     return None
 
 
+def _amount_mismatch_fail(judge: Mapping[str, Any] | None) -> str | None:
+    prefix = AMOUNT_MISMATCH_NOTE.split("{", 1)[0].strip()
+    blob = judge if isinstance(judge, Mapping) else {}
+    items = list(blob.get("extra_failures") or []) + list(blob.get("reasons") or [])
+    for item in items:
+        text = str(item).strip()
+        if not text:
+            continue
+        if text.startswith(prefix) or (
+            "billing/tool log" in text.lower() and "stated usd" in text.lower()
+        ):
+            return text
+    return None
+
+
+def _is_q0_no_summary(text: str | None, task: TaskReport | None = None) -> bool:
+    raw = str(text or "").strip()
+    if not raw:
+        return False
+    if ("→ No" in raw or "-> No" in raw) and (
+        raw.startswith("q") or "q0" in raw or "behavior failed this check" in raw.lower()
+    ):
+        return True
+    judge = task.judge if task is not None and isinstance(task.judge, dict) else {}
+    questions = judge.get("questions") if isinstance(judge.get("questions"), dict) else {}
+    for meta in questions.values() if isinstance(questions, dict) else ():
+        ask = ""
+        if isinstance(meta, dict):
+            ask = str(meta.get("instructions") or "").strip()
+        if ask and (raw == f"{ask} No" or raw.startswith(ask)):
+            return True
+    return False
+
+
 def _task_fail_line(task: TaskReport) -> str:
     judge = task.judge if isinstance(task.judge, dict) else {}
     if isinstance(judge, dict):
@@ -544,6 +585,9 @@ def _task_fail_line(task: TaskReport) -> str:
         counted = _expected_refund_fail(judge)
         if counted:
             return counted
+        amount = _amount_mismatch_fail(judge)
+        if amount:
+            return amount
         named = _named_builtin_fail(judge)
         if named:
             return named
@@ -552,6 +596,7 @@ def _task_fail_line(task: TaskReport) -> str:
             str(item).strip()
             for item in (extras or [])
             if isinstance(extras, list) and str(item).strip()
+            and not _is_q0_no_summary(str(item).strip(), task)
         ]
         questions = behavior_question_ids(judge)
         if questions and not named:

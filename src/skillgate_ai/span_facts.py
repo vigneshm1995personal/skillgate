@@ -7,7 +7,11 @@ import re
 from collections.abc import Mapping, Sequence
 from typing import Any
 
-from skillgate_ai.judge_bank import EXPECTED_REFUND_NOTE, GUARD_REFUSED_RETRY_NOTE
+from skillgate_ai.judge_bank import (
+    AMOUNT_MISMATCH_NOTE,
+    EXPECTED_REFUND_NOTE,
+    GUARD_REFUSED_RETRY_NOTE,
+)
 from skillgate_ai.judge_spec import JudgeQuestion, JudgeSpec
 from skillgate_ai.spans import attr_map
 
@@ -805,11 +809,61 @@ def expected_refund_shortfall(
 
 
 def _wrong_amount_claim(outputs: Sequence[Mapping[str, Any]] | str | None) -> bool:
-    calls = _parse_calls_log(outputs)
-    amounts = _succeeded_amounts(None, None, calls)
+    return amount_mismatch(outputs) is not None
+
+
+def _claimed_amounts(outputs: Sequence[Mapping[str, Any]] | str | None) -> list[float]:
+    claimed: list[float] = []
+    for text in _amount_texts(outputs):
+        for raw in _MONEY_RE.findall(text.lower()):
+            try:
+                value = float(raw)
+            except (TypeError, ValueError):
+                continue
+            if value <= 0.001:
+                continue
+            claimed.append(value)
+    return claimed
+
+
+def _amount_texts(outputs: Sequence[Mapping[str, Any]] | str | None) -> list[str]:
+    texts: list[str] = []
     reply = _reply_text(outputs)
-    claimed = [float(item) for item in _MONEY_RE.findall(reply.lower())]
-    return bool(amounts and claimed and max(claimed) > sum(amounts) + 0.001)
+    if reply.strip():
+        texts.append(reply)
+    if isinstance(outputs, str):
+        return texts
+    for item in outputs or []:
+        if not isinstance(item, Mapping):
+            continue
+        path = str(item.get("path") or "").replace("\\", "/").lower()
+        if path.endswith(("calls.log", "reply.txt")):
+            continue
+        body = str(
+            item.get("content") or item.get("body") or item.get("extracted_text") or ""
+        ).strip()
+        if body:
+            texts.append(body)
+    return texts
+
+
+def amount_mismatch(
+    outputs: Sequence[Mapping[str, Any]] | str | None,
+) -> str | None:
+    """Fail when the reply/draft amount disagrees with the billing or tool log."""
+    calls = _parse_calls_log(outputs)
+    logged = _succeeded_amounts(None, None, calls)
+    claimed = _claimed_amounts(outputs)
+    if not logged or not claimed:
+        return None
+    billed = round(sum(logged), 2)
+    stated = round(max(claimed), 2)
+    if abs(stated - billed) <= 0.001:
+        return None
+    return AMOUNT_MISMATCH_NOTE.format(
+        claimed=f"{stated:.2f}",
+        logged=f"{billed:.2f}",
+    )
 
 
 def _wanted_status(ask: str) -> list[str]:

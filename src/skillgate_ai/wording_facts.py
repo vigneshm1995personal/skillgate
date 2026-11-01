@@ -169,9 +169,9 @@ def resolve_wording_facts(
     else:
         phrases = ", ".join(f'"{rule.phrase}"' for rule in violated)
         reason = (
-            f"The reply uses banned wording: {phrases}."
+            f"The reply uses banned wording: {phrases} (the agent's wording)."
             if phrases
-            else "The reply uses banned wording."
+            else "The reply uses banned wording (the agent's wording)."
         )
     facts: dict[str, Any] = {
         question.id: {

@@ -47,7 +47,7 @@ def score_run(
 ) -> dict[str, Any]:
     """Gate a run from judge answers plus outputs/spans. Live check and rescore call this."""
     from skillgate_ai.judge_context import stamp_run_fact_rows
-    from skillgate_ai.span_facts import expected_refund_shortfall
+    from skillgate_ai.span_facts import amount_mismatch, expected_refund_shortfall
     from skillgate_ai.wording_facts import attach_wording_questions
 
     spec = attach_wording_questions(spec, skill_text)
@@ -86,6 +86,9 @@ def score_run(
     shortfall = expected_refund_shortfall(outputs, expected_blob)
     if shortfall and shortfall not in extra_failures:
         extra_failures.append(shortfall)
+    mismatch_amount = amount_mismatch(outputs)
+    if mismatch_amount and mismatch_amount not in extra_failures:
+        extra_failures.append(mismatch_amount)
     stamp_extra_cells(cells, merged, spec)
     drop_unsure_on_pass_lock(cells, merged)
     drop_assembled_reasons(cells, merged)
