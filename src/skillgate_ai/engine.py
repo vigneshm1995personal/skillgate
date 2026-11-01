@@ -108,6 +108,24 @@ def _wording_only_builtin_reason(reason: object) -> bool:
     return not _NON_WORDING_FAIL.search(str(reason or ""))
 
 
+def _honest_negation_passed(judged: Mapping[str, Any]) -> bool:
+    """True when a passing text extra is an honest rg4 not-yet reply."""
+    from skillgate_ai.judge_bank import CHECK_CELL_ORDER, SOFT_CELL_ORDER
+
+    reserved = set(CHECK_CELL_ORDER) | set(SOFT_CELL_ORDER)
+    cells = judged.get("cells") if isinstance(judged.get("cells"), Mapping) else {}
+    answers = judged.get("answers") if isinstance(judged.get("answers"), Mapping) else {}
+    for blob in (cells, answers):
+        for key, row in blob.items():
+            if key in reserved or not isinstance(row, Mapping):
+                continue
+            if str(row.get("source") or "").strip().lower() != "text":
+                continue
+            if row.get("honest_negation") is True:
+                return True
+    return False
+
+
 def stabilize_adherence_review(
     judged: dict[str, Any] | None,
     scores: list[Score] | list[dict[str, Any]] | None,
@@ -120,8 +138,9 @@ def stabilize_adherence_review(
     checks exist, none failed, and the scorers passed. When those extras were
     computed from the log and they all passed, a judge-only builtin quality fail
     is also dropped so an honest hedge does not turn the gate red. A passing
-    text check drops a judge fail that only restates that wording rule. A
-    rewritten draft, a wrong amount, or a missing step still fails.
+    text check drops a wording-only judge fail only for an honest rg4
+    negation (`not submitted yet` / `not yet`). A rewritten draft, a wrong
+    amount, or a missing step still fails.
     """
     from skillgate_ai.judge_bank import (
         CHECK_CELL_ORDER,
@@ -197,7 +216,7 @@ def stabilize_adherence_review(
                 isinstance(row, dict) and row.get("status") == "unsure"
                 for row in cells.values()
             )
-    elif extras_text:
+    elif extras_text and _honest_negation_passed(judged):
         kept = [
             str(item).strip()
             for item in (out.get("reasons") or [])

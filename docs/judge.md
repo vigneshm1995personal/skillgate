@@ -110,7 +110,7 @@ Bad key, no credits, 403, 400, timeout, or a scoring outage fails closed with a 
 
 If a blocking verdict's confidence is still below 0.5 after that majority, the check is **unsure, needs review**. It is not a gate fail: `skillgate check` exits 0, the JSON `gate` is `needs review`, the task `status` is `unsure`, and Deploy stays pending. High-confidence fails still fail in one call. Custom checks and the pass mark are unchanged.
 
-When a blocking answer's confidence is below 0.5, Skill Gate re-asks up to 3 times and takes a majority vote instead of failing on one unsure call. High-confidence fails still fail in one call. Custom checks about facts in the log — tool-call counts and duplicates, whether a tool was called, what a tool returned — are scored from the spans when that is possible. The judge is used only when the check cannot be computed. A duplicate refund in the log still fails. CLI, JSON (`tasks[].judge.cells[].source` and `check_answers[].source`), and the local UI say whether each custom check was computed `from the log`, `from the log/text`, or `from the judge`. When a skill lists banned phrases or required wording, those lines are scored from `output/reply.txt`. A hit fails the check; the judge cannot override that wording extra. A missing reply fails it. A passing text check clears a judge fail that only restates that wording rule. Incorrect, Violated, or Major deviation about a rewritten draft, a wrong amount, or a missing step still fail. Quoting the user or a negation such as `has not been submitted` or `not yet submitted` does not trip it. Write the phrases in quotes, one of:
+When a blocking answer's confidence is below 0.5, Skill Gate re-asks up to 3 times and takes a majority vote instead of failing on one unsure call. High-confidence fails still fail in one call. Custom checks about facts in the log — tool-call counts and duplicates, whether a tool was called, what a tool returned — are scored from the spans when that is possible. The judge is used only when the check cannot be computed. A duplicate refund in the log still fails. CLI, JSON (`tasks[].judge.cells[].source` and `check_answers[].source`), and the local UI say whether each custom check was computed `from the log`, `from the log/text`, or `from the judge`. When a skill lists banned phrases or required wording, those lines are scored from `output/reply.txt`. A hit fails the check; the judge cannot override that wording extra. A missing reply fails it. A passing text check clears a wording-only judge fail only when the reply is an honest `not submitted yet` / `not yet` negation. Incorrect, Significant issues, Violated, or Major deviation about a wrong amount, a false claim, a rewritten draft, or a missing step still fail. Quoting the user or a negation such as `has not been submitted` or `not yet submitted` does not trip it. Write the phrases in quotes, one of:
 
 ```text
 - Banned phrases: never say "I've submitted", "we've submitted", "issued"
@@ -136,7 +136,7 @@ A red names the failing check and includes the judge's reason. Example: `Got the
     SKILLGATE_JEV_API_KEY: ${{ secrets.SKILLGATE_JEV_API_KEY }}
 ```
 
-Leave `version` unset for the latest release. Until 0.7.12 is published, install from source (`pip install -e .`) instead of pinning that version. The action reads `SKILLGATE_*` variables and does not print them. It does not switch to another decision model. Do not add a required scoring secret to merge CI.
+Leave `version` unset for the latest release. Until 0.7.13 is published, install from source (`pip install -e .`) instead of pinning that version. The action reads `SKILLGATE_*` variables and does not print them. It does not switch to another decision model. Do not add a required scoring secret to merge CI.
 
 A manual install still works:
 
@@ -149,7 +149,7 @@ A manual install still works:
     DECISION_MODEL_API_KEY: ${{ secrets.DECISION_MODEL_API_KEY }}
 ```
 
-Until 0.7.12 is published, replace that install with `pip install -e .` from a clone of this repo.
+Until 0.7.13 is published, replace that install with `pip install -e .` from a clone of this repo.
 
 ## Live smoke (not CI)
 
