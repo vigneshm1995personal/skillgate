@@ -251,7 +251,10 @@ def load_case_pack(skill_path: str | Path) -> CasePack | None:
     try:
         pack = CasePack.model_validate(raw)
     except Exception as exc:
-        raise SuiteError(friendly_validation_error(exc, kind="Case pack", raw=raw)) from None
+        raise SuiteError(
+            friendly_validation_error(exc, kind="Case pack", raw=raw),
+            exit_code=2,
+        ) from None
     folder = root.name
     if not folder_matches_skill(folder, pack.skill):
         raise SuiteError(

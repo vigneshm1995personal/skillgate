@@ -250,6 +250,8 @@ def _loc_label(
                 return f"case {case_id} ({field})"
             return f"case {case_id}"
         return f"case #{idx + 1}"
+    if len(loc) == 1 and isinstance(loc[0], str):
+        return str(loc[0])
     if loc[0] == "tasks" and len(loc) >= 2 and isinstance(loc[1], int):
         idx = loc[1]
         task_id = _task_id_at(raw, idx)

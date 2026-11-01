@@ -69,8 +69,7 @@ def _extras_from_log(judged: Mapping[str, Any]) -> bool:
         for key, row in blob.items():
             if key in reserved or not isinstance(row, Mapping):
                 continue
-            source = str(row.get("source") or "").strip().lower()
-            if source in {"log", "text", "log/text"}:
+            if str(row.get("source") or "").strip().lower() == "log":
                 return True
     return False
 

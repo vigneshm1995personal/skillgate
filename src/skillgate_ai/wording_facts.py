@@ -39,13 +39,6 @@ _COVER = re.compile(
     r"already been issued|must include|required pending|never say|"
     r"nowhere in the reply|customer (?:reply|copy)"
 )
-_SKIP_FILE = (
-    "calls.log",
-    "ticket.txt",
-    "task.md",
-    "policy.md",
-    "skill.md",
-)
 _DONE_WORDS = frozenset(
     {
         "submitted",
@@ -140,24 +133,28 @@ def resolve_wording_facts(
     rules = compile_wording_rules(skill_text, spec)
     if not rules:
         return {}
-    texts = _agent_texts(outputs)
-    if not texts:
-        return {}
-    _ = hedge
-    violated = _violations(rules, texts, succeeded=succeeded)
-    facts: dict[str, Any] = {}
     covering = [question for question in spec.extras if _covers_wording(question.ask)]
     if not covering and any(question.id == "wording" for question in spec.extras):
         covering = [question for question in spec.extras if question.id == "wording"]
     if not covering:
         return {}
-    yes = not violated
-    for question in covering:
-        facts[question.id] = {
-            "probability": 1.0 if yes else 0.0,
-            "source": "text",
+    from skillgate_ai.span_facts import _reply_text
+
+    reply = _reply_text(outputs)
+    if outputs is not None and not reply:
+        return {
+            question.id: {"probability": 0.0, "source": "text"} for question in covering
         }
-    return facts
+    texts = _agent_texts(outputs)
+    if not texts:
+        return {}
+    _ = hedge
+    violated = _violations(rules, texts, succeeded=succeeded)
+    yes = not violated
+    return {
+        question.id: {"probability": 1.0 if yes else 0.0, "source": "text"}
+        for question in covering
+    }
 
 
 def _skill_body(text: str | None) -> str:
@@ -239,24 +236,12 @@ def _wording_ask(rules: Sequence[WordingRule]) -> str:
 def _agent_texts(outputs: Sequence[Mapping[str, Any]] | str | None) -> list[str]:
     from skillgate_ai.span_facts import _reply_text
 
-    texts: list[str] = []
     reply = _reply_text(outputs)
     if reply.strip():
-        texts.append(reply)
-    if isinstance(outputs, str):
-        return texts or [outputs]
-    for item in outputs or []:
-        if not isinstance(item, Mapping):
-            continue
-        path = str(item.get("path") or "").replace("\\", "/").lower()
-        if any(path.endswith(name) for name in _SKIP_FILE) or path.endswith(".py"):
-            continue
-        body = str(
-            item.get("content") or item.get("body") or item.get("extracted_text") or ""
-        ).strip()
-        if body and body not in texts:
-            texts.append(body)
-    return texts
+        return [reply]
+    if isinstance(outputs, str) and outputs.strip():
+        return [outputs]
+    return []
 
 
 def _violations(

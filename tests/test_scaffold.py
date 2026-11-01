@@ -85,6 +85,33 @@ def test_run_uses_inline_checks_when_skill_has_no_dataset(
     assert "skillgate keys set" in ((result.error.get("hint") or "") + (result.error.get("message") or ""))
 
 
+def test_cases_yaml_missing_field_exits_2_and_names_it(tmp_path: Path) -> None:
+    dest = create_pack(tmp_path, "notes-pack")
+    cases = dest / "evals" / "cases.yaml"
+    cases.write_text(
+        "schema: 1\ncases:\n  - id: hello\n    status: pinned\n    prompt: Hi\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(SuiteError, match="skill") as caught:
+        load_case_pack(dest)
+    assert caught.value.exit_code == 2
+    assert "Couldn't load these checks" in caught.value.message
+    result = run_check(dest, source="cli", root=tmp_path)
+    assert result.exit_code == 2
+    assert result.error is not None
+    blob = result.error.get("message") or ""
+    assert "Couldn't load these checks" in blob
+    assert "skill" in blob.lower()
+    cases.write_text(
+        "schema: 1\nskill: notes-pack\ncases:\n  - id: hello\n    status: pinned\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(SuiteError, match="prompt") as missing_prompt:
+        load_case_pack(dest)
+    assert missing_prompt.value.exit_code == 2
+    assert "Couldn't load these checks" in missing_prompt.value.message
+
+
 def test_invalid_cases_yaml_is_suite_error(tmp_path: Path) -> None:
     dest = create_pack(tmp_path, "bad-yaml")
     cases = dest / "evals" / "cases.yaml"
