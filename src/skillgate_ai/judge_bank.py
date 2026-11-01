@@ -240,6 +240,30 @@ UNSURE_REVIEW = "unsure, needs review"
 LOW_CONFIDENCE_WARNING = UNSURE_REVIEW
 NO_REASON_RECORDED = "No reason recorded"
 WHY_SUFFIX = "_why"
+WORDING_OVERRIDE_NOTE = (
+    "Wording check passed, so those Fail rows did not turn the gate red."
+)
+CANNED_WHY_REASONS = frozenset(
+    {
+        "This run finished the customer request.",
+        "This run left the customer request unfinished.",
+        "This run did not attempt the customer request.",
+        "The facts on this run are right.",
+        "The facts on this run are wrong.",
+        "The facts on this run only partly match.",
+        "This run followed the skill's rules.",
+        "This run broke a skill rule.",
+        "No skill rule applied on this run.",
+        "This run's tool use is allowed.",
+        "This run's tool use is not allowed.",
+        "This run needed no extra tool use.",
+        "The customer reply on this run is clear.",
+        "The customer reply on this run is not clear.",
+        "This run's path was efficient.",
+        "This run's path wasted steps.",
+        "No short evidence line from this run.",
+    }
+)
 DEFAULT_MIN_CONFIDENCE = 0.5
 LOW_CONFIDENCE_MAX_ASKS = 3
 
@@ -367,6 +391,8 @@ def is_built_reason(text: str | None) -> bool:
     raw = str(text or "").strip()
     if not raw:
         return False
+    if raw in CANNED_WHY_REASONS or f"{raw.rstrip('.')}." in CANNED_WHY_REASONS:
+        return True
     if raw.startswith(_BUILT_REASON_PREFIXES):
         return True
     return " on this run. Connector" in raw or " on this run. Reply:" in raw

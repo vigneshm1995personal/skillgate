@@ -612,6 +612,69 @@ def test_missing_reply_is_red_without_a_connector_pack() -> None:
     assert not any("banned wording" in item.lower() for item in failures)
 
 
+def test_wording_override_shows_a_visible_note() -> None:
+    from skillgate_ai.engine import WORDING_OVERRIDE_NOTE
+    from skillgate_ai.report import format_cli
+    from skillgate_ai.run_details import format_run_show
+
+    ask = wording_ask(compile_wording_rules(SKILL_BOTPRESS_4B_FULL))
+    reply = "The refund has not been submitted yet. USD 0.00 has been returned so far."
+    facts = _wording_on(SKILL_BOTPRESS_4B_FULL, reply)
+    judged = _judge_wording_red(extra_ok=True, extra_source="text", extra_label=ask)
+    judged["reasons"] = [
+        "Got it right? Incorrect (need Correct) — used submitted",
+        "Followed the rules? Violated (need Fully followed) — banned wording",
+    ]
+    judged["answers"]["q0"] = {**judged["answers"]["q0"], **facts["q0"]}
+    judged["cells"]["q0"] = {**judged["cells"]["q0"], **facts["q0"]}
+    out = stabilize_adherence_review(judged, _scores())
+    assert facts["q0"].get("honest_negation") is True
+    assert out["passed"] is True
+    assert WORDING_OVERRIDE_NOTE in (out.get("warnings") or [])
+    task = TaskReport(
+        task_id="rg4-negations",
+        prompt="pending refund",
+        expect_skill="ticket-deflector",
+        passed=True,
+        scores=_scores(),
+        selected_skill="ticket-deflector",
+        judge=out,
+    )
+    report = SuiteReport(
+        suite="suite",
+        title="Refund desk",
+        skill="ticket-deflector",
+        harness="cursor-agent",
+        sandbox="local",
+        passed=True,
+        tasks=[task],
+    )
+    cli = format_cli(report)
+    assert WORDING_OVERRIDE_NOTE in cli
+    text = format_run_show(
+        {
+            "run_id": "override",
+            "passed": True,
+            "report": {
+                "gate": "green",
+                "passed": True,
+                "passed_count": 1,
+                "task_count": 1,
+                "tasks": [
+                    {
+                        "id": "rg4-negations",
+                        "name": "rg4-negations",
+                        "passed": True,
+                        "judge": out,
+                    }
+                ],
+            },
+        },
+        detail=True,
+    )
+    assert WORDING_OVERRIDE_NOTE in text
+
+
 def test_rg4_negation_stays_green_when_text_passes() -> None:
     replies = (
         "The refund has not been submitted yet. USD 0.00 has been returned so far.",

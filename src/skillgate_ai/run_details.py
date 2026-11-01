@@ -39,6 +39,17 @@ _BUILTIN_LABELS = {
 _PREDICATE_PASS = 0.8
 
 
+def _task_is_clean_pass(task: Mapping[str, Any]) -> bool:
+    if task.get("passed") is not True:
+        return False
+    if task.get("review"):
+        return False
+    if str(task.get("status") or "").strip().lower() in {"unsure", "review"}:
+        return False
+    judge = task.get("judge")
+    return not (isinstance(judge, Mapping) and judge.get("review"))
+
+
 def redact_run_text(text: str, secret: str | None = None) -> str:
     """Strip API keys and password-shaped values. Never print secrets."""
     if not text:
@@ -256,7 +267,7 @@ def check_rows(task: Mapping[str, Any] | None) -> list[dict[str, Any]]:
                     guessed = score >= _PREDICATE_PASS
                 passed = guessed
         status = str(cell.get("status") or "").strip().lower()
-        if status == "unsure":
+        if status == "unsure" and not _task_is_clean_pass(task):
             choice = UNSURE_REVIEW
             if passed is False and choice_passed(key, str(cell.get("choice") or "")) is True:
                 passed = True
@@ -608,6 +619,11 @@ def format_run_show(
                 extra = "  ".join(part for part in (score, reason, f"({src})" if src else "") if part)
                 label = item.get("label") or item.get("id") or "Check"
                 lines.append(f"  {label}  {bit}" + (f"  {extra}" if extra else ""))
+        judge = task.get("judge") if isinstance(task.get("judge"), Mapping) else {}
+        for item in (judge.get("warnings") or []) if isinstance(judge, Mapping) else []:
+            note = str(item).strip()
+            if note and note != UNSURE_REVIEW:
+                lines.append(f"  {note}")
         reply = detail_row["reply"]
         if reply:
             lines.append("  Agent reply")

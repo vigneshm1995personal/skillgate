@@ -50,6 +50,7 @@ import {
   stripRepeatedHeadline,
   scoredByLine,
   suiteUnsureWarning,
+  wordingOverrideNote,
 } from "@/lib/check-results"
 import {
   failedHudCount,
@@ -163,10 +164,14 @@ export function GatePage({ embedded = false }: { embedded?: boolean }) {
       .filter((item) => !hidePassFileWarning(item, report))
       .filter((item) => !(green && item.includes("unsure")))
     const unsure = suiteUnsureWarning(report)
-    if (unsure && !base.some((item) => item.includes("unsure"))) {
-      return [...base, unsure]
-    }
-    return base
+    const override = (report?.tasks ?? [])
+      .map((task) => wordingOverrideNote(task))
+      .find((item): item is string => Boolean(item))
+    const extra = [
+      ...(unsure && !base.some((item) => item.includes("unsure")) ? [unsure] : []),
+      ...(override && !base.includes(override) ? [override] : []),
+    ]
+    return extra.length ? [...base, ...extra] : base
   })()
   const scoredBy = scoredByLine(report)
   const stampMetrics =

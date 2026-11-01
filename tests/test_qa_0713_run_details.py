@@ -808,12 +808,41 @@ def test_shared_call_dump_is_not_shown_as_a_judge_reason() -> None:
     assert dump not in job.split("The reply follows", 1)[0]
 
 
-def test_why_picks_are_unique_per_check_not_a_shared_dump() -> None:
-    from skillgate_ai.judge_bank import CHECK_CELL_ORDER, SOFT_CELL_ORDER
+def test_canned_why_is_not_shown_as_a_judge_reason() -> None:
+    canned = "The facts on this run are right."
+    task = _refund_task()
+    task["judge"]["cells"]["correctness"] = {
+        "label": "Got it right?",
+        "choice": "Incorrect",
+        "reason": canned,
+        "source": "judge",
+    }
+    task["judge"]["answers"]["correctness"] = {
+        "choice": "Incorrect",
+        "reason": canned,
+    }
+    rows = {row["id"]: row for row in check_rows(task)}
+    assert rows["correctness"]["passed"] is False
+    assert rows["correctness"]["score"] == pytest.approx(0.0)
+    assert rows["correctness"]["reason"] == "No reason recorded"
+    text = format_run_show(
+        {
+            "run_id": "canned-why",
+            "passed": False,
+            "report": _refund_report([task]),
+        },
+        detail=True,
+        case_id="c3-pending",
+    )
+    assert canned not in text
+    assert "No reason recorded" in text.split("Got it right?", 1)[1]
+
+
+def test_canned_why_picks_are_not_stamped_on_cells() -> None:
+    from skillgate_ai.judge_bank import CHECK_CELL_ORDER
     from skillgate_ai.judge_context import apply_why_reasons, with_run_reason_questions
     from skillgate_ai.judge_openai import _cell_entry
 
-    names = [*CHECK_CELL_ORDER, *SOFT_CELL_ORDER]
     questions = with_run_reason_questions(
         [
             {
@@ -822,45 +851,27 @@ def test_why_picks_are_unique_per_check_not_a_shared_dump() -> None:
                 "instructions": f"{name}?",
                 "choices": [{"value": "ok", "description": "ok"}],
             }
-            for name in names
+            for name in CHECK_CELL_ORDER
         ],
         {"actual_output": {"body": REPLY}},
     )
-    why_sets: list[tuple[str, ...]] = []
-    for item in questions:
-        if not str(item.get("name") or "").endswith("_why"):
-            continue
-        descs = tuple(
-            str(row.get("description") or "")
-            for row in (item.get("choices") or [])
-            if isinstance(row, dict)
-        )
-        why_sets.append(descs)
-        blob = " ".join(descs)
-        assert "Connector calls:" not in blob
-        assert "The agent replied:" not in blob
-        assert "Expected outcome:" not in blob
-    assert len(why_sets) >= 5
-    assert len(set(why_sets)) == len(why_sets)
+    assert not any(str(item.get("name") or "").endswith("_why") for item in questions)
     cells = {
         name: _cell_entry(name, {"choice": "Correct"}, {name: name})
         for name in CHECK_CELL_ORDER
     }
     answers = {
         "task_completion_why": {"choice": "finished"},
-        "correctness_why": {"choice": "facts_wrong"},
-        "instruction_adherence_why": {"choice": "rules_broke"},
+        "correctness_why": {"choice": "facts_right"},
+        "instruction_adherence_why": {"choice": "rules_followed"},
         "evidence_action_validity_why": {"choice": "tools_ok"},
         "result_quality_why": {"choice": "reply_clear"},
     }
     apply_why_reasons(cells, answers, questions)
-    reasons = [str(cells[name].get("reason") or "") for name in CHECK_CELL_ORDER]
-    assert all(reasons)
-    assert len(set(reasons)) == len(reasons)
-    for line in reasons:
-        assert "Connector calls:" not in line
-        assert "The agent replied:" not in line
-        assert line != RUBRIC_CORRECT
+    for name in CHECK_CELL_ORDER:
+        reason = str(cells[name].get("reason") or "")
+        assert reason != "The facts on this run are right."
+        assert "on this run" not in reason.lower()
 
 
 def test_check_rows_skip_why_companion_answers() -> None:
@@ -873,7 +884,7 @@ def test_check_rows_skip_why_companion_answers() -> None:
     assert "correctness_why" not in ids
 
 
-def test_jev_evaluate_stores_the_why_choice_on_the_cell() -> None:
+def test_jev_evaluate_does_not_stamp_canned_why() -> None:
     from skillgate_ai.judge_openai import OutcomeJudge
     from skillgate_ai.judge_providers.jev import JevBackend
     from skillgate_ai.judge_spec import resolve_judge_spec
@@ -886,21 +897,19 @@ def test_jev_evaluate_stores_the_why_choice_on_the_cell() -> None:
         def json(self) -> object:
             return self._payload
 
+    posted: list[dict] = []
+
     def post(url, headers=None, json=None, timeout=None):
         del url, headers, timeout
+        posted.append(json or {})
         answers = {
             "task_completion": {"choice": "Fully completed"},
-            "correctness": {"choice": "Correct"},
+            "correctness": {"choice": "Incorrect"},
             "instruction_adherence": {"choice": "Fully followed"},
             "evidence_action_validity": {"choice": "Fully supported"},
             "result_quality": {"choice": "Clear and complete"},
             "path_efficiency": {"choice": "Acceptable"},
-            "task_completion_why": {"choice": "finished"},
-            "correctness_why": {"choice": "facts_wrong"},
-            "instruction_adherence_why": {"choice": "rules_broke"},
-            "evidence_action_validity_why": {"choice": "tools_ok"},
-            "result_quality_why": {"choice": "reply_clear"},
-            "path_efficiency_why": {"choice": "path_ok"},
+            "correctness_why": {"choice": "facts_right"},
         }
         return FakeResponse(200, {"model": "jev", "answers": answers})
 
@@ -925,22 +934,69 @@ def test_jev_evaluate_stores_the_why_choice_on_the_cell() -> None:
         },
         actual_output={"body": REPLY},
     )
-    reasons = [
-        str(judged["cells"][key].get("reason") or "")
-        for key in (
-            "task_completion",
-            "correctness",
-            "instruction_adherence",
-            "evidence_action_validity",
-            "result_quality",
-        )
-    ]
-    assert all(reasons)
-    assert len(set(reasons)) == len(reasons)
-    for line in reasons:
-        assert "Connector calls:" not in line
-        assert "The agent replied:" not in line
-        assert line != "No reason recorded"
-    rows = {row["id"]: row for row in check_rows({"judge": judged, "passed": True})}
-    assert rows["correctness"]["reason"] == judged["cells"]["correctness"]["reason"]
-    assert rows["correctness"]["reason"] != "No reason recorded"
+    questions = posted[0].get("questions") or []
+    if isinstance(questions, dict):
+        names = list(questions)
+    else:
+        names = [str(item.get("name") or "") for item in questions]
+    assert not any(name.endswith("_why") for name in names)
+    canned = "The facts on this run are right."
+    assert judged["cells"]["correctness"].get("reason") not in {canned, canned.rstrip(".")}
+    rows = {row["id"]: row for row in check_rows({"judge": judged, "passed": False})}
+    assert rows["correctness"]["reason"] == "No reason recorded"
+    assert canned not in rows["correctness"]["reason"]
+
+
+def test_passed_green_run_check_rows_do_not_say_unsure() -> None:
+    task = {
+        "id": "extract-hello",
+        "name": "extract-hello",
+        "passed": True,
+        "review": False,
+        "status": "done",
+        "happened": "unsure, needs review",
+        "judge": {
+            "passed": True,
+            "review": False,
+            "provider": "jev",
+            "backend": "jev",
+            "supports_confidence": True,
+            "warnings": ["unsure, needs review"],
+            "cells": {
+                "task_completion": {
+                    "label": "Got the job done?",
+                    "choice": "Fully completed",
+                    "status": "unsure",
+                },
+                "correctness": {
+                    "label": "Got it right?",
+                    "choice": "Correct",
+                    "status": "unsure",
+                },
+            },
+            "answers": {
+                "task_completion": {"choice": "Fully completed"},
+                "correctness": {"choice": "Correct"},
+            },
+        },
+    }
+    rows = check_rows(task)
+    blob = json.dumps(rows)
+    assert "unsure, needs review" not in blob
+    assert all(row["answer"] != "unsure, needs review" for row in rows)
+    text = format_run_show(
+        {
+            "run_id": "green-8",
+            "passed": True,
+            "report": {
+                "gate": "green",
+                "passed": True,
+                "passed_count": 8,
+                "task_count": 8,
+                "tasks": [task] * 8,
+            },
+        },
+        detail=True,
+    )
+    assert "unsure, needs review" not in text
+    assert "PASS" in text

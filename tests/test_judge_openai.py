@@ -182,7 +182,7 @@ def test_decisions_request_shape() -> None:
     names = [item["name"] for item in mains]
     assert "path_efficiency" not in names
     assert names == [item["name"] for item in decisions_questions(include_path=False)]
-    assert any(str(item["name"]).endswith("_why") for item in questions)
+    assert not any(str(item["name"]).endswith("_why") for item in questions)
     task = next(item for item in questions if item["name"] == "task_completion")
     assert set(task.keys()) == {"type", "name", "instructions", "choices"}
     assert task["instructions"] == "Got the job done? Pick exactly one."
@@ -830,7 +830,7 @@ def test_path_asked_when_recorded() -> None:
     names = [item["name"] for item in post.calls[0]["json"]["questions"]]
     mains = [name for name in names if not str(name).endswith("_why")]
     assert mains[-1] == "path_efficiency"
-    assert "path_efficiency_why" in names
+    assert "path_efficiency_why" not in names
     assert judged["soft_answers"]["path_efficiency"]["choice"] == "Efficient"
     assert judged["cells"]["path_efficiency"]["choice"] == "Efficient"
 

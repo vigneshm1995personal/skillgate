@@ -285,6 +285,7 @@ export type JudgeResult = {
   require_artifacts?: boolean
   skipped_questions?: string[]
   extra_failures?: string[]
+  warnings?: string[]
   review?: boolean
   cells?: Record<
     string,

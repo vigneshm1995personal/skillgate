@@ -10,9 +10,7 @@ from typing import Any
 
 from skillgate_ai.document_text import extract_document_text
 from skillgate_ai.judge_bank import (
-    CHECK_CELL_ORDER,
     OUTCOME_SCORING_NOTES,
-    SOFT_CELL_ORDER,
     WHY_SUFFIX,
     is_built_reason,
 )
@@ -364,88 +362,13 @@ _ADHERENCE_NOTE = (
 )
 
 
-_WHY_NONE = "none"
-_REASON_CELLS = frozenset((*CHECK_CELL_ORDER, *SOFT_CELL_ORDER))
-CELL_WHY_CHOICES: dict[str, tuple[tuple[str, str], ...]] = {
-    "task_completion": (
-        ("finished", "This run finished the customer request."),
-        ("unfinished", "This run left the customer request unfinished."),
-        ("unattempted", "This run did not attempt the customer request."),
-    ),
-    "correctness": (
-        ("facts_right", "The facts on this run are right."),
-        ("facts_wrong", "The facts on this run are wrong."),
-        ("facts_partial", "The facts on this run only partly match."),
-    ),
-    "instruction_adherence": (
-        ("rules_followed", "This run followed the skill's rules."),
-        ("rules_broke", "This run broke a skill rule."),
-        ("rules_na", "No skill rule applied on this run."),
-    ),
-    "evidence_action_validity": (
-        ("tools_ok", "This run's tool use is allowed."),
-        ("tools_bad", "This run's tool use is not allowed."),
-        ("tools_na", "This run needed no extra tool use."),
-    ),
-    "result_quality": (
-        ("reply_clear", "The customer reply on this run is clear."),
-        ("reply_unclear", "The customer reply on this run is not clear."),
-    ),
-    "path_efficiency": (
-        ("path_ok", "This run's path was efficient."),
-        ("path_waste", "This run's path wasted steps."),
-    ),
-}
-
-
-def cell_reason_choices(cell_id: str) -> list[dict[str, str]]:
-    """Per-check why options. Unique to that check; never a shared call dump."""
-    rows = [
-        {"value": value, "description": description}
-        for value, description in CELL_WHY_CHOICES.get(cell_id, ())
-    ]
-    rows.append(
-        {
-            "value": _WHY_NONE,
-            "description": "No short evidence line from this run.",
-        }
-    )
-    return rows
-
-
 def with_run_reason_questions(
     questions: list[dict[str, Any]],
     state: Mapping[str, Any] | None,
 ) -> list[dict[str, Any]]:
-    """Ask the judge to pick a unique why line for each scored check."""
+    """Do not add canned why questions. Decision judges cannot write free text."""
     del state
-    extra: list[dict[str, Any]] = []
-    seen: set[str] = set()
-    for question in questions:
-        if not isinstance(question, dict):
-            continue
-        name = str(question.get("name") or "").strip()
-        if not name or name.endswith(WHY_SUFFIX) or name in seen:
-            continue
-        if name not in _REASON_CELLS:
-            continue
-        choices = cell_reason_choices(name)
-        if len(choices) < 2:
-            continue
-        seen.add(name)
-        label = str(question.get("instructions") or name).split(" Pick exactly one.")[0]
-        extra.append(
-            {
-                "type": "choice",
-                "name": f"{name}{WHY_SUFFIX}",
-                "instructions": (
-                    f"Why that answer for {label}? Pick the line that fits this check. "
-                    "Do not pick a rubric definition."
-                ),
-                "choices": [dict(row) for row in choices],
-            }
-        )
-    return [*questions, *extra]
+    return questions
 
 
 def apply_why_reasons(
@@ -453,52 +376,20 @@ def apply_why_reasons(
     answers: Mapping[str, Any],
     questions: list[dict[str, Any]] | None = None,
 ) -> None:
-    """Copy the judge's evidence-line pick onto each cell that has no written reason."""
-    lookup: dict[str, dict[str, str]] = {}
-    for question in questions or []:
-        if not isinstance(question, dict):
-            continue
-        name = str(question.get("name") or "")
-        if not name.endswith(WHY_SUFFIX):
-            continue
-        mapping: dict[str, str] = {}
-        for row in question.get("choices") or []:
-            if not isinstance(row, Mapping):
-                continue
-            value = str(row.get("value") or "").strip()
-            description = str(row.get("description") or "").strip()
-            if value:
-                mapping[value] = description or value
-        lookup[name] = mapping
-    from skillgate_ai.judge_bank import extract_choice
+    """Never stamp canned why picks. Keep a reason the judge actually wrote."""
+    del questions
+    from skillgate_ai.judge_bank import extract_reason
 
     for key, cell in cells.items():
         if not isinstance(cell, dict) or str(cell.get("reason") or "").strip():
             continue
-        why_key = f"{key}{WHY_SUFFIX}"
-        why = answers.get(why_key)
-        choice = extract_choice(why) if why is not None else None
-        if not choice or choice == _WHY_NONE:
-            continue
-        reason = (lookup.get(why_key) or {}).get(choice) or ""
-        if not reason and isinstance(why, Mapping):
-            reason = str(why.get("reason") or why.get("description") or "").strip()
-        if (
-            not reason
-            and choice not in {_WHY_NONE, "reply", "calls", "expected"}
-            and not choice.lower().startswith("no short evidence")
-        ):
-            reason = choice
-        if not reason or reason.lower().startswith("no short evidence"):
-            continue
-        if is_built_reason(reason):
+        blob = answers.get(key)
+        reason = extract_reason(blob) if blob is not None else None
+        if not reason or is_built_reason(reason):
             continue
         cell["reason"] = reason
-        blob = answers.get(key)
         if isinstance(blob, dict) and not str(blob.get("reason") or "").strip():
             blob["reason"] = reason
-        if isinstance(why, dict) and not str(why.get("reason") or "").strip():
-            why["reason"] = reason
 
 
 def stamp_why_on_answers(

@@ -8,7 +8,7 @@ from typing import Any
 from skillgate_ai.engine import EvalProgress, SuiteReport, TaskProgress, TaskReport
 from skillgate_ai.eval_config import customer_run_details
 from skillgate_ai.harness import is_live_harness
-from skillgate_ai.judge_bank import UNSURE_REVIEW, is_built_reason
+from skillgate_ai.judge_bank import UNSURE_REVIEW, WORDING_OVERRIDE_NOTE, is_built_reason
 from skillgate_ai.metrics import suite_metrics_summary
 
 
@@ -510,7 +510,9 @@ def _task_happened(task: TaskReport) -> str:
         if getattr(task, "review", False):
             return UNSURE_REVIEW
         warnings = [
-            item for item in _task_warnings(task) if item != UNSURE_REVIEW
+            item
+            for item in _task_warnings(task)
+            if item not in {UNSURE_REVIEW, WORDING_OVERRIDE_NOTE}
         ]
         if warnings:
             return warnings[0]
@@ -531,7 +533,7 @@ def _scoring_endpoint(report: SuiteReport) -> str | None:
     return None
 
 
-def _cell_answer(cell: dict, answer: Any = None) -> str:
+def _cell_answer(cell: dict, answer: Any = None, *, clean_pass: bool = False) -> str:
     merged = dict(cell)
     if isinstance(answer, dict):
         for key in ("choice", "probability", "score"):
@@ -539,7 +541,7 @@ def _cell_answer(cell: dict, answer: Any = None) -> str:
                 merged[key] = answer[key]
         if answer.get("status"):
             merged["status"] = answer.get("status")
-    if str(merged.get("status") or "") == "unsure":
+    if str(merged.get("status") or "") == "unsure" and not clean_pass:
         return UNSURE_REVIEW
     choice = str(merged.get("choice") or "").strip()
     if choice:
@@ -586,7 +588,11 @@ def _task_check_answers(task: TaskReport) -> tuple[list[dict[str, str]], str]:
             row = {
                 "id": key,
                 "label": str(cell.get("label") or "").strip() or "Check",
-                "answer": _cell_answer(cell, answer),
+                "answer": _cell_answer(
+                    cell,
+                    answer,
+                    clean_pass=bool(task.passed and not getattr(task, "review", False)),
+                ),
             }
             source = _check_source(cell, answer, key)
             if source:
@@ -684,7 +690,11 @@ def _extra_source_lines(task: TaskReport) -> list[str]:
         if not source:
             continue
         label = str(cell.get("label") or key).strip()
-        choice = _cell_answer(cell, answers.get(key))
+        choice = _cell_answer(
+            cell,
+            answers.get(key),
+            clean_pass=bool(task.passed and not getattr(task, "review", False)),
+        )
         lines.append(f"{label}  {choice}  ({source})")
     return lines
 

@@ -17,6 +17,8 @@ import {
   scoredByFromJudge,
   scoredByLine,
   suiteUnsureWarning,
+  wordingOverrideNote,
+  WORDING_OVERRIDE_NOTE,
 } from "./check-results"
 import type { TaskResult } from "./types"
 
@@ -55,14 +57,32 @@ describe("happenedLine", () => {
   })
 
   it("does not show a stray unsure on a passed 8/8 green run", () => {
-    const green = {
+    const green: TaskResult = {
       ...passTask,
       happened: "unsure, needs review",
       passed: true,
       review: false,
-      status: "done" as const,
+      status: "done",
+      judge: {
+        provider: "jev",
+        backend: "jev",
+        supports_confidence: true,
+        warnings: ["unsure, needs review"],
+        answers: passTask.judge!.answers,
+        cells: {
+          correctness: { choice: "Correct", status: "unsure" },
+          task_completion: { choice: "Fully completed", status: "unsure" },
+        },
+      },
     }
     expect(happenedLine(green)).toBe("Output matched what was expected.")
+    expect(lowConfidenceWarning(green)).toBeNull()
+    expect(
+      openedCheckAnswers(green).some((row) => row.answer === "unsure, needs review")
+    ).toBe(false)
+    expect(openedCheckAnswers(green).find((row) => row.id === "correctness")?.answer).toBe(
+      "Correct"
+    )
     expect(
       suiteUnsureWarning({
         gate: "green",
@@ -678,6 +698,8 @@ describe("openedCheckAnswers / low confidence", () => {
     expect(
       lowConfidenceWarning({
         ...passTask,
+        review: true,
+        status: "unsure",
         judge: {
           provider: "openai",
           backend: "decisions",
@@ -690,9 +712,12 @@ describe("openedCheckAnswers / low confidence", () => {
     ).toBe("unsure, needs review")
     expect(
       suiteUnsureWarning({
+        gate: "needs review",
         tasks: [
           {
             ...passTask,
+            review: true,
+            status: "unsure",
             judge: {
               provider: "openai",
               answers: {
@@ -770,6 +795,8 @@ describe("openedCheckAnswers / low confidence", () => {
   it("does not show a raw confidence number", () => {
     const warning = lowConfidenceWarning({
       ...passTask,
+      review: true,
+      status: "unsure",
       judge: {
         provider: "openai",
         backend: "decisions",
@@ -781,6 +808,43 @@ describe("openedCheckAnswers / low confidence", () => {
     })
     expect(warning).toBe("unsure, needs review")
     expect(warning).not.toMatch(/0\.13|OpenAI was unsure/)
+  })
+
+  it("does not show a canned why sentence as the judge reason", () => {
+    const rows = openedCheckAnswers({
+      id: "c3-pending",
+      passed: false,
+      status: "done",
+      judge: {
+        cells: {
+          correctness: {
+            choice: "Incorrect",
+            reason: "The facts on this run are right.",
+          },
+        },
+        answers: {
+          correctness: {
+            choice: "Incorrect",
+            reason: "The facts on this run are right.",
+          },
+        },
+      },
+    })
+    expect(rows.find((row) => row.id === "correctness")?.reason).toBe(
+      "No reason recorded"
+    )
+  })
+
+  it("shows a note when wording overrides judge Fail rows", () => {
+    expect(
+      wordingOverrideNote({
+        ...passTask,
+        judge: {
+          ...passTask.judge,
+          warnings: [WORDING_OVERRIDE_NOTE],
+        },
+      })
+    ).toBe(WORDING_OVERRIDE_NOTE)
   })
 
   it("marks rubric answers Not checked when the script never ran", () => {

@@ -17,6 +17,7 @@ import {
   missingJudgeAnswersLine,
   openedCheckAnswers,
   pathOpenedLine,
+  wordingOverrideNote,
 } from "@/lib/check-results"
 import {
   taskChip,
@@ -287,6 +288,7 @@ function OpenedDetails({
   const noAnswers = missingJudgeAnswersLine(task)
   const path = pathOpenedLine(task)
   const warning = lowConfidenceWarning(task)
+  const overrideNote = wordingOverrideNote(task)
   const extraWhy = extraFailWhy(task)
   const failReason =
     !skipped && task.passed === false && !noAnswers
@@ -358,6 +360,11 @@ function OpenedDetails({
           Down vs baseline
         </p>
       ))}
+      {overrideNote ? (
+        <p className="text-muted-foreground" id={`check-wording-override-${index}`}>
+          {overrideNote}
+        </p>
+      ) : null}
       {warning ? (
         <p className="text-muted-foreground" id={`check-unsure-${index}`}>
           {warning}

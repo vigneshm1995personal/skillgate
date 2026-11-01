@@ -88,6 +88,30 @@ const RUBRIC_TEXTS = new Set(
 export const CONFIDENCE_WARN = 0.5
 export const UNSURE_REVIEW = "unsure, needs review"
 export const NO_REASON_RECORDED = "No reason recorded"
+export const WORDING_OVERRIDE_NOTE =
+  "Wording check passed, so those Fail rows did not turn the gate red."
+
+const CANNED_WHY_REASONS = new Set(
+  [
+    "This run finished the customer request.",
+    "This run left the customer request unfinished.",
+    "This run did not attempt the customer request.",
+    "The facts on this run are right.",
+    "The facts on this run are wrong.",
+    "The facts on this run only partly match.",
+    "This run followed the skill's rules.",
+    "This run broke a skill rule.",
+    "No skill rule applied on this run.",
+    "This run's tool use is allowed.",
+    "This run's tool use is not allowed.",
+    "This run needed no extra tool use.",
+    "The customer reply on this run is clear.",
+    "The customer reply on this run is not clear.",
+    "This run's path was efficient.",
+    "This run's path wasted steps.",
+    "No short evidence line from this run.",
+  ].map((item) => item.toLowerCase())
+)
 
 const CHECKS_DUMP = /^Checks:\s+/i
 const GENERIC_FAIL = "This check did not pass."
@@ -637,6 +661,10 @@ function reasonRepeatsPrompt(label: string, choice: string, reason: string): boo
 function isBuiltReason(reason: string): boolean {
   const text = reason.trim()
   if (!text) return false
+  const compact = text.toLowerCase().replace(/\.+$/, "")
+  if (CANNED_WHY_REASONS.has(text.toLowerCase()) || CANNED_WHY_REASONS.has(`${compact}.`)) {
+    return true
+  }
   if (
     text.startsWith("Connector calls:") ||
     text.startsWith("The agent replied:") ||
@@ -648,6 +676,25 @@ function isBuiltReason(reason: string): boolean {
   return (
     text.includes(" on this run. Connector") || text.includes(" on this run. Reply:")
   )
+}
+
+function isCleanPass(task: TaskResult): boolean {
+  return (
+    task.passed === true &&
+    task.review !== true &&
+    task.status !== "unsure" &&
+    task.judge?.review !== true
+  )
+}
+
+export function wordingOverrideNote(task: TaskResult): string | null {
+  const warnings = task.judge?.warnings
+  if (!Array.isArray(warnings)) {
+    return null
+  }
+  return warnings.some((item) => String(item).trim() === WORDING_OVERRIDE_NOTE)
+    ? WORDING_OVERRIDE_NOTE
+    : null
 }
 
 function isRubricReason(
@@ -724,7 +771,7 @@ function hasConfidenceChannel(judge: JudgeResult | null | undefined): boolean {
 }
 
 export function lowConfidenceWarning(task: TaskResult): string | null {
-  if (workDidNotHappen(task)) {
+  if (isCleanPass(task) || workDidNotHappen(task)) {
     return null
   }
   const judge = task.judge
@@ -835,7 +882,7 @@ export function openedCheckAnswers(task: TaskResult): OpenedAnswer[] {
     const question = task.judge?.questions?.[id]
     const choice =
       trimText(answers?.[id]?.choice) || trimText(cells?.[id]?.choice)
-    const unsure = cells?.[id]?.status === "unsure"
+    const unsure = !isCleanPass(task) && cells?.[id]?.status === "unsure"
     const listedRow = listed.find(
       (row) => trimText(row?.id) === id || trimText(row?.label) === (CHECK_QUESTION_LABELS[id] || "")
     )

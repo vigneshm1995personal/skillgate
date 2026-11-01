@@ -26,7 +26,7 @@ from skillgate_ai.harness import (
 )
 from skillgate_ai.ingest import Skill, ingest_skill, ingest_skills
 from skillgate_ai.judge import Judge, SkipJudge, default_judge, judge_stamp
-from skillgate_ai.judge_bank import UNUSABLE_ANSWER
+from skillgate_ai.judge_bank import UNUSABLE_ANSWER, WORDING_OVERRIDE_NOTE
 from skillgate_ai.live import KILL, CheckAborted, RunControl
 from skillgate_ai.observability import breadcrumb_task, report_eval_outcome, set_eval_passed, span
 from skillgate_ai.output_match import expected_output_mismatch_reason
@@ -234,12 +234,23 @@ def stabilize_adherence_review(
                 for row in cells.values()
             )
     elif extras_text and _honest_negation_passed(judged):
-        kept = [
+        original = [
             str(item).strip()
             for item in (out.get("reasons") or [])
-            if str(item).strip() and not _wording_only_builtin_reason(item)
+            if str(item).strip()
         ]
+        kept = [item for item in original if not _wording_only_builtin_reason(item)]
+        dropped = [item for item in original if _wording_only_builtin_reason(item)]
         out["reasons"] = kept
+        if dropped:
+            warnings = [
+                str(item).strip()
+                for item in (out.get("warnings") or [])
+                if str(item).strip()
+            ]
+            if WORDING_OVERRIDE_NOTE not in warnings:
+                warnings.append(WORDING_OVERRIDE_NOTE)
+            out["warnings"] = warnings
         if not kept:
             out["passed"] = True
     return out
