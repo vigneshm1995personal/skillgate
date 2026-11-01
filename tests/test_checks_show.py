@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 from typer.testing import CliRunner
 
 from skillgate_ai.api import create_app
-from skillgate_ai.case_pack import save_pack_judge
+from skillgate_ai.case_pack import CasePack, PackCase, save_case_pack, save_pack_judge
 from skillgate_ai.checks_show import format_decisions_question, prompt_for_id
 from skillgate_ai.cli import app
 from skillgate_ai.judge_bank import decisions_questions
@@ -113,6 +113,47 @@ def test_api_show_matches_cli(tmp_path: Path, monkeypatch) -> None:
     assert posted.startswith("Was the tone plain?")
     missing = client.get("/api/checks/not-a-check")
     assert missing.status_code == 404
+
+
+def _wording_pack(tmp_path: Path) -> Path:
+    dest = tmp_path / "reply-guard"
+    dest.mkdir()
+    (dest / "SKILL.md").write_text(
+        "---\nname: reply-guard\ndescription: Guard customer reply wording.\n---\n"
+        "# Reply guard\n\n"
+        '- Banned phrase: "I\'ve submitted"\n'
+        '- Required wording: "USD 0.00"\n',
+        encoding="utf-8",
+    )
+    (dest / "evals").mkdir()
+    save_case_pack(
+        dest,
+        CasePack(
+            schema_version=1,
+            skill="reply-guard",
+            cases=[PackCase(id="pending-reply", status="pinned", prompt="Reply to Dana")],
+        ),
+    )
+    return dest
+
+
+def test_checks_show_and_judge_show_preview_generated_text_checks(tmp_path: Path) -> None:
+    dest = _wording_pack(tmp_path)
+    listed = runner.invoke(app, ["judge", "show", str(dest)])
+    assert listed.exit_code == 0, listed.stdout + listed.stderr
+    assert "Text checks from the skill" in listed.stdout
+    assert "I've submitted" in listed.stdout
+    assert "USD 0.00" in listed.stdout
+    shown = runner.invoke(app, ["checks", "show", "wording", "--pack", str(dest)])
+    assert shown.exit_code == 0, shown.stdout + shown.stderr
+    assert "I've submitted" in shown.stdout
+    assert "USD 0.00" in shown.stdout
+    from skillgate_ai.checks_show import list_check_rows
+
+    rows = list_check_rows(dest)
+    wording = next(row for row in rows if row["id"] == "wording")
+    assert wording["source"] == "text"
+    assert "I've submitted" in wording["prompt"]
 
 
 def test_decision_judges_exclude_chat_models() -> None:

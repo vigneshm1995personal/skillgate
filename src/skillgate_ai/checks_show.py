@@ -65,9 +65,13 @@ def list_check_rows(pack: Path | None = None) -> list[dict[str, Any]]:
                 "id": question.id,
                 "label": question.label,
                 "builtin": question.builtin,
+                "source": "text" if question.id == "wording" else None,
                 "prompt": format_decisions_question(payload),
             }
         )
+    preview = _wording_row(pack)
+    if preview is not None and all(row["id"] != preview["id"] for row in rows):
+        rows.append(preview)
     return rows
 
 
@@ -93,9 +97,38 @@ def _spec_for_pack(pack: Path | None) -> JudgeSpec:
     if pack is None:
         return builtin_spec()
     from skillgate_ai.case_pack import load_case_pack, pack_judge_dict
+    from skillgate_ai.wording_facts import attach_wording_questions
 
     loaded = load_case_pack(pack)
-    return resolve_judge_spec(pack=pack_judge_dict(loaded))
+    spec = resolve_judge_spec(pack=pack_judge_dict(loaded))
+    return attach_wording_questions(spec, _skill_text(pack))
+
+
+def _skill_text(pack: Path | None) -> str | None:
+    if pack is None:
+        return None
+    path = pack / "SKILL.md"
+    if not path.is_file():
+        return None
+    return path.read_text(encoding="utf-8")
+
+
+def _wording_row(pack: Path | None) -> dict[str, Any] | None:
+    from skillgate_ai.judge_spec import JudgeQuestion
+    from skillgate_ai.wording_facts import compile_wording_rules, wording_ask
+
+    rules = compile_wording_rules(_skill_text(pack))
+    if not rules:
+        return None
+    ask = wording_ask(rules)
+    extra = JudgeQuestion(id="wording", type="predicate", ask=ask, on_fail="block")
+    return {
+        "id": extra.id,
+        "label": extra.label,
+        "builtin": False,
+        "source": "text",
+        "prompt": format_decisions_question(extra.to_decisions()),
+    }
 
 
 def register_check_routes(app: Any) -> None:

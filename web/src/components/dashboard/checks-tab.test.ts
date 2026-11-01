@@ -49,6 +49,8 @@ describe("Checks tab", () => {
     const form = source("judge-setup-form.tsx")
     expect(prompts).toMatch(/listChecks/)
     expect(prompts).toMatch(/previewCheck/)
+    expect(prompts).toMatch(/GeneratedTextChecks/)
+    expect(prompts).toMatch(/source === "text"/)
     expect(prompts).not.toMatch(/Did it finish the task/)
     expect(prompts).not.toMatch(PROVIDER_NAMES)
     expect(judge).toMatch(/JudgeSetupCard/)

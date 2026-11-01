@@ -18,15 +18,16 @@ _LABEL = re.compile(
     r"[ \t]*:[ \t]*(?P<body>.+)$"
 )
 _DONE_LINE = re.compile(r"(?im)done[- ]words?\b[^\n:]*:[ \t]*(.+)$")
-_NEVER_QUOTED = re.compile(
-    r"(?i)(?:never|do[ \t]+not|must[ \t]+not|don['’]t)[ \t]+"
-    r"(?:say|use|write|claim|tell(?:[ \t]+the[ \t]+customer)?)"
-    r"[ \t]+[\"“]([^\"”]{2,80})[\"”]"
+_BAN_CLAIM = re.compile(
+    r"(?i)(?:nowhere|never|do[ \t]+not|must[ \t]+not|don['’]t)"
+    r"(?:[^\n.\"“]{0,80})"
+    r"(?:say|use|write|claim|tell)"
 )
 _MUST_QUOTED = re.compile(
     r"(?i)(?:must|always)[ \t]+(?:say|include|write|contain|use)"
     r"[ \t]+[\"“]([^\"”]{2,80})[\"”]"
 )
+_QUOTED = re.compile(r"[\"“]([^\"”]{2,80})[\"”]")
 _LIST_CUT = re.compile(r"\.(?:\s|$)|[ \t]+(?:unless|when|if)[ \t]+", re.IGNORECASE)
 _SPLIT = re.compile(r"\s*(?:,|;|\bor\b|\band\b)\s*", re.IGNORECASE)
 _NEG = re.compile(
@@ -36,7 +37,7 @@ _NEG = re.compile(
 _COVER = re.compile(
     r"(?i)\breply\b|wording|banned|forbidden|done[- ]word|pending refund done|"
     r"already been issued|must include|required pending|never say|"
-    r"customer (?:reply|copy)"
+    r"nowhere in the reply|customer (?:reply|copy)"
 )
 _SKIP_FILE = (
     "calls.log",
@@ -96,6 +97,11 @@ def compile_wording_rules(
     return found
 
 
+def wording_ask(rules: Sequence[WordingRule]) -> str:
+    """One Yes/No prompt listing the compiled phrases."""
+    return _wording_ask(rules)
+
+
 def attach_wording_questions(spec: JudgeSpec, skill_text: str | None) -> JudgeSpec:
     """Add one extra when the skill has wording rules and no covering check."""
     rules = compile_wording_rules(skill_text, spec)
@@ -127,7 +133,8 @@ def resolve_wording_facts(
     texts = _agent_texts(outputs)
     if not texts:
         return {}
-    violated = _violations(rules, texts, succeeded=succeeded, hedge=hedge)
+    _ = hedge
+    violated = _violations(rules, texts, succeeded=succeeded)
     facts: dict[str, Any] = {}
     covering = [question for question in spec.extras if _covers_wording(question.ask)]
     if not covering and any(question.id == "wording" for question in spec.extras):
@@ -159,23 +166,40 @@ def _rules_from_text(text: str) -> list[WordingRule]:
         rules.extend(_phrases(kind, match.group("body")))
     for match in _DONE_LINE.finditer(text or ""):
         rules.extend(_phrases("banned", match.group(1)))
-    for match in _NEVER_QUOTED.finditer(text or ""):
-        rules.extend(_phrases("banned", match.group(1)))
+    for match in _BAN_CLAIM.finditer(text or ""):
+        tail = _LIST_CUT.split(text[match.start() :], maxsplit=1)[0]
+        rules.extend(_quoted_only("banned", tail))
     for match in _MUST_QUOTED.finditer(text or ""):
         rules.extend(_phrases("required", match.group(1)))
     return rules
 
 
 def _phrases(kind: Literal["banned", "required"], blob: str) -> list[WordingRule]:
-    head = _LIST_CUT.split(blob.strip(), maxsplit=1)[0]
+    head = _LIST_CUT.split((blob or "").strip(), maxsplit=1)[0]
+    quoted = _quoted_only(kind, head)
+    if quoted:
+        return quoted
     items: list[WordingRule] = []
     for part in _SPLIT.split(head):
-        phrase = part.strip().strip("\"“”'`")
-        phrase = phrase.strip(" .;:")
+        phrase = _clean_phrase(part)
         if not _usable(phrase):
             continue
         items.append(WordingRule(kind=kind, phrase=phrase))
     return items
+
+
+def _quoted_only(kind: Literal["banned", "required"], blob: str) -> list[WordingRule]:
+    items: list[WordingRule] = []
+    for match in _QUOTED.finditer(blob or ""):
+        phrase = _clean_phrase(match.group(1))
+        if not _usable(phrase):
+            continue
+        items.append(WordingRule(kind=kind, phrase=phrase))
+    return items
+
+
+def _clean_phrase(raw: str) -> str:
+    return raw.strip().strip("\"“”'`").strip(" .;:")
 
 
 def _usable(phrase: str) -> bool:
@@ -230,7 +254,6 @@ def _violations(
     texts: Sequence[str],
     *,
     succeeded: bool,
-    hedge: bool,
 ) -> list[WordingRule]:
     blob = "\n".join(texts)
     hit: list[WordingRule] = []
@@ -241,7 +264,7 @@ def _violations(
             if not _present(blob, rule.phrase):
                 hit.append(rule)
             continue
-        if _done_like(rule.phrase) and (succeeded or hedge):
+        if _done_like(rule.phrase) and succeeded:
             continue
         if _asserted(blob, rule.phrase):
             hit.append(rule)
@@ -254,9 +277,7 @@ def _done_like(phrase: str) -> bool:
 
 
 def _present(text: str, phrase: str) -> bool:
-    return any(
-        not _negated(text, start) for start, _end in _hits(text, phrase)
-    )
+    return bool(_hits(text, phrase))
 
 
 def _asserted(text: str, phrase: str) -> bool:
@@ -267,18 +288,23 @@ def _asserted(text: str, phrase: str) -> bool:
     return False
 
 
+def _fold_apos(text: str) -> str:
+    return text.replace("’", "'").replace("‘", "'")
+
+
 def _hits(text: str, phrase: str) -> list[tuple[int, int]]:
-    token = phrase.strip()
+    hay = _fold_apos(text)
+    token = _fold_apos(phrase.strip())
     if not token:
         return []
-    if re.search(r"\s|['’]", token):
+    if re.search(r"\s|'", token):
         pat = re.compile(re.escape(token), re.IGNORECASE)
     else:
         pat = re.compile(
             rf"(?<![A-Za-z0-9_]){re.escape(token)}(?![A-Za-z0-9_])",
             re.IGNORECASE,
         )
-    return [(match.start(), match.end()) for match in pat.finditer(text)]
+    return [(match.start(), match.end()) for match in pat.finditer(hay)]
 
 
 def _quoted(text: str, start: int, end: int) -> bool:

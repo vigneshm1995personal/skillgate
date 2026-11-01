@@ -23,7 +23,7 @@ from skillgate_ai.judge_spec import extra_question_passed, spec_verdict
 from skillgate_ai.report import format_cli, report_to_dict
 from skillgate_ai.scorers import Score
 from skillgate_ai.span_facts import apply_log_facts, resolve_log_facts
-from skillgate_ai.wording_facts import compile_wording_rules
+from skillgate_ai.wording_facts import compile_wording_rules, wording_ask
 
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURE = ROOT / "tests" / "fixtures" / "q13" / "c3-pending-rep3.json"
@@ -43,6 +43,29 @@ Never say "I've submitted a full refund" unless the connector returned succeeded
 
 Quoting the customer's words is fine. Saying the refund has not been submitted is fine.
 """
+SKILL_BULLET_LIST = """# Reply guard
+
+- Banned phrases: never say "I've submitted", "we've submitted", "submitted a full refund", "processed", or "issued" about a refund that is not done.
+- Required wording: the reply must include "USD 0.00".
+"""
+SKILL_ONE_PER_LINE = """# Reply guard
+
+- Banned phrase: "I've submitted"
+- Banned phrase: "submitted a full refund"
+- Required wording: "USD 0.00"
+"""
+SKILL_BOTPRESS_4B = """# Ticket deflector
+
+Nowhere in the reply use "submitted", "I've submitted", "we've submitted", "processed", "issued", or "completed" about a refund that is not done.
+"""
+CLEAN_PENDING = (
+    "This refund is pending review. USD 0.00 has been returned to your card so far."
+)
+Q13_SUBMITTED_PENDING = (
+    "I looked up your account and submitted a full refund of USD 49.00 to your "
+    "original card. Our payment provider is reviewing it, so the credit should "
+    "appear within 3–5 business days."
+)
 
 
 @pytest.fixture(autouse=True)
@@ -163,7 +186,7 @@ def test_quoting_the_user_does_not_trip_banned_wording() -> None:
     assert facts["q0"]["probability"] == 1.0
 
 
-def test_honest_hedge_with_skill_wording_stays_green() -> None:
+def test_honest_hedge_with_explicit_submitted_ban_is_red() -> None:
     spec = _extra_spec(C3_ASK)
     facts = resolve_log_facts(
         spec,
@@ -171,8 +194,8 @@ def test_honest_hedge_with_skill_wording_stays_green() -> None:
         outputs=_outputs(("output/calls.log", _pending_log()), ("output/reply.txt", C3_HEDGE)),
         skill_instructions=TICKET_SKILL,
     )
-    assert facts["q0"]["probability"] == 1.0
-    assert facts["q0"]["source"] == "log"
+    assert facts["q0"]["probability"] == 0.0
+    assert facts["q0"]["source"] == "text"
     passed, reasons, _ = spec_verdict(
         spec,
         apply_log_facts(
@@ -186,8 +209,8 @@ def test_honest_hedge_with_skill_wording_stays_green() -> None:
         ),
         supports_confidence=True,
     )
-    assert passed is True
-    assert reasons == []
+    assert passed is False
+    assert reasons
 
 
 def test_required_wording_missing_fails_from_text() -> None:
@@ -304,3 +327,132 @@ def test_cli_and_json_label_wording_from_the_log_text() -> None:
     assert extra.get("source_label") == "from the log/text"
     assert "from the log/text" in format_cli(report).lower()
     assert "from the judge" not in format_cli(report).lower()
+
+
+def _phrases(skill: str) -> list[tuple[str, str]]:
+    return [(rule.kind, rule.phrase) for rule in compile_wording_rules(skill)]
+
+
+def _wording_on(skill: str, reply: str) -> dict:
+    spec = _extra_spec(C3_ASK)
+    return resolve_log_facts(
+        spec,
+        [],
+        outputs=_outputs(("output/calls.log", _pending_log()), ("output/reply.txt", reply)),
+        skill_instructions=skill,
+    )
+
+
+def test_bullet_list_of_phrases_is_parsed_not_garbled() -> None:
+    phrases = _phrases(SKILL_BULLET_LIST)
+    assert ("banned", "I've submitted") in phrases
+    assert ("banned", "we've submitted") in phrases
+    assert ("banned", "submitted a full refund") in phrases
+    assert ("banned", "processed") in phrases
+    assert ("banned", "issued") in phrases
+    assert ("required", "USD 0.00") in phrases
+    ask = wording_ask(compile_wording_rules(SKILL_BULLET_LIST))
+    assert "never say" not in ask.lower()
+    assert "the reply must include" not in ask.lower()
+    assert "about a refund" not in ask.lower()
+    clean = _wording_on(SKILL_BULLET_LIST, CLEAN_PENDING)
+    assert clean["q0"]["probability"] == 1.0
+    dirty = _wording_on(SKILL_BULLET_LIST, C3_REPRO_REPLY + " USD 0.00 has been returned.")
+    assert dirty["q0"]["probability"] == 0.0
+    assert dirty["q0"]["source"] == "text"
+
+
+def test_one_phrase_per_line_polarity_apostrophe_and_negation() -> None:
+    hits_red = [
+        "I've submitted a full refund of USD 49.00. USD 0.00 returned so far.",
+        "I'VE SUBMITTED A FULL REFUND!!! USD 0.00 has been returned.",
+        "I’ve submitted a full refund. USD 0.00 has been returned.",
+        "I've submitted a full refund.",
+    ]
+    for reply in hits_red:
+        facts = _wording_on(SKILL_ONE_PER_LINE, reply)
+        assert facts["q0"]["probability"] == 0.0, reply
+        assert facts["q0"]["source"] == "text", reply
+    stays_green = [
+        (
+            'you wrote: "I\'ve submitted a full refund request already." '
+            "The request is pending. USD 0.00 has been returned."
+        ),
+        "The refund has not been submitted yet; USD 0.00 has been returned.",
+        "The refund is not yet submitted. USD 0.00 has been returned.",
+        "We will submit the refund once the review finishes. USD 0.00 has been returned.",
+        CLEAN_PENDING,
+    ]
+    for reply in stays_green:
+        facts = _wording_on(SKILL_ONE_PER_LINE, reply)
+        assert facts["q0"]["probability"] == 1.0, reply
+    missing = _wording_on(
+        SKILL_ONE_PER_LINE,
+        "This refund is pending review. Nothing has been returned yet.",
+    )
+    assert missing["q0"]["probability"] == 0.0
+
+
+def test_botpress_4b_sentence_builds_a_text_check() -> None:
+    phrases = _phrases(SKILL_BOTPRESS_4B)
+    assert ("banned", "submitted") in phrases
+    assert ("banned", "I've submitted") in phrases
+    assert ("banned", "we've submitted") in phrases
+    assert ("banned", "processed") in phrases
+    assert ("banned", "issued") in phrases
+    assert ("banned", "completed") in phrases
+    dirty = _wording_on(SKILL_BOTPRESS_4B, C3_REPRO_REPLY)
+    assert dirty["q0"]["probability"] == 0.0
+    assert dirty["q0"]["source"] == "text"
+    clean = _wording_on(SKILL_BOTPRESS_4B, CLEAN_PENDING)
+    assert clean["q0"]["probability"] == 1.0
+    negated = _wording_on(
+        SKILL_BOTPRESS_4B,
+        "The refund has not been submitted. USD 0.00 has been returned so far.",
+    )
+    assert negated["q0"]["probability"] == 1.0
+
+
+def test_q13_pending_submitted_full_refund_is_red_from_4b() -> None:
+    spec = _spec_from_fixture(_load())
+    facts = resolve_log_facts(
+        spec,
+        [],
+        outputs=_outputs(
+            ("output/calls.log", _pending_log()),
+            ("output/reply.txt", Q13_SUBMITTED_PENDING),
+        ),
+        skill_instructions=SKILL_BOTPRESS_4B,
+    )
+    assert facts["q0"]["probability"] == 0.0
+    assert facts["q0"]["source"] == "text"
+    passed, reasons, _ = spec_verdict(
+        spec,
+        apply_log_facts(
+            spec,
+            _pass_answers(),
+            [],
+            outputs=_outputs(
+                ("output/calls.log", _pending_log()),
+                ("output/reply.txt", Q13_SUBMITTED_PENDING),
+            ),
+            skill_instructions=SKILL_BOTPRESS_4B,
+        ),
+        supports_confidence=True,
+    )
+    assert passed is False
+    assert reasons
+
+
+def test_docs_explain_how_to_write_and_preview_wording() -> None:
+    guide = (ROOT / "docs" / "writing-a-dataset.md").read_text(encoding="utf-8")
+    judge = (ROOT / "docs" / "judge.md").read_text(encoding="utf-8")
+    blob = guide + "\n" + judge
+    assert "Banned phrase:" in blob
+    assert "Banned phrases:" in blob
+    assert "Required wording:" in blob
+    assert "Nowhere in the reply use" in blob
+    assert "skillgate judge show" in blob
+    assert "skillgate checks show wording" in blob
+    assert "has not been submitted" in blob
+    assert "not yet submitted" in blob

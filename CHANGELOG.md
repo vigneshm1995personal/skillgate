@@ -4,7 +4,7 @@
 
 ## 0.7.12
 
-- When a skill states explicit banned phrases or required/forbidden wording, those lines are compiled into deterministic text checks on the customer reply and output files. A hit fails the gate. The judge cannot override it. CLI, JSON, and the UI label that answer `from the log/text`, not `from the judge`. Quoting the user, or a negation such as `has not been submitted`, does not trip the check. A pending refund reply that says `I've submitted a full refund` is red. Until 0.7.12 is published, install from source.
+- When a skill states explicit banned phrases or required/forbidden wording, those lines are compiled into deterministic text checks on the customer reply and output files. A hit fails the gate. The judge cannot override it. CLI, JSON, and the UI label that answer `from the log/text`, not `from the judge`. Write quoted lists (`Banned phrases:`, `Banned phrase:`, `Required wording:`, or `Nowhere in the reply use "…"`). Preview with `skillgate judge show`, `skillgate checks show wording --pack`, or **Text checks from the skill** in the UI. Quoting the user, or a negation such as `has not been submitted` / `not yet submitted`, does not trip the check. A pending refund reply that says `I've submitted a full refund` or `submitted a full refund of USD 49.00` is red, including capitals, trailing punctuation, and a curly `’`. Until 0.7.12 is published, install from source.
 
 ## 0.7.11
 

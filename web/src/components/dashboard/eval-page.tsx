@@ -17,7 +17,7 @@ import { GateBadge, PageHeader } from "@/components/dashboard/chrome"
 import { FixtureBindAccordion } from "@/components/dashboard/fixture-bind-accordion"
 import { GatePage } from "@/components/dashboard/gate-page"
 import { AgentSetup } from "@/components/dashboard/agent-setup"
-import { BuiltInChecks } from "@/components/dashboard/check-prompts"
+import { BuiltInChecks, GeneratedTextChecks } from "@/components/dashboard/check-prompts"
 import { JudgeSection } from "@/components/dashboard/judge-section"
 import {
   Alert,
@@ -915,7 +915,8 @@ export function EvalPage() {
               Custom rules for every test case. Add one, or edit one you already saved.
             </CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="flex flex-col gap-4">
+            <GeneratedTextChecks skill={skill?.absolute || skill?.id} />
             <PackScoringExtras
               packJudge={packJudge}
               disabled={running || seeding || !skill}

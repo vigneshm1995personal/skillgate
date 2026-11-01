@@ -974,24 +974,31 @@ def judge_show(
             pack=pack_judge_dict(loaded),
             case=case_block,
         )
+        from skillgate_ai.wording_facts import attach_wording_questions, compile_wording_rules, wording_ask
+
+        skill_text = (dest / "SKILL.md").read_text(encoding="utf-8") if (dest / "SKILL.md").is_file() else None
+        spec = attach_wording_questions(spec, skill_text)
+        wording_rules = compile_wording_rules(skill_text)
+        wording_label = wording_ask(wording_rules) if wording_rules else None
     except SkillGateError as exc:
         console.print(exc.render())
         raise typer.Exit(exc.exit_code) from None
     if json_out:
-        _emit_json(
-            {
-                "questions": [
-                    {
-                        "id": q.id,
-                        "type": q.type,
-                        "ask": q.ask,
-                        "on_fail": q.on_fail,
-                        "builtin": q.builtin,
-                    }
-                    for q in spec.questions
-                ]
-            }
-        )
+        payload = {
+            "questions": [
+                {
+                    "id": q.id,
+                    "type": q.type,
+                    "ask": q.ask,
+                    "on_fail": q.on_fail,
+                    "builtin": q.builtin,
+                }
+                for q in spec.questions
+            ]
+        }
+        if wording_label:
+            payload["text_checks"] = [{"id": "wording", "ask": wording_label, "source": "text"}]
+        _emit_json(payload)
         return
     console.print("Skill Gate questions (always asked)")
     for question in spec.builtins:
@@ -1006,6 +1013,9 @@ def judge_show(
             console.print(f"  {question.label}  {kind}  {severity}")
     else:
         console.print("No extra questions.")
+    if wording_label:
+        console.print("Text checks from the skill")
+        console.print(f"  {wording_label}  Yes/No  Fail the check")
 
 
 @judge_app.command("reset")
