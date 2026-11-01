@@ -344,6 +344,9 @@ function OpenedDetails({
                 {item.reason ? (
                   <span className="check-reason mt-1 block">{item.reason}</span>
                 ) : null}
+                {item.votes ? (
+                  <span className="check-votes mt-1 block">{item.votes}</span>
+                ) : null}
               </dd>
             </div>
           ))}

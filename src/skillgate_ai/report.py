@@ -17,6 +17,7 @@ from skillgate_ai.judge_bank import (
     WORDING_OVERRIDE_NOTE,
     is_built_reason,
     is_run_fact_reason,
+    votes_line,
 )
 from skillgate_ai.metrics import suite_metrics_summary
 
@@ -546,55 +547,58 @@ def _task_fail_line(task: TaskReport) -> str:
         named = _named_builtin_fail(judge)
         if named:
             return named
-        questions = behavior_question_ids(judge)
-        if questions:
-            return behavior_fail_line(questions[0])
         extras = judge.get("extra_failures")
-        if isinstance(extras, list):
-            for item in extras:
-                text = str(item).strip()
-                if text:
-                    return text
+        extra_texts = [
+            str(item).strip()
+            for item in (extras or [])
+            if isinstance(extras, list) and str(item).strip()
+        ]
+        questions = behavior_question_ids(judge)
+        if questions and not named:
+            qid = str(questions[0])
+            if not qid.startswith("q") or not qid[1:].isdigit():
+                return behavior_fail_line(qid)
+        for text in extra_texts:
+            if any(
+                text.startswith(label)
+                for label in (
+                    "Got the job done?",
+                    "Got it right?",
+                    "Followed the rules?",
+                    "Used the right evidence/actions?",
+                    "Delivered a good result?",
+                )
+            ):
+                return text
+        if extra_texts:
+            return extra_texts[0]
     why = judge.get("why") if isinstance(judge, dict) else None
     if isinstance(why, str) and why.strip():
         return why.strip()
     for item in task.failures:
         text = str(item).strip()
         if text and text.lower() not in _GENERIC_FAILS:
+            if ("→ No" in text or "-> No" in text) and (
+                text.startswith("q") or "q0" in text
+            ):
+                continue
             return text
     return "This check did not pass."
 
 
 def _named_builtin_fail(judge: dict[str, Any]) -> str | None:
-    from skillgate_ai.judge_bank import (
-        CHECK_CELL_LABELS,
-        PASS_LOCK,
-        canonical_choice,
-        extract_choice,
-    )
+    from skillgate_ai.judge_bank import CHECK_CELL_LABELS
+    from skillgate_ai.score import builtin_fail_lines
 
+    lines = builtin_fail_lines(judge)
+    if lines:
+        return lines[0]
     for item in judge.get("reasons") or []:
         text = str(item).strip()
         if not text or text.lower() in _GENERIC_FAILS:
             continue
         if any(text.startswith(label) for label in CHECK_CELL_LABELS.values()):
             return text
-    cells = judge.get("cells") if isinstance(judge.get("cells"), dict) else {}
-    for key, label in CHECK_CELL_LABELS.items():
-        cell = cells.get(key) if isinstance(cells, dict) else None
-        if not isinstance(cell, dict):
-            continue
-        choice = str(cell.get("choice") or extract_choice(cell) or "").strip()
-        if not choice:
-            continue
-        canonical = canonical_choice(key, choice)
-        if canonical and canonical.strip().lower() in PASS_LOCK[key]:
-            continue
-        reason = str(cell.get("reason") or "").strip()
-        line = f"{label} {choice}"
-        if reason and reason not in line and not is_built_reason(reason):
-            line = f"{line} — {reason}"
-        return line
     return None
 
 
@@ -736,12 +740,30 @@ def _task_check_answers(task: TaskReport) -> tuple[list[dict[str, str]], str]:
                 if text:
                     reason = text
                     break
-            if reason and is_run_fact_reason(reason):
+            builtins = {
+                "task_completion",
+                "correctness",
+                "instruction_adherence",
+                "evidence_action_validity",
+                "result_quality",
+                "path_efficiency",
+            }
+            if reason and is_run_fact_reason(reason) and key not in builtins:
                 row["reason"] = reason
                 row["source"] = "run"
                 row["source_label"] = RUN_FACTS_LABEL
+            elif reason and is_run_fact_reason(reason) and key in builtins:
+                if row.get("source_label") == "from the judge":
+                    row.pop("source_label", None)
+                    row.pop("source", None)
             elif reason and not is_built_reason(reason):
                 row["reason"] = reason
+            elif not reason and row.get("source_label") == "from the judge":
+                row.pop("source_label", None)
+                row.pop("source", None)
+            votes = votes_line(judge.get("votes"), key)
+            if votes:
+                row["votes"] = votes
             rows.append(row)
         return rows, "openai"
     rows: list[dict[str, str]] = []

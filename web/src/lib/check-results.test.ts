@@ -974,10 +974,16 @@ describe("openedCheckAnswers / low confidence", () => {
     const job = rows.find((row) => row.id === "task_completion")
     const tools = rows.find((row) => row.id === "evidence_action_validity")
     const judgeRow = rows.find((row) => row.id === "correctness")
-    expect(job?.reason).toMatch(/^Job result in the reply:/)
-    expect(job?.source).toBe("run facts")
-    expect(tools?.reason).toMatch(/^Tools used:/)
-    expect(tools?.source).toBe("run facts")
+    const jobFact = rows.find((row) => row.id === "run_facts_job_result")
+    const toolsFact = rows.find((row) => row.id === "run_facts_tools_used")
+    expect(job?.reason).toBe("No reason recorded")
+    expect(job?.source).toBeUndefined()
+    expect(tools?.reason).toBe("No reason recorded")
+    expect(tools?.source).toBeUndefined()
+    expect(jobFact?.reason).toMatch(/^Job result in the reply:/)
+    expect(jobFact?.source).toBe("run facts")
+    expect(toolsFact?.reason).toMatch(/^Tools used:/)
+    expect(toolsFact?.source).toBe("run facts")
     expect(judgeRow?.reason).toBe("The reply honestly says no refund went through.")
     expect(judgeRow?.source).toBe("from the judge")
   })
@@ -1026,9 +1032,12 @@ describe("openedCheckAnswers / low confidence", () => {
       happened: GUARD_REFUSED_RETRY_NOTE,
       judge: {
         warnings: [GUARD_REFUSED_RETRY_NOTE],
-        extra_failures: [],
+        extra_failures: ["no duplicate refund calls No"],
+        questions: {
+          q0: { instructions: "no duplicate refund calls", type: "predicate" },
+        },
         answers: {
-          q0: { probability: 1, source: "log", warning: GUARD_REFUSED_RETRY_NOTE },
+          q0: { probability: 0, source: "log", choice: "No" },
           instruction_adherence: { choice: "Violated" },
           result_quality: { choice: "Significant issues" },
         },
@@ -1055,6 +1064,32 @@ describe("openedCheckAnswers / low confidence", () => {
     const line = happenedLine(task)
     expect(line).not.toBe(GUARD_REFUSED_RETRY_NOTE)
     expect(line).toMatch(/Violated|Significant issues/)
+    expect(line).not.toMatch(/q0/)
+    expect(line).not.toMatch(/→ No/)
+  })
+
+  it("shows every majority vote on the check row", () => {
+    const rows = openedCheckAnswers({
+      id: "c1",
+      passed: false,
+      status: "fail",
+      judge: {
+        cells: {
+          correctness: { choice: "Incorrect", reason: "The refund was not done." },
+        },
+        answers: {
+          correctness: { choice: "Incorrect", reason: "The refund was not done." },
+        },
+        votes: [
+          { correctness: { choice: "Incorrect", confidence: 0.4 } },
+          { correctness: { choice: "Correct", confidence: 0.7 } },
+          { correctness: { choice: "Incorrect", confidence: 0.6 } },
+        ],
+      },
+    })
+    const row = rows.find((item) => item.id === "correctness")
+    expect(row?.answer).toBe("Incorrect")
+    expect(row?.votes).toBe("votes: 1 Incorrect; 2 Correct; 3 Incorrect")
   })
 
   it("does not say Output matched what was expected on a failing row", () => {

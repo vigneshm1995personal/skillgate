@@ -16,10 +16,11 @@ from skillgate_ai.judge_bank import (
     GUARD_REFUSED_RETRY_NOTE,
     OUTCOME_QUESTIONS,
     OUTCOME_SCORING_NOTES,
+    RUN_FACTS_JOB_ID,
     RUN_FACTS_LABEL,
+    RUN_FACTS_TOOLS_ID,
     UNSURE_REVIEW,
     WORDING_OVERRIDE_NOTE,
-    is_built_reason,
 )
 from skillgate_ai.judge_spec import builtin_spec
 from skillgate_ai.report import format_cli, report_to_dict
@@ -296,13 +297,18 @@ def test_built_run_text_is_labeled_run_facts_not_from_the_judge() -> None:
     }
     answers = {key: dict(row) for key, row in cells.items()}
     drop_assembled_reasons(cells, answers)
-    assert is_built_reason(cells["task_completion"]["reason"])
-    assert cells["task_completion"]["reason"].startswith("Job result in the reply:")
-    assert cells["evidence_action_validity"]["reason"].startswith("Tools used:")
+    assert not cells["task_completion"].get("reason")
+    assert not cells["evidence_action_validity"].get("reason")
     rows = {row["id"]: row for row in check_rows({"passed": True, "judge": {"cells": cells, "answers": answers}})}
-    assert rows["task_completion"]["reason"].startswith("Job result in the reply:")
-    assert rows["task_completion"]["source_label"] == RUN_FACTS_LABEL
-    assert rows["evidence_action_validity"]["source_label"] == RUN_FACTS_LABEL
+    assert rows["task_completion"]["reason"] == "No reason recorded" or not str(
+        rows["task_completion"].get("reason") or ""
+    ).startswith("Job result")
+    assert rows["task_completion"].get("source_label") != "from the judge" or rows[
+        "task_completion"
+    ]["reason"] != "No reason recorded"
+    assert rows[RUN_FACTS_JOB_ID]["reason"].startswith("Job result in the reply:")
+    assert rows[RUN_FACTS_JOB_ID]["source_label"] == RUN_FACTS_LABEL
+    assert rows[RUN_FACTS_TOOLS_ID]["source_label"] == RUN_FACTS_LABEL
     assert rows["correctness"]["reason"] == "The reply honestly says no refund went through."
     assert rows["correctness"]["source_label"] == "from the judge"
     text = format_run_show(

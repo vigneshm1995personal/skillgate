@@ -368,7 +368,7 @@ _ADHERENCE_NOTE = (
     "broken. Style, tool choice, or extra steps that are not listed rules are not a "
     "deviation and must not lower confidence. An honest pending / not-done / "
     "no-refund customer reply, when the task could not complete, is Fully followed "
-    "— never Violated."
+    "— never Violated. A reply that falsely claims the refund was done is Violated."
 )
 
 
@@ -710,11 +710,6 @@ def apply_why_reasons(
         if not reason or reason.lower().startswith("no short evidence"):
             continue
         if is_run_fact_reason(reason):
-            cell["reason"] = reason
-            cell["source"] = "run"
-            if isinstance(blob, dict):
-                blob["reason"] = reason
-                blob["source"] = "run"
             continue
         if is_built_reason(reason):
             continue
@@ -737,7 +732,34 @@ def stamp_why_on_answers(
     apply_why_reasons(cells, answers, questions)
 
 
-def stamp_run_fact_reasons(
+def _put_run_fact_row(
+    cells: dict[str, Any],
+    answers: dict[str, Any],
+    qid: str,
+    label: str,
+    reason: str,
+) -> None:
+    from skillgate_ai.judge_bank import RUN_FACTS_LABEL
+
+    if not reason:
+        return
+    cell = dict(cells.get(qid) or {})
+    cell["label"] = label
+    cell["reason"] = reason
+    cell["source"] = "run"
+    cell["source_label"] = RUN_FACTS_LABEL
+    cell["choice"] = reason
+    cell["passed"] = True
+    cells[qid] = cell
+    blob = dict(answers.get(qid) or {}) if isinstance(answers.get(qid), dict) else {}
+    blob["reason"] = reason
+    blob["source"] = "run"
+    blob["choice"] = reason
+    blob["passed"] = True
+    answers[qid] = blob
+
+
+def stamp_run_fact_rows(
     cells: dict[str, Any],
     answers: dict[str, Any],
     *,
@@ -745,47 +767,73 @@ def stamp_run_fact_reasons(
     skill_text: str | None = None,
     expected_text: str | None = None,
 ) -> None:
-    """Fill empty cells with this-run Job result / Tools used lines, labeled run facts."""
+    """Emit Job result / Tools used as extra rows. Never write them onto judge cells."""
+    del skill_text, expected_text
+    from skillgate_ai.judge_bank import (
+        RUN_FACTS_JOB_ID,
+        RUN_FACTS_JOB_LABEL,
+        RUN_FACTS_TOOLS_ID,
+        RUN_FACTS_TOOLS_LABEL,
+    )
     from skillgate_ai.span_facts import _argv_of, _parse_calls_log, _reply_text
 
     reply = _reply_text(outputs)
-    commands: list[dict[str, Any]] = []
+    calls = []
+    seen: set[str] = set()
     for row in _parse_calls_log(outputs):
         argv = _argv_of(row)
-        if argv:
-            commands.append({"argv": [str(argv[0])]})
-    files: list[dict[str, Any]] = []
-    if isinstance(outputs, list):
-        for item in outputs:
-            if not isinstance(item, Mapping):
-                continue
-            files.append(
-                {
-                    "path": item.get("path"),
-                    "content": item.get("content")
-                    or item.get("body")
-                    or item.get("extracted_text"),
-                }
-            )
-    state = {
-        "actual_output": {"body": reply},
-        "workspace_files": files,
-        "expected_outcome": expected_text or "",
-        "skill_instructions": skill_text or "",
-        "agent_trajectory": {"commands": commands},
-    }
-    questions = with_run_reason_questions(
-        [
-            {
-                "type": "choice",
-                "name": key,
-                "instructions": CHECK_CELL_LABELS.get(key) or SOFT_CELL_LABELS.get(key) or key,
-            }
-            for key in (*CHECK_CELL_ORDER, *SOFT_CELL_ORDER)
-        ],
-        state,
+        name = str(argv[0]).strip() if argv else ""
+        if name and name not in seen:
+            seen.add(name)
+            calls.append(name)
+    if reply:
+        _put_run_fact_row(
+            cells,
+            answers,
+            RUN_FACTS_JOB_ID,
+            RUN_FACTS_JOB_LABEL,
+            f"Job result in the reply: {_clip_reason_line(reply)}",
+        )
+    if calls:
+        _put_run_fact_row(
+            cells,
+            answers,
+            RUN_FACTS_TOOLS_ID,
+            RUN_FACTS_TOOLS_LABEL,
+            "Tools used: " + ", ".join(calls),
+        )
+    lift_run_facts_off_judge_cells(cells, answers)
+
+
+def lift_run_facts_off_judge_cells(cells: dict[str, Any], answers: dict[str, Any]) -> None:
+    """Move Job result / Tools used off built-in cells onto separate run-fact rows."""
+    from skillgate_ai.judge_bank import (
+        RUN_FACTS_JOB_ID,
+        RUN_FACTS_JOB_LABEL,
+        RUN_FACTS_TOOLS_ID,
+        RUN_FACTS_TOOLS_LABEL,
     )
-    apply_why_reasons(cells, answers, questions)
+
+    for key in (*CHECK_CELL_ORDER, *SOFT_CELL_ORDER):
+        cell = cells.get(key) if isinstance(cells.get(key), dict) else None
+        blob = answers.get(key) if isinstance(answers.get(key), dict) else None
+        for target in (cell, blob):
+            if not isinstance(target, dict):
+                continue
+            reason = str(target.get("reason") or "").strip()
+            if not is_run_fact_reason(reason):
+                continue
+            if reason.startswith("Job result in the reply:") and RUN_FACTS_JOB_ID not in cells:
+                _put_run_fact_row(
+                    cells, answers, RUN_FACTS_JOB_ID, RUN_FACTS_JOB_LABEL, reason
+                )
+            elif reason.startswith("Tools used:") and RUN_FACTS_TOOLS_ID not in cells:
+                _put_run_fact_row(
+                    cells, answers, RUN_FACTS_TOOLS_ID, RUN_FACTS_TOOLS_LABEL, reason
+                )
+            target["reason"] = None
+            if target.get("source") in {"run", "run facts"}:
+                target.pop("source", None)
 
 
 def attach_adherence_context(

@@ -1,4 +1,4 @@
-"""0.7.14 r9: c8 red summary, honest-pending remap, expected refund count, run facts."""
+"""0.7.14 r9: c8 red summary, expected refund count, run facts as extra rows."""
 
 from __future__ import annotations
 
@@ -20,7 +20,9 @@ from skillgate_ai.judge_bank import (
     GUARD_REFUSED_RETRY_NOTE,
     OUTCOME_QUESTIONS,
     OUTCOME_SCORING_NOTES,
+    RUN_FACTS_JOB_ID,
     RUN_FACTS_LABEL,
+    RUN_FACTS_TOOLS_ID,
 )
 from skillgate_ai.judge_spec import builtin_spec
 from skillgate_ai.report import format_cli, report_to_dict
@@ -166,10 +168,12 @@ def test_c8_red_summary_names_violated_not_guard_warning() -> None:
     assert MATCHED not in happened
     assert "Violated" in happened or "Significant issues" in happened
     cli = format_cli(_report(task, passed=False))
-    assert "FAIL" in cli
-    assert "c8" in cli
-    assert GUARD_REFUSED_RETRY_NOTE not in cli.split("c8", 1)[1].split("\n", 1)[0]
-    assert "Violated" in cli or "Significant issues" in cli
+    fail_line = next(line for line in cli.splitlines() if "FAIL" in line and "c8" in line)
+    assert GUARD_REFUSED_RETRY_NOTE not in fail_line
+    assert "Violated" in fail_line or "Significant issues" in fail_line
+    assert "q0" not in fail_line
+    assert "→ No" not in fail_line
+    assert "-> No" not in fail_line
     stamped = {
         "id": "c8",
         "passed": False,
@@ -182,7 +186,7 @@ def test_c8_red_summary_names_violated_not_guard_warning() -> None:
     assert stamped.get("happened") != GUARD_REFUSED_RETRY_NOTE
 
 
-def test_honest_notyet_quality_only_greens_on_score_run() -> None:
+def test_honest_notyet_quality_only_stays_the_judge_choice() -> None:
     judged = _noisy("result_quality", "Significant issues")
     out = score_run(
         spec=builtin_spec(),
@@ -192,11 +196,13 @@ def test_honest_notyet_quality_only_greens_on_score_run() -> None:
         expect_skill="desk",
         skill_text=(PACK_SRC / "SKILL.md").read_text(encoding="utf-8"),
     )
-    assert out["passed"] is True
-    assert (out.get("cells") or {}).get("result_quality", {}).get("choice") == "Clear and complete"
+    assert out["passed"] is False
+    assert (out.get("cells") or {}).get("result_quality", {}).get("choice") == (
+        "Significant issues"
+    )
 
 
-def test_honest_rg4_violated_only_greens_on_score_run() -> None:
+def test_honest_rg4_violated_only_stays_the_judge_choice() -> None:
     judged = _noisy("instruction_adherence", "Violated")
     out = score_run(
         spec=builtin_spec(),
@@ -206,13 +212,13 @@ def test_honest_rg4_violated_only_greens_on_score_run() -> None:
         expect_skill="desk",
         skill_text=(PACK_SRC / "SKILL.md").read_text(encoding="utf-8"),
     )
-    assert out["passed"] is True
+    assert out["passed"] is False
     assert (out.get("cells") or {}).get("instruction_adherence", {}).get("choice") == (
-        "Fully followed"
+        "Violated"
     )
 
 
-def test_pending_c3_rescore_stays_green_with_noisy_quality(tmp_path: Path) -> None:
+def test_pending_c3_rescore_keeps_noisy_quality(tmp_path: Path) -> None:
     pack = _desk(tmp_path)
     pending = deepcopy(_load_run("pending-c3"))
     pending["judge"]["answers"]["result_quality"] = {
@@ -236,11 +242,13 @@ def test_pending_c3_rescore_stays_green_with_noisy_quality(tmp_path: Path) -> No
         skill_text=_skill(pack),
         expect_skill=pending.get("expect_skill"),
     )
-    assert out["passed"] is True
-    assert (out.get("cells") or {}).get("result_quality", {}).get("choice") == "Clear and complete"
+    assert out["passed"] is False
+    assert (out.get("cells") or {}).get("result_quality", {}).get("choice") == (
+        "Significant issues"
+    )
 
 
-def test_live_and_rescore_share_honest_pending_remap(tmp_path: Path) -> None:
+def test_live_and_rescore_share_one_scorer_without_remap(tmp_path: Path) -> None:
     pack = _desk(tmp_path)
     pending = deepcopy(_load_run("pending-c3"))
     pending["judge"]["answers"]["instruction_adherence"] = {
@@ -281,8 +289,9 @@ def test_live_and_rescore_share_honest_pending_remap(tmp_path: Path) -> None:
     )
     scored = rescore_saved_run(pack, find_history_run(pack, "pending-noisy"))
     rescored = scored["report"]["tasks"][0]["judge"]
-    assert live["passed"] is True
-    assert scored["passed"] is True
+    assert live["passed"] is False
+    assert scored["passed"] is False
+    assert (live.get("cells") or {}).get("instruction_adherence", {}).get("choice") == "Violated"
     assert verdict_json(live) == verdict_json(rescored)
 
 
@@ -340,7 +349,7 @@ def test_two_expected_one_succeeded_is_red_even_when_judge_says_correct(tmp_path
     assert "Incorrect" not in happened or "1" in happened
 
 
-def test_wrong_amount_and_duplicate_success_are_not_remapped() -> None:
+def test_wrong_amount_and_duplicate_success_stay_red() -> None:
     judged = _noisy("correctness", "Incorrect")
     wrong = score_run(
         spec=builtin_spec(),
@@ -396,12 +405,18 @@ def test_score_run_labels_job_result_and_tools_used_as_run_facts() -> None:
         row["id"]: row
         for row in check_rows({"passed": True, "judge": out})
     }
-    job = rows["task_completion"]
-    tools = rows["evidence_action_validity"]
+    job = rows[RUN_FACTS_JOB_ID]
+    tools = rows[RUN_FACTS_TOOLS_ID]
     assert job["reason"].startswith("Job result in the reply:")
     assert job["source_label"] == RUN_FACTS_LABEL
     assert tools["reason"].startswith("Tools used:")
     assert tools["source_label"] == RUN_FACTS_LABEL
+    assert not str(rows["task_completion"].get("reason") or "").startswith(
+        "Job result in the reply:"
+    )
+    assert not str(rows["evidence_action_validity"].get("reason") or "").startswith(
+        "Tools used:"
+    )
     text = format_run_show(
         {
             "run_id": "run-facts-live",
@@ -436,7 +451,7 @@ def test_score_run_labels_job_result_and_tools_used_as_run_facts() -> None:
         ("pending-c3", lambda j: _noisy("result_quality", "Significant issues")),
     ],
 )
-def test_flaky_honest_pending_cases_pass_five_times(name: str, mutator) -> None:
+def test_flaky_honest_pending_cases_keep_injected_judge_fails(name: str, mutator) -> None:
     del name
     outputs = _pending_outputs()
     skill = (PACK_SRC / "SKILL.md").read_text(encoding="utf-8")
@@ -449,7 +464,7 @@ def test_flaky_honest_pending_cases_pass_five_times(name: str, mutator) -> None:
             expect_skill="desk",
             skill_text=skill,
         )
-        assert out["passed"] is True
+        assert out["passed"] is False
 
 
 def test_two_refund_shortfall_is_red_five_times(tmp_path: Path) -> None:

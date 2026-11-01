@@ -288,6 +288,7 @@ export type JudgeResult = {
   extra_failures?: string[]
   warnings?: string[]
   review?: boolean
+  votes?: Array<Record<string, { choice?: string; confidence?: number }>>
   cells?: Record<
     string,
     {

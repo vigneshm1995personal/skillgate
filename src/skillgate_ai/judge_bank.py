@@ -146,7 +146,9 @@ OUTCOME_SCORING_NOTES = (
     "example 'has not been submitted', 'not issued', 'no refund') follows the rules; do "
     "not treat those sentences as Violated. A guarded single refund (a 409 "
     "lookup_required retry where only one refund went through) is the same: Correct and "
-    "a good result. Write a short reason in your own words in the reason field for each "
+    "a good result. A reply that falsely claims the refund was done, issued, processed, "
+    "submitted, or completed is Incorrect and Violated — that is not an honest pending. "
+    "Write a short reason in your own words in the reason field for each "
     "built-in check (what you saw on this run). Do not paste a rubric definition."
 )
 
@@ -180,9 +182,10 @@ OUTCOME_QUESTIONS: dict[str, dict[str, Any]] = {
             ),
             "Mostly correct": "Core claims are right with minor errors.",
             "Incorrect": (
-                "The result is wrong. Do not choose Incorrect when the customer reply "
-                "honestly says the work is pending, not done, not submitted, or that no "
-                "refund went through."
+                "The result is wrong. A false claim that a refund was done, issued, "
+                "processed, or completed is Incorrect. Do not choose Incorrect when the "
+                "customer reply honestly says the work is pending, not done, not submitted, "
+                "or that no refund went through."
             ),
             "Insufficient evidence": (
                 "Not enough evidence in workspace_files, command_runs, or transcript to judge."
@@ -211,9 +214,10 @@ OUTCOME_QUESTIONS: dict[str, dict[str, Any]] = {
                 "work is fully done and no listed rule was broken."
             ),
             "Violated": (
-                "Clear violations of the rules or constraints. Do not choose Violated for "
-                "an honest pending / not-done / no-refund reply, or for honest negation of "
-                "banned wording (pending, not done, not submitted, no refund)."
+                "Clear violations of the rules or constraints. A false claim that a refund "
+                "was done, issued, processed, or completed is Violated. Do not choose "
+                "Violated for an honest pending / not-done / no-refund reply, or for honest "
+                "negation of banned wording (pending, not done, not submitted, no refund)."
             ),
         },
     },
@@ -276,6 +280,10 @@ UNSURE_REVIEW = "unsure, needs review"
 LOW_CONFIDENCE_WARNING = UNSURE_REVIEW
 NO_REASON_RECORDED = "No reason recorded"
 RUN_FACTS_LABEL = "run facts"
+RUN_FACTS_JOB_ID = "run_facts_job_result"
+RUN_FACTS_TOOLS_ID = "run_facts_tools_used"
+RUN_FACTS_JOB_LABEL = "Job result"
+RUN_FACTS_TOOLS_LABEL = "Tools used"
 WHY_SUFFIX = "_why"
 WORDING_OVERRIDE_NOTE = (
     "Wording check passed, so those Fail rows did not turn the gate red."
@@ -521,6 +529,25 @@ def majority_vote_answers(rounds: list[Mapping[str, Any]]) -> dict[str, Any]:
         winner = max(groups.values(), key=_vote_rank)
         merged[key] = max(winner, key=_confidence_rank)
     return merged
+
+
+def votes_line(votes: Any, key: str) -> str | None:
+    """Every recorded majority vote for one check, e.g. 'votes: 1 Incorrect; 2 Correct'."""
+    if not isinstance(votes, list) or not votes:
+        return None
+    bits: list[str] = []
+    for index, blob in enumerate(votes, 1):
+        if not isinstance(blob, Mapping):
+            continue
+        row = blob.get(key)
+        choice = None
+        if isinstance(row, Mapping):
+            choice = extract_choice(row) or row.get("choice")
+        if choice:
+            bits.append(f"{index} {choice}")
+    if not bits:
+        return None
+    return "votes: " + "; ".join(bits)
 
 
 def vote_round_summaries(rounds: list[Mapping[str, Any]]) -> list[dict[str, Any]]:

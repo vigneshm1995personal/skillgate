@@ -32,19 +32,6 @@ from skillgate_ai.judge_spec import (
 )
 from skillgate_ai.span_facts import apply_log_facts
 
-_HONEST_PENDING_LOCK = {
-    "task_completion": "Fully completed",
-    "correctness": "Correct",
-    "instruction_adherence": "Fully followed",
-    "result_quality": "Clear and complete",
-}
-_HONEST_PENDING_NOISE = {
-    "task_completion": frozenset({"partially completed", "not completed"}),
-    "correctness": frozenset({"incorrect"}),
-    "instruction_adherence": frozenset({"violated", "major deviation"}),
-    "result_quality": frozenset({"significant issues", "poor"}),
-}
-
 
 def score_run(
     *,
@@ -59,8 +46,8 @@ def score_run(
     expected_text: str | None = None,
 ) -> dict[str, Any]:
     """Gate a run from judge answers plus outputs/spans. Live check and rescore call this."""
-    from skillgate_ai.judge_context import stamp_run_fact_reasons
-    from skillgate_ai.span_facts import expected_refund_count, expected_refund_shortfall
+    from skillgate_ai.judge_context import stamp_run_fact_rows
+    from skillgate_ai.span_facts import expected_refund_shortfall
     from skillgate_ai.wording_facts import attach_wording_questions
 
     spec = attach_wording_questions(spec, skill_text)
@@ -83,9 +70,7 @@ def score_run(
         outputs=outputs,
         skill_instructions=skill_text,
     )
-    expected_n = expected_refund_count(expected_blob)
-    remap_honest_pending(cells, merged, outputs, expected=expected_n)
-    stamp_run_fact_reasons(
+    stamp_run_fact_rows(
         cells,
         merged,
         outputs=outputs,
@@ -133,42 +118,37 @@ def score_run(
     return out
 
 
-def remap_honest_pending(
-    cells: dict[str, Any],
-    answers: dict[str, Any],
-    outputs: Sequence[Any] | None,
-    *,
-    expected: int | None,
-) -> None:
-    """Clear noisy quality/Violated rows when the run is an honest pending/not-done."""
-    from skillgate_ai.span_facts import is_honest_pending_outcome
-
-    if not is_honest_pending_outcome(outputs, expected=expected):
-        return
-    for key, lock in _HONEST_PENDING_LOCK.items():
-        noisy = _HONEST_PENDING_NOISE[key]
-        cell = cells.get(key) if isinstance(cells.get(key), dict) else None
-        blob = answers.get(key)
-        choice = None
-        if isinstance(cell, dict):
-            choice = cell.get("choice") or extract_choice(cell)
+def builtin_fail_lines(judged: Mapping[str, Any]) -> list[str]:
+    """Named Pass-lock fails, in check order. Never a q0 → No stand-in."""
+    cells = judged.get("cells") if isinstance(judged.get("cells"), Mapping) else {}
+    answers = judged.get("answers") if isinstance(judged.get("answers"), Mapping) else {}
+    lines: list[str] = []
+    for key in CHECK_CELL_ORDER:
+        cell = cells.get(key) if isinstance(cells.get(key), Mapping) else {}
+        raw = answers.get(key)
+        choice = cell.get("choice") if isinstance(cell, Mapping) else None
         if not choice:
-            choice = extract_choice(blob)
+            choice = extract_choice(raw)
         canonical = canonical_choice(key, str(choice) if choice else None)
-        if canonical is None or canonical.strip().lower() not in noisy:
+        allowed = PASS_LOCK.get(key) or frozenset()
+        if canonical is None or canonical.strip().lower() in allowed:
             continue
-        if not isinstance(cell, dict):
-            cell = {"label": CHECK_CELL_LABELS[key]}
-            cells[key] = cell
-        cell["choice"] = lock
-        cell["reason"] = None
-        cell.pop("source", None)
-        if isinstance(blob, dict):
-            blob["choice"] = lock
-            blob["reason"] = None
-            blob.pop("source", None)
-        else:
-            answers[key] = {"choice": lock}
+        label = CHECK_CELL_LABELS[key]
+        reason = None
+        if isinstance(cell, Mapping):
+            reason = str(cell.get("reason") or "").strip() or None
+        if not reason and isinstance(raw, Mapping):
+            reason = extract_reason(raw)
+        line = f"{label} {choice}"
+        if (
+            reason
+            and reason not in line
+            and not is_built_reason(reason)
+            and not is_run_fact_reason(reason)
+        ):
+            line = f"{line} — {reason}"
+        lines.append(line)
+    return lines
 
 
 def apply_gate(
@@ -195,6 +175,7 @@ def apply_gate(
         for item in (judged.get("extra_failures") or [])
         if str(item).strip()
     ]
+    named = builtin_fail_lines(judged)
     if expect_skill is None:
         if judged.get("score_no_trigger") and extra:
             judged["passed"] = False
@@ -202,13 +183,13 @@ def apply_gate(
         return det_passed, list(det_failures)
     if extra:
         judged["passed"] = False
-        return False, extra
-    if builtin_choice_failed(judged):
+        return False, [*named, *extra] if named else extra
+    if named or builtin_choice_failed(judged):
         failures = [
             str(item) for item in (judged.get("reasons") or []) if str(item).strip()
         ]
         judged["passed"] = False
-        return False, failures or ["Got it right? Incorrect"]
+        return False, failures or named or ["Got it right? Incorrect"]
     if judged.get("status") == "error":
         reason = str(judged.get("reason") or "").strip()
         if not reason:
@@ -277,7 +258,10 @@ def drop_unsure_on_pass_lock(cells: dict[str, Any], answers: Mapping[str, Any]) 
 
 
 def drop_assembled_reasons(cells: dict[str, Any], answers: dict[str, Any]) -> None:
-    """Drop canned/rubric lines. Keep run-built prefixes and stamp them as run facts."""
+    """Drop canned/rubric lines. Lift run-fact prefixes onto separate rows."""
+    from skillgate_ai.judge_context import lift_run_facts_off_judge_cells
+
+    lift_run_facts_off_judge_cells(cells, answers)
     for key in (*CHECK_CELL_ORDER, *SOFT_CELL_ORDER):
         cell = cells.get(key) if isinstance(cells.get(key), dict) else None
         blob = answers.get(key) if isinstance(answers.get(key), dict) else None
@@ -303,11 +287,13 @@ def drop_assembled_reasons(cells: dict[str, Any], answers: dict[str, Any]) -> No
             continue
         if is_run_fact_reason(reason):
             if isinstance(cell, dict):
-                cell["reason"] = reason
-                cell["source"] = "run"
-            if isinstance(blob, dict):
-                blob["reason"] = reason
-                blob["source"] = "run"
+                cell["reason"] = None
+                if cell.get("source") in {"run", "run facts"}:
+                    cell.pop("source", None)
+            if isinstance(blob, dict) and is_run_fact_reason(blob.get("reason")):
+                blob.pop("reason", None)
+                if blob.get("source") in {"run", "run facts"}:
+                    blob.pop("source", None)
             continue
         if is_built_reason(reason):
             if isinstance(cell, dict):

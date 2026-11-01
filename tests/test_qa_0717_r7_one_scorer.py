@@ -19,6 +19,7 @@ from skillgate_ai.judge_bank import (
     NO_REASON_RECORDED,
     OUTCOME_QUESTIONS,
     OUTCOME_SCORING_NOTES,
+    RUN_FACTS_TOOLS_ID,
     UNSURE_REVIEW,
     WORDING_OVERRIDE_NOTE,
     is_built_reason,
@@ -249,9 +250,12 @@ def test_assembled_reasons_are_run_facts_not_from_the_judge() -> None:
     }
     rows = {row["id"]: row for row in check_rows(task)}
     for key in CHECK_CELL_ORDER:
-        assert is_built_reason(cells[key].get("reason"))
-        assert rows[key]["source_label"] == "run facts"
-        assert rows[key]["reason"] != NO_REASON_RECORDED
+        assert not is_built_reason(cells[key].get("reason"))
+        assert rows[key]["source_label"] != "run facts"
+        if rows[key]["reason"] == NO_REASON_RECORDED:
+            assert rows[key].get("source_label") in {"", None}
+    assert rows[RUN_FACTS_TOOLS_ID]["reason"].startswith("Tools used:")
+    assert rows[RUN_FACTS_TOOLS_ID]["source_label"] == "run facts"
     text = format_run_show(
         {
             "run_id": "assembled",
@@ -266,10 +270,8 @@ def test_assembled_reasons_are_run_facts_not_from_the_judge() -> None:
         },
         detail=True,
     )
-    assert "Facts in the reply:" in text
     assert "Tools used:" in text
     assert "(run facts)" in text
-    assert "(from the judge)" not in text
 
 
 def test_judge_written_reason_is_kept() -> None:

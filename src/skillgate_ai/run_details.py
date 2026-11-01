@@ -12,6 +12,11 @@ from skillgate_ai.judge_bank import (
     GUARD_REFUSED_RETRY_NOTE,
     MATCHED_OUTPUT_LINE,
     NO_REASON_RECORDED,
+    RUN_FACTS_JOB_ID,
+    RUN_FACTS_JOB_LABEL,
+    RUN_FACTS_LABEL,
+    RUN_FACTS_TOOLS_ID,
+    RUN_FACTS_TOOLS_LABEL,
     UNSURE_REVIEW,
     WHY_SUFFIX,
     WORDING_OVERRIDE_NOTE,
@@ -20,6 +25,7 @@ from skillgate_ai.judge_bank import (
     is_rubric_reason,
     is_run_fact_reason,
     score_for_choice,
+    votes_line,
 )
 from skillgate_ai.openai_http import redact_secrets
 
@@ -198,6 +204,8 @@ def _row_reason(
         if is_rubric_reason(key, choice, text):
             continue
         if is_run_fact_reason(text):
+            if key in _BUILTIN_LABELS:
+                continue
             return redact_run_text(text)
         if is_built_reason(text):
             continue
@@ -269,6 +277,8 @@ def check_rows(task: Mapping[str, Any] | None) -> list[dict[str, Any]]:
             if guessed is not None:
                 score = 1.0 if guessed else 0.0
         reason = _row_reason(key, choice, label, cell, answer, listed_row)
+        if key in _BUILTIN_LABELS and reason != NO_REASON_RECORDED and is_run_fact_reason(reason):
+            reason = NO_REASON_RECORDED
         if reason != NO_REASON_RECORDED and is_run_fact_reason(reason):
             src = "run facts"
         elif reason == NO_REASON_RECORDED and src == "from the judge":
@@ -315,6 +325,9 @@ def check_rows(task: Mapping[str, Any] | None) -> list[dict[str, Any]]:
             row["score"] = score
         if warning:
             row["warning"] = warning
+        votes = votes_line(judge.get("votes"), key)
+        if votes:
+            row["votes"] = votes
         rows.append(row)
 
     if isinstance(cells, Mapping):
@@ -330,6 +343,34 @@ def check_rows(task: Mapping[str, Any] | None) -> list[dict[str, Any]]:
         if not label or any(row["label"] == label for row in rows):
             continue
         add_row(str(item.get("id") or f"listed-{index}"), item)
+
+    def add_fact(qid: str, label: str, reason: str) -> None:
+        if qid in seen or not reason:
+            return
+        seen.add(qid)
+        rows.append(
+            {
+                "id": qid,
+                "label": label,
+                "answer": reason,
+                "reason": reason,
+                "source": "run",
+                "source_label": RUN_FACTS_LABEL,
+                "passed": True,
+            }
+        )
+
+    for key in _BUILTIN_LABELS:
+        cell = cells.get(key) if isinstance(cells, Mapping) else {}
+        answer = answers.get(key) if isinstance(answers, Mapping) else {}
+        for blob in (cell, answer):
+            if not isinstance(blob, Mapping):
+                continue
+            text = str(blob.get("reason") or "").strip()
+            if text.startswith("Job result in the reply:"):
+                add_fact(RUN_FACTS_JOB_ID, RUN_FACTS_JOB_LABEL, text)
+            elif text.startswith("Tools used:"):
+                add_fact(RUN_FACTS_TOOLS_ID, RUN_FACTS_TOOLS_LABEL, text)
 
     scores = task.get("scores") if isinstance(task.get("scores"), list) else []
     if not rows:
@@ -530,6 +571,7 @@ def hydrate_task(task: dict[str, Any]) -> dict[str, Any]:
             "source_label": row.get("source_label"),
             "passed": row.get("passed"),
             "warning": row.get("warning"),
+            "votes": row.get("votes"),
         }
         for row in detail["checks"]
     ]
@@ -674,6 +716,7 @@ def format_run_show(
                         str(item.get("answer") or "").strip(),
                         score,
                         reason,
+                        str(item.get("votes") or "").strip(),
                         f"({src})" if src else "",
                     )
                     if part

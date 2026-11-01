@@ -89,6 +89,8 @@ export const CONFIDENCE_WARN = 0.5
 export const UNSURE_REVIEW = "unsure, needs review"
 export const NO_REASON_RECORDED = "No reason recorded"
 export const RUN_FACTS_LABEL = "run facts"
+export const RUN_FACTS_JOB_ID = "run_facts_job_result"
+export const RUN_FACTS_TOOLS_ID = "run_facts_tools_used"
 export const WORDING_OVERRIDE_NOTE =
   "Wording check passed, so those Fail rows did not turn the gate red."
 export const GUARD_REFUSED_RETRY_NOTE =
@@ -142,6 +144,7 @@ export type OpenedAnswer = {
   source?: string
   passed?: boolean | null
   warning?: string
+  votes?: string
 }
 
 function trimText(value: unknown): string {
@@ -846,12 +849,30 @@ function openedReason(
   ].filter(Boolean)
   for (const text of texts) {
     if (isRubricReason(text, question)) continue
-    if (isRunFactReason(text)) return text
+    if (isRunFactReason(text)) continue
     if (isBuiltReason(text)) continue
     if (reasonRepeatsPrompt(label, choice, text)) continue
     return text
   }
   return NO_REASON_RECORDED
+}
+
+export function votesLine(votes: unknown, key: string): string | undefined {
+  if (!Array.isArray(votes) || votes.length === 0) {
+    return undefined
+  }
+  const bits: string[] = []
+  votes.forEach((blob, index) => {
+    if (!blob || typeof blob !== "object") {
+      return
+    }
+    const row = (blob as Record<string, { choice?: string } | undefined>)[key]
+    const choice = trimText(row?.choice)
+    if (choice) {
+      bits.push(`${index + 1} ${choice}`)
+    }
+  })
+  return bits.length ? `votes: ${bits.join("; ")}` : undefined
 }
 
 function openedPassed(
@@ -997,11 +1018,13 @@ export function openedCheckAnswers(task: TaskResult): OpenedAnswer[] {
       question
     )
     if (reason) row.reason = reason
-    if (reason && isRunFactReason(reason)) {
+    if (reason && isRunFactReason(reason) && !reservedQuestionId(id)) {
       row.source = RUN_FACTS_LABEL
     } else if (reason === NO_REASON_RECORDED && row.source === "from the judge") {
       row.source = undefined
     }
+    const votes = votesLine(task.judge?.votes, id)
+    if (votes) row.votes = votes
     const passed = openedPassed(id, choice, score, cell, listedRow)
     if (passed != null) row.passed = passed
     const warning = trimText(cell?.warning) || trimText(answer?.warning) || trimText(listedRow?.warning)
@@ -1159,7 +1182,31 @@ export function openedCheckAnswers(task: TaskResult): OpenedAnswer[] {
       )
     )
   }
-  return [...builtins, ...extras]
+  const seenIds = new Set([...builtins, ...extras].map((row) => row.id))
+  const facts: OpenedAnswer[] = []
+  const addFact = (id: string, label: string, reason: string) => {
+    if (!reason || seenIds.has(id)) {
+      return
+    }
+    seenIds.add(id)
+    facts.push({
+      id,
+      label,
+      answer: reason,
+      reason,
+      source: RUN_FACTS_LABEL,
+      passed: true,
+    })
+  }
+  for (const id of CHECK_QUESTION_ORDER) {
+    const reason = trimText(answers?.[id]?.reason) || trimText(cells?.[id]?.reason)
+    if (reason.startsWith("Job result in the reply:")) {
+      addFact(RUN_FACTS_JOB_ID, "Job result", reason)
+    } else if (reason.startsWith("Tools used:")) {
+      addFact(RUN_FACTS_TOOLS_ID, "Tools used", reason)
+    }
+  }
+  return [...builtins, ...extras, ...facts]
 }
 
 function looksLikeDidntStart(text: string): boolean {
