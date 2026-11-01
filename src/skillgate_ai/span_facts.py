@@ -331,9 +331,12 @@ def log_fact_kind(ask: str) -> str | None:
     return _fact_kind(ask)
 
 
-def _predicate(yes: bool, *, source: str) -> dict[str, Any]:
+def _predicate(yes: bool, *, source: str, reason: str | None = None) -> dict[str, Any]:
     value = 1.0 if yes else 0.0
-    return {"probability": value, "source": source}
+    out: dict[str, Any] = {"probability": value, "source": source}
+    if reason:
+        out["reason"] = reason
+    return out
 
 
 def _primary_tool(
@@ -422,8 +425,10 @@ _HEDGE_RE = re.compile(
     r"did(?:n['’]t| not) go through|attempt did|"
     r"nothing has been returned|no funds have been returned|"
     r"have not been returned|has not been returned|"
-    r"usd 0\.00 has been returned|0\.00 (?:has been returned|so far)|"
-    r"under review|is reviewing|reviewing that refund|"
+    r"usd 0\.00 has been returned|usd 0\.00 refunded|"
+    r"0\.00(?:\s+\w+){0,4}\s+so far|"
+    r"under review|for review|is reviewing|reviewing that refund|"
+    r"still pending|is pending\b|pending review|"
     r"could still (?:be declined|change)|"
     r"intend to (?:refund|return)|we intend|"
     r"can(?:not|'t) confirm|"
@@ -621,7 +626,7 @@ def _compute_reply_fact(
         if outputs is None:
             return None
         if _ALREADY_ISSUED_ASK.search(ask) or _REPLY.search(ask):
-            return _predicate(False, source="log")
+            return _predicate(False, source="log", reason="reply.txt missing")
         return None
     calls = _parse_calls_log(outputs)
     issued = _reply_claims_issued(reply)

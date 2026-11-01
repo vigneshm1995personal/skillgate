@@ -132,7 +132,7 @@ class PackCase(BaseModel):
 
 class CasePack(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
-    schema_version: Literal[1] = Field(default=1, alias="schema")
+    schema_version: Literal[1] = Field(alias="schema")
     skill: str
     cases: list[PackCase]
     budgets: CaseBudgets | None = None

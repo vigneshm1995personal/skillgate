@@ -143,7 +143,12 @@ def resolve_wording_facts(
     reply = _reply_text(outputs)
     if outputs is not None and not reply:
         return {
-            question.id: {"probability": 0.0, "source": "text"} for question in covering
+            question.id: {
+                "probability": 0.0,
+                "source": "text",
+                "reason": "reply.txt missing",
+            }
+            for question in covering
         }
     texts = _agent_texts(outputs)
     if not texts:

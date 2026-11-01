@@ -110,6 +110,14 @@ def test_cases_yaml_missing_field_exits_2_and_names_it(tmp_path: Path) -> None:
         load_case_pack(dest)
     assert missing_prompt.value.exit_code == 2
     assert "Couldn't load these checks" in missing_prompt.value.message
+    cases.write_text(
+        "skill: notes-pack\ncases:\n  - id: hello\n    status: pinned\n    prompt: Hi\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(SuiteError, match="schema") as missing_schema:
+        load_case_pack(dest)
+    assert missing_schema.value.exit_code == 2
+    assert "Couldn't load these checks" in missing_schema.value.message
 
 
 def test_invalid_cases_yaml_is_suite_error(tmp_path: Path) -> None:

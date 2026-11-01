@@ -381,7 +381,10 @@ def extra_question_passed(question: JudgeQuestion, answer: Any) -> tuple[bool, s
         threshold = _gte(question.pass_if, default=0.8)
         if probability >= threshold:
             return True, None
-        return False, f"{question.ask} No"
+        named = ""
+        if isinstance(answer, Mapping):
+            named = str(answer.get("reason") or "").strip()
+        return False, named or f"{question.ask} No"
     if question.type == "score":
         score = _extract_score(answer)
         if score is None:

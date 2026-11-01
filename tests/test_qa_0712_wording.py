@@ -573,6 +573,10 @@ def test_missing_reply_is_red_without_a_connector_pack() -> None:
     )
     assert facts["q0"]["probability"] == 0.0
     assert facts["q0"]["source"] == "text"
+    assert facts["q0"].get("reason") == "reply.txt missing"
+    ok, detail = extra_question_passed(spec.extras[0], facts["q0"])
+    assert ok is False
+    assert detail == "reply.txt missing"
     judged = _judge_wording_red(
         extra_ok=False,
         extra_source="text",
@@ -585,6 +589,13 @@ def test_missing_reply_is_red_without_a_connector_pack() -> None:
     )
     assert gate is False
     assert failures
+    judged["extra_failures"] = [detail]
+    gate, failures, _stamped = _live_verdict(
+        judged, "notes", det_passed=True, det_failures=[], trigger_passed=True
+    )
+    assert gate is False
+    assert "reply.txt missing" in failures
+    assert not any("banned wording" in item.lower() for item in failures)
 
 
 def test_wrong_amount_stays_red_when_wording_passes() -> None:

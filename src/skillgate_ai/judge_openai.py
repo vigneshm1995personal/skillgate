@@ -816,7 +816,8 @@ class OutcomeJudge:
                 source = str(raw.get("source"))
             cell["source"] = source
             if cell.get("choice"):
-                cell["reason"] = f"{question.ask} {cell['choice']}"
+                named = str(raw.get("reason") or "").strip() if isinstance(raw, Mapping) else ""
+                cell["reason"] = named or f"{question.ask} {cell['choice']}"
             cells[question.id] = cell
             if isinstance(raw, Mapping):
                 cleaned = dict(raw)
