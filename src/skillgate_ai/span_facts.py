@@ -263,9 +263,7 @@ def _merge_wording_facts(
         hedge=_reply_hedges(reply),
     )
     for qid, fact in wording.items():
-        current = facts.get(qid)
-        if current is None or float(fact.get("probability") or 0) < 0.8:
-            facts[qid] = fact
+        facts[qid] = fact
     return facts
 
 
@@ -450,25 +448,6 @@ _AMOUNT_ASK = re.compile(
 )
 
 
-def _output_text(outputs: Sequence[Mapping[str, Any]] | str | None) -> str:
-    if isinstance(outputs, str):
-        return outputs
-    parts: list[str] = []
-    for item in outputs or []:
-        if isinstance(item, Mapping):
-            parts.append(
-                str(
-                    item.get("content")
-                    or item.get("body")
-                    or item.get("extracted_text")
-                    or ""
-                )
-            )
-        elif isinstance(item, str):
-            parts.append(item)
-    return "\n".join(parts)
-
-
 def _output_file(outputs: Sequence[Mapping[str, Any]] | str | None, name: str) -> str:
     if isinstance(outputs, str):
         return outputs if name in {"reply.txt", "calls.log"} else ""
@@ -488,10 +467,7 @@ def _output_file(outputs: Sequence[Mapping[str, Any]] | str | None, name: str) -
 
 
 def _reply_text(outputs: Sequence[Mapping[str, Any]] | str | None) -> str:
-    reply = _output_file(outputs, "reply.txt").strip()
-    if reply:
-        return reply
-    return _output_text(outputs).strip()
+    return _output_file(outputs, "reply.txt").strip()
 
 
 def _parse_calls_log(outputs: Sequence[Mapping[str, Any]] | str | None) -> list[dict[str, Any]]:
@@ -642,6 +618,10 @@ def _compute_reply_fact(
 ) -> dict[str, Any] | None:
     reply = _reply_text(outputs)
     if not reply:
+        if outputs is None:
+            return None
+        if _ALREADY_ISSUED_ASK.search(ask) or _REPLY.search(ask):
+            return _predicate(False, source="log")
         return None
     calls = _parse_calls_log(outputs)
     issued = _reply_claims_issued(reply)

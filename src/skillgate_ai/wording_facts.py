@@ -47,8 +47,18 @@ _SKIP_FILE = (
     "skill.md",
 )
 _DONE_WORDS = frozenset(
-    {"submitted", "issued", "processed", "completed", "refunded"}
+    {
+        "submitted",
+        "issued",
+        "processed",
+        "completed",
+        "refunded",
+        "started",
+        "sent",
+        "initiated",
+    }
 )
+_DONE_PHRASES = ("on its way", "on the way")
 _STOP = frozenset(
     {
         "the",
@@ -220,9 +230,9 @@ def _wording_ask(rules: Sequence[WordingRule]) -> str:
     required = [rule.phrase for rule in rules if rule.kind == "required"]
     bits: list[str] = []
     if banned:
-        bits.append("do not use " + ", ".join(banned[:6]))
+        bits.append("do not use " + ", ".join(banned))
     if required:
-        bits.append("must include " + ", ".join(required[:6]))
+        bits.append("must include " + ", ".join(required))
     return "The reply follows the skill's wording: " + "; ".join(bits) + "."
 
 
@@ -272,7 +282,10 @@ def _violations(
 
 
 def _done_like(phrase: str) -> bool:
-    tokens = {part.lower() for part in re.findall(r"[A-Za-z']+", phrase)}
+    folded = _fold_apos(phrase).lower()
+    if any(item in folded for item in _DONE_PHRASES):
+        return True
+    tokens = {part.lower() for part in re.findall(r"[A-Za-z']+", folded)}
     return bool(tokens & _DONE_WORDS)
 
 

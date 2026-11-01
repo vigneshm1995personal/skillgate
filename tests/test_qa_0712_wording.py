@@ -58,6 +58,22 @@ SKILL_BOTPRESS_4B = """# Ticket deflector
 
 Nowhere in the reply use "submitted", "I've submitted", "we've submitted", "processed", "issued", or "completed" about a refund that is not done.
 """
+SKILL_BOTPRESS_4B_FULL = """# Ticket deflector
+
+Nowhere in the reply use "submitted", "I've submitted", "we've submitted", "processed", "issued", "sent", "started", "initiated", "completed", or "on its way".
+"""
+FOUR_B_PHRASES = (
+    "submitted",
+    "I've submitted",
+    "we've submitted",
+    "processed",
+    "issued",
+    "sent",
+    "started",
+    "initiated",
+    "completed",
+    "on its way",
+)
 CLEAN_PENDING = (
     "This refund is pending review. USD 0.00 has been returned to your card so far."
 )
@@ -456,3 +472,149 @@ def test_docs_explain_how_to_write_and_preview_wording() -> None:
     assert "skillgate checks show wording" in blob
     assert "has not been submitted" in blob
     assert "not yet submitted" in blob
+
+
+def _judge_wording_red(*, extra_ok: bool, extra_source: str, extra_label: str) -> dict:
+    return {
+        "status": "completed",
+        "passed": False,
+        "review": False,
+        "reasons": [
+            "Got it right? Incorrect (need Correct)",
+            "Followed the rules? Violated (need Fully followed)",
+        ],
+        "extra_failures": [] if extra_ok else [f"{extra_label} No"],
+        "cells": {
+            "correctness": {
+                "label": "Got it right?",
+                "choice": "Incorrect",
+                "confidence": 0.91,
+            },
+            "instruction_adherence": {
+                "label": "Followed the rules?",
+                "choice": "Major deviation",
+                "confidence": 0.88,
+            },
+            "q0": {
+                "label": extra_label,
+                "choice": "Yes" if extra_ok else "No",
+                "probability": 1.0 if extra_ok else 0.0,
+                "source": extra_source,
+            },
+        },
+        "answers": {
+            "correctness": {"choice": "Incorrect", "confidence": 0.91},
+            "instruction_adherence": {"choice": "Major deviation", "confidence": 0.88},
+            "q0": {
+                "probability": 1.0 if extra_ok else 0.0,
+                "source": extra_source,
+            },
+        },
+        "questions": {"q0": {"instructions": extra_label}},
+    }
+
+
+def test_passing_text_check_is_not_overridden_by_judge() -> None:
+    reply = (
+        "The refund has not been submitted yet; USD 0.00 has been returned. "
+        'You wrote: "I\'ve submitted a full refund request already." We have not.'
+    )
+    spec = _extra_spec("Does the reply follow the skill's banned wording?")
+    facts = resolve_log_facts(
+        spec,
+        [],
+        outputs=_outputs(("output/calls.log", _pending_log()), ("output/reply.txt", reply)),
+        skill_instructions=SKILL_ONE_PER_LINE,
+    )
+    assert facts["q0"]["probability"] == 1.0
+    assert facts["q0"]["source"] == "text"
+    judged = _judge_wording_red(
+        extra_ok=True, extra_source="text", extra_label=C3_ASK
+    )
+    out = stabilize_adherence_review(judged, _scores())
+    passed, failures, stamped = _live_verdict(
+        out, "ticket-deflector", det_passed=True, det_failures=[], trigger_passed=True
+    )
+    assert passed is True
+    assert stamped is not None
+    assert stamped.get("passed") is True
+    assert not any("Got it right?" in item for item in failures)
+    assert not any("Followed the rules?" in item for item in failures)
+
+
+def test_missing_reply_or_incorrect_verdict_is_red() -> None:
+    spec = _extra_spec(C3_ASK)
+    outputs = _outputs(
+        ("output/calls.log", _pending_log()),
+        (
+            "output/ticket.txt",
+            "From: Dana\nPlease refund the $49 to my card.\n",
+        ),
+    )
+    facts = resolve_log_facts(spec, [], outputs=outputs)
+    assert facts["q0"]["probability"] == 0.0
+    merged = apply_log_facts(
+        spec,
+        {
+            "correctness": {"choice": "Incorrect", "confidence": 0.9},
+            "q0": {"probability": 1.0, "source": "judge"},
+        },
+        [],
+        outputs=outputs,
+    )
+    assert merged["q0"]["probability"] == 0.0
+    passed, reasons, _ = spec_verdict(spec, merged, supports_confidence=True)
+    assert passed is False
+    assert reasons
+    judged = _judge_wording_red(
+        extra_ok=False, extra_source="log", extra_label=C3_ASK
+    )
+    judged["answers"]["q0"] = facts["q0"]
+    judged["cells"]["q0"] = {**judged["cells"]["q0"], **facts["q0"], "choice": "No"}
+    out = stabilize_adherence_review(judged, _scores())
+    gate, failures, stamped = _live_verdict(
+        out, "ticket-deflector", det_passed=True, det_failures=[], trigger_passed=True
+    )
+    assert gate is False
+    assert failures
+    assert stamped is None or stamped.get("passed") is not True
+
+
+def test_already_running_check_exits_2(tmp_path: Path) -> None:
+    from skillgate_ai.errors import SkillGateError
+    from skillgate_ai.run_lock import BUSY_MESSAGE, project_run_lock
+
+    with (
+        project_run_lock(tmp_path),
+        pytest.raises(SkillGateError) as caught,
+        project_run_lock(tmp_path),
+    ):
+        raise AssertionError("second check should not start")
+    assert caught.value.message == BUSY_MESSAGE
+    assert caught.value.exit_code == 2
+
+
+def test_wording_preview_lists_every_phrase_and_success_on_its_way_passes() -> None:
+    rules = compile_wording_rules(SKILL_BOTPRESS_4B_FULL)
+    phrases = {rule.phrase for rule in rules if rule.kind == "banned"}
+    assert phrases >= set(FOUR_B_PHRASES)
+    ask = wording_ask(rules)
+    for phrase in FOUR_B_PHRASES:
+        assert phrase in ask
+        spec = _extra_spec("Does the reply follow the skill's banned wording?")
+        success_log = _call(
+        ["issue_refund", "--charge", "ch_3QX81", "--amount", "49.00"],
+        {"http_status": 200, "status": "succeeded", "amount": "49.00"},
+    )
+    facts = resolve_log_facts(
+        spec,
+        [],
+        outputs=_outputs(
+            ("output/calls.log", success_log),
+            ("output/reply.txt", "Your refund is on its way."),
+        ),
+        skill_instructions=SKILL_BOTPRESS_4B_FULL,
+    )
+    assert facts["q0"]["probability"] == 1.0
+    pending = _wording_on(SKILL_BOTPRESS_4B_FULL, "Your refund is on its way.")
+    assert pending["q0"]["probability"] == 0.0

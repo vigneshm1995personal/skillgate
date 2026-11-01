@@ -41,7 +41,7 @@ class project_run_lock:
             fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
             handle.close()
-            raise SkillGateError(BUSY_MESSAGE, hint=BUSY_HINT) from None
+            raise SkillGateError(BUSY_MESSAGE, hint=BUSY_HINT, exit_code=2) from None
         except OSError:
             handle.close()
             return self
