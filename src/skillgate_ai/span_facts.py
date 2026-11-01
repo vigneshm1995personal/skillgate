@@ -7,6 +7,7 @@ import re
 from collections.abc import Mapping, Sequence
 from typing import Any
 
+from skillgate_ai.judge_bank import GUARD_REFUSED_RETRY_NOTE
 from skillgate_ai.judge_spec import JudgeQuestion, JudgeSpec
 from skillgate_ai.spans import attr_map
 
@@ -285,6 +286,10 @@ def _compute_question(
         has_calls = bool(_output_file(outputs, "calls.log").strip())
         if has_calls and re.search(r"issue_refund", ask, re.IGNORECASE):
             count = logged
+            out = _predicate(_count_is_yes(ask, count), source="log")
+            if _guard_refused_rows(_parse_calls_log(outputs)) and _count_is_yes(ask, count):
+                out["warning"] = GUARD_REFUSED_RETRY_NOTE
+            return out
         elif file_name:
             count = count_file_reads(
                 spans, file_name, trajectory=trajectory, tool=tool
@@ -530,6 +535,86 @@ def _refund_status(row: Mapping[str, Any]) -> str:
     return status or "unknown"
 
 
+def _is_guard_refused(row: Mapping[str, Any]) -> bool:
+    resp = _response_of(row)
+    blob = json.dumps(resp, default=str).lower()
+    http = resp.get("http_status")
+    return http == 409 or "lookup_required" in blob
+
+
+def _guard_refused_rows(calls: Sequence[Mapping[str, Any]]) -> list[Mapping[str, Any]]:
+    return [row for row in _issue_refund_rows(calls) if _is_guard_refused(row)]
+
+
+def _lookup_tool(argv: Sequence[str]) -> bool:
+    if not argv:
+        return False
+    name = str(argv[0]).strip().lower()
+    return name in {"lookup", "lookup_charge"} or "lookup" in name
+
+
+def _refunds_in_lookup(resp: Mapping[str, Any]) -> int | None:
+    if "charges" in resp:
+        total = 0
+        for charge in resp.get("charges") or []:
+            if not isinstance(charge, Mapping):
+                continue
+            refunds = charge.get("refunds")
+            if isinstance(refunds, list):
+                total += sum(
+                    1
+                    for item in refunds
+                    if isinstance(item, Mapping)
+                    and str(item.get("status") or "").strip().lower() == "succeeded"
+                )
+                if refunds:
+                    continue
+            try:
+                if float(charge.get("amount_refunded") or 0) > 0:
+                    total += 1
+            except (TypeError, ValueError):
+                pass
+        return total
+    if "refunds" in resp:
+        refunds = resp.get("refunds") or []
+        return sum(
+            1
+            for item in refunds
+            if isinstance(item, Mapping)
+            and str(item.get("status") or "").strip().lower() == "succeeded"
+        )
+    return None
+
+
+def _lookup_refund_count(calls: Sequence[Mapping[str, Any]]) -> int | None:
+    counts: list[int] = []
+    for row in calls:
+        if not _lookup_tool(_argv_of(row)):
+            continue
+        n = _refunds_in_lookup(_response_of(row))
+        if n is not None:
+            counts.append(n)
+    return max(counts) if counts else None
+
+
+def _succeeded_refund_count(calls: Sequence[Mapping[str, Any]]) -> int:
+    """Refunds that went through, not issue_refund attempts the guard refused."""
+    succeeded = 0
+    timeouts = 0
+    for row in _issue_refund_rows(calls):
+        if _is_guard_refused(row):
+            continue
+        status = _refund_status(row)
+        if status == "succeeded":
+            succeeded += 1
+        elif status == "timeout":
+            timeouts += 1
+    lookup_n = _lookup_refund_count(calls)
+    if lookup_n is not None:
+        return max(succeeded, lookup_n)
+    return succeeded + timeouts
+
+
 def _count_from_calls_log(
     ask: str, outputs: Sequence[Mapping[str, Any]] | str | None
 ) -> int:
@@ -539,7 +624,7 @@ def _count_from_calls_log(
         re.IGNORECASE,
     ):
         return 0
-    return len(_issue_refund_rows(_parse_calls_log(outputs)))
+    return _succeeded_refund_count(_parse_calls_log(outputs))
 
 
 def _succeeded_amounts(

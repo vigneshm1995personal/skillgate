@@ -17,6 +17,7 @@ import {
   missingJudgeAnswersLine,
   openedCheckAnswers,
   pathOpenedLine,
+  refusedRetryNote,
   wordingOverrideNote,
 } from "@/lib/check-results"
 import {
@@ -289,6 +290,7 @@ function OpenedDetails({
   const path = pathOpenedLine(task)
   const warning = lowConfidenceWarning(task)
   const overrideNote = wordingOverrideNote(task)
+  const retryNote = refusedRetryNote(task)
   const extraWhy = extraFailWhy(task)
   const failReason =
     !skipped && task.passed === false && !noAnswers
@@ -363,6 +365,11 @@ function OpenedDetails({
       {overrideNote ? (
         <p className="text-muted-foreground" id={`check-wording-override-${index}`}>
           {overrideNote}
+        </p>
+      ) : null}
+      {retryNote ? (
+        <p className="text-muted-foreground" id={`check-refused-retry-${index}`}>
+          {retryNote}
         </p>
       ) : null}
       {warning ? (

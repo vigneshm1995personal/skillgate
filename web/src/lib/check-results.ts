@@ -90,6 +90,8 @@ export const UNSURE_REVIEW = "unsure, needs review"
 export const NO_REASON_RECORDED = "No reason recorded"
 export const WORDING_OVERRIDE_NOTE =
   "Wording check passed, so those Fail rows did not turn the gate red."
+export const GUARD_REFUSED_RETRY_NOTE =
+  "A second refund attempt was refused. Only one refund went through."
 
 const CANNED_WHY_REASONS = new Set(
   [
@@ -694,6 +696,16 @@ export function wordingOverrideNote(task: TaskResult): string | null {
   }
   return warnings.some((item) => String(item).trim() === WORDING_OVERRIDE_NOTE)
     ? WORDING_OVERRIDE_NOTE
+    : null
+}
+
+export function refusedRetryNote(task: TaskResult): string | null {
+  const warnings = task.judge?.warnings
+  if (!Array.isArray(warnings)) {
+    return null
+  }
+  return warnings.some((item) => String(item).trim() === GUARD_REFUSED_RETRY_NOTE)
+    ? GUARD_REFUSED_RETRY_NOTE
     : null
 }
 

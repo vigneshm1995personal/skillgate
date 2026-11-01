@@ -243,6 +243,9 @@ WHY_SUFFIX = "_why"
 WORDING_OVERRIDE_NOTE = (
     "Wording check passed, so those Fail rows did not turn the gate red."
 )
+GUARD_REFUSED_RETRY_NOTE = (
+    "A second refund attempt was refused. Only one refund went through."
+)
 CANNED_WHY_REASONS = frozenset(
     {
         "This run finished the customer request.",

@@ -49,6 +49,7 @@ import {
   plainAdviceCopy,
   stripRepeatedHeadline,
   scoredByLine,
+  refusedRetryNote,
   suiteUnsureWarning,
   wordingOverrideNote,
 } from "@/lib/check-results"
@@ -167,9 +168,13 @@ export function GatePage({ embedded = false }: { embedded?: boolean }) {
     const override = (report?.tasks ?? [])
       .map((task) => wordingOverrideNote(task))
       .find((item): item is string => Boolean(item))
+    const retry = (report?.tasks ?? [])
+      .map((task) => refusedRetryNote(task))
+      .find((item): item is string => Boolean(item))
     const extra = [
       ...(unsure && !base.some((item) => item.includes("unsure")) ? [unsure] : []),
       ...(override && !base.includes(override) ? [override] : []),
+      ...(retry && !base.includes(retry) ? [retry] : []),
     ]
     return extra.length ? [...base, ...extra] : base
   })()

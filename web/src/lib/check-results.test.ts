@@ -17,7 +17,9 @@ import {
   scoredByFromJudge,
   scoredByLine,
   suiteUnsureWarning,
+  refusedRetryNote,
   wordingOverrideNote,
+  GUARD_REFUSED_RETRY_NOTE,
   WORDING_OVERRIDE_NOTE,
 } from "./check-results"
 import type { TaskResult } from "./types"
@@ -845,6 +847,19 @@ describe("openedCheckAnswers / low confidence", () => {
         },
       })
     ).toBe(WORDING_OVERRIDE_NOTE)
+  })
+
+  it("shows a warning when a refund retry was refused", () => {
+    const task = {
+      ...passTask,
+      happened: GUARD_REFUSED_RETRY_NOTE,
+      judge: {
+        ...passTask.judge,
+        warnings: [GUARD_REFUSED_RETRY_NOTE],
+      },
+    }
+    expect(refusedRetryNote(task)).toBe(GUARD_REFUSED_RETRY_NOTE)
+    expect(happenedLine(task)).toBe(GUARD_REFUSED_RETRY_NOTE)
   })
 
   it("marks rubric answers Not checked when the script never ran", () => {

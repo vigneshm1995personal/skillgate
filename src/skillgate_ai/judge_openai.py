@@ -849,6 +849,10 @@ class OutcomeJudge:
                 reason = None
             if reason:
                 cell["reason"] = reason
+            if isinstance(raw, Mapping):
+                note = str(raw.get("warning") or "").strip()
+                if note:
+                    cell["warning"] = note
             cells[question.id] = cell
             if isinstance(raw, Mapping):
                 cleaned = dict(raw)

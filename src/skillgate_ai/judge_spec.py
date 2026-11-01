@@ -314,7 +314,12 @@ def spec_verdict(
             continue
         if question.builtin and question.id in SOFT_CELL_ORDER and not include_path:
             continue
-        ok, detail = extra_question_passed(question, answers.get(question.id))
+        raw = answers.get(question.id)
+        if isinstance(raw, Mapping):
+            note = str(raw.get("warning") or "").strip()
+            if note and note not in warnings:
+                warnings.append(note)
+        ok, detail = extra_question_passed(question, raw)
         if ok or not detail:
             continue
         if question.on_fail == "warn":
