@@ -238,6 +238,8 @@ SOFT_OUTCOME_QUESTIONS: dict[str, dict[str, Any]] = {
 UNUSABLE_ANSWER = "The judge returned an unusable answer."
 UNSURE_REVIEW = "unsure, needs review"
 LOW_CONFIDENCE_WARNING = UNSURE_REVIEW
+NO_REASON_RECORDED = "No reason recorded"
+WHY_SUFFIX = "_why"
 DEFAULT_MIN_CONFIDENCE = 0.5
 LOW_CONFIDENCE_MAX_ASKS = 3
 
@@ -308,7 +310,15 @@ def extract_confidence(answer: Any) -> float | None:
 def extract_reason(answer: Any) -> str | None:
     if not isinstance(answer, Mapping):
         return None
-    for key in ("reason", "rationale", "explanation", "why", "evidence", "justification"):
+    for key in (
+        "reason",
+        "rationale",
+        "explanation",
+        "why",
+        "evidence",
+        "justification",
+        "reasoning",
+    ):
         raw = answer.get(key)
         if isinstance(raw, str) and raw.strip():
             return raw.strip()

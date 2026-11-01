@@ -51,16 +51,53 @@ export function runSkillName(
   return (record?.report?.skill || record?.skill || "").trim()
 }
 
+export function skillKeyToken(value?: string | null): string {
+  const raw = (value || "").trim().replace(/\\/g, "/")
+  if (!raw) {
+    return ""
+  }
+  return (raw.split("/").filter(Boolean).pop() || raw).toLowerCase()
+}
+
+export function skillKeysMatch(left?: string | null, right?: string | null): boolean {
+  const a = skillKeyToken(left)
+  const b = skillKeyToken(right)
+  if (!a || !b) {
+    return false
+  }
+  return a === b
+}
+
 export function pinBelongsToSkill(
   pin: RunRecord | null | undefined,
   skillName?: string | null
 ): boolean {
-  const name = (skillName || "").trim()
-  if (!name || !pin) {
+  if (!pin) {
     return false
   }
+  const name = (skillName || "").trim()
   const pinSkill = runSkillName(pin)
-  return !pinSkill || pinSkill === name
+  if (!name) {
+    return true
+  }
+  if (!pinSkill) {
+    return true
+  }
+  return skillKeysMatch(pinSkill, name)
+}
+
+export function shownHistoryOrGate(
+  slot: SkillRunSlot,
+  skillName?: string | null,
+  historyView?: RunRecord | null
+): RunRecord | null {
+  if (historyView && !isTryoutRun(historyView)) {
+    const name = (skillName || "").trim()
+    if (!name || pinBelongsToSkill(historyView, name)) {
+      return historyView
+    }
+  }
+  return shownGateRun(slot, skillName)
 }
 
 export function isViewingOlderRun(
@@ -110,7 +147,7 @@ export function shownGateRun(slot: SkillRunSlot, skillName?: string | null): Run
     return null
   }
   const name = (skillName || "").trim()
-  if (name && runSkillName(gate) && runSkillName(gate) !== name) {
+  if (name && runSkillName(gate) && !skillKeysMatch(runSkillName(gate), name)) {
     return null
   }
   return gate
@@ -122,7 +159,7 @@ export function liveGateRun(slot: SkillRunSlot, skillName?: string | null): RunR
     return null
   }
   const name = (skillName || "").trim()
-  if (name && runSkillName(gate) && runSkillName(gate) !== name) {
+  if (name && runSkillName(gate) && !skillKeysMatch(runSkillName(gate), name)) {
     return null
   }
   return gate
@@ -150,7 +187,7 @@ export function deployAllowedForLiveGate(opts: {
   }
   const name = skillSlotKey(skill)
   const runSkill = runSkillName(liveGate)
-  if (runSkill && runSkill !== name) {
+  if (runSkill && name && !skillKeysMatch(runSkill, name)) {
     return false
   }
   if (liveGate.gate_decision !== "cleared") {

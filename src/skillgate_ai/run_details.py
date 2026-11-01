@@ -9,7 +9,9 @@ from typing import Any
 
 from skillgate_ai.errors import SkillGateError
 from skillgate_ai.judge_bank import (
+    NO_REASON_RECORDED,
     UNSURE_REVIEW,
+    WHY_SUFFIX,
     choice_passed,
     is_rubric_reason,
     score_for_choice,
@@ -155,44 +157,6 @@ def _reason_repeats_prompt(label: str, choice: str, reason: str) -> bool:
     )
 
 
-def _run_specific_reason(task: Mapping[str, Any], choice: str) -> str:
-    parts: list[str] = []
-    numeric_choice = False
-    if choice:
-        try:
-            float(choice)
-            numeric_choice = True
-        except ValueError:
-            numeric_choice = False
-    if choice and not numeric_choice:
-        parts.append(f"{choice} on this run")
-    calls = tool_calls(task)
-    if calls:
-        names: list[str] = []
-        seen: set[str] = set()
-        for call in calls:
-            name = str(call.get("name") or "tool")
-            if name in seen:
-                continue
-            seen.add(name)
-            names.append(name)
-        parts.append("Connector calls: " + ", ".join(names))
-    reply = agent_reply(task)
-    if reply:
-        line = reply.strip().splitlines()[0].strip()
-        if len(line) > 88:
-            line = line[:85].rstrip() + "…"
-        parts.append(f'Reply: "{line}"')
-    happened = str(task.get("happened") or "").strip()
-    if happened and happened.lower() not in {
-        "unsure, needs review",
-        "output matched what was expected.",
-        "output matched what was expected",
-    }:
-        parts.append(happened)
-    return ". ".join(parts)
-
-
 def _row_reason(
     key: str,
     choice: str,
@@ -200,7 +164,6 @@ def _row_reason(
     cell: Mapping[str, Any],
     answer: Mapping[str, Any] | None,
     listed: Mapping[str, Any] | None,
-    task: Mapping[str, Any],
 ) -> str:
     texts: list[str] = []
     for blob in (cell, answer or {}, listed or {}):
@@ -215,7 +178,7 @@ def _row_reason(
         if _reason_repeats_prompt(label, choice, text):
             continue
         return redact_run_text(text)
-    return redact_run_text(_run_specific_reason(task, choice))
+    return NO_REASON_RECORDED
 
 
 def check_rows(task: Mapping[str, Any] | None) -> list[dict[str, Any]]:
@@ -233,7 +196,7 @@ def check_rows(task: Mapping[str, Any] | None) -> list[dict[str, Any]]:
     seen: set[str] = set()
 
     def add_row(key: str, cell: Mapping[str, Any] | None = None) -> None:
-        if key in seen:
+        if key in seen or key.endswith(WHY_SUFFIX):
             return
         cell = cell if isinstance(cell, Mapping) else {}
         answer = answers.get(key) if isinstance(answers.get(key), Mapping) else {}
@@ -279,7 +242,7 @@ def check_rows(task: Mapping[str, Any] | None) -> list[dict[str, Any]]:
             guessed = choice_passed(key, choice)
             if guessed is not None:
                 score = 1.0 if guessed else 0.0
-        reason = _row_reason(key, choice, label, cell, answer, listed_row, task)
+        reason = _row_reason(key, choice, label, cell, answer, listed_row)
         passed = cell.get("passed")
         if not isinstance(passed, bool):
             if listed_row.get("passed") is True or listed_row.get("passed") is False:

@@ -662,14 +662,36 @@ def test_check_rows_use_outcome_score_not_confidence() -> None:
 def test_check_rows_show_this_run_reason_not_rubric() -> None:
     rows = {row["id"]: row for row in check_rows(_contradicting_scores_task())}
     correct = rows["correctness"]
-    assert correct["reason"]
+    assert correct["reason"] == "No reason recorded"
     assert correct["reason"] != RUBRIC_CORRECT
     assert "matches the expected outcome" not in correct["reason"].lower()
-    assert "this run" in correct["reason"].lower() or "lookup" in correct["reason"].lower()
+    assert "on this run" not in correct["reason"].lower()
     quality = rows["result_quality"]
-    assert quality["reason"] != RUBRIC_QUALITY
+    assert quality["reason"] == "No reason recorded"
     path = rows["path_efficiency"]
-    assert path["reason"] != RUBRIC_ACCEPTABLE
+    assert path["reason"] == "No reason recorded"
+
+
+def test_missing_judge_reason_is_not_labeled_as_from_the_judge() -> None:
+    text = format_run_show(
+        {
+            "run_id": "b88788af8f81",
+            "passed": False,
+            "report": {
+                "gate": "red",
+                "passed_count": 0,
+                "task_count": 1,
+                "tasks": [_contradicting_scores_task()],
+            },
+        },
+        detail=True,
+        case_id="c4-partial",
+    )
+    assert "No reason recorded" in text
+    assert "Correct on this run" not in text
+    blob = text.split("Got it right?", 1)[1].split("\n", 1)[0]
+    assert "from the judge" in blob
+    assert "No reason recorded" in text.split("Got it right?", 1)[1]
 
 
 def test_check_rows_keep_written_judge_reason() -> None:
@@ -709,6 +731,7 @@ def test_format_run_show_agrees_pass_fail_and_score() -> None:
     assert "FAIL" not in text.split("How it ran", 1)[1].split("\n", 1)[0]
     assert "1.00" in text
     assert RUBRIC_CORRECT not in text
+    assert "Correct on this run" not in text
     assert text.lower().count("issue_refund more than once") == 1
 
 
@@ -767,3 +790,102 @@ def test_cell_entry_keeps_the_judge_reason() -> None:
         {"correctness": "Got it right?"},
     )
     assert "ch_3QX81" in (cell.get("reason") or "")
+
+
+def test_why_question_choice_is_stored_as_the_check_reason() -> None:
+    from skillgate_ai.judge_context import apply_why_reasons, with_run_reason_questions
+    from skillgate_ai.judge_openai import _cell_entry
+
+    questions = with_run_reason_questions(
+        [
+            {
+                "type": "choice",
+                "name": "correctness",
+                "instructions": "Got it right? Pick exactly one.",
+                "choices": [{"value": "Correct", "description": "Right."}],
+            }
+        ],
+        {
+            "actual_output": {"body": REPLY},
+            "agent_trajectory": {
+                "commands": [
+                    {"argv": ["lookup"]},
+                    {"argv": ["issue_refund", "--charge", "ch_3QX81"]},
+                ]
+            },
+        },
+    )
+    why = next(item for item in questions if item["name"] == "correctness_why")
+    assert why["type"] == "choice"
+    assert any("issue_refund" in str(row.get("description") or "") for row in why["choices"])
+    cell = _cell_entry("correctness", {"choice": "Correct", "confidence": 0.24}, {"correctness": "Got it right?"})
+    apply_why_reasons(
+        {"correctness": cell},
+        {"correctness_why": {"choice": "calls"}},
+        questions,
+    )
+    assert "issue_refund" in (cell.get("reason") or "")
+    assert cell["reason"] != RUBRIC_CORRECT
+
+
+def test_check_rows_skip_why_companion_answers() -> None:
+    task = _refund_task()
+    task["judge"]["answers"]["correctness_why"] = {
+        "choice": "calls",
+        "reason": "Connector calls: lookup, issue_refund",
+    }
+    ids = [row["id"] for row in check_rows(task)]
+    assert "correctness_why" not in ids
+
+
+def test_jev_evaluate_stores_the_why_choice_on_the_cell() -> None:
+    from skillgate_ai.judge_openai import OutcomeJudge
+    from skillgate_ai.judge_providers.jev import JevBackend
+    from skillgate_ai.judge_spec import resolve_judge_spec
+
+    class FakeResponse:
+        def __init__(self, status_code: int, payload: object) -> None:
+            self.status_code = status_code
+            self._payload = payload
+
+        def json(self) -> object:
+            return self._payload
+
+    def post(url, headers=None, json=None, timeout=None):
+        del url, headers, timeout
+        answers = {
+            "task_completion": {"choice": "Fully completed"},
+            "correctness": {"choice": "Correct"},
+            "instruction_adherence": {"choice": "Fully followed"},
+            "evidence_action_validity": {"choice": "Fully supported"},
+            "result_quality": {"choice": "Clear and complete"},
+            "path_efficiency": {"choice": "Acceptable"},
+            "correctness_why": {"choice": "calls"},
+        }
+        return FakeResponse(200, {"model": "jev", "answers": answers})
+
+    judged = OutcomeJudge(
+        JevBackend(api_key="jev-key", base_url="https://jev.example/v1", post=post),
+        display_name="the judge",
+        provider="jev",
+        chosen=True,
+        supports_why=False,
+        supports_confidence=False,
+    ).judge(
+        "goal",
+        [{"path": "output/reply.txt", "body": REPLY, "present": True, "kind": "text"}],
+        "",
+        spec=resolve_judge_spec(),
+        path={"had_path": True, "steps": 2, "tools": ["lookup", "issue_refund"]},
+        agent_trajectory={
+            "commands": [
+                {"argv": ["lookup"]},
+                {"argv": ["issue_refund", "--charge", "ch_3QX81"]},
+            ]
+        },
+        actual_output={"body": REPLY},
+    )
+    assert "issue_refund" in (judged["cells"]["correctness"].get("reason") or "")
+    rows = {row["id"]: row for row in check_rows({"judge": judged, "passed": True})}
+    assert "issue_refund" in rows["correctness"]["reason"]
+    assert rows["correctness"]["reason"] != "No reason recorded"

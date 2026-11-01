@@ -20,7 +20,10 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Spinner } from "@/components/ui/spinner"
 import { toast } from "@/components/ui/toast"
 import { PageHeader } from "@/components/dashboard/chrome"
-import { EvalResultShell } from "@/components/dashboard/eval-result-shell"
+import {
+  EvalResultShell,
+  type EvalResultTarget,
+} from "@/components/dashboard/eval-result-shell"
 import {
   EvalCheckingPanel,
   EvalErrorPanel,
@@ -129,6 +132,7 @@ export function GatePage({ embedded = false }: { embedded?: boolean }) {
     evaluating,
     Boolean(report?.tasks?.length)
   )
+  const stampTarget: EvalResultTarget = kind === "idle" ? "fail" : kind
   const rawHarness =
     report?.harness ||
     scopedResult?.harness ||
@@ -176,7 +180,8 @@ export function GatePage({ embedded = false }: { embedded?: boolean }) {
     (evaluating ||
       scopedResult?.status === "done" ||
       scopedResult?.status === "error" ||
-      Boolean(report?.tasks?.length))
+      Boolean(report?.tasks?.length) ||
+      Boolean(scopedResult?.id))
   const displayTasks = report?.tasks?.length
     ? report.tasks
     : evaluating && checks.length
@@ -294,12 +299,12 @@ export function GatePage({ embedded = false }: { embedded?: boolean }) {
                   </AlertDescription>
                 </Alert>
               ) : null}
-              {kind === "idle" ? (
+              {kind === "idle" && !scopedResult?.id && !report?.tasks?.length ? (
                 <RunChecksEmpty />
               ) : (
                 <EvalResultShell
                   key={scopedResult?.id ?? "gate-run"}
-                  target={kind}
+                  target={stampTarget}
                   hold={!viewingHistorical}
                   onResultVisible={setResultVisible}
                   checking={
@@ -330,9 +335,9 @@ export function GatePage({ embedded = false }: { embedded?: boolean }) {
                         hint={customerGateCopy(scopedResult?.error?.hint || "")}
                         stampLine={stampLine}
                       />
-                    ) : kind === "pass" || kind === "fail" || kind === "review" ? (
+                    ) : stampTarget === "pass" || stampTarget === "fail" || stampTarget === "review" ? (
                       <EvalPassFailPanel
-                        kind={kind}
+                        kind={stampTarget}
                         mode={mode}
                         deployAllowed={deployAllowed}
                         passed={passed}

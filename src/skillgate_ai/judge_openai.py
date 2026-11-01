@@ -16,6 +16,7 @@ from skillgate_ai.judge_bank import (
     SOFT_CELL_LABELS,
     SOFT_CELL_ORDER,
     UNUSABLE_ANSWER,
+    WHY_SUFFIX,
     all_questions,
     answers_have_low_confidence,
     canonical_choice,
@@ -28,7 +29,12 @@ from skillgate_ai.judge_bank import (
     unusable_answers,
     vote_round_summaries,
 )
-from skillgate_ai.judge_context import attach_adherence_context, workspace_files_for_judge
+from skillgate_ai.judge_context import (
+    attach_adherence_context,
+    stamp_why_on_answers,
+    with_run_reason_questions,
+    workspace_files_for_judge,
+)
 from skillgate_ai.judge_images import IMAGE_MAX_BYTES, IMAGE_MAX_COUNT, collect_images
 from skillgate_ai.judge_providers.decision import DecisionModel, require_decision_model
 from skillgate_ai.judge_spec import (
@@ -327,6 +333,11 @@ def _normalize_answers(
                 answers[question.id] = coerce_extra_answer(
                     raw.get(question.id), kind=question.type
                 )
+    for key, value in raw.items():
+        name = str(key)
+        if not name.endswith(WHY_SUFFIX) or name in answers:
+            continue
+        answers[name] = dict(value) if isinstance(value, Mapping) else {"choice": value}
     return answers
 
 
@@ -422,15 +433,19 @@ class DecisionsBackend(_OpenAIPosted):
             payload_input = text
         include_path = _path_is_recorded(state.get("path"))
         resolved = spec or builtin_spec()
+        questions = with_run_reason_questions(
+            attach_adherence_context(
+                spec_decisions_questions(resolved, include_path=include_path),
+                state,
+            ),
+            state,
+        )
         result = self.post_json(
             self.decisions_path,
             {
                 "model": self.model,
                 "input": payload_input,
-                "questions": attach_adherence_context(
-                    spec_decisions_questions(resolved, include_path=include_path),
-                    state,
-                ),
+                "questions": questions,
             },
             timeout_sec=timeout_sec,
         )
@@ -441,12 +456,14 @@ class DecisionsBackend(_OpenAIPosted):
 
         model_name = str(data.get("model") or self.model)
         usage = normalize_judge_api_usage(data, model=model_name)
+        answers = _normalize_answers(
+            _answers_from_decisions_list(data),
+            include_path=include_path,
+            spec=resolved,
+        )
+        stamp_why_on_answers(answers, questions)
         finished = _finished_answers(
-            _normalize_answers(
-                _answers_from_decisions_list(data),
-                include_path=include_path,
-                spec=resolved,
-            ),
+            answers,
             model=model_name,
             usage=usage,
         )
@@ -760,6 +777,7 @@ class OutcomeJudge:
                 payload["upstream"] = upstream.strip()
             return payload
         answers = evaluated.get("answers") if isinstance(evaluated.get("answers"), dict) else {}
+        stamp_why_on_answers(answers)
         if not include_path:
             answers = {key: value for key, value in answers.items() if key not in SOFT_CELL_ORDER}
         confidence = bool(
@@ -831,8 +849,6 @@ class OutcomeJudge:
                 reason = None
             if reason:
                 cell["reason"] = reason
-            elif cell.get("choice"):
-                cell["reason"] = f"{question.ask} {cell['choice']}"
             cells[question.id] = cell
             if isinstance(raw, Mapping):
                 cleaned = dict(raw)

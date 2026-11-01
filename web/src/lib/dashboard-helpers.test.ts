@@ -22,6 +22,7 @@ describe("matchesSkill / isSameSkill", () => {
     expect(matchesSkill(idea, "idea-brainstorming")).toBe(true)
     expect(matchesSkill(idea, idea.absolute)).toBe(true)
     expect(matchesSkill(idea, "Idea brainstorming")).toBe(false)
+    expect(matchesSkill(idea, "/tmp/.h/q10b1/skills/idea-brainstorming")).toBe(true)
     expect(isSameSkill(idea, "Idea brainstorming")).toBe(false)
     expect(isSameSkill(idea, "idea-brainstorming")).toBe(true)
     expect(

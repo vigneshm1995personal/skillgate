@@ -9,7 +9,12 @@ from pathlib import Path
 from typing import Any
 
 from skillgate_ai.document_text import extract_document_text
-from skillgate_ai.judge_bank import OUTCOME_SCORING_NOTES
+from skillgate_ai.judge_bank import (
+    CHECK_CELL_ORDER,
+    OUTCOME_SCORING_NOTES,
+    SOFT_CELL_ORDER,
+    WHY_SUFFIX,
+)
 from skillgate_ai.pack_files import GOLDEN_TAIL_CHARS, read_capped_text
 from skillgate_ai.scorers import Score
 from skillgate_ai.spans import attr_map, spans_from_jsonl
@@ -356,6 +361,212 @@ _ADHERENCE_NOTE = (
     "broken. Style, tool choice, or extra steps that are not listed rules are not a "
     "deviation and must not lower confidence."
 )
+
+
+_WHY_NONE = "none"
+_REASON_CELLS = frozenset((*CHECK_CELL_ORDER, *SOFT_CELL_ORDER))
+
+
+def _clip_reason_line(text: str, limit: int = 88) -> str:
+    line = text.strip().splitlines()[0].strip() if text.strip() else ""
+    if len(line) > limit:
+        return line[: limit - 1].rstrip() + "…"
+    return line
+
+
+def _state_reply(state: Mapping[str, Any] | None) -> str:
+    if not isinstance(state, Mapping):
+        return ""
+    actual = state.get("actual_output")
+    if isinstance(actual, Mapping):
+        actual = actual.get("body") or actual.get("content") or actual.get("text")
+    if isinstance(actual, str) and actual.strip():
+        return actual.strip()
+    files = state.get("workspace_files") or state.get("artifacts")
+    if isinstance(files, list):
+        for row in files:
+            if not isinstance(row, Mapping):
+                continue
+            path = str(row.get("path") or "").replace("\\", "/").lower()
+            if path.endswith("reply.txt"):
+                body = row.get("content") or row.get("body") or row.get("extracted_text")
+                if isinstance(body, str) and body.strip():
+                    return body.strip()
+    return ""
+
+
+def _state_call_names(state: Mapping[str, Any] | None) -> list[str]:
+    if not isinstance(state, Mapping):
+        return []
+    names: list[str] = []
+    seen: set[str] = set()
+
+    def add(raw: Any) -> None:
+        name = str(raw or "").strip()
+        if not name or name in seen:
+            return
+        seen.add(name)
+        names.append(name)
+
+    trajectory = state.get("agent_trajectory")
+    if isinstance(trajectory, Mapping):
+        for key in ("commands", "command_runs"):
+            rows = trajectory.get(key)
+            if not isinstance(rows, list):
+                continue
+            for row in rows:
+                if isinstance(row, Mapping):
+                    argv = row.get("argv")
+                    if isinstance(argv, list) and argv:
+                        add(argv[0])
+                    else:
+                        add(row.get("name") or row.get("tool") or row.get("command"))
+                elif isinstance(row, str):
+                    add(row.split()[0] if row.split() else row)
+    path = state.get("path")
+    if isinstance(path, Mapping):
+        tools = path.get("tools") or path.get("tool_names")
+        if isinstance(tools, list):
+            for item in tools:
+                add(item)
+    return names
+
+
+def evidence_reason_choices(state: Mapping[str, Any] | None) -> list[dict[str, str]]:
+    """Short evidence lines the judge can pick as the per-check reason."""
+    rows: list[dict[str, str]] = []
+    reply = _state_reply(state)
+    if reply:
+        rows.append(
+            {
+                "value": "reply",
+                "description": f'The agent replied: "{_clip_reason_line(reply)}"',
+            }
+        )
+    calls = _state_call_names(state)
+    if calls:
+        rows.append(
+            {
+                "value": "calls",
+                "description": "Connector calls: " + ", ".join(calls),
+            }
+        )
+    expected = ""
+    if isinstance(state, Mapping):
+        raw = state.get("expected_outcome")
+        if isinstance(raw, str):
+            expected = raw.strip()
+    if expected:
+        rows.append(
+            {
+                "value": "expected",
+                "description": f"Expected outcome: {_clip_reason_line(expected)}",
+            }
+        )
+    rows.append(
+        {
+            "value": _WHY_NONE,
+            "description": "No short evidence line from this run.",
+        }
+    )
+    return rows
+
+
+def with_run_reason_questions(
+    questions: list[dict[str, Any]],
+    state: Mapping[str, Any] | None,
+) -> list[dict[str, Any]]:
+    """Ask the judge to pick a this-run evidence line for each scored check."""
+    choices = evidence_reason_choices(state)
+    if len(choices) < 2:
+        return questions
+    extra: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for question in questions:
+        if not isinstance(question, dict):
+            continue
+        name = str(question.get("name") or "").strip()
+        if not name or name.endswith(WHY_SUFFIX) or name in seen:
+            continue
+        if name not in _REASON_CELLS:
+            continue
+        seen.add(name)
+        label = str(question.get("instructions") or name).split(" Pick exactly one.")[0]
+        extra.append(
+            {
+                "type": "choice",
+                "name": f"{name}{WHY_SUFFIX}",
+                "instructions": (
+                    f"Why that answer for {label}? Pick the evidence line from this run. "
+                    "Do not pick a rubric definition."
+                ),
+                "choices": [dict(row) for row in choices],
+            }
+        )
+    return [*questions, *extra]
+
+
+def apply_why_reasons(
+    cells: Mapping[str, Any],
+    answers: Mapping[str, Any],
+    questions: list[dict[str, Any]] | None = None,
+) -> None:
+    """Copy the judge's evidence-line pick onto each cell that has no written reason."""
+    lookup: dict[str, dict[str, str]] = {}
+    for question in questions or []:
+        if not isinstance(question, dict):
+            continue
+        name = str(question.get("name") or "")
+        if not name.endswith(WHY_SUFFIX):
+            continue
+        mapping: dict[str, str] = {}
+        for row in question.get("choices") or []:
+            if not isinstance(row, Mapping):
+                continue
+            value = str(row.get("value") or "").strip()
+            description = str(row.get("description") or "").strip()
+            if value:
+                mapping[value] = description or value
+        lookup[name] = mapping
+    from skillgate_ai.judge_bank import extract_choice
+
+    for key, cell in cells.items():
+        if not isinstance(cell, dict) or str(cell.get("reason") or "").strip():
+            continue
+        why_key = f"{key}{WHY_SUFFIX}"
+        why = answers.get(why_key)
+        choice = extract_choice(why) if why is not None else None
+        if not choice or choice == _WHY_NONE:
+            continue
+        reason = (lookup.get(why_key) or {}).get(choice) or ""
+        if not reason and isinstance(why, Mapping):
+            reason = str(why.get("reason") or why.get("description") or "").strip()
+        if (
+            not reason
+            and choice not in {_WHY_NONE, "reply", "calls", "expected"}
+            and not choice.lower().startswith("no short evidence")
+        ):
+            reason = choice
+        if not reason or reason.lower().startswith("no short evidence"):
+            continue
+        cell["reason"] = reason
+        blob = answers.get(key)
+        if isinstance(blob, dict) and not str(blob.get("reason") or "").strip():
+            blob["reason"] = reason
+        if isinstance(why, dict) and not str(why.get("reason") or "").strip():
+            why["reason"] = reason
+
+
+def stamp_why_on_answers(
+    answers: Mapping[str, Any],
+    questions: list[dict[str, Any]] | None = None,
+) -> None:
+    cells = {
+        str(key): blob
+        for key, blob in answers.items()
+        if isinstance(blob, dict) and not str(key).endswith(WHY_SUFFIX)
+    }
+    apply_why_reasons(cells, answers, questions)
 
 
 def attach_adherence_context(

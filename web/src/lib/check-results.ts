@@ -87,6 +87,7 @@ const RUBRIC_TEXTS = new Set(
 
 export const CONFIDENCE_WARN = 0.5
 export const UNSURE_REVIEW = "unsure, needs review"
+export const NO_REASON_RECORDED = "No reason recorded"
 
 const CHECKS_DUMP = /^Checks:\s+/i
 const GENERIC_FAIL = "This check did not pass."
@@ -144,7 +145,11 @@ function mentionsPdf(hint: string): boolean {
 }
 
 function reservedQuestionId(id: string): boolean {
-  return (CHECK_QUESTION_ORDER as readonly string[]).includes(id) || id === "path_efficiency"
+  return (
+    (CHECK_QUESTION_ORDER as readonly string[]).includes(id) ||
+    id === "path_efficiency" ||
+    id.endsWith("_why")
+  )
 }
 
 function extraFailureTexts(task: TaskResult): string[] {
@@ -638,33 +643,8 @@ function isRubricReason(
   return false
 }
 
-function runSpecificReason(task: TaskResult, choice: string): string {
-  const parts: string[] = []
-  const numericChoice = choice !== "" && !Number.isNaN(Number(choice))
-  if (choice && !numericChoice) parts.push(`${choice} on this run`)
-  const calls = Array.isArray(task.tool_calls) ? task.tool_calls : []
-  if (calls.length) {
-    const names: string[] = []
-    const seen = new Set<string>()
-    for (const call of calls) {
-      const name = String(call?.name || "tool")
-      if (seen.has(name)) continue
-      seen.add(name)
-      names.push(name)
-    }
-    parts.push(`Connector calls: ${names.join(", ")}`)
-  }
-  const reply = trimText(task.reply)
-  if (reply) {
-    let line = reply.split(/\r?\n/)[0]?.trim() || reply.trim()
-    if (line.length > 88) line = `${line.slice(0, 85).trimEnd()}…`
-    parts.push(`Reply: "${line}"`)
-  }
-  return parts.join(". ")
-}
-
 function openedReason(
-  task: TaskResult,
+  _task: TaskResult,
   _id: string,
   choice: string,
   label: string,
@@ -672,7 +652,7 @@ function openedReason(
   cell?: { reason?: string | null } | null,
   listed?: { reason?: string } | null,
   question?: JudgeQuestion | null
-): string | undefined {
+): string {
   const texts = [
     trimText(answer?.reason),
     trimText(cell?.reason),
@@ -683,8 +663,7 @@ function openedReason(
     if (reasonRepeatsPrompt(label, choice, text)) continue
     return text
   }
-  const fallback = runSpecificReason(task, choice)
-  return fallback || undefined
+  return NO_REASON_RECORDED
 }
 
 function openedPassed(
@@ -759,10 +738,13 @@ export function lowConfidenceWarning(task: TaskResult): string | null {
 }
 
 export function suiteUnsureWarning(
-  report?: Pick<Report, "tasks" | "gate"> | null
+  report?: Pick<Report, "tasks" | "gate" | "passed"> | null
 ): string | null {
   if (report?.gate === "needs review") {
     return UNSURE_REVIEW
+  }
+  if (report?.gate === "green" || report?.passed === true) {
+    return null
   }
   for (const task of report?.tasks ?? []) {
     if (lowConfidenceWarning(task)) {
@@ -899,7 +881,7 @@ export function openedCheckAnswers(task: TaskResult): OpenedAnswer[] {
     ...Object.keys(task.judge?.questions ?? {}),
   ]
   for (const id of extraIds) {
-    if (seen.has(id)) {
+    if (seen.has(id) || reservedQuestionId(id)) {
       continue
     }
     seen.add(id)

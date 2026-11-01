@@ -13,7 +13,8 @@ import {
   isViewingOlderRun,
   liveGateRun,
   patchSkillSlot,
-  shownGateRun,
+  pinBelongsToSkill,
+  shownHistoryOrGate,
   skillSlotKey,
   type RunPurpose,
   type SkillRunSlot,
@@ -85,6 +86,7 @@ export function useEvalSession(opts: EvalSessionOpts) {
   const [slots, setSlots] = useState<Record<string, SkillRunSlot>>({})
   const slotsRef = useRef(slots)
   slotsRef.current = slots
+  const [historyView, setHistoryView] = useState<RunRecord | null>(null)
   const [connectionLost, setConnectionLost] = useState(false)
   const pollsRef = useRef(new Map<string, AbortController>())
   const pollMetaRef = useRef(
@@ -112,8 +114,13 @@ export function useEvalSession(opts: EvalSessionOpts) {
   const slot = slots[skillKey] ?? emptySkillRunSlot()
   const liveGateResult = liveGateRun(slot, skillKey)
   const tryoutResult = slot.tryout
-  const viewingPinnedHistory = isViewingOlderRun(slot, skillKey)
-  const lastResult = shownGateRun(slot, skillKey)
+  const viewingPinnedHistory = isViewingOlderRun(
+    historyView && (!skillKey || pinBelongsToSkill(historyView, skillKey))
+      ? { ...slot, pin: historyView }
+      : slot,
+    skillKey
+  )
+  const lastResult = shownHistoryOrGate(slot, skillKey, historyView)
   const lastAdvice: Advice | null = lastResult?.report?.advice ?? null
   const gateRunning = slot.runningPurpose === "gate"
   const tryoutRunning = slot.runningPurpose === "tryout"
@@ -329,6 +336,7 @@ export function useEvalSession(opts: EvalSessionOpts) {
         )
       }
       if (!tryout) {
+        setHistoryView(null)
         setEvalTab("gate")
         setCopiedFix(false)
       }
@@ -435,13 +443,20 @@ export function useEvalSession(opts: EvalSessionOpts) {
       setIntakeError("")
       try {
         const data = await api.getRun(item.id)
+        let catalog = skills
+        if (catalog.length === 0) {
+          catalog = await refreshSkills()
+        }
         const skillName = data.skill || data.report?.skill || item.skill || null
         const match = skillName
-          ? skills.find((s) => matchesSkill(s, skillName))
+          ? catalog.find((s) => matchesSkill(s, skillName))
           : undefined
         const slotKey = skillSlotKey(match) || skillName
         if (match) {
           setSkill(match)
+        }
+        if (!isTryoutRun(data)) {
+          setHistoryView(data)
         }
         if (slotKey) {
           patchSlot(slotKey, (current) => historyOpenPatch(current, data))
@@ -462,6 +477,7 @@ export function useEvalSession(opts: EvalSessionOpts) {
     [
       patchSlot,
       refreshSkillHistory,
+      refreshSkills,
       refreshWorkspaceHistory,
       setCopiedFix,
       setEvalTab,

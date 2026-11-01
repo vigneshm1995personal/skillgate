@@ -2,15 +2,11 @@
 
 ## Unreleased
 
-- History, Gate, and `skillgate history show` now show enough of a run to screenshot: the case name or id (not the shared prompt), the case setup, a numeric score and written reason for each judge and text/log check with the source labeled (`from the log/text` / `from the judge`), plus a collapsible agent reply and every connector/tool call with arguments and response. `skillgate history show RUN --detail` prints the same; `--case NAME` filters to one case. Secrets in replies and tool payloads are redacted. Older history files still render.
+- History, Gate, and `skillgate history show` now show enough of a run to screenshot: the case name or id (not the shared prompt), the case setup, a numeric score and written reason for each judge and text/log check with the source labeled (`from the log/text` / `from the judge`), plus a collapsible agent reply and every connector/tool call with arguments and response. Each check score is 0.00–1.00, higher is better (the outcome, not confidence); CLI and UI print the same Pass/Fail. The reason is the short line the judge stored for that check, not the rubric and not a built template. Old runs with no stored reason say `No reason recorded`. Opening a History row — including a red run — shows that Gate result. `skillgate history show RUN --detail` prints the same; `--case NAME` filters to one case (unknown id exits 2). Secrets in replies and tool payloads are redacted. Older history files still render.
 
 ## 0.7.13
 
-<<<<<<< HEAD
 - A passing wording check no longer clears every judge fail. The override applies only when the reply is an honest rg4 negation (`not submitted yet` / `not yet`). Factual judge fails (wrong amount, false claims, a rewritten draft, a missing step) stay red even when the wording extra is Yes. Until 0.7.13 is published, install from source.
-=======
-- History, Gate, and `skillgate history show` now show enough of a run to screenshot: the case name or id (not the shared prompt), the case setup, a numeric score and written reason for each judge and text/log check with the source labeled (`from the log/text` / `from the judge`), plus a collapsible agent reply and every connector/tool call with arguments and response. Each check score is 0.00–1.00, higher is better (the outcome, not confidence); CLI and UI print the same Pass/Fail. The reason is why this run passed or failed, not the rubric text. `skillgate history show RUN --detail` prints the same; `--case NAME` filters to one case (unknown id exits 2). Secrets in replies and tool payloads are redacted. Older history files still render. Until 0.7.13 is published, install from source.
->>>>>>> 9e2ae6d (0.7.13: show this-run reasons and one outcome score)
 
 ## 0.7.12
 

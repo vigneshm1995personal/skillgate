@@ -476,6 +476,7 @@ describe("openedCheckAnswers / low confidence", () => {
       answer: "0.91",
       score: 0.91,
       passed: true,
+      reason: "No reason recorded",
     })
   })
 
@@ -711,6 +712,15 @@ describe("openedCheckAnswers / low confidence", () => {
         ],
       })
     ).toBeNull()
+    expect(
+      suiteUnsureWarning({
+        gate: "green",
+        passed: true,
+        passed_count: 8,
+        task_count: 8,
+        tasks: [{ ...passTask, review: true, status: "unsure" }],
+      })
+    ).toBeNull()
   })
 
   it("lists five answers from cells when answers keys are incomplete", () => {
@@ -821,7 +831,7 @@ describe("openedCheckAnswers / low confidence", () => {
       answer: "No",
       passed: false,
       score: 0,
-      reason: "No on this run",
+      reason: "No reason recorded",
     })
   })
 
@@ -926,14 +936,31 @@ describe("caseRowTitle / caseScenario / formatCheckScore", () => {
     const byId = Object.fromEntries(rows.map((row) => [row.id, row]))
     expect(byId.correctness.score).toBe(1)
     expect(byId.correctness.passed).toBe(true)
+    expect(byId.correctness.reason).toBe("No reason recorded")
     expect(byId.correctness.reason).not.toBe("The result matches the expected outcome.")
     expect(byId.result_quality.score).toBe(1)
     expect(byId.result_quality.passed).toBe(true)
+    expect(byId.result_quality.reason).toBe("No reason recorded")
     expect(byId.path_efficiency.score).toBe(0.75)
     expect(byId.path_efficiency.passed).not.toBe(false)
-    expect(byId.path_efficiency.reason).not.toBe(
-      "The skill finished with only minor extra steps and no looping."
-    )
+    expect(byId.path_efficiency.reason).toBe("No reason recorded")
+    expect(byId.path_efficiency.reason).not.toMatch(/on this run/i)
+  })
+
+  it("keeps a stored judge reason and does not invent one", () => {
+    const rows = openedCheckAnswers({
+      ...passTask,
+      judge: {
+        ...passTask.judge,
+        cells: {
+          correctness: {
+            choice: "Correct",
+            reason: "The lookup returned ch_3QX81 for $49.00.",
+          },
+        },
+      },
+    })
+    expect(rows.find((row) => row.id === "correctness")?.reason).toContain("ch_3QX81")
   })
 
   it("does not print the custom-check prompt twice", () => {

@@ -576,6 +576,8 @@ def _task_check_answers(task: TaskReport) -> tuple[list[dict[str, str]], str]:
         else:
             pairs = ((str(cell.get("label") or ""), cell) for cell in cells)
         for key, cell in pairs:
+            if str(key).endswith("_why"):
+                continue
             answer = answers_map.get(key)
             row = {
                 "id": key,
@@ -670,7 +672,7 @@ def _extra_source_lines(task: TaskReport) -> list[str]:
     answers = judge.get("answers") if isinstance(judge.get("answers"), dict) else {}
     lines: list[str] = []
     for key, cell in cells.items():
-        if key in CHECK_CELL_ORDER or key in SOFT_CELL_ORDER:
+        if key in CHECK_CELL_ORDER or key in SOFT_CELL_ORDER or str(key).endswith("_why"):
             continue
         if not isinstance(cell, dict):
             continue

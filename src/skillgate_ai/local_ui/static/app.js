@@ -664,6 +664,7 @@ function detailInnerHtml(task) {
       ) {
         reason = "";
       }
+      if (!reason) reason = "No reason recorded";
       const mark =
         item.passed === true ? " PASS" : item.passed === false ? " FAIL" : "";
       parts.push(

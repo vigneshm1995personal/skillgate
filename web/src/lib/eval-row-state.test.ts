@@ -235,6 +235,14 @@ describe("suiteResultKind", () => {
   it("is fail when the suite is done and checks did not pass", () => {
     expect(suiteResultKind({ status: "done" }, false, false)).toBe("fail")
     expect(suiteResultKind({ status: "done" }, null, false)).toBe("fail")
+    expect(
+      suiteResultKind(
+        { status: "done", id: "full-red" },
+        false,
+        false,
+        true
+      )
+    ).toBe("fail")
   })
 
   it("is error on a worker error", () => {

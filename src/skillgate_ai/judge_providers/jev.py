@@ -5,7 +5,11 @@ from __future__ import annotations
 from typing import Any, Mapping
 from urllib.parse import urlparse
 
-from skillgate_ai.judge_context import attach_adherence_context
+from skillgate_ai.judge_context import (
+    attach_adherence_context,
+    stamp_why_on_answers,
+    with_run_reason_questions,
+)
 from skillgate_ai.judge_openai import (
     DEFAULT_TIMEOUT_SEC,
     _answers_from_decisions_list,
@@ -49,6 +53,13 @@ class JevBackend:
         del images
         include_path = _path_is_recorded(state.get("path"))
         resolved = spec if spec is not None else builtin_spec()
+        questions = with_run_reason_questions(
+            attach_adherence_context(
+                spec_decisions_questions(resolved, include_path=include_path),
+                state,
+            ),
+            state,
+        )
         result = post_openai_json(
             _score_url(self.base_url),
             api_key=self.api_key,
@@ -56,10 +67,7 @@ class JevBackend:
                 self.base_url,
                 model=self.model,
                 text=_state_text(state),
-                questions=attach_adherence_context(
-                    spec_decisions_questions(resolved, include_path=include_path),
-                    state,
-                ),
+                questions=questions,
             ),
             timeout_sec=timeout_sec,
             model=self.model,
@@ -75,6 +83,7 @@ class JevBackend:
             include_path=include_path,
             spec=resolved,
         )
+        stamp_why_on_answers(answers, questions)
         return {
             "status": "completed",
             "model": str(data.get("model") or self.model),

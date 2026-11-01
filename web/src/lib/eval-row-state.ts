@@ -106,7 +106,7 @@ export function suiteStampReady(
 
 /** Suite result shell. Checking until the run is actually done; Pass if checks passed. */
 export function suiteResultKind(
-  record: Pick<RunRecord, "status" | "gate" | "report"> | null | undefined,
+  record: Pick<RunRecord, "status" | "gate" | "report" | "id"> | null | undefined,
   reportPassed: boolean | null | undefined,
   evaluating: boolean,
   hasTasks = false
@@ -117,7 +117,7 @@ export function suiteResultKind(
   if (record?.status === "error") {
     return hasTasks ? "fail" : "error"
   }
-  if (record?.status === "done") {
+  if (record && (record.status === "done" || hasTasks || record.id)) {
     const gate = record.gate || record.report?.gate
     if (gate === "needs review") {
       return "review"
