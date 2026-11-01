@@ -118,6 +118,10 @@ def test_cases_yaml_missing_field_exits_2_and_names_it(tmp_path: Path) -> None:
         load_case_pack(dest)
     assert missing_schema.value.exit_code == 2
     assert "Couldn't load these checks" in missing_schema.value.message
+    assert "Field required" in missing_schema.value.message
+    assert "hello" not in missing_schema.value.message
+    assert "notes-pack" not in missing_schema.value.message
+    assert "{" not in missing_schema.value.message
 
 
 def test_invalid_cases_yaml_is_suite_error(tmp_path: Path) -> None:

@@ -235,7 +235,9 @@ def _loc_label(
     if not loc:
         return ""
     if loc[0] in {"schema", "schema_version"}:
-        shown = inp if inp is not None else (raw or {}).get("schema")
+        shown = inp if isinstance(inp, (int, str)) else (raw or {}).get("schema")
+        if isinstance(shown, (dict, list)):
+            shown = None
         if shown is not None:
             return f"schema {shown}"
         return "schema"

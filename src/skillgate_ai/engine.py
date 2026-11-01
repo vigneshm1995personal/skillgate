@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -60,8 +61,18 @@ def _extras_all_passed(judged: Mapping[str, Any]) -> bool:
 
 def _extras_from_log(judged: Mapping[str, Any]) -> bool:
     """True when at least one extra check was computed from the log."""
+    return _extras_from_source(judged, "log")
+
+
+def _extras_from_text(judged: Mapping[str, Any]) -> bool:
+    """True when at least one extra check was computed from the text."""
+    return _extras_from_source(judged, "text")
+
+
+def _extras_from_source(judged: Mapping[str, Any], source: str) -> bool:
     from skillgate_ai.judge_bank import CHECK_CELL_ORDER, SOFT_CELL_ORDER
 
+    wanted = source.strip().lower()
     reserved = set(CHECK_CELL_ORDER) | set(SOFT_CELL_ORDER)
     cells = judged.get("cells") if isinstance(judged.get("cells"), Mapping) else {}
     answers = judged.get("answers") if isinstance(judged.get("answers"), Mapping) else {}
@@ -69,7 +80,7 @@ def _extras_from_log(judged: Mapping[str, Any]) -> bool:
         for key, row in blob.items():
             if key in reserved or not isinstance(row, Mapping):
                 continue
-            if str(row.get("source") or "").strip().lower() == "log":
+            if str(row.get("source") or "").strip().lower() == wanted:
                 return True
     return False
 
@@ -79,6 +90,22 @@ def _is_builtin_quality_reason(reason: object) -> bool:
 
     text = str(reason or "").strip()
     return any(text.startswith(label) for label in CHECK_CELL_LABELS.values())
+
+
+_NON_WORDING_FAIL = re.compile(
+    r"rewrit|verbatim|copy the draft|did not copy|changed the required|"
+    r"wrong amount|amount refunded|usd\s*\d|4\.90|49\.00|"
+    r"owner[- ]?report|missing step|reply\.txt missing|"
+    r"did not write|no owner|skipped the",
+    re.IGNORECASE,
+)
+
+
+def _wording_only_builtin_reason(reason: object) -> bool:
+    """Judge restated a wording extra. Real quality fails keep their reasons."""
+    if not _is_builtin_quality_reason(reason):
+        return False
+    return not _NON_WORDING_FAIL.search(str(reason or ""))
 
 
 def stabilize_adherence_review(
@@ -92,7 +119,9 @@ def stabilize_adherence_review(
     scorer passed. A failing choice at low confidence stays review unless extra
     checks exist, none failed, and the scorers passed. When those extras were
     computed from the log and they all passed, a judge-only builtin quality fail
-    is also dropped so an honest hedge does not turn the gate red.
+    is also dropped so an honest hedge does not turn the gate red. A passing
+    text check drops a judge fail that only restates that wording rule. A
+    rewritten draft, a wrong amount, or a missing step still fails.
     """
     from skillgate_ai.judge_bank import (
         CHECK_CELL_ORDER,
@@ -116,6 +145,7 @@ def stabilize_adherence_review(
         return judged
     extras_ok = _extras_all_passed(judged)
     extras_log = extras_ok and _extras_from_log(judged)
+    extras_text = extras_ok and _extras_from_text(judged)
     answers = judged.get("answers") if isinstance(judged.get("answers"), dict) else {}
     next_cells = dict(cells)
     changed = False
@@ -137,7 +167,7 @@ def stabilize_adherence_review(
         cleaned.pop("status", None)
         next_cells[key] = cleaned
         changed = True
-    if not changed and not extras_log:
+    if not changed and not extras_log and not extras_text:
         return judged
     out = dict(judged)
     if changed:
@@ -167,6 +197,15 @@ def stabilize_adherence_review(
                 isinstance(row, dict) and row.get("status") == "unsure"
                 for row in cells.values()
             )
+    elif extras_text:
+        kept = [
+            str(item).strip()
+            for item in (out.get("reasons") or [])
+            if str(item).strip() and not _wording_only_builtin_reason(item)
+        ]
+        out["reasons"] = kept
+        if not kept:
+            out["passed"] = True
     return out
 
 

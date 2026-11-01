@@ -556,9 +556,9 @@ def test_rewritten_draft_stays_red_when_wording_passes() -> None:
     assert facts["q0"]["source"] == "text"
     assert _gate_with_text_pass(
         reasons=[
-            "Got it right? Incorrect (need Correct)",
-            "Followed the rules? Violated (need Fully followed)",
-            "Delivered a good result? Significant issues",
+            "Got it right? Incorrect (need Correct) — rewrote the draft",
+            "Followed the rules? Violated (need Fully followed) — did not copy verbatim",
+            "Delivered a good result? Significant issues — changed the required reply",
         ]
     ) is False
 
@@ -596,6 +596,25 @@ def test_missing_reply_is_red_without_a_connector_pack() -> None:
     assert gate is False
     assert "reply.txt missing" in failures
     assert not any("banned wording" in item.lower() for item in failures)
+
+
+def test_rg4_negation_stays_green_when_text_passes() -> None:
+    replies = (
+        "The refund has not been submitted yet. USD 0.00 has been returned so far.",
+        "The refund is not yet submitted. USD 0.00 has been returned so far.",
+    )
+    ask = wording_ask(compile_wording_rules(SKILL_BOTPRESS_4B_FULL))
+    for reply in replies:
+        facts = _wording_on(SKILL_BOTPRESS_4B_FULL, reply)
+        assert facts["q0"]["probability"] == 1.0, reply
+        assert facts["q0"]["source"] == "text", reply
+        assert _gate_with_text_pass(
+            extra_label=ask,
+            reasons=[
+                "Got it right? Incorrect (need Correct) — used submitted",
+                "Followed the rules? Violated (need Fully followed) — banned wording",
+            ],
+        ) is True
 
 
 def test_wrong_amount_stays_red_when_wording_passes() -> None:
