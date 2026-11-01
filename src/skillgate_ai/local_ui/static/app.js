@@ -656,9 +656,18 @@ function detailInnerHtml(task) {
       const answer = String(item.answer || "").trim() || "Not available";
       const source = sourceLabel(item.source_label || item.source);
       const score = formatCheckScore(item.score);
-      const reason = String(item.reason || "").trim();
+      let reason = String(item.reason || "").trim();
+      if (
+        reason === label ||
+        (answer && reason === `${label} ${answer}`.trim()) ||
+        (answer && reason.toLowerCase() === answer.toLowerCase())
+      ) {
+        reason = "";
+      }
+      const mark =
+        item.passed === true ? " PASS" : item.passed === false ? " FAIL" : "";
       parts.push(
-        `<div><dt>${esc(label)}</dt><dd>${esc(answer)}${score ? ` <span class="check-score">${esc(score)}</span>` : ""}${source ? ` (${esc(source)})` : ""}${reason ? `<span class="check-reason">${esc(reason)}</span>` : ""}</dd></div>`
+        `<div><dt>${esc(label)}</dt><dd>${esc(answer)}${mark ? `<span class="${item.passed ? "pass" : "fail"}">${esc(mark)}</span>` : ""}${score ? ` <span class="check-score">${esc(score)}</span>` : ""}${source ? ` (${esc(source)})` : ""}${reason ? `<span class="check-reason">${esc(reason)}</span>` : ""}</dd></div>`
       );
     });
     parts.push("</dl>");

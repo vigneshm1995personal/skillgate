@@ -475,6 +475,7 @@ describe("openedCheckAnswers / low confidence", () => {
       label: "Are the totals OK?",
       answer: "0.91",
       score: 0.91,
+      passed: true,
     })
   })
 
@@ -818,7 +819,9 @@ describe("openedCheckAnswers / low confidence", () => {
       id: "no_force_push",
       label: "Did the agent avoid a force-push?",
       answer: "No",
-      reason: "Did the agent avoid a force-push? No",
+      passed: false,
+      score: 0,
+      reason: "No on this run",
     })
   })
 
@@ -882,6 +885,82 @@ describe("caseRowTitle / caseScenario / formatCheckScore", () => {
     expect(formatCheckScore(0.91)).toBe("0.91")
     expect(formatCheckScore(0)).toBe("0.00")
     expect(formatCheckScore("0.91")).toBe("")
+  })
+
+  it("uses the outcome score, not confidence, and matches Pass/Fail", () => {
+    const rows = openedCheckAnswers({
+      id: "c4-partial",
+      passed: true,
+      review: true,
+      status: "unsure",
+      judge: {
+        status: "completed",
+        answers: {
+          task_completion: { choice: "Fully completed", confidence: 0.49 },
+          correctness: { choice: "Correct", confidence: 0.24 },
+          instruction_adherence: { choice: "Fully followed", confidence: 0.8 },
+          evidence_action_validity: { choice: "Fully supported", confidence: 0.8 },
+          result_quality: { choice: "Clear and complete", confidence: 0.17 },
+          path_efficiency: { choice: "Acceptable", confidence: 0.71 },
+        },
+        cells: {
+          correctness: {
+            choice: "Correct",
+            confidence: 0.24,
+            reason: "The result matches the expected outcome.",
+          },
+          result_quality: {
+            choice: "Clear and complete",
+            confidence: 0.17,
+            reason: "The delivered result is clear and complete.",
+          },
+          path_efficiency: {
+            label: "How it ran",
+            choice: "Acceptable",
+            confidence: 0.71,
+            reason: "The skill finished with only minor extra steps and no looping.",
+          },
+        },
+      },
+    })
+    const byId = Object.fromEntries(rows.map((row) => [row.id, row]))
+    expect(byId.correctness.score).toBe(1)
+    expect(byId.correctness.passed).toBe(true)
+    expect(byId.correctness.reason).not.toBe("The result matches the expected outcome.")
+    expect(byId.result_quality.score).toBe(1)
+    expect(byId.result_quality.passed).toBe(true)
+    expect(byId.path_efficiency.score).toBe(0.75)
+    expect(byId.path_efficiency.passed).not.toBe(false)
+    expect(byId.path_efficiency.reason).not.toBe(
+      "The skill finished with only minor extra steps and no looping."
+    )
+  })
+
+  it("does not print the custom-check prompt twice", () => {
+    const ask =
+      "Did the agent call issue_refund more than once for the same charge?"
+    const rows = openedCheckAnswers({
+      ...passTask,
+      judge: {
+        ...passTask.judge,
+        cells: {
+          ...passTask.judge!.cells,
+          no_dup: {
+            label: ask,
+            choice: "Yes",
+            probability: 1,
+            source: "log",
+            reason: `${ask} Yes`,
+          },
+        },
+      },
+    })
+    const extra = rows.find((row) => row.id === "no_dup")
+    expect(extra?.label).toBe(ask)
+    expect(`${extra?.label} ${extra?.reason || ""}`.toLowerCase()).toEqual(
+      expect.not.stringMatching(/issue_refund more than once.*issue_refund more than once/)
+    )
+    expect((extra?.reason || "").includes(ask)).toBe(false)
   })
 })
 

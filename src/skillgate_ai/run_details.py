@@ -8,6 +8,12 @@ from collections.abc import Mapping, Sequence
 from typing import Any
 
 from skillgate_ai.errors import SkillGateError
+from skillgate_ai.judge_bank import (
+    UNSURE_REVIEW,
+    choice_passed,
+    is_rubric_reason,
+    score_for_choice,
+)
 from skillgate_ai.openai_http import redact_secrets
 
 _SK_TOKEN = re.compile(r"sk-[A-Za-z0-9_*\-]{8,}")
@@ -27,13 +33,7 @@ _BUILTIN_LABELS = {
     "result_quality": "Delivered a good result?",
     "path_efficiency": "How it ran",
 }
-_PASS_LOCK = {
-    "task_completion": ("fully completed",),
-    "correctness": ("correct",),
-    "instruction_adherence": ("fully followed",),
-    "evidence_action_validity": ("fully supported", "n/a"),
-    "result_quality": ("clear and complete", "mostly good"),
-}
+_PREDICATE_PASS = 0.8
 
 
 def redact_run_text(text: str, secret: str | None = None) -> str:
@@ -95,39 +95,127 @@ def _numeric(value: Any) -> float | None:
     return float(value)
 
 
-def _choice_passed(key: str, choice: str) -> bool | None:
-    text = (choice or "").strip().lower()
-    if not text:
-        return None
-    lock = _PASS_LOCK.get(key)
-    if lock:
-        return text in lock
-    if text in {"yes", "pass", "true", "1"}:
-        return True
-    if text in {"no", "fail", "false", "0"}:
-        return False
-    return None
+def _clamp_score(value: float) -> float:
+    if value < 0:
+        return 0.0
+    if value > 1:
+        if value <= 10:
+            return value / 10.0
+        return 1.0
+    return value
 
 
-def _row_score(cell: Mapping[str, Any], answer: Mapping[str, Any] | None) -> float | None:
+def _row_score(
+    key: str,
+    choice: str,
+    cell: Mapping[str, Any],
+    answer: Mapping[str, Any] | None,
+    listed: Mapping[str, Any] | None = None,
+) -> float | None:
     for blob in (cell, answer or {}):
-        for key in ("confidence", "probability", "score"):
-            num = _numeric(blob.get(key))
-            if num is not None:
-                return num
+        num = _numeric(blob.get("probability"))
+        if num is not None:
+            return _clamp_score(num)
+        num = _numeric(blob.get("score"))
+        if num is not None:
+            return _clamp_score(num)
+    mapped = score_for_choice(key, choice)
+    if mapped is not None:
+        return mapped
+    if listed:
+        num = _numeric(listed.get("score"))
+        if num is not None:
+            return _clamp_score(num)
     passed = cell.get("passed")
+    if not isinstance(passed, bool) and listed is not None:
+        passed = listed.get("passed")
     if isinstance(passed, bool):
         return 1.0 if passed else 0.0
+    guessed = choice_passed(key, choice)
+    if guessed is not None:
+        return 1.0 if guessed else 0.0
     return None
 
 
-def _row_reason(cell: Mapping[str, Any], answer: Mapping[str, Any] | None) -> str:
-    for blob in (cell, answer or {}):
-        for key in ("reason", "rationale", "explanation"):
-            text = str(blob.get(key) or "").strip()
+def _reason_repeats_prompt(label: str, choice: str, reason: str) -> bool:
+    compact = " ".join(reason.split())
+    ask = " ".join(label.split())
+    if not compact:
+        return True
+    if ask and compact == ask:
+        return True
+    if choice and compact.lower() == choice.strip().lower():
+        return True
+    if ask and choice and compact == f"{ask} {choice}".strip():
+        return True
+    return bool(
+        ask
+        and compact.lower().startswith(ask.lower())
+        and (not choice or compact.lower().endswith(choice.strip().lower()))
+    )
+
+
+def _run_specific_reason(task: Mapping[str, Any], choice: str) -> str:
+    parts: list[str] = []
+    numeric_choice = False
+    if choice:
+        try:
+            float(choice)
+            numeric_choice = True
+        except ValueError:
+            numeric_choice = False
+    if choice and not numeric_choice:
+        parts.append(f"{choice} on this run")
+    calls = tool_calls(task)
+    if calls:
+        names: list[str] = []
+        seen: set[str] = set()
+        for call in calls:
+            name = str(call.get("name") or "tool")
+            if name in seen:
+                continue
+            seen.add(name)
+            names.append(name)
+        parts.append("Connector calls: " + ", ".join(names))
+    reply = agent_reply(task)
+    if reply:
+        line = reply.strip().splitlines()[0].strip()
+        if len(line) > 88:
+            line = line[:85].rstrip() + "…"
+        parts.append(f'Reply: "{line}"')
+    happened = str(task.get("happened") or "").strip()
+    if happened and happened.lower() not in {
+        "unsure, needs review",
+        "output matched what was expected.",
+        "output matched what was expected",
+    }:
+        parts.append(happened)
+    return ". ".join(parts)
+
+
+def _row_reason(
+    key: str,
+    choice: str,
+    label: str,
+    cell: Mapping[str, Any],
+    answer: Mapping[str, Any] | None,
+    listed: Mapping[str, Any] | None,
+    task: Mapping[str, Any],
+) -> str:
+    texts: list[str] = []
+    for blob in (cell, answer or {}, listed or {}):
+        for field in ("reason", "rationale", "explanation", "why", "evidence"):
+            text = str(blob.get(field) or "").strip()
             if text:
-                return redact_run_text(text)
-    return ""
+                texts.append(text)
+                break
+    for text in texts:
+        if is_rubric_reason(key, choice, text):
+            continue
+        if _reason_repeats_prompt(label, choice, text):
+            continue
+        return redact_run_text(text)
+    return redact_run_text(_run_specific_reason(task, choice))
 
 
 def check_rows(task: Mapping[str, Any] | None) -> list[dict[str, Any]]:
@@ -186,23 +274,26 @@ def check_rows(task: Mapping[str, Any] | None) -> list[dict[str, Any]]:
         src = source_label(source_raw) or (
             "from the judge" if key in _BUILTIN_LABELS else ""
         )
-        score = _row_score(cell, answer)
-        if score is None:
-            score = _numeric(listed_row.get("score"))
+        score = _row_score(key, choice, cell, answer, listed_row)
         if score is None and choice:
-            guessed = _choice_passed(key, choice)
+            guessed = choice_passed(key, choice)
             if guessed is not None:
                 score = 1.0 if guessed else 0.0
-        reason = _row_reason(cell, answer) or str(listed_row.get("reason") or "").strip()
+        reason = _row_reason(key, choice, label, cell, answer, listed_row, task)
         passed = cell.get("passed")
         if not isinstance(passed, bool):
             if listed_row.get("passed") is True or listed_row.get("passed") is False:
                 passed = listed_row.get("passed")
             else:
-                guessed = _choice_passed(key, choice)
+                guessed = choice_passed(key, choice)
                 if guessed is None and score is not None:
-                    guessed = score >= 0.8
+                    guessed = score >= _PREDICATE_PASS
                 passed = guessed
+        status = str(cell.get("status") or "").strip().lower()
+        if status == "unsure":
+            choice = UNSURE_REVIEW
+            if passed is False and choice_passed(key, str(cell.get("choice") or "")) is True:
+                passed = True
         seen.add(key)
         row: dict[str, Any] = {
             "id": key,
@@ -419,36 +510,19 @@ def hydrate_task(task: dict[str, Any]) -> dict[str, Any]:
         task["reply"] = detail["reply"]
     if not task.get("tool_calls"):
         task["tool_calls"] = detail["tool_calls"]
-    listed = task.get("check_answers")
-    if not isinstance(listed, list) or not listed:
-        task["check_answers"] = [
-            {
-                "id": row.get("id"),
-                "label": row.get("label"),
-                "answer": row.get("answer"),
-                "score": row.get("score"),
-                "reason": row.get("reason"),
-                "source": row.get("source"),
-                "source_label": row.get("source_label"),
-                "passed": row.get("passed"),
-            }
-            for row in detail["checks"]
-        ]
-    else:
-        by_label = {row["label"]: row for row in detail["checks"]}
-        filled: list[dict[str, Any]] = []
-        for item in listed:
-            if not isinstance(item, dict):
-                continue
-            extra = by_label.get(str(item.get("label") or ""))
-            row = dict(item)
-            if extra:
-                row.setdefault("score", extra.get("score"))
-                row.setdefault("reason", extra.get("reason"))
-                row.setdefault("source_label", extra.get("source_label"))
-                row.setdefault("source", extra.get("source"))
-            filled.append(row)
-        task["check_answers"] = filled
+    task["check_answers"] = [
+        {
+            "id": row.get("id"),
+            "label": row.get("label"),
+            "answer": row.get("answer"),
+            "score": row.get("score"),
+            "reason": row.get("reason"),
+            "source": row.get("source"),
+            "source_label": row.get("source_label"),
+            "passed": row.get("passed"),
+        }
+        for row in detail["checks"]
+    ]
     return task
 
 
@@ -502,7 +576,7 @@ def format_run_show(
             or str(item.get("name") or "") == wanted
         ]
         if not tasks:
-            raise SkillGateError(f"No case named {wanted}.")
+            raise SkillGateError(f"No case named {wanted}.", exit_code=2)
         detail = True
     passed_flag = row.get("passed")
     err = row.get("error") if isinstance(row.get("error"), Mapping) else {}

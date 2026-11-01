@@ -166,7 +166,7 @@ def test_check_rows_include_score_reason_and_source() -> None:
     rows = check_rows(_refund_task())
     by_label = {row["label"]: row for row in rows}
     job = by_label["Got the job done?"]
-    assert job["score"] == pytest.approx(0.91)
+    assert job["score"] == pytest.approx(1.0)
     assert "looked up the charge" in job["reason"]
     assert job["source_label"] == "from the judge"
     wording = by_label["The reply follows the skill's wording."]
@@ -280,7 +280,7 @@ def test_format_run_show_detail_prints_score_reason_reply_tools() -> None:
         detail=True,
     )
     assert "Dana asked" in text
-    assert "0.91" in text
+    assert "1.00" in text
     assert "from the judge" in text
     assert "from the log/text" in text
     assert "banned wording" in text
@@ -336,7 +336,7 @@ def test_history_show_cli_detail_and_case(
     )
     detail_out = plain_text(detailed.stdout + detailed.stderr)
     assert detailed.exit_code == 0, detail_out
-    assert "0.91" in detail_out
+    assert "1.00" in detail_out
     assert "from the log/text" in detail_out
     assert "issue_refund" in detail_out
     assert "I've submitted a full refund" in detail_out
@@ -559,3 +559,211 @@ def test_load_history_scrubs_keys_from_new_fields(tmp_path: Path) -> None:
     blob = json.dumps(rows)
     assert "sk-live-abcdefghijklmnopqrstuvwxyz012345" not in blob
     assert redact_secrets("sk-live-abcdefghijklmnopqrstuvwxyz012345") == "sk-***"
+
+
+RUBRIC_CORRECT = "The result matches the expected outcome."
+RUBRIC_QUALITY = "The delivered result is clear and complete."
+RUBRIC_ACCEPTABLE = (
+    "The skill finished with only minor extra steps and no looping."
+)
+CUSTOM_ASK = (
+    "Did the agent call issue_refund more than once for the same charge?"
+)
+
+
+def _contradicting_scores_task() -> dict:
+    """QA D1/D2 fixture: passing choices with low confidence, Acceptable path."""
+    return {
+        "id": "c4-partial",
+        "name": "Partial refund",
+        "scenario": "Dana asked to refund $49. The connector refunded $4.90.",
+        "passed": True,
+        "review": True,
+        "status": "unsure",
+        "happened": "unsure, needs review",
+        "outputs": [
+            {"path": "output/reply.txt", "body": REPLY},
+            {"path": "output/calls.log", "body": CALLS_LOG},
+        ],
+        "judge": {
+            "status": "completed",
+            "passed": True,
+            "review": True,
+            "cells": {
+                "correctness": {
+                    "label": "Got it right?",
+                    "choice": "Correct",
+                    "confidence": 0.24,
+                    "reason": RUBRIC_CORRECT,
+                },
+                "result_quality": {
+                    "label": "Delivered a good result?",
+                    "choice": "Clear and complete",
+                    "confidence": 0.17,
+                    "reason": RUBRIC_QUALITY,
+                },
+                "path_efficiency": {
+                    "label": "How it ran",
+                    "choice": "Acceptable",
+                    "confidence": 0.71,
+                    "reason": RUBRIC_ACCEPTABLE,
+                    "status": "unsure",
+                },
+                "no_dup": {
+                    "label": CUSTOM_ASK,
+                    "choice": "Yes",
+                    "probability": 1.0,
+                    "source": "log",
+                    "reason": f"{CUSTOM_ASK} Yes",
+                },
+            },
+            "answers": {
+                "correctness": {
+                    "choice": "Correct",
+                    "confidence": 0.24,
+                    "reason": RUBRIC_CORRECT,
+                },
+                "result_quality": {
+                    "choice": "Clear and complete",
+                    "confidence": 0.17,
+                    "reason": RUBRIC_QUALITY,
+                },
+                "path_efficiency": {
+                    "choice": "Acceptable",
+                    "confidence": 0.71,
+                    "reason": RUBRIC_ACCEPTABLE,
+                },
+                "no_dup": {
+                    "choice": "Yes",
+                    "probability": 1.0,
+                    "source": "log",
+                    "reason": f"{CUSTOM_ASK} Yes",
+                },
+            },
+        },
+    }
+
+
+def test_check_rows_use_outcome_score_not_confidence() -> None:
+    rows = {row["id"]: row for row in check_rows(_contradicting_scores_task())}
+    correct = rows["correctness"]
+    assert correct["passed"] is True
+    assert correct["score"] == pytest.approx(1.0)
+    assert correct["score"] != pytest.approx(0.24)
+    quality = rows["result_quality"]
+    assert quality["passed"] is True
+    assert quality["score"] == pytest.approx(1.0)
+    path = rows["path_efficiency"]
+    assert path["passed"] is not False
+    assert path["score"] == pytest.approx(0.75)
+    assert path["score"] != pytest.approx(0.71)
+
+
+def test_check_rows_show_this_run_reason_not_rubric() -> None:
+    rows = {row["id"]: row for row in check_rows(_contradicting_scores_task())}
+    correct = rows["correctness"]
+    assert correct["reason"]
+    assert correct["reason"] != RUBRIC_CORRECT
+    assert "matches the expected outcome" not in correct["reason"].lower()
+    assert "this run" in correct["reason"].lower() or "lookup" in correct["reason"].lower()
+    quality = rows["result_quality"]
+    assert quality["reason"] != RUBRIC_QUALITY
+    path = rows["path_efficiency"]
+    assert path["reason"] != RUBRIC_ACCEPTABLE
+
+
+def test_check_rows_keep_written_judge_reason() -> None:
+    task = _refund_task()
+    rows = {row["label"]: row for row in check_rows(task)}
+    job = rows["Got the job done?"]
+    assert "looked up the charge" in job["reason"]
+    assert job["score"] == pytest.approx(1.0)
+
+
+def test_custom_check_does_not_repeat_the_prompt() -> None:
+    rows = {row["id"]: row for row in check_rows(_contradicting_scores_task())}
+    extra = rows["no_dup"]
+    assert extra["label"] == CUSTOM_ASK
+    assert extra["answer"] == "Yes"
+    blob = f"{extra['label']} {extra['reason']}"
+    assert blob.lower().count("issue_refund more than once") == 1
+
+
+def test_format_run_show_agrees_pass_fail_and_score() -> None:
+    text = format_run_show(
+        {
+            "run_id": "edde008b6e96",
+            "passed": True,
+            "report": {
+                "gate": "needs review",
+                "passed_count": 1,
+                "task_count": 1,
+                "tasks": [_contradicting_scores_task()],
+            },
+        },
+        detail=True,
+        case_id="c4-partial",
+    )
+    assert "FAIL  0.71" not in text
+    assert "How it ran" in text
+    assert "FAIL" not in text.split("How it ran", 1)[1].split("\n", 1)[0]
+    assert "1.00" in text
+    assert RUBRIC_CORRECT not in text
+    assert text.lower().count("issue_refund more than once") == 1
+
+
+def test_unknown_case_is_cannot_run() -> None:
+    with pytest.raises(SkillGateError) as caught:
+        format_run_show(
+            {"run_id": "run-blog", "passed": False, "report": _refund_report()},
+            case_id="nope",
+        )
+    assert caught.value.exit_code == 2
+    assert "nope" in str(caught.value)
+
+
+def test_history_show_unknown_case_exits_2(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _isolate_home(tmp_path, monkeypatch)
+    pack = tmp_path / "skills" / "refund-desk"
+    (pack / "evals").mkdir(parents=True)
+    (pack / "SKILL.md").write_text(
+        "---\nname: refund-desk\ndescription: Handle refund tickets.\n---\n# refund-desk\n",
+        encoding="utf-8",
+    )
+    append_eval(pack, run_id="run-blog", passed=False, report=_refund_report())
+    missing = CliRunner().invoke(
+        app,
+        ["history", "show", "run-blog", "--pack", str(pack), "--case", "nope"],
+    )
+    missing_out = plain_text(missing.stdout + missing.stderr)
+    assert missing.exit_code == 2, missing_out
+    assert "nope" in missing_out.lower() or "No case" in missing_out
+
+
+def test_cell_entry_does_not_store_rubric_as_reason() -> None:
+    from skillgate_ai.judge_openai import _cell_entry
+
+    cell = _cell_entry(
+        "correctness",
+        {"choice": "Correct", "confidence": 0.24},
+        {"correctness": "Got it right?"},
+    )
+    assert cell["choice"] == "Correct"
+    assert (cell.get("reason") or "") != RUBRIC_CORRECT
+
+
+def test_cell_entry_keeps_the_judge_reason() -> None:
+    from skillgate_ai.judge_openai import _cell_entry
+
+    cell = _cell_entry(
+        "correctness",
+        {
+            "choice": "Correct",
+            "confidence": 0.9,
+            "reason": "The lookup returned ch_3QX81 for $49.00.",
+        },
+        {"correctness": "Got it right?"},
+    )
+    assert "ch_3QX81" in (cell.get("reason") or "")

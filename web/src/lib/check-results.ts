@@ -1,6 +1,6 @@
 import { isJudgeScorerCopy, isLegacyRunCopy, JUDGE_SCORED, OLDER_RUN_LABEL } from "@/lib/eval-config"
 import { pathOpenedCaption } from "@/lib/metrics-label"
-import type { JudgeAnswer, JudgeResult, Report, TaskResult } from "@/lib/types"
+import type { JudgeAnswer, JudgeQuestion, JudgeResult, Report, TaskResult } from "@/lib/types"
 
 export const CHECK_QUESTION_ORDER = [
   "task_completion",
@@ -21,11 +21,69 @@ export const CHECK_QUESTION_LABELS: Record<string, string> = {
 
 const PASS_LOCK: Record<string, string[]> = {
   task_completion: ["fully completed"],
-  correctness: ["correct"],
-  instruction_adherence: ["fully followed"],
-  evidence_action_validity: ["fully supported", "n/a"],
+  correctness: ["correct", "mostly correct"],
+  instruction_adherence: ["fully followed", "minor deviation"],
+  evidence_action_validity: ["fully supported", "partially supported", "n/a"],
   result_quality: ["clear and complete", "mostly good"],
 }
+
+const CHOICE_SCORES: Record<string, Record<string, number>> = {
+  task_completion: {
+    "fully completed": 1,
+    "partially completed": 0.5,
+    "not completed": 0,
+  },
+  correctness: {
+    correct: 1,
+    "mostly correct": 0.75,
+    "insufficient evidence": 0.5,
+    incorrect: 0,
+  },
+  instruction_adherence: {
+    "fully followed": 1,
+    "minor deviation": 0.75,
+    "major deviation": 0.25,
+    violated: 0,
+  },
+  evidence_action_validity: {
+    "fully supported": 1,
+    "partially supported": 0.75,
+    "n/a": 1,
+    unsupported: 0,
+  },
+  result_quality: {
+    "clear and complete": 1,
+    "mostly good": 0.75,
+    "significant issues": 0.25,
+    poor: 0,
+  },
+  path_efficiency: {
+    efficient: 1,
+    acceptable: 0.75,
+    looping: 0.25,
+    wasteful: 0,
+  },
+}
+
+const PREDICATE_PASS = 0.8
+const RUBRIC_TEXTS = new Set(
+  [
+    "The test's expected outcome is fully met.",
+    "Some of the requested work is done but incomplete.",
+    "The requested work was not done.",
+    "The result matches the expected outcome.",
+    "Core claims are right with minor errors.",
+    "The result is wrong.",
+    "The delivered result is clear and complete.",
+    "Mostly good with minor quality gaps (still Pass).",
+    "Significant quality issues (Fail).",
+    "Poor quality result (Fail).",
+    "The skill took a direct path: no repeated tool calls, no loops, no wasted steps.",
+    "The skill finished with only minor extra steps and no looping.",
+    "The skill repeated the same or near-same tool calls without making progress.",
+    "The skill spent many tool calls off-task or thrashing.",
+  ].map((item) => item.toLowerCase())
+)
 
 export const CONFIDENCE_WARN = 0.5
 export const UNSURE_REVIEW = "unsure, needs review"
@@ -52,6 +110,7 @@ export type OpenedAnswer = {
   score?: number
   reason?: string
   source?: string
+  passed?: boolean | null
 }
 
 function trimText(value: unknown): string {
@@ -497,21 +556,150 @@ export function scoredByLine(
   return ""
 }
 
+function clampScore(value: number): number {
+  if (value < 0) return 0
+  if (value > 1) return value <= 10 ? value / 10 : 1
+  return value
+}
+
+function choiceOutcomeScore(id: string, choice: string): number | undefined {
+  const mapped = CHOICE_SCORES[id]?.[choice.trim().toLowerCase()]
+  return typeof mapped === "number" ? mapped : undefined
+}
+
 function answerScore(
+  id: string,
+  choice: string,
   answer?: JudgeAnswer | null,
   cell?: { probability?: number; confidence?: number; score?: number } | null,
   listed?: { score?: number } | null
 ): number | undefined {
-  for (const value of [answer?.confidence, answer?.probability, answer?.score, cell?.confidence, cell?.probability, cell?.score, listed?.score]) {
+  for (const value of [answer?.probability, cell?.probability, answer?.score, cell?.score]) {
     if (typeof value === "number" && !Number.isNaN(value)) {
-      return value
+      return clampScore(value)
     }
+  }
+  const mapped = choiceOutcomeScore(id, choice)
+  if (mapped != null) return mapped
+  const guessed = cellWouldPass(id, choice)
+  if (guessed != null) return guessed ? 1 : 0
+  if (typeof listed?.score === "number" && !Number.isNaN(listed.score)) {
+    return clampScore(listed.score)
   }
   return undefined
 }
 
-function cellWouldPass(id: string, choice: string): boolean {
-  return PASS_LOCK[id]?.includes(choice.trim().toLowerCase()) ?? false
+function cellWouldPass(id: string, choice: string): boolean | null {
+  const text = choice.trim().toLowerCase()
+  if (!text) return null
+  if (PASS_LOCK[id]) {
+    return PASS_LOCK[id].includes(text)
+  }
+  if (id === "path_efficiency") {
+    if (text === "efficient" || text === "acceptable") return true
+    if (text in (CHOICE_SCORES.path_efficiency || {})) return false
+    return null
+  }
+  if (["yes", "pass", "true", "1"].includes(text)) return true
+  if (["no", "fail", "false", "0"].includes(text)) return false
+  return null
+}
+
+function reasonRepeatsPrompt(label: string, choice: string, reason: string): boolean {
+  const compact = reason.trim().replace(/\s+/g, " ")
+  const ask = label.trim().replace(/\s+/g, " ")
+  if (!compact) return true
+  if (ask && compact === ask) return true
+  if (choice && compact.toLowerCase() === choice.trim().toLowerCase()) return true
+  if (ask && choice && compact === `${ask} ${choice}`.trim()) return true
+  if (
+    ask &&
+    compact.toLowerCase().startsWith(ask.toLowerCase()) &&
+    (!choice || compact.toLowerCase().endsWith(choice.trim().toLowerCase()))
+  ) {
+    return true
+  }
+  return false
+}
+
+function isRubricReason(
+  reason: string,
+  question?: JudgeQuestion | null
+): boolean {
+  const text = reason.trim()
+  if (!text) return false
+  if (RUBRIC_TEXTS.has(text.toLowerCase())) return true
+  const criteria = question?.criteria
+  if (criteria && typeof criteria === "object" && !Array.isArray(criteria)) {
+    return Object.values(criteria).some(
+      (value) => typeof value === "string" && value.trim() === text
+    )
+  }
+  return false
+}
+
+function runSpecificReason(task: TaskResult, choice: string): string {
+  const parts: string[] = []
+  const numericChoice = choice !== "" && !Number.isNaN(Number(choice))
+  if (choice && !numericChoice) parts.push(`${choice} on this run`)
+  const calls = Array.isArray(task.tool_calls) ? task.tool_calls : []
+  if (calls.length) {
+    const names: string[] = []
+    const seen = new Set<string>()
+    for (const call of calls) {
+      const name = String(call?.name || "tool")
+      if (seen.has(name)) continue
+      seen.add(name)
+      names.push(name)
+    }
+    parts.push(`Connector calls: ${names.join(", ")}`)
+  }
+  const reply = trimText(task.reply)
+  if (reply) {
+    let line = reply.split(/\r?\n/)[0]?.trim() || reply.trim()
+    if (line.length > 88) line = `${line.slice(0, 85).trimEnd()}…`
+    parts.push(`Reply: "${line}"`)
+  }
+  return parts.join(". ")
+}
+
+function openedReason(
+  task: TaskResult,
+  _id: string,
+  choice: string,
+  label: string,
+  answer?: JudgeAnswer | null,
+  cell?: { reason?: string | null } | null,
+  listed?: { reason?: string } | null,
+  question?: JudgeQuestion | null
+): string | undefined {
+  const texts = [
+    trimText(answer?.reason),
+    trimText(cell?.reason),
+    trimText(listed?.reason),
+  ].filter(Boolean)
+  for (const text of texts) {
+    if (isRubricReason(text, question)) continue
+    if (reasonRepeatsPrompt(label, choice, text)) continue
+    return text
+  }
+  const fallback = runSpecificReason(task, choice)
+  return fallback || undefined
+}
+
+function openedPassed(
+  id: string,
+  choice: string,
+  score: number | undefined,
+  cell?: { passed?: boolean; status?: string } | null,
+  listed?: { passed?: boolean } | null
+): boolean | null {
+  if (typeof cell?.passed === "boolean") return cell.passed
+  if (typeof listed?.passed === "boolean") return listed.passed
+  const guessed = cellWouldPass(id, choice)
+  if (guessed != null) return guessed
+  if (score != null) return score >= PREDICATE_PASS
+  return null
 }
 
 function hasConfidenceChannel(judge: JudgeResult | null | undefined): boolean {
@@ -604,6 +792,39 @@ export function openedCheckAnswers(task: TaskResult): OpenedAnswer[] {
   }
   const unchecked = workDidNotHappen(task)
   const failedBehavior = new Set(behaviorQuestionIds(task))
+  const stampOpened = (
+    id: string,
+    row: OpenedAnswer,
+    choice: string,
+    answer?: JudgeAnswer | null,
+    cell?: {
+      probability?: number
+      confidence?: number
+      score?: number
+      reason?: string | null
+      passed?: boolean
+      status?: string
+    } | null,
+    listedRow?: { score?: number; reason?: string; passed?: boolean } | null,
+    question?: JudgeQuestion | null
+  ): OpenedAnswer => {
+    const score = answerScore(id, choice, answer, cell, listedRow)
+    if (score != null) row.score = score
+    const reason = openedReason(
+      task,
+      id,
+      choice,
+      row.label,
+      answer,
+      cell,
+      listedRow,
+      question
+    )
+    if (reason) row.reason = reason
+    const passed = openedPassed(id, choice, score, cell, listedRow)
+    if (passed != null) row.passed = passed
+    return row
+  }
   const builtins = CHECK_QUESTION_ORDER.map((id) => {
     const question = task.judge?.questions?.[id]
     const choice =
@@ -628,15 +849,50 @@ export function openedCheckAnswers(task: TaskResult): OpenedAnswer[] {
           "judge"
       ),
     }
-    const score = answerScore(answers?.[id], cells?.[id], listedRow)
-    if (score != null) row.score = score
-    const reason = trimText(answers?.[id]?.reason) || trimText(cells?.[id]?.reason) || trimText(listedRow?.reason)
-    if (reason) row.reason = reason
-    return row
+    return stampOpened(id, row, choice, answers?.[id], cells?.[id], listedRow, question)
   })
   const seen = new Set<string>(CHECK_QUESTION_ORDER)
-  seen.add("path_efficiency")
   const extras: OpenedAnswer[] = []
+  const pathChoice =
+    trimText(answers?.path_efficiency?.choice) ||
+    trimText(cells?.path_efficiency?.choice) ||
+    trimText(task.judge?.soft_answers?.path_efficiency?.choice)
+  if (
+    !unchecked &&
+    (pathChoice || cells?.path_efficiency || answers?.path_efficiency)
+  ) {
+    seen.add("path_efficiency")
+    const listedRow = listed.find(
+      (row) =>
+        trimText(row?.id) === "path_efficiency" ||
+        trimText(row?.label) === "How it ran"
+    )
+    const pathCell = cells?.path_efficiency
+    extras.push(
+      stampOpened(
+        "path_efficiency",
+        {
+          id: "path_efficiency",
+          label: "How it ran",
+          answer: unchecked ? "Not checked" : pathChoice || "—",
+          source: checkSource(
+            answers?.path_efficiency?.source ||
+              pathCell?.source ||
+              listedRow?.source_label ||
+              listedRow?.source ||
+              "judge"
+          ),
+        },
+        pathChoice,
+        answers?.path_efficiency || task.judge?.soft_answers?.path_efficiency,
+        pathCell,
+        listedRow,
+        task.judge?.questions?.path_efficiency || task.judge?.soft_questions?.path_efficiency
+      )
+    )
+  } else {
+    seen.add("path_efficiency")
+  }
   const extraIds = [
     ...Object.keys(answers ?? {}),
     ...Object.keys(cells ?? {}),
@@ -681,14 +937,9 @@ export function openedCheckAnswers(task: TaskResult): OpenedAnswer[] {
     if (source) {
       extra.source = source
     }
-    const score = answerScore(answers?.[id], cell, listedRow)
-    if (score != null) extra.score = score
-    const reason =
-      trimText(answers?.[id]?.reason) ||
-      trimText(cell?.reason) ||
-      trimText(listedRow?.reason)
-    if (reason) extra.reason = reason
-    extras.push(extra)
+    extras.push(
+      stampOpened(id, extra, choice, answers?.[id], cell, listedRow, question)
+    )
   }
   const builtinLabels = new Set(Object.values(CHECK_QUESTION_LABELS))
   for (const [index, row] of listed.entries()) {
@@ -697,20 +948,28 @@ export function openedCheckAnswers(task: TaskResult): OpenedAnswer[] {
       !label ||
       extras.some((item) => item.label === label) ||
       builtinLabels.has(label) ||
-      reservedQuestionId(trimText(row?.id)) ||
-      label === "How it ran"
+      reservedQuestionId(trimText(row?.id))
     ) {
       continue
     }
     const source = checkSource(row?.source_label || row?.source)
-    extras.push({
-      id: trimText(row?.id) || `listed-${index}`,
-      label,
-      answer: trimText(row?.answer) || "—",
-      ...(source ? { source } : {}),
-      ...(typeof row?.score === "number" ? { score: row.score } : {}),
-      ...(trimText(row?.reason) ? { reason: trimText(row.reason) } : {}),
-    })
+    const listedChoice = trimText(row?.answer)
+    extras.push(
+      stampOpened(
+        trimText(row?.id) || `listed-${index}`,
+        {
+          id: trimText(row?.id) || `listed-${index}`,
+          label,
+          answer: listedChoice || "—",
+          ...(source ? { source } : {}),
+        },
+        listedChoice,
+        null,
+        null,
+        row,
+        null
+      )
+    )
   }
   return [...builtins, ...extras]
 }

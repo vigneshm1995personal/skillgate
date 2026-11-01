@@ -19,11 +19,11 @@ from skillgate_ai.judge_bank import (
     all_questions,
     answers_have_low_confidence,
     canonical_choice,
-    criteria_text,
     extract_choice,
     extract_confidence,
     extract_probabilities,
     extract_reason,
+    is_rubric_reason,
     majority_vote_answers,
     unusable_answers,
     vote_round_summaries,
@@ -146,10 +146,13 @@ def _tail(text: str, limit: int = TRANSCRIPT_TAIL_CHARS) -> str:
 
 def _cell_entry(key: str, answer: Any, labels: Mapping[str, str]) -> dict[str, Any]:
     choice = extract_choice(answer)
+    reason = extract_reason(answer)
+    if reason and is_rubric_reason(key, choice, reason):
+        reason = None
     cell: dict[str, Any] = {
         "label": labels[key],
         "choice": choice,
-        "reason": extract_reason(answer) or criteria_text(key, choice),
+        "reason": reason,
     }
     confidence = extract_confidence(answer)
     if confidence is not None:
@@ -818,6 +821,14 @@ class OutcomeJudge:
             reason = extract_reason(raw) if raw is not None else None
             if not reason and isinstance(raw, Mapping):
                 reason = str(raw.get("reason") or "").strip() or None
+            ask = str(question.ask or "").strip()
+            choice_text = str(cell.get("choice") or "").strip()
+            if reason and ask and reason.strip() in {
+                ask,
+                f"{ask} {choice_text}".strip(),
+                f"{ask} {choice_text}".strip().rstrip("."),
+            }:
+                reason = None
             if reason:
                 cell["reason"] = reason
             elif cell.get("choice"):

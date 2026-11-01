@@ -316,7 +316,13 @@ def _task_status(task: TaskReport) -> str:
 
 def _task_to_dict(task: TaskReport) -> dict:
     answers, kind = _task_check_answers(task)
-    from skillgate_ai.run_details import agent_reply, case_name, case_scenario, tool_calls
+    from skillgate_ai.run_details import (
+        agent_reply,
+        case_name,
+        case_scenario,
+        hydrate_task,
+        tool_calls,
+    )
 
     payload = {
         "id": task.task_id,
@@ -358,7 +364,7 @@ def _task_to_dict(task: TaskReport) -> dict:
     payload["scenario"] = case_scenario(payload) or payload["scenario"]
     payload["reply"] = agent_reply(payload)
     payload["tool_calls"] = tool_calls(payload)
-    return payload
+    return hydrate_task(payload)
 
 
 def _judge_stamp(report: SuiteReport) -> dict:

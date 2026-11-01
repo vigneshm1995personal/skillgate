@@ -81,6 +81,26 @@ export function isViewingOlderRun(
   return pinId !== liveId
 }
 
+export function historyOpenPatch(
+  current: SkillRunSlot,
+  data: RunRecord
+): SkillRunSlot {
+  if (isTryoutRun(data)) {
+    return { ...current, tryout: data }
+  }
+  const liveId = (current.gate?.id || "").trim()
+  const openedId = (data.id || "").trim()
+  const sameLive = !liveId || liveId === openedId
+  const liveTasks = current.gate?.report?.tasks?.length ?? 0
+  const openedTasks = data.report?.tasks?.length ?? 0
+  const replaceLive = sameLive && (openedTasks >= liveTasks || !current.gate)
+  return {
+    ...current,
+    pin: data,
+    gate: replaceLive ? data : current.gate,
+  }
+}
+
 export function shownGateRun(slot: SkillRunSlot, skillName?: string | null): RunRecord | null {
   if (pinBelongsToSkill(slot.pin, skillName)) {
     return slot.pin

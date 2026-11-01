@@ -5,7 +5,8 @@ Shared with a future hosted TypeSafe wrapper so ordinals cannot drift.
 
 from __future__ import annotations
 
-from typing import Any, Mapping
+from collections.abc import Mapping
+from typing import Any
 
 CHECK_CELL_ORDER: tuple[str, ...] = (
     "task_completion",
@@ -40,6 +41,47 @@ PASS_LOCK: dict[str, frozenset[str]] = {
     ),
     "result_quality": frozenset({"clear and complete", "mostly good"}),
 }
+
+# 0.00–1.00, higher is better. This is the check outcome, not judge confidence.
+CHOICE_SCORES: dict[str, dict[str, float]] = {
+    "task_completion": {
+        "fully completed": 1.0,
+        "partially completed": 0.5,
+        "not completed": 0.0,
+    },
+    "correctness": {
+        "correct": 1.0,
+        "mostly correct": 0.75,
+        "insufficient evidence": 0.5,
+        "incorrect": 0.0,
+    },
+    "instruction_adherence": {
+        "fully followed": 1.0,
+        "minor deviation": 0.75,
+        "major deviation": 0.25,
+        "violated": 0.0,
+    },
+    "evidence_action_validity": {
+        "fully supported": 1.0,
+        "partially supported": 0.75,
+        "n/a": 1.0,
+        "unsupported": 0.0,
+    },
+    "result_quality": {
+        "clear and complete": 1.0,
+        "mostly good": 0.75,
+        "significant issues": 0.25,
+        "poor": 0.0,
+    },
+    "path_efficiency": {
+        "efficient": 1.0,
+        "acceptable": 0.75,
+        "looping": 0.25,
+        "wasteful": 0.0,
+    },
+}
+
+SOFT_PASS: frozenset[str] = frozenset({"efficient", "acceptable"})
 
 PASS_NEED_LABEL: dict[str, str] = {
     "task_completion": "Fully completed",
@@ -266,11 +308,49 @@ def extract_confidence(answer: Any) -> float | None:
 def extract_reason(answer: Any) -> str | None:
     if not isinstance(answer, Mapping):
         return None
-    for key in ("reason", "rationale", "explanation"):
+    for key in ("reason", "rationale", "explanation", "why", "evidence", "justification"):
         raw = answer.get(key)
         if isinstance(raw, str) and raw.strip():
             return raw.strip()
     return None
+
+
+def score_for_choice(key: str, choice: str | None) -> float | None:
+    if not choice or not str(choice).strip():
+        return None
+    table = CHOICE_SCORES.get(key)
+    if not table:
+        return None
+    return table.get(choice.strip().lower())
+
+
+def choice_passed(key: str, choice: str | None) -> bool | None:
+    text = (choice or "").strip().lower()
+    if not text:
+        return None
+    lock = PASS_LOCK.get(key)
+    if lock is not None:
+        return text in lock
+    if key in SOFT_CELL_ORDER or key == "path_efficiency":
+        if text in SOFT_PASS:
+            return True
+        if text in CHOICE_SCORES.get("path_efficiency", {}):
+            return False
+        return None
+    if text in {"yes", "pass", "true", "1"}:
+        return True
+    if text in {"no", "fail", "false", "0"}:
+        return False
+    return None
+
+
+def is_rubric_reason(key: str, choice: str | None, text: str | None) -> bool:
+    if not text or not str(text).strip():
+        return False
+    rubric = criteria_text(key, choice)
+    if not rubric:
+        return False
+    return str(text).strip() == rubric.strip()
 
 
 def answers_have_low_confidence(
@@ -428,7 +508,9 @@ def outcome_verdict(answers: Mapping[str, Any] | None) -> tuple[bool, list[str]]
         if canonical.strip().lower() not in PASS_LOCK[key]:
             display = canonical or (raw_choice or "unclear")
             reason = f"{CHECK_CELL_LABELS[key]} {display} (need {PASS_NEED_LABEL[key]})"
-            extra = extract_reason(answers.get(key)) or criteria_text(key, display)
+            extra = extract_reason(answers.get(key))
+            if extra and is_rubric_reason(key, display, extra):
+                extra = None
             if extra:
                 reason += f" — {extra}"
             reasons.append(reason)

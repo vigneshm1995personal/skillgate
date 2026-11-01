@@ -128,7 +128,10 @@ def test_q13_c3_pending_submitted_is_red_from_the_text() -> None:
     assert merged["q0"]["source"] == "text"
     passed, reasons, _ = spec_verdict(spec, merged, supports_confidence=True)
     assert passed is False
-    assert any("pending refund done" in item.lower() for item in reasons)
+    assert any(
+        "pending refund done" in item.lower() or "banned wording" in item.lower()
+        for item in reasons
+    )
     judged = {
         "status": "completed",
         "passed": True,

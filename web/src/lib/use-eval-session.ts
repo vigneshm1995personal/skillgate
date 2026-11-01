@@ -8,6 +8,7 @@ import { mergeEvalSnapshot, seededRunningReport } from "@/lib/eval-row-state"
 import {
   deployAllowedForLiveGate,
   emptySkillRunSlot,
+  historyOpenPatch,
   isTryoutRun,
   isViewingOlderRun,
   liveGateRun,
@@ -194,7 +195,19 @@ export function useEvalSession(opts: EvalSessionOpts) {
     }
     const last =
       hist?.last_run && !isTryoutRun(hist.last_run) ? hist.last_run : null
-    patchSlot(name, (current) => ({ ...current, gate: last }))
+    patchSlot(name, (current) => {
+      if (
+        last &&
+        current.pin?.id &&
+        current.pin.id === last.id
+      ) {
+        const pinTasks = current.pin.report?.tasks?.length ?? 0
+        const lastTasks = last.report?.tasks?.length ?? 0
+        const fuller = pinTasks >= lastTasks ? current.pin : last
+        return { ...current, gate: fuller, pin: fuller }
+      }
+      return { ...current, gate: last }
+    })
     if (last?.status === "running" && last.id) {
       const id = last.id
       void resumePoll(id, name, "gate")
@@ -423,21 +436,22 @@ export function useEvalSession(opts: EvalSessionOpts) {
       try {
         const data = await api.getRun(item.id)
         const skillName = data.skill || data.report?.skill || item.skill || null
-        if (skillName) {
-          const match = skills.find((s) => matchesSkill(s, skillName))
-          if (match) {
-            setSkill(match)
-          }
-          await refreshSkillHistory(skillName)
-          if (isTryoutRun(data)) {
-            patchSlot(skillName, (current) => ({ ...current, tryout: data }))
-          } else {
-            patchSlot(skillName, (current) => ({ ...current, pin: data }))
-          }
+        const match = skillName
+          ? skills.find((s) => matchesSkill(s, skillName))
+          : undefined
+        const slotKey = skillSlotKey(match) || skillName
+        if (match) {
+          setSkill(match)
+        }
+        if (slotKey) {
+          patchSlot(slotKey, (current) => historyOpenPatch(current, data))
         }
         setCopiedFix(false)
         setEvalTab("gate")
         setStage("eval")
+        if (slotKey) {
+          await refreshSkillHistory(slotKey)
+        }
         await refreshWorkspaceHistory()
       } catch (err) {
         const apiErr = asApiError(err)

@@ -51,7 +51,6 @@ import {
 import {
   failedHudCount,
   queuedTasksFromChecks,
-  runBelongsToSkill,
   suiteResultKind,
   suiteStampReady,
 } from "@/lib/eval-row-state"
@@ -108,14 +107,8 @@ export function GatePage({ embedded = false }: { embedded?: boolean }) {
   const [stallPeek, setStallPeek] = useState(false)
   const [controlBusy, setControlBusy] = useState<"skip" | "kill" | null>(null)
   const [resultVisible, setResultVisible] = useState(false)
-  const skillScoped =
-    viewingPinnedHistory ||
-    runBelongsToSkill(
-      lastResult,
-      skill?.slug || skill?.id || skill?.name
-    )
   const scopedResult =
-    skillScoped && !isTryoutRun(lastResult) ? lastResult : null
+    lastResult && !isTryoutRun(lastResult) ? lastResult : null
   const report = scopedResult?.report
   const live = scopedResult?.live ?? null
   const viewingHistorical = viewingPinnedHistory

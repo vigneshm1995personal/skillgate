@@ -316,6 +316,11 @@ function OpenedDetails({
               <dt className="font-medium">{item.label}</dt>
               <dd className="text-muted-foreground m-0">
                 {item.answer}
+                {item.passed === true ? (
+                  <span className="text-success"> PASS</span>
+                ) : item.passed === false ? (
+                  <span className="text-destructive"> FAIL</span>
+                ) : null}
                 {formatCheckScore(item.score) ? (
                   <span className="check-score text-foreground">
                     {" "}
@@ -338,7 +343,7 @@ function OpenedDetails({
       ) : noAnswers ? (
         <p className="text-muted-foreground">{noAnswers}</p>
       ) : null}
-      {path ? (
+      {path && !answers.some((item) => item.id === "path_efficiency") ? (
         <div>
           <p className="font-medium">How it ran</p>
           <p className="text-muted-foreground">{path}</p>
