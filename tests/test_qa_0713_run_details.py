@@ -1,4 +1,4 @@
-"""0.7.13: history/gate run details — case name, scores, reply, tools."""
+"""0.7.14: history/gate run details — case name, scores, reply, tools."""
 
 from __future__ import annotations
 

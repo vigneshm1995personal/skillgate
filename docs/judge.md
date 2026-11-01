@@ -138,7 +138,7 @@ Each check has **one score from 0.00 to 1.00**. Higher is better. That number is
     SKILLGATE_JEV_API_KEY: ${{ secrets.SKILLGATE_JEV_API_KEY }}
 ```
 
-Leave `version` unset for the latest release. Until 0.7.13 is published, install from source (`pip install -e .`) instead of pinning that version. The action reads `SKILLGATE_*` variables and does not print them. It does not switch to another decision model. Do not add a required scoring secret to merge CI.
+Leave `version` unset for the latest release. Until 0.7.14 is published, install from source (`pip install -e .`) instead of pinning that version. The action reads `SKILLGATE_*` variables and does not print them. It does not switch to another decision model. Do not add a required scoring secret to merge CI.
 
 A manual install still works:
 
@@ -151,7 +151,7 @@ A manual install still works:
     DECISION_MODEL_API_KEY: ${{ secrets.DECISION_MODEL_API_KEY }}
 ```
 
-Until 0.7.13 is published, replace that install with `pip install -e .` from a clone of this repo.
+Until 0.7.14 is published, replace that install with `pip install -e .` from a clone of this repo.
 
 ## Live smoke (not CI)
 
