@@ -830,7 +830,7 @@ def test_path_asked_when_recorded() -> None:
     names = [item["name"] for item in post.calls[0]["json"]["questions"]]
     mains = [name for name in names if not str(name).endswith("_why")]
     assert mains[-1] == "path_efficiency"
-    assert "path_efficiency_why" not in names
+    assert "path_efficiency_why" in names
     assert judged["soft_answers"]["path_efficiency"]["choice"] == "Efficient"
     assert judged["cells"]["path_efficiency"]["choice"] == "Efficient"
 

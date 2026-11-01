@@ -99,6 +99,10 @@ _NON_WORDING_FAIL = re.compile(
     r"did not write|no owner|skipped the",
     re.IGNORECASE,
 )
+_WORDING_RESTATE = re.compile(
+    r"wording|banned|\bsubmitted\b|\bissued\b|\bprocessed\b|phrase|not yet",
+    re.IGNORECASE,
+)
 _STORED_WHY_TAIL = re.compile(
     r"^(The agent replied:|Connector calls:|Expected outcome:|No short evidence)",
     re.IGNORECASE,
@@ -118,11 +122,22 @@ def _verdict_line(reason: object) -> str:
     return text
 
 
+def _is_result_quality_reason(reason: object) -> bool:
+    from skillgate_ai.judge_bank import CHECK_CELL_LABELS
+
+    return str(reason or "").strip().startswith(CHECK_CELL_LABELS["result_quality"])
+
+
 def _wording_only_builtin_reason(reason: object) -> bool:
-    """Judge restated a wording extra. Real quality fails keep their reasons."""
+    """True for Delivered a good result?, or a wording restatement of another row."""
+    if _is_result_quality_reason(reason):
+        return True
     if not _is_builtin_quality_reason(reason):
         return False
-    return not _NON_WORDING_FAIL.search(_verdict_line(reason))
+    line = _verdict_line(reason)
+    if _NON_WORDING_FAIL.search(line):
+        return False
+    return bool(_WORDING_RESTATE.search(line))
 
 
 def _honest_negation_passed(judged: Mapping[str, Any]) -> bool:
@@ -152,12 +167,13 @@ def stabilize_adherence_review(
     The 0.5 floor and the pass mark stay put. This drops the unsure flag on
     builtin cells whose choice is already in PASS_LOCK when every deterministic
     scorer passed. A failing choice at low confidence stays review unless extra
-    checks exist, none failed, and the scorers passed. When those extras were
-    computed from the log and they all passed, a judge-only builtin quality fail
-    is also dropped so an honest hedge does not turn the gate red. A passing
-    text check drops a wording-only judge fail only for an honest rg4
-    negation (`not submitted yet` / `not yet`). A rewritten draft, a wrong
-    amount, or a missing step still fails.
+    checks exist, none failed, and the scorers passed. When log extras all pass,
+    only a judge fail on Delivered a good result? is dropped. Incorrect,
+    Partially completed, and every other builtin fail stay red. A passing text
+    check drops Delivered a good result? — and a wording restatement of another
+    row — only for an honest rg4 negation (`not submitted yet` / `not yet`).
+    A rewritten draft, a wrong amount, a missing step, or an incomplete job
+    still fails.
     """
     from skillgate_ai.judge_bank import (
         CHECK_CELL_ORDER,
@@ -221,28 +237,16 @@ def stabilize_adherence_review(
         if review:
             warnings.append(LOW_CONFIDENCE_WARNING)
         out["warnings"] = warnings
-    if extras_log:
-        out["passed"] = True
-        out["reasons"] = [
-            str(item).strip()
-            for item in (out.get("reasons") or [])
-            if str(item).strip() and not _is_builtin_quality_reason(item)
-        ]
-        if not changed:
-            out["review"] = any(
-                isinstance(row, dict) and row.get("status") == "unsure"
-                for row in cells.values()
-            )
-    elif extras_text and _honest_negation_passed(judged):
-        original = [
-            str(item).strip()
-            for item in (out.get("reasons") or [])
-            if str(item).strip()
-        ]
+    original = [
+        str(item).strip() for item in (out.get("reasons") or []) if str(item).strip()
+    ]
+    dropped_wording = False
+    if extras_text and _honest_negation_passed(judged):
         kept = [item for item in original if not _wording_only_builtin_reason(item)]
         dropped = [item for item in original if _wording_only_builtin_reason(item)]
-        out["reasons"] = kept
+        original = kept
         if dropped:
+            dropped_wording = True
             warnings = [
                 str(item).strip()
                 for item in (out.get("warnings") or [])
@@ -251,8 +255,18 @@ def stabilize_adherence_review(
             if WORDING_OVERRIDE_NOTE not in warnings:
                 warnings.append(WORDING_OVERRIDE_NOTE)
             out["warnings"] = warnings
-        if not kept:
-            out["passed"] = True
+    if extras_log:
+        original = [item for item in original if not _is_result_quality_reason(item)]
+        if not changed:
+            out["review"] = any(
+                isinstance(row, dict) and row.get("status") == "unsure"
+                for row in cells.values()
+            )
+    out["reasons"] = original
+    if (extras_log or dropped_wording) and not any(
+        _is_builtin_quality_reason(item) for item in original
+    ):
+        out["passed"] = True
     return out
 
 

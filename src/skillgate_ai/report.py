@@ -533,7 +533,13 @@ def _scoring_endpoint(report: SuiteReport) -> str | None:
     return None
 
 
-def _cell_answer(cell: dict, answer: Any = None, *, clean_pass: bool = False) -> str:
+def _cell_answer(
+    cell: dict,
+    answer: Any = None,
+    *,
+    clean_pass: bool = False,
+    hard_fail: bool = False,
+) -> str:
     merged = dict(cell)
     if isinstance(answer, dict):
         for key in ("choice", "probability", "score"):
@@ -541,7 +547,7 @@ def _cell_answer(cell: dict, answer: Any = None, *, clean_pass: bool = False) ->
                 merged[key] = answer[key]
         if answer.get("status"):
             merged["status"] = answer.get("status")
-    if str(merged.get("status") or "") == "unsure" and not clean_pass:
+    if str(merged.get("status") or "") == "unsure" and not clean_pass and not hard_fail:
         return UNSURE_REVIEW
     choice = str(merged.get("choice") or "").strip()
     if choice:
@@ -592,6 +598,7 @@ def _task_check_answers(task: TaskReport) -> tuple[list[dict[str, str]], str]:
                     cell,
                     answer,
                     clean_pass=bool(task.passed and not getattr(task, "review", False)),
+                    hard_fail=task.passed is False,
                 ),
             }
             source = _check_source(cell, answer, key)
@@ -694,6 +701,7 @@ def _extra_source_lines(task: TaskReport) -> list[str]:
             cell,
             answers.get(key),
             clean_pass=bool(task.passed and not getattr(task, "review", False)),
+            hard_fail=task.passed is False,
         )
         lines.append(f"{label}  {choice}  ({source})")
     return lines

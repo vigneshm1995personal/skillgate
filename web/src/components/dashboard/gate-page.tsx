@@ -159,11 +159,12 @@ export function GatePage({ embedded = false }: { embedded?: boolean }) {
   const configDiff = scopedResult?.config_diff ?? []
   const passWarnings = (() => {
     const green = report?.gate === "green" || report?.passed === true
+    const red = report?.gate === "red" || report?.passed === false
     const base = (scopedResult?.gate_warnings ?? [])
       .map(customerGateCopy)
       .filter(Boolean)
       .filter((item) => !hidePassFileWarning(item, report))
-      .filter((item) => !(green && item.includes("unsure")))
+      .filter((item) => !((green || red) && item.includes("unsure")))
     const unsure = suiteUnsureWarning(report)
     const override = (report?.tasks ?? [])
       .map((task) => wordingOverrideNote(task))

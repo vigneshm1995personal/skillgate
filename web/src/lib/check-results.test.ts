@@ -96,6 +96,46 @@ describe("happenedLine", () => {
     ).toBeNull()
   })
 
+  it("does not show a stray unsure on a red run", () => {
+    const red: TaskResult = {
+      id: "c3-pending",
+      passed: false,
+      review: false,
+      status: "fail",
+      happened: "Got it right? Incorrect",
+      judge: {
+        provider: "jev",
+        backend: "jev",
+        supports_confidence: true,
+        warnings: ["unsure, needs review"],
+        answers: {
+          task_completion: { choice: "Partially completed" },
+          correctness: { choice: "Incorrect" },
+        },
+        cells: {
+          task_completion: { choice: "Partially completed", status: "unsure" },
+          correctness: { choice: "Incorrect", status: "unsure" },
+        },
+      },
+    }
+    expect(lowConfidenceWarning(red)).toBeNull()
+    expect(
+      openedCheckAnswers(red).some((row) => row.answer === "unsure, needs review")
+    ).toBe(false)
+    expect(openedCheckAnswers(red).find((row) => row.id === "correctness")?.answer).toBe(
+      "Incorrect"
+    )
+    expect(
+      suiteUnsureWarning({
+        gate: "red",
+        passed: false,
+        passed_count: 0,
+        task_count: 1,
+        tasks: [red],
+      })
+    ).toBeNull()
+  })
+
   it("says no skill was picked on a passing no-trigger check", () => {
     expect(
       happenedLine({

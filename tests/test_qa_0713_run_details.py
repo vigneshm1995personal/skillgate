@@ -855,7 +855,8 @@ def test_canned_why_picks_are_not_stamped_on_cells() -> None:
         ],
         {"actual_output": {"body": REPLY}},
     )
-    assert not any(str(item.get("name") or "").endswith("_why") for item in questions)
+    why = [item for item in questions if str(item.get("name") or "").endswith("_why")]
+    assert why
     cells = {
         name: _cell_entry(name, {"choice": "Correct"}, {name: name})
         for name in CHECK_CELL_ORDER
@@ -868,10 +869,11 @@ def test_canned_why_picks_are_not_stamped_on_cells() -> None:
         "result_quality_why": {"choice": "reply_clear"},
     }
     apply_why_reasons(cells, answers, questions)
+    canned = "The facts on this run are right."
     for name in CHECK_CELL_ORDER:
         reason = str(cells[name].get("reason") or "")
-        assert reason != "The facts on this run are right."
-        assert "on this run" not in reason.lower()
+        assert reason != canned
+        assert "the facts on this run are right" not in reason.lower()
 
 
 def test_check_rows_skip_why_companion_answers() -> None:
@@ -902,6 +904,8 @@ def test_jev_evaluate_does_not_stamp_canned_why() -> None:
     def post(url, headers=None, json=None, timeout=None):
         del url, headers, timeout
         posted.append(json or {})
+        body = json or {}
+        questions = body.get("questions") or []
         answers = {
             "task_completion": {"choice": "Fully completed"},
             "correctness": {"choice": "Incorrect"},
@@ -909,8 +913,20 @@ def test_jev_evaluate_does_not_stamp_canned_why() -> None:
             "evidence_action_validity": {"choice": "Fully supported"},
             "result_quality": {"choice": "Clear and complete"},
             "path_efficiency": {"choice": "Acceptable"},
-            "correctness_why": {"choice": "facts_right"},
         }
+        for item in questions:
+            name = str(item.get("name") or "")
+            if not name.endswith("_why"):
+                continue
+            pick = next(
+                (
+                    str(choice.get("value") or "")
+                    for choice in item.get("choices") or []
+                    if str(choice.get("value") or "") not in {"", "none"}
+                ),
+                "none",
+            )
+            answers[name] = {"choice": pick}
         return FakeResponse(200, {"model": "jev", "answers": answers})
 
     judged = OutcomeJudge(
@@ -939,12 +955,13 @@ def test_jev_evaluate_does_not_stamp_canned_why() -> None:
         names = list(questions)
     else:
         names = [str(item.get("name") or "") for item in questions]
-    assert not any(name.endswith("_why") for name in names)
+    assert any(name.endswith("_why") for name in names)
     canned = "The facts on this run are right."
     assert judged["cells"]["correctness"].get("reason") not in {canned, canned.rstrip(".")}
     rows = {row["id"]: row for row in check_rows({"judge": judged, "passed": False})}
-    assert rows["correctness"]["reason"] == "No reason recorded"
     assert canned not in rows["correctness"]["reason"]
+    assert rows["correctness"]["reason"] != "No reason recorded"
+    assert "Facts in the reply:" in rows["correctness"]["reason"]
 
 
 def test_passed_green_run_check_rows_do_not_say_unsure() -> None:

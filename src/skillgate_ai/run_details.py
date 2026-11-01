@@ -50,6 +50,10 @@ def _task_is_clean_pass(task: Mapping[str, Any]) -> bool:
     return not (isinstance(judge, Mapping) and judge.get("review"))
 
 
+def _task_is_hard_fail(task: Mapping[str, Any]) -> bool:
+    return task.get("passed") is False
+
+
 def redact_run_text(text: str, secret: str | None = None) -> str:
     """Strip API keys and password-shaped values. Never print secrets."""
     if not text:
@@ -267,7 +271,11 @@ def check_rows(task: Mapping[str, Any] | None) -> list[dict[str, Any]]:
                     guessed = score >= _PREDICATE_PASS
                 passed = guessed
         status = str(cell.get("status") or "").strip().lower()
-        if status == "unsure" and not _task_is_clean_pass(task):
+        if (
+            status == "unsure"
+            and not _task_is_clean_pass(task)
+            and not _task_is_hard_fail(task)
+        ):
             choice = UNSURE_REVIEW
             if passed is False and choice_passed(key, str(cell.get("choice") or "")) is True:
                 passed = True

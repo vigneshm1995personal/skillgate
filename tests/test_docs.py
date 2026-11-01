@@ -260,6 +260,7 @@ def test_docs_cover_escalation_majority_named_reds_and_no_judge() -> None:
     assert "--no-judge" in judge
     assert "still needs" in judge.lower() and "agent" in judge.lower()
     assert "history show" in blob.lower()
+    assert "rescore" in blob.lower()
     assert "0.00" in judge and "1.00" in judge
     assert "higher is better" in judge.lower()
     assert "not the judge's confidence" in judge.lower()

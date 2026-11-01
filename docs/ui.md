@@ -26,7 +26,7 @@ The React app in `web/` is the only Skill Gate UI (`@skillgate/ui`). `skillgate 
 
 **Deploy** copies a green-gated skill (skill files only, not `evals/`) into those same agent folders. Install stays disabled without an agent (`skillgate login` or Settings → Sign in), even after a passing check. The decision-model key lives in this project’s `.skillgate/keys`, or CI/Docker can set `SKILLGATE_*` (always read). A live check with no decision model fails and asks you to pick one. `skillgate check` still exits 0, 1, or 2 with no account.
 
-The result panel names who scored the run in plain words (`Scored by the judge` when a decision model scored the run, or `Checks scored this run.` when scoring is off). A historical other stamp says `Scored by your judge`. Checking → slide → drawn Passed / Needs review / Failed. A low-confidence verdict after majority voting is Needs review, not Failed, and does not unlock Deploy. Opened check rows show one score from 0.00 to 1.00 (higher is better — the outcome, not confidence) with Pass/Fail matching `skillgate history show --detail`, and the reason the judge wrote for that check. Canned sentences and shared connector-call dumps are not judge reasons. A run with no written reason says `No reason recorded`. A green Passed run does not show a stray `unsure, needs review`. When a wording check overrides judge Fail rows, the result shows `Wording check passed, so those Fail rows did not turn the gate red.` Opening a History row — pass or fail — shows that Gate result.
+The result panel names who scored the run in plain words (`Scored by the judge` when a decision model scored the run, or `Checks scored this run.` when scoring is off). A historical other stamp says `Scored by your judge`. Checking → slide → drawn Passed / Needs review / Failed. A low-confidence verdict after majority voting is Needs review, not Failed, and does not unlock Deploy. Opened check rows show one score from 0.00 to 1.00 (higher is better — the outcome, not confidence) with Pass/Fail matching `skillgate history show --detail`, and the reason the judge wrote for that check. Canned sentences and shared connector-call dumps are not judge reasons. A run with no written reason says `No reason recorded`. A green Passed run and a red Failed run do not show a stray `unsure, needs review`. When a wording check overrides **Delivered a good result?** (honest rg4 only; other judge fails stay red), the result shows `Wording check passed, so those Fail rows did not turn the gate red.` Opening a History row — pass or fail — shows that Gate result. Re-score a saved run without an agent with `skillgate rescore RUN --pack PATH`.
 
 ## Intentional red path
 
@@ -85,6 +85,7 @@ Everything the local UI can do has a CLI command. New API writes must update thi
 | Skip / stop a run | `POST /api/runs/{run_id}/skip`, `POST /api/runs/{run_id}/kill` | `skillgate check` (Ctrl+C) |
 | History | `GET /api/history` | `skillgate history` |
 | One run | `GET /api/runs/{run_id}` | `skillgate history show` |
+| Re-score a saved run | — | `skillgate rescore` |
 | Compare list | `GET /api/compare` | `skillgate compare list` |
 | Compare detail | `GET /api/compare/{compare_id}` | `skillgate compare show` |
 | Compare models | `POST /api/compare/models` | `skillgate compare models` |

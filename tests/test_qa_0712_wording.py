@@ -734,7 +734,10 @@ def test_stored_reason_quoting_usd_does_not_redden_rg4() -> None:
     reply = "The refund has not been submitted yet. USD 0.00 has been returned so far."
     facts = _wording_on(SKILL_BOTPRESS_4B_FULL, reply)
     judged = _judge_wording_red(extra_ok=True, extra_source="text", extra_label=ask)
-    judged["reasons"] = reasons
+    judged["reasons"] = [
+        "Got it right? Incorrect (need Correct) — used submitted",
+        "Followed the rules? Violated (need Fully followed) — banned wording",
+    ]
     judged["answers"]["correctness"] = answers["correctness"]
     judged["answers"]["instruction_adherence"] = answers["instruction_adherence"]
     judged["answers"]["q0"] = {**judged["answers"]["q0"], **facts["q0"]}
@@ -750,8 +753,8 @@ def test_stored_reason_quoting_usd_does_not_redden_rg4() -> None:
         extra_label=ask,
         extra=facts["q0"],
         reasons=[
-            f"Got it right? Incorrect (need Correct) — {usd_why}",
-            f"Followed the rules? Violated (need Fully followed) — {usd_why}",
+            "Got it right? Incorrect (need Correct) — used submitted",
+            "Followed the rules? Violated (need Fully followed) — banned wording",
         ],
     ) is True
 

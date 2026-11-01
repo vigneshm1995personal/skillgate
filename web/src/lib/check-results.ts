@@ -689,6 +689,10 @@ function isCleanPass(task: TaskResult): boolean {
   )
 }
 
+function isHardFail(task: TaskResult): boolean {
+  return task.passed === false
+}
+
 export function wordingOverrideNote(task: TaskResult): string | null {
   const warnings = task.judge?.warnings
   if (!Array.isArray(warnings)) {
@@ -783,7 +787,7 @@ function hasConfidenceChannel(judge: JudgeResult | null | undefined): boolean {
 }
 
 export function lowConfidenceWarning(task: TaskResult): string | null {
-  if (isCleanPass(task) || workDidNotHappen(task)) {
+  if (isCleanPass(task) || isHardFail(task) || workDidNotHappen(task)) {
     return null
   }
   const judge = task.judge
@@ -826,7 +830,12 @@ export function suiteUnsureWarning(
   if (report?.gate === "needs review") {
     return UNSURE_REVIEW
   }
-  if (report?.gate === "green" || report?.passed === true) {
+  if (
+    report?.gate === "green" ||
+    report?.gate === "red" ||
+    report?.passed === true ||
+    report?.passed === false
+  ) {
     return null
   }
   for (const task of report?.tasks ?? []) {
@@ -894,7 +903,8 @@ export function openedCheckAnswers(task: TaskResult): OpenedAnswer[] {
     const question = task.judge?.questions?.[id]
     const choice =
       trimText(answers?.[id]?.choice) || trimText(cells?.[id]?.choice)
-    const unsure = !isCleanPass(task) && cells?.[id]?.status === "unsure"
+    const unsure =
+      !isCleanPass(task) && !isHardFail(task) && cells?.[id]?.status === "unsure"
     const listedRow = listed.find(
       (row) => trimText(row?.id) === id || trimText(row?.label) === (CHECK_QUESTION_LABELS[id] || "")
     )
