@@ -58,16 +58,41 @@ def _extras_all_passed(judged: Mapping[str, Any]) -> bool:
     return bool(extra_ids)
 
 
+def _extras_from_log(judged: Mapping[str, Any]) -> bool:
+    """True when at least one extra check was computed from the log."""
+    from skillgate_ai.judge_bank import CHECK_CELL_ORDER, SOFT_CELL_ORDER
+
+    reserved = set(CHECK_CELL_ORDER) | set(SOFT_CELL_ORDER)
+    cells = judged.get("cells") if isinstance(judged.get("cells"), Mapping) else {}
+    answers = judged.get("answers") if isinstance(judged.get("answers"), Mapping) else {}
+    for blob in (cells, answers):
+        for key, row in blob.items():
+            if key in reserved or not isinstance(row, Mapping):
+                continue
+            if str(row.get("source") or "").strip().lower() == "log":
+                return True
+    return False
+
+
+def _is_builtin_quality_reason(reason: object) -> bool:
+    from skillgate_ai.judge_bank import CHECK_CELL_LABELS
+
+    text = str(reason or "").strip()
+    return any(text.startswith(label) for label in CHECK_CELL_LABELS.values())
+
+
 def stabilize_adherence_review(
     judged: dict[str, Any] | None,
     scores: list[Score] | list[dict[str, Any]] | None,
 ) -> dict[str, Any] | None:
-    """Passing Pass-lock cells with scorer evidence are not a review hedge.
+    """Passing extras and scorers keep a correct hedge from going red.
 
-    The 0.5 floor and the pass mark stay put. This only drops the unsure flag
-    on builtin cells whose choice is already in PASS_LOCK when every
-    deterministic scorer passed. A failing choice at low confidence stays review
-    unless extra checks exist, none failed, and the scorers passed.
+    The 0.5 floor and the pass mark stay put. This drops the unsure flag on
+    builtin cells whose choice is already in PASS_LOCK when every deterministic
+    scorer passed. A failing choice at low confidence stays review unless extra
+    checks exist, none failed, and the scorers passed. When those extras were
+    computed from the log and they all passed, a judge-only builtin quality fail
+    is also dropped so an honest hedge does not turn the gate red.
     """
     from skillgate_ai.judge_bank import (
         CHECK_CELL_ORDER,
@@ -90,6 +115,7 @@ def stabilize_adherence_review(
     if not isinstance(cells, dict):
         return judged
     extras_ok = _extras_all_passed(judged)
+    extras_log = extras_ok and _extras_from_log(judged)
     answers = judged.get("answers") if isinstance(judged.get("answers"), dict) else {}
     next_cells = dict(cells)
     changed = False
@@ -111,22 +137,36 @@ def stabilize_adherence_review(
         cleaned.pop("status", None)
         next_cells[key] = cleaned
         changed = True
-    if not changed:
+    if not changed and not extras_log:
         return judged
     out = dict(judged)
-    out["cells"] = next_cells
-    review = any(
-        isinstance(row, dict) and row.get("status") == "unsure" for row in next_cells.values()
-    )
-    out["review"] = review
-    warnings = [
-        str(item).strip()
-        for item in (out.get("warnings") or [])
-        if str(item).strip() and str(item).strip() != LOW_CONFIDENCE_WARNING
-    ]
-    if review:
-        warnings.append(LOW_CONFIDENCE_WARNING)
-    out["warnings"] = warnings
+    if changed:
+        out["cells"] = next_cells
+        review = any(
+            isinstance(row, dict) and row.get("status") == "unsure"
+            for row in next_cells.values()
+        )
+        out["review"] = review
+        warnings = [
+            str(item).strip()
+            for item in (out.get("warnings") or [])
+            if str(item).strip() and str(item).strip() != LOW_CONFIDENCE_WARNING
+        ]
+        if review:
+            warnings.append(LOW_CONFIDENCE_WARNING)
+        out["warnings"] = warnings
+    if extras_log:
+        out["passed"] = True
+        out["reasons"] = [
+            str(item).strip()
+            for item in (out.get("reasons") or [])
+            if str(item).strip() and not _is_builtin_quality_reason(item)
+        ]
+        if not changed:
+            out["review"] = any(
+                isinstance(row, dict) and row.get("status") == "unsure"
+                for row in cells.values()
+            )
     return out
 
 
@@ -931,6 +971,8 @@ def _run_task(
                     skill_instructions=skills[0].body if skills else None,
                     file_baseline=file_baseline,
                 )
+                if isinstance(judged, dict):
+                    judged = stabilize_adherence_review(judged, scores)
                 passed, failures, judged = _live_verdict(
                     judged,
                     task.expect_skill,
@@ -939,8 +981,6 @@ def _run_task(
                     mismatch=mismatch,
                     trigger_passed=trigger_passed,
                 )
-                if passed and isinstance(judged, dict):
-                    judged = stabilize_adherence_review(judged, scores)
                 review = bool(passed) and bool(
                     isinstance(judged, dict) and judged.get("review")
                 )
