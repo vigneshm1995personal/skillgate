@@ -10,12 +10,15 @@ from typing import Any
 from skillgate_ai.errors import SkillGateError
 from skillgate_ai.judge_bank import (
     GUARD_REFUSED_RETRY_NOTE,
+    MATCHED_OUTPUT_LINE,
     NO_REASON_RECORDED,
     UNSURE_REVIEW,
     WHY_SUFFIX,
+    WORDING_OVERRIDE_NOTE,
     choice_passed,
     is_built_reason,
     is_rubric_reason,
+    is_run_fact_reason,
     score_for_choice,
 )
 from skillgate_ai.openai_http import redact_secrets
@@ -103,6 +106,8 @@ def source_label(value: Any) -> str:
         return "from the log/text"
     if raw in {"log", "from the log"}:
         return "from the log"
+    if raw in {"run", "run facts", "from the run"}:
+        return "run facts"
     if raw in {"judge", "from the judge"}:
         return "from the judge"
     return ""
@@ -192,6 +197,8 @@ def _row_reason(
     for text in texts:
         if is_rubric_reason(key, choice, text):
             continue
+        if is_run_fact_reason(text):
+            return redact_run_text(text)
         if is_built_reason(text):
             continue
         if _reason_repeats_prompt(label, choice, text):
@@ -262,7 +269,9 @@ def check_rows(task: Mapping[str, Any] | None) -> list[dict[str, Any]]:
             if guessed is not None:
                 score = 1.0 if guessed else 0.0
         reason = _row_reason(key, choice, label, cell, answer, listed_row)
-        if reason == NO_REASON_RECORDED and src == "from the judge":
+        if reason != NO_REASON_RECORDED and is_run_fact_reason(reason):
+            src = "run facts"
+        elif reason == NO_REASON_RECORDED and src == "from the judge":
             src = ""
         passed = cell.get("passed")
         if not isinstance(passed, bool):
@@ -627,7 +636,7 @@ def format_run_show(
                 reason = f"  {happened or GUARD_REFUSED_RETRY_NOTE}"
             elif task.get("passed") is False:
                 happened = str(task.get("happened") or "").strip()
-                if happened:
+                if happened and happened != MATCHED_OUTPUT_LINE:
                     reason = f"  {happened}"
                 else:
                     failures = task.get("failures")
@@ -674,7 +683,7 @@ def format_run_show(
         judge = task.get("judge") if isinstance(task.get("judge"), Mapping) else {}
         for item in (judge.get("warnings") or []) if isinstance(judge, Mapping) else []:
             note = str(item).strip()
-            if note and note != UNSURE_REVIEW:
+            if note and note not in {UNSURE_REVIEW, WORDING_OVERRIDE_NOTE}:
                 lines.append(f"  {note}")
         reply = detail_row["reply"]
         if reply:

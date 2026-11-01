@@ -88,10 +88,12 @@ const RUBRIC_TEXTS = new Set(
 export const CONFIDENCE_WARN = 0.5
 export const UNSURE_REVIEW = "unsure, needs review"
 export const NO_REASON_RECORDED = "No reason recorded"
+export const RUN_FACTS_LABEL = "run facts"
 export const WORDING_OVERRIDE_NOTE =
   "Wording check passed, so those Fail rows did not turn the gate red."
 export const GUARD_REFUSED_RETRY_NOTE =
   "A second refund attempt was refused. Only one refund went through."
+export const MATCHED_OUTPUT_LINE = "Output matched what was expected."
 
 const CANNED_WHY_REASONS = new Set(
   [
@@ -152,6 +154,9 @@ export function checkSource(value: unknown): string | undefined {
   }
   if (raw === "log" || raw === "from the log") {
     return "from the log"
+  }
+  if (raw === "run" || raw === "run facts" || raw === "from the run") {
+    return "run facts"
   }
   if (raw === "judge" || raw === "from the judge") {
     return "from the judge"
@@ -394,13 +399,34 @@ export function happenedLine(task: TaskResult): string {
   if (task.status === "running") {
     return "In progress"
   }
+  const retry = refusedRetryNote(task)
+  if (retry && task.passed !== false) {
+    return retry
+  }
+  if (task.status === "warning" && task.passed !== false) {
+    const stampedWarning = trimText(task.happened)
+    if (
+      stampedWarning &&
+      stampedWarning !== MATCHED_OUTPUT_LINE &&
+      stampedWarning !== UNSURE_REVIEW &&
+      stampedWarning !== WORDING_OVERRIDE_NOTE
+    ) {
+      return scorerCodeToPlain(stampedWarning, hint)
+    }
+    return GUARD_REFUSED_RETRY_NOTE
+  }
   const passedClean =
-    task.passed === true && task.review !== true && task.status !== "unsure"
+    task.passed === true &&
+    task.review !== true &&
+    task.status !== "unsure" &&
+    task.status !== "warning"
   if (passedClean) {
     const stampedPass = trimText(task.happened)
     if (
       stampedPass &&
       stampedPass !== UNSURE_REVIEW &&
+      stampedPass !== WORDING_OVERRIDE_NOTE &&
+      stampedPass !== MATCHED_OUTPUT_LINE &&
       !isGenericFail(stampedPass) &&
       !isChecksDump(stampedPass)
     ) {
@@ -409,7 +435,7 @@ export function happenedLine(task: TaskResult): string {
     if (task.expect_skill === null && !task.selected_skill) {
       return "No skill was picked, as expected."
     }
-    return "Output matched what was expected."
+    return MATCHED_OUTPUT_LINE
   }
   if (
     (task.review === true || task.status === "unsure") &&
@@ -438,7 +464,13 @@ export function happenedLine(task: TaskResult): string {
     return behaviorFailLine(behavior[0])
   }
   const stamped = trimText(task.happened)
-  if (stamped && !isGenericFail(stamped) && !isChecksDump(stamped)) {
+  if (
+    stamped &&
+    stamped !== MATCHED_OUTPUT_LINE &&
+    stamped !== WORDING_OVERRIDE_NOTE &&
+    !isGenericFail(stamped) &&
+    !isChecksDump(stamped)
+  ) {
     return scorerCodeToPlain(stamped, hint)
   }
   const failReason =
@@ -661,6 +693,22 @@ function reasonRepeatsPrompt(label: string, choice: string, reason: string): boo
   return false
 }
 
+function isRunFactReason(reason: string): boolean {
+  const text = reason.trim()
+  return (
+    text.startsWith("Job result in the reply:") ||
+    text.startsWith("Job expected:") ||
+    text.startsWith("Facts in the reply:") ||
+    text.startsWith("Facts expected:") ||
+    text.startsWith("Listed skill rule:") ||
+    text.startsWith("Reply checked against the rules:") ||
+    text.startsWith("Tools used:") ||
+    text.startsWith("Evidence in the reply:") ||
+    text.startsWith("Customer-facing reply:") ||
+    text.startsWith("Run path:")
+  )
+}
+
 function isBuiltReason(reason: string): boolean {
   const text = reason.trim()
   if (!text) return false
@@ -668,6 +716,7 @@ function isBuiltReason(reason: string): boolean {
   if (CANNED_WHY_REASONS.has(text.toLowerCase()) || CANNED_WHY_REASONS.has(`${compact}.`)) {
     return true
   }
+  if (isRunFactReason(text)) return true
   if (
     text.startsWith("Connector calls:") ||
     text.startsWith("The agent replied:") ||
@@ -694,14 +743,8 @@ function isHardFail(task: TaskResult): boolean {
   return task.passed === false
 }
 
-export function wordingOverrideNote(task: TaskResult): string | null {
-  const warnings = task.judge?.warnings
-  if (!Array.isArray(warnings)) {
-    return null
-  }
-  return warnings.some((item) => String(item).trim() === WORDING_OVERRIDE_NOTE)
-    ? WORDING_OVERRIDE_NOTE
-    : null
+export function wordingOverrideNote(_task: TaskResult): string | null {
+  return null
 }
 
 export function refusedRetryNote(task: TaskResult): string | null {
@@ -747,6 +790,7 @@ function openedReason(
   ].filter(Boolean)
   for (const text of texts) {
     if (isRubricReason(text, question)) continue
+    if (isRunFactReason(text)) return text
     if (isBuiltReason(text)) continue
     if (reasonRepeatsPrompt(label, choice, text)) continue
     return text
@@ -897,7 +941,9 @@ export function openedCheckAnswers(task: TaskResult): OpenedAnswer[] {
       question
     )
     if (reason) row.reason = reason
-    if (reason === NO_REASON_RECORDED && row.source === "from the judge") {
+    if (reason && isRunFactReason(reason)) {
+      row.source = RUN_FACTS_LABEL
+    } else if (reason === NO_REASON_RECORDED && row.source === "from the judge") {
       row.source = undefined
     }
     const passed = openedPassed(id, choice, score, cell, listedRow)

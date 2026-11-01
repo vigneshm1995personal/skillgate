@@ -212,7 +212,7 @@ def test_rubric_says_honest_pending_is_correct() -> None:
     assert "pending" in quality.lower() or "not submitted yet" in quality.lower()
 
 
-def test_assembled_reasons_become_no_reason_recorded_without_judge_label() -> None:
+def test_assembled_reasons_are_run_facts_not_from_the_judge() -> None:
     cells = {
         "correctness": {
             "label": "Got it right?",
@@ -249,9 +249,9 @@ def test_assembled_reasons_become_no_reason_recorded_without_judge_label() -> No
     }
     rows = {row["id"]: row for row in check_rows(task)}
     for key in CHECK_CELL_ORDER:
-        assert rows[key]["reason"] == NO_REASON_RECORDED
-        assert rows[key].get("source_label") in {"", None}
-        assert is_built_reason(cells[key].get("reason")) is False
+        assert is_built_reason(cells[key].get("reason"))
+        assert rows[key]["source_label"] == "run facts"
+        assert rows[key]["reason"] != NO_REASON_RECORDED
     text = format_run_show(
         {
             "run_id": "assembled",
@@ -266,10 +266,10 @@ def test_assembled_reasons_become_no_reason_recorded_without_judge_label() -> No
         },
         detail=True,
     )
-    assert "No reason recorded" in text
+    assert "Facts in the reply:" in text
+    assert "Tools used:" in text
+    assert "(run facts)" in text
     assert "(from the judge)" not in text
-    assert "Facts in the reply:" not in text
-    assert "Tools used:" not in text
 
 
 def test_judge_written_reason_is_kept() -> None:

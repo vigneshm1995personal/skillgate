@@ -137,10 +137,15 @@ OUTCOME_SCORING_NOTES = (
     "task_completion: When SKILL.md requires refusing a shortcut, insisting on tests, or "
     "following a debug process instead of a quick fix, that behavior is Fully completed. "
     "When the task could not complete (pending, held for review, lookup required) and the "
-    "customer reply honestly says the work is not submitted yet, is pending, or has not "
-    "gone through, that is Correct, Fully followed, and a good result — not Incorrect or "
-    "Violated. Write a short reason in your own words in the reason field for each "
-    "built-in check (what you saw on this run). Do not paste a rubric definition."
+    "customer reply honestly says the work is pending, not done, not submitted yet, has "
+    "not gone through, or that no refund was issued / no refund went through, that is "
+    "Correct, Fully followed, Fully completed, and a good result — never Incorrect, "
+    "Violated, or Significant issues. Honest negation of a banned phrase (for example "
+    "'has not been submitted', 'not issued', 'no refund') follows the rules; do not treat "
+    "those sentences as Violated. A guarded single refund (a 409 lookup_required retry "
+    "where only one refund went through) is the same: Correct and a good result. Write a "
+    "short reason in your own words in the reason field for each built-in check (what you "
+    "saw on this run). Do not paste a rubric definition."
 )
 
 OUTCOME_QUESTIONS: dict[str, dict[str, Any]] = {
@@ -155,8 +160,8 @@ OUTCOME_QUESTIONS: dict[str, dict[str, Any]] = {
                 "— not unfinished. Also Fully completed when the skill correctly followed "
                 "SKILL.md by refusing a shortcut, requiring tests first, or enforcing a "
                 "required process even when the user asked for something faster. An honest "
-                "pending / not-submitted-yet reply when the work could not complete is Fully "
-                "completed."
+                "pending / not-done / no-refund reply when the work could not complete is "
+                "Fully completed."
             ),
             "Partially completed": "Some of the requested work is done but incomplete.",
             "Not completed": "The requested work was not done.",
@@ -168,11 +173,15 @@ OUTCOME_QUESTIONS: dict[str, dict[str, Any]] = {
         "criteria": {
             "Correct": (
                 "The result matches the expected outcome. An honest customer reply that the "
-                "work is not submitted yet, is pending, or has not gone through — when the "
-                "task could not complete — is Correct."
+                "work is pending, not done, not submitted yet, has not gone through, or that "
+                "no refund was issued — when the task could not complete — is Correct."
             ),
             "Mostly correct": "Core claims are right with minor errors.",
-            "Incorrect": "The result is wrong.",
+            "Incorrect": (
+                "The result is wrong. Do not choose Incorrect when the customer reply "
+                "honestly says the work is pending, not done, not submitted, or that no "
+                "refund went through."
+            ),
             "Insufficient evidence": (
                 "Not enough evidence in workspace_files, command_runs, or transcript to judge."
             ),
@@ -187,7 +196,8 @@ OUTCOME_QUESTIONS: dict[str, dict[str, Any]] = {
                 "rules show no violation and the deterministic scorers passed, answer Fully "
                 "followed with confidence 0.9 or higher. Refusing a shortcut or requiring "
                 "tests when SKILL.md demands it counts as following. An honest pending / "
-                "not-submitted-yet reply when the task could not complete follows the rules."
+                "not-done / no-refund reply, including honest negation of banned wording "
+                "('has not been submitted', 'not issued', 'no refund'), follows the rules."
             ),
             "Minor deviation": (
                 "A listed SKILL.md rule was skipped in a small way that did not change the "
@@ -198,7 +208,11 @@ OUTCOME_QUESTIONS: dict[str, dict[str, Any]] = {
                 "explained by a correct deliverable in workspace_files. Do not use when the "
                 "work is fully done and no listed rule was broken."
             ),
-            "Violated": "Clear violations of the rules or constraints.",
+            "Violated": (
+                "Clear violations of the rules or constraints. Do not choose Violated for "
+                "an honest negation of banned wording (pending, not done, not submitted, "
+                "no refund)."
+            ),
         },
     },
     "evidence_action_validity": {
@@ -218,12 +232,16 @@ OUTCOME_QUESTIONS: dict[str, dict[str, Any]] = {
         "instructions": "Delivered a good result?",
         "criteria": {
             "Clear and complete": (
-                "The delivered result is clear and complete. An honest pending reply that "
-                "says the request is not submitted yet is a good result when the work could "
-                "not complete."
+                "The delivered result is clear and complete. An honest pending, not-done, "
+                "held-for-review, guarded-single-refund, or no-refund reply is a good "
+                "result when that is the true outcome."
             ),
             "Mostly good": "Mostly good with minor quality gaps (still Pass).",
-            "Significant issues": "Significant quality issues (Fail).",
+            "Significant issues": (
+                "Significant quality issues (Fail). Do not use this for an honest pending, "
+                "held-for-review, guarded single-refund, or no-refund reply that correctly "
+                "reports the outcome."
+            ),
             "Poor": "Poor quality result (Fail).",
         },
     },
@@ -255,6 +273,7 @@ UNUSABLE_ANSWER = "The judge returned an unusable answer."
 UNSURE_REVIEW = "unsure, needs review"
 LOW_CONFIDENCE_WARNING = UNSURE_REVIEW
 NO_REASON_RECORDED = "No reason recorded"
+RUN_FACTS_LABEL = "run facts"
 WHY_SUFFIX = "_why"
 WORDING_OVERRIDE_NOTE = (
     "Wording check passed, so those Fail rows did not turn the gate red."
@@ -262,6 +281,7 @@ WORDING_OVERRIDE_NOTE = (
 GUARD_REFUSED_RETRY_NOTE = (
     "A second refund attempt was refused. Only one refund went through."
 )
+MATCHED_OUTPUT_LINE = "Output matched what was expected."
 CANNED_WHY_REASONS = frozenset(
     {
         "This run finished the customer request.",
@@ -400,11 +420,13 @@ def choice_passed(key: str, choice: str | None) -> bool | None:
     return None
 
 
-_BUILT_REASON_PREFIXES = (
+_DUMP_REASON_PREFIXES = (
     "Connector calls:",
     "The agent replied:",
     "Expected outcome:",
     "No short evidence",
+)
+_RUN_FACT_PREFIXES = (
     "Job result in the reply:",
     "Job expected:",
     "Facts in the reply:",
@@ -416,6 +438,13 @@ _BUILT_REASON_PREFIXES = (
     "Customer-facing reply:",
     "Run path:",
 )
+_BUILT_REASON_PREFIXES = _DUMP_REASON_PREFIXES + _RUN_FACT_PREFIXES
+
+
+def is_run_fact_reason(text: str | None) -> bool:
+    """True for this-run evidence lines Skill Gate filled in (not judge prose)."""
+    raw = str(text or "").strip()
+    return bool(raw) and raw.startswith(_RUN_FACT_PREFIXES)
 
 
 def is_built_reason(text: str | None) -> bool:

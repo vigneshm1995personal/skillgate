@@ -907,7 +907,7 @@ describe("openedCheckAnswers / low confidence", () => {
     )
   })
 
-  it("shows a note when wording overrides judge Fail rows", () => {
+  it("never shows the stale wording-override note", () => {
     expect(
       wordingOverrideNote({
         ...passTask,
@@ -916,7 +916,118 @@ describe("openedCheckAnswers / low confidence", () => {
           warnings: [WORDING_OVERRIDE_NOTE],
         },
       })
-    ).toBe(WORDING_OVERRIDE_NOTE)
+    ).toBeNull()
+    expect(
+      happenedLine({
+        ...passTask,
+        happened: WORDING_OVERRIDE_NOTE,
+        judge: {
+          ...passTask.judge,
+          warnings: [WORDING_OVERRIDE_NOTE],
+        },
+      })
+    ).not.toBe(WORDING_OVERRIDE_NOTE)
+  })
+
+  it("labels Job result / Tools used as run facts, not from the judge", () => {
+    const rows = openedCheckAnswers({
+      id: "c1",
+      passed: true,
+      status: "pass",
+      judge: {
+        cells: {
+          task_completion: {
+            choice: "Fully completed",
+            reason: "Job result in the reply: The refund has not been submitted yet.",
+            source: "judge",
+          },
+          evidence_action_validity: {
+            choice: "Fully supported",
+            reason: "Tools used: lookup, issue_refund",
+            source: "judge",
+          },
+          correctness: {
+            choice: "Correct",
+            reason: "The reply honestly says no refund went through.",
+            source: "judge",
+          },
+        },
+        answers: {
+          task_completion: {
+            choice: "Fully completed",
+            reason: "Job result in the reply: The refund has not been submitted yet.",
+            source: "judge",
+          },
+          evidence_action_validity: {
+            choice: "Fully supported",
+            reason: "Tools used: lookup, issue_refund",
+            source: "judge",
+          },
+          correctness: {
+            choice: "Correct",
+            reason: "The reply honestly says no refund went through.",
+            source: "judge",
+          },
+        },
+      },
+    })
+    const job = rows.find((row) => row.id === "task_completion")
+    const tools = rows.find((row) => row.id === "evidence_action_validity")
+    const judgeRow = rows.find((row) => row.id === "correctness")
+    expect(job?.reason).toMatch(/^Job result in the reply:/)
+    expect(job?.source).toBe("run facts")
+    expect(tools?.reason).toMatch(/^Tools used:/)
+    expect(tools?.source).toBe("run facts")
+    expect(judgeRow?.reason).toBe("The reply honestly says no refund went through.")
+    expect(judgeRow?.source).toBe("from the judge")
+  })
+
+  it("uses the warning note for c8, not Output matched what was expected", () => {
+    const task = {
+      ...passTask,
+      id: "c8",
+      status: "pass" as const,
+      passed: true,
+      happened: "Output matched what was expected.",
+      judge: {
+        ...passTask.judge,
+        warnings: [GUARD_REFUSED_RETRY_NOTE],
+        answers: {
+          ...passTask.judge?.answers,
+          q0: { probability: 1, source: "log", warning: GUARD_REFUSED_RETRY_NOTE },
+        },
+        cells: {
+          q0: {
+            label: "no duplicate refund calls",
+            choice: "Yes",
+            probability: 1,
+            source: "log",
+            warning: GUARD_REFUSED_RETRY_NOTE,
+            passed: true,
+          },
+        },
+        questions: {
+          q0: { instructions: "no duplicate refund calls", type: "predicate" },
+        },
+      },
+    }
+    expect(happenedLine(task)).toBe(GUARD_REFUSED_RETRY_NOTE)
+    expect(happenedLine({ ...task, status: "warning" })).toBe(GUARD_REFUSED_RETRY_NOTE)
+    const row = openedCheckAnswers(task).find((item) => item.id === "q0")
+    expect(row?.answer).toBe("Yes")
+    expect(row?.warning).toBe(GUARD_REFUSED_RETRY_NOTE)
+  })
+
+  it("does not say Output matched what was expected on a failing row", () => {
+    expect(
+      happenedLine({
+        id: "wrong",
+        passed: false,
+        status: "fail",
+        happened: "Output matched what was expected.",
+        judge: { fail_reason: "Got it right? Incorrect" },
+      })
+    ).toBe("Got it right? Incorrect")
   })
 
   it("shows a warning when a refund retry was refused", () => {

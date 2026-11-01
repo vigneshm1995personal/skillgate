@@ -9,15 +9,18 @@ from skillgate_ai.errors import SkillGateError
 from skillgate_ai.judge_bank import (
     CHECK_CELL_ORDER,
     GUARD_REFUSED_RETRY_NOTE,
+    MATCHED_OUTPUT_LINE,
     PASS_LOCK,
     SOFT_CELL_ORDER,
     UNSURE_REVIEW,
     WHY_SUFFIX,
+    WORDING_OVERRIDE_NOTE,
     canonical_choice,
     extract_choice,
     extract_reason,
     is_built_reason,
     is_rubric_reason,
+    is_run_fact_reason,
 )
 from skillgate_ai.judge_spec import (
     JudgeQuestion,
@@ -197,7 +200,7 @@ def drop_unsure_on_pass_lock(cells: dict[str, Any], answers: Mapping[str, Any]) 
 
 
 def drop_assembled_reasons(cells: dict[str, Any], answers: dict[str, Any]) -> None:
-    """Keep only a reason the judge wrote. Assembled run-text lines are dropped."""
+    """Drop canned/rubric lines. Keep run-built prefixes and stamp them as run facts."""
     for key in (*CHECK_CELL_ORDER, *SOFT_CELL_ORDER):
         cell = cells.get(key) if isinstance(cells.get(key), dict) else None
         blob = answers.get(key) if isinstance(answers.get(key), dict) else None
@@ -211,17 +214,28 @@ def drop_assembled_reasons(cells: dict[str, Any], answers: dict[str, Any]) -> No
             reason = str(cell.get("reason") or "").strip() or None
         if not reason and isinstance(blob, dict):
             reason = extract_reason(blob)
-        if not reason or is_built_reason(reason) or is_rubric_reason(key, choice, reason):
+        if not reason or is_rubric_reason(key, choice, reason):
             if isinstance(cell, dict):
                 cell["reason"] = None
             if (
                 isinstance(blob, dict)
                 and str(blob.get("reason") or "").strip()
-                and (
-                    is_built_reason(blob.get("reason"))
-                    or is_rubric_reason(key, choice, str(blob.get("reason") or ""))
-                )
+                and is_rubric_reason(key, choice, str(blob.get("reason") or ""))
             ):
+                blob.pop("reason", None)
+            continue
+        if is_run_fact_reason(reason):
+            if isinstance(cell, dict):
+                cell["reason"] = reason
+                cell["source"] = "run"
+            if isinstance(blob, dict):
+                blob["reason"] = reason
+                blob["source"] = "run"
+            continue
+        if is_built_reason(reason):
+            if isinstance(cell, dict):
+                cell["reason"] = None
+            if isinstance(blob, dict) and is_built_reason(blob.get("reason")):
                 blob.pop("reason", None)
             continue
         if isinstance(cell, dict):
@@ -258,14 +272,17 @@ def stamp_extra_cells(
 
 
 def strip_unsure(judged: dict[str, Any], gate: bool | None) -> None:
-    if gate is not True and gate is not False:
-        return
+    stale = {WORDING_OVERRIDE_NOTE}
+    if gate is True or gate is False:
+        stale.add(UNSURE_REVIEW)
     warnings = [
         str(item).strip()
         for item in (judged.get("warnings") or [])
-        if str(item).strip() and str(item).strip() != UNSURE_REVIEW
+        if str(item).strip() and str(item).strip() not in stale
     ]
     judged["warnings"] = warnings
+    if gate is not True and gate is not False:
+        return
     judged["review"] = False
     cells = judged.get("cells") if isinstance(judged.get("cells"), dict) else {}
     for cell in cells.values():
@@ -280,7 +297,7 @@ def finish_task(task: dict[str, Any], gate: bool | None) -> None:
     warnings = [
         str(item).strip()
         for item in (judge.get("warnings") or [])
-        if str(item).strip()
+        if str(item).strip() and str(item).strip() != WORDING_OVERRIDE_NOTE
     ]
     if gate is True:
         warnings = [item for item in warnings if item != UNSURE_REVIEW]
@@ -300,6 +317,8 @@ def finish_task(task: dict[str, Any], gate: bool | None) -> None:
         judge["review"] = False
         task["status"] = "fail"
         task["review"] = False
+        if str(task.get("happened") or "").strip() == MATCHED_OUTPUT_LINE:
+            task["happened"] = ""
     elif task.get("review") or judge.get("review"):
         task["status"] = "unsure"
     task["judge"] = judge

@@ -18,6 +18,7 @@ from skillgate_ai.judge_bank import (
     CHECK_CELL_ORDER,
     GUARD_REFUSED_RETRY_NOTE,
     WORDING_OVERRIDE_NOTE,
+    is_built_reason,
 )
 from skillgate_ai.rescore import find_history_run, rescore_saved_run
 from skillgate_ai.run_details import check_rows, format_run_show
@@ -196,13 +197,13 @@ def test_assembled_run_text_is_not_stamped_as_the_reason() -> None:
     }
     drop_assembled_reasons(cells, answers)
     for name in CHECK_CELL_ORDER:
-        assert cells[name].get("reason") in {None, ""}
-        assert "Facts in the reply:" not in str(cells[name].get("reason") or "")
-        assert "Tools used:" not in str(cells[name].get("reason") or "")
+        assert is_built_reason(cells[name].get("reason"))
+        assert cells[name].get("source") == "run"
         written = _cell_entry(
             name, {"choice": "Incorrect", "reason": "Only one refund went through."}, {name: name}
         )
         assert written["reason"] == "Only one refund went through."
+        assert written.get("source") != "run"
 
 
 def test_red_run_check_rows_do_not_say_unsure() -> None:

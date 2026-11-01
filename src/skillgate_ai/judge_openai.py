@@ -12,6 +12,7 @@ from skillgate_ai.judge_bank import (
     CHECK_CELL_ORDER,
     DEFAULT_MIN_CONFIDENCE,
     LOW_CONFIDENCE_MAX_ASKS,
+    PASS_LOCK,
     PATH_NOT_AVAILABLE,
     SOFT_CELL_LABELS,
     SOFT_CELL_ORDER,
@@ -26,6 +27,7 @@ from skillgate_ai.judge_bank import (
     extract_reason,
     is_built_reason,
     is_rubric_reason,
+    is_run_fact_reason,
     majority_vote_answers,
     unusable_answers,
     vote_round_summaries,
@@ -152,13 +154,20 @@ def _tail(text: str, limit: int = TRANSCRIPT_TAIL_CHARS) -> str:
 def _cell_entry(key: str, answer: Any, labels: Mapping[str, str]) -> dict[str, Any]:
     choice = extract_choice(answer)
     reason = extract_reason(answer)
-    if reason and (is_rubric_reason(key, choice, reason) or is_built_reason(reason)):
+    source = None
+    if reason and is_rubric_reason(key, choice, reason):
+        reason = None
+    elif reason and is_run_fact_reason(reason):
+        source = "run"
+    elif reason and is_built_reason(reason):
         reason = None
     cell: dict[str, Any] = {
         "label": labels[key],
         "choice": choice,
         "reason": reason,
     }
+    if source:
+        cell["source"] = source
     confidence = extract_confidence(answer)
     if confidence is not None:
         cell["confidence"] = confidence
@@ -797,7 +806,13 @@ class OutcomeJudge:
             if confidence:
                 conf = extract_confidence(pass_answers.get(key))
                 if conf is not None and conf < self.min_confidence:
-                    cells[key]["status"] = "unsure"
+                    canonical = canonical_choice(key, extract_choice(pass_answers.get(key)))
+                    allowed = PASS_LOCK.get(key) or frozenset()
+                    if (
+                        canonical is not None
+                        and canonical.strip().lower() in allowed
+                    ):
+                        cells[key]["status"] = "unsure"
         for key in SOFT_CELL_ORDER:
             if include_path:
                 cells[key] = _cell_entry(key, soft_answers.get(key), SOFT_CELL_LABELS)
