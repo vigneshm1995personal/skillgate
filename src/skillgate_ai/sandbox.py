@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import IO, Protocol
 
-from skillgate_ai.errors import SandboxError
+from skillgate_ai.errors import SandboxError, agent_timeout_error
 from skillgate_ai.ingest import Skill
 from skillgate_ai.live import CheckAborted, OutputSink
 from skillgate_ai.observability import breadcrumb_harness_spawn, breadcrumb_timeout
@@ -116,7 +116,7 @@ class LocalSandbox:
             )
         except subprocess.TimeoutExpired:
             breadcrumb_timeout(command, timeout)
-            raise
+            raise agent_timeout_error(timeout) from None
 
     def close(self) -> None:
         if self._tmp is not None:
@@ -185,7 +185,7 @@ class DockerSandbox:
             )
         except subprocess.TimeoutExpired:
             breadcrumb_timeout(docker_cmd, timeout + 30)
-            raise
+            raise agent_timeout_error(timeout) from None
         except FileNotFoundError as exc:
             raise SandboxError("Docker executable disappeared while running.") from exc
 

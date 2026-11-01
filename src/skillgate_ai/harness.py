@@ -21,7 +21,7 @@ from skillgate_ai.config import (
     no_agent_available_error,
     normalize_codex_reasoning_effort,
 )
-from skillgate_ai.errors import HarnessError, MissingLLMKeyError
+from skillgate_ai.errors import HarnessError, MissingLLMKeyError, agent_timeout_error
 from skillgate_ai.ingest import Skill, canonical_skill_name
 from skillgate_ai.sandbox import Sandbox
 from skillgate_ai.scorers import TriggerEvidence
@@ -241,7 +241,7 @@ class CursorAgentHarness:
         env: dict[str, str] = {"SKILLGATE_TASK": prompt}
         if self.cfg.cursor_api_key:
             env["CURSOR_API_KEY"] = self.cfg.cursor_api_key
-        proc = sandbox.run(command, env=env, timeout=timeout_sec)
+        proc = _sandbox_run(sandbox, command, env=env, timeout=timeout_sec)
         _raise_if_cannot_run(proc.stdout or "", proc.stderr or "")
         transcript = _cursor_transcript(proc.stdout or "", proc.stderr or "")
         selected = _parse_selected(sandbox.workspace, transcript, skills)
@@ -637,7 +637,7 @@ class CodexCliHarness:
         env: dict[str, str] = {"SKILLGATE_TASK": prompt}
         if key:
             env["CODEX_API_KEY"] = key
-        proc = sandbox.run(command, env=env, timeout=timeout_sec)
+        proc = _sandbox_run(sandbox, command, env=env, timeout=timeout_sec)
         _raise_if_cannot_run(proc.stdout or "", proc.stderr or "")
         transcript = _codex_transcript(proc.stdout or "", proc.stderr or "")
         if _codex_rejected_chatgpt_model(proc.stdout or "", proc.stderr or ""):
@@ -731,7 +731,7 @@ class ClaudeCodeHarness:
         env: dict[str, str] = {"SKILLGATE_TASK": prompt}
         if self.cfg.anthropic_api_key:
             env["ANTHROPIC_API_KEY"] = self.cfg.anthropic_api_key
-        proc = sandbox.run(command, env=env, timeout=timeout_sec)
+        proc = _sandbox_run(sandbox, command, env=env, timeout=timeout_sec)
         _raise_if_cannot_run(proc.stdout or "", proc.stderr or "")
         requested = (self.cfg.anthropic_model or "").strip() or None
         if _claude_model_access_error(proc.stdout or "", proc.stderr or ""):
@@ -1019,6 +1019,21 @@ _AUTH_FAILURE_RE = re.compile(
 
 USAGE_LIMIT_MESSAGE = "The agent hit a usage limit. This check cannot run."
 MODEL_UNAVAILABLE_MESSAGE = "The agent couldn't use this model. This check cannot run."
+
+
+def _sandbox_run(
+    sandbox: Sandbox,
+    command: list[str],
+    *,
+    env: dict[str, str] | None,
+    timeout: int,
+) -> subprocess.CompletedProcess[str]:
+    try:
+        return sandbox.run(command, env=env, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        raise agent_timeout_error(timeout) from None
+
+
 _USAGE_LIMIT_RE = re.compile(
     r"ActionRequiredError|Weekly usage limit reached|usage limit reached",
     re.IGNORECASE,

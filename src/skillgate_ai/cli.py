@@ -14,7 +14,7 @@ from rich.console import Console
 from skillgate_ai import __version__
 from skillgate_ai.api_payloads import scrub_browser_payload
 from skillgate_ai.config import load_env
-from skillgate_ai.errors import SkillGateError
+from skillgate_ai.errors import SkillGateError, timeout_harness_error
 from skillgate_ai.gate import run_check
 from skillgate_ai.ingest import ingest_skill
 from skillgate_ai.keys import bind_key_env, reset_key_env_bindings
@@ -342,21 +342,37 @@ def _run_gate(
             else:
                 console.print(exc.render())
             raise typer.Exit(exc.exit_code) from None
-    result = run_check(
-        target,
-        skill=skill,
-        harness=harness,
-        sandbox=sandbox,
-        expect_fail=expect_fail,
-        model=model,
-        timeout=timeout,
-        temperature=temperature,
-        reasoning_effort=reasoning_effort,
-        source="cli",
-        checks=checks,
-        tryout=tryout,
-        no_judge=no_judge,
-    )
+    try:
+        result = run_check(
+            target,
+            skill=skill,
+            harness=harness,
+            sandbox=sandbox,
+            expect_fail=expect_fail,
+            model=model,
+            timeout=timeout,
+            temperature=temperature,
+            reasoning_effort=reasoning_effort,
+            source="cli",
+            checks=checks,
+            tryout=tryout,
+            no_judge=no_judge,
+        )
+    except Exception as exc:  # noqa: BLE001 — TimeoutExpired must not dump the prompt
+        blocked = timeout_harness_error(exc)
+        if blocked is None:
+            raise
+        if json_out or summary == "json":
+            _emit_json(
+                {
+                    "error": blocked.message,
+                    "hint": blocked.hint,
+                    "exit_code": blocked.exit_code,
+                }
+            )
+        else:
+            console.print(blocked.render())
+        raise typer.Exit(blocked.exit_code) from None
     machine = json_out or summary == "json"
     if not machine and summary != "github":
         _present_check(result, verbose=verbose)

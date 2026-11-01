@@ -9,7 +9,12 @@ from pathlib import Path
 from typing import Any
 
 from skillgate_ai.advice import FixAdvice, advise_suite, advise_task
-from skillgate_ai.errors import HarnessError, IngestError, SuiteError
+from skillgate_ai.errors import (
+    HarnessError,
+    IngestError,
+    SuiteError,
+    timeout_harness_error,
+)
 from skillgate_ai.harness import (
     Harness,
     HarnessResult,
@@ -848,6 +853,11 @@ def _run_task(
                     return _skipped_report(
                         task, KILL_FAILURE if exc.reason == KILL else SKIP_FAILURE
                     )
+                except Exception as exc:
+                    blocked = timeout_harness_error(exc, timeout_sec=timeout)
+                    if blocked is not None:
+                        raise blocked from None
+                    raise
             blocked = cannot_run_message(
                 result.stdout or "", result.stderr or "", result.transcript or ""
             )

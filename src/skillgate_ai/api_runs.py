@@ -18,7 +18,7 @@ from skillgate_ai.api_payloads import (
 )
 from skillgate_ai.catalog import find_skill
 from skillgate_ai.config import get_llm_config, load_env, missing_key_error
-from skillgate_ai.errors import MissingLLMKeyError, SkillGateError
+from skillgate_ai.errors import MissingLLMKeyError, SkillGateError, timeout_harness_error
 from skillgate_ai.gate import run_check
 from skillgate_ai.live import create_control, drop_control, get_control
 from skillgate_ai.report import progress_to_dict, report_to_dict
@@ -136,7 +136,15 @@ def start_run(state: AppState, body: dict[str, Any]) -> dict[str, Any]:
             )
             attach_stamped_config(record, report)
         except Exception as exc:  # noqa: BLE001 — surface to the poller
-            message = exc.message if isinstance(exc, SkillGateError) else str(exc)
+            blocked = timeout_harness_error(exc)
+            if blocked is not None:
+                message = blocked.message
+                hint = blocked.hint
+                exit_code = blocked.exit_code
+            else:
+                message = exc.message if isinstance(exc, SkillGateError) else str(exc)
+                hint = getattr(exc, "hint", None)
+                exit_code = getattr(exc, "exit_code", None)
             decision, reason = local_gate(
                 None, status="error", tryout=tryout, gate_moved=False
             )
@@ -147,8 +155,9 @@ def start_run(state: AppState, body: dict[str, Any]) -> dict[str, Any]:
                     "gate": None,
                     "gate_decision": decision,
                     "gate_reason": reason,
-                    "error": {"message": message, "hint": getattr(exc, "hint", None)},
+                    "error": {"message": message, "hint": hint},
                     "tryout": tryout,
+                    "exit_code": exit_code,
                 }
             )
         finally:
