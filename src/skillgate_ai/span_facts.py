@@ -197,6 +197,7 @@ def resolve_log_facts(
     *,
     trajectory: Mapping[str, Any] | None = None,
     outputs: Sequence[Mapping[str, Any]] | str | None = None,
+    skill_instructions: str | None = None,
 ) -> dict[str, Any]:
     """Answers for extras that are deterministic from the log. Empty → use the judge."""
     has_log = bool(spans) or bool(trajectory) or bool(outputs)
@@ -209,7 +210,14 @@ def resolve_log_facts(
         )
         if computed is not None:
             facts[question.id] = computed
-    return facts
+    return _merge_wording_facts(
+        spec,
+        facts,
+        spans,
+        trajectory=trajectory,
+        outputs=outputs,
+        skill_instructions=skill_instructions,
+    )
 
 
 def apply_log_facts(
@@ -219,11 +227,46 @@ def apply_log_facts(
     *,
     trajectory: Mapping[str, Any] | None = None,
     outputs: Sequence[Mapping[str, Any]] | str | None = None,
+    skill_instructions: str | None = None,
 ) -> dict[str, Any]:
     """Replace judge answers with log facts when the check can be computed."""
     merged = dict(answers or {})
-    merged.update(resolve_log_facts(spec, spans, trajectory=trajectory, outputs=outputs))
+    merged.update(
+        resolve_log_facts(
+            spec,
+            spans,
+            trajectory=trajectory,
+            outputs=outputs,
+            skill_instructions=skill_instructions,
+        )
+    )
     return merged
+
+
+def _merge_wording_facts(
+    spec: JudgeSpec,
+    facts: dict[str, Any],
+    spans: Sequence[Mapping[str, Any]] | None,
+    *,
+    trajectory: Mapping[str, Any] | None,
+    outputs: Sequence[Mapping[str, Any]] | str | None,
+    skill_instructions: str | None,
+) -> dict[str, Any]:
+    from skillgate_ai.wording_facts import resolve_wording_facts
+
+    reply = _reply_text(outputs)
+    wording = resolve_wording_facts(
+        spec,
+        outputs,
+        skill_instructions,
+        succeeded=_connector_succeeded(spans, trajectory, _parse_calls_log(outputs)),
+        hedge=_reply_hedges(reply),
+    )
+    for qid, fact in wording.items():
+        current = facts.get(qid)
+        if current is None or float(fact.get("probability") or 0) < 0.8:
+            facts[qid] = fact
+    return facts
 
 
 def _compute_question(
@@ -368,10 +411,10 @@ def _count_is_yes(ask: str, count: int) -> bool:
 
 
 _ISSUED_RE = re.compile(
-    r"\b(?:has been|have been|was|already|i(?:['’]ve| have))\s+"
-    r"(?:issued|processed|completed)\b|"
+    r"\b(?:has been|have been|was|already|i(?:['’]ve| have)|we(?:['’]ve| have))\s+"
+    r"(?:issued|processed|completed|submitted)\b|"
     r"money is already on its way|"
-    r"(?:issued|processed)\s+a\s+(?:full\s+)?refund|"
+    r"(?:issued|processed|submitted)\s+a\s+(?:full\s+)?refund|"
     r"\bis on (?:its|the) way\b",
     re.IGNORECASE,
 )

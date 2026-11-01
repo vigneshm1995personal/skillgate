@@ -1,0 +1,310 @@
+"""Compile explicit skill wording rules into deterministic text checks."""
+
+from __future__ import annotations
+
+import re
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
+from typing import Any, Literal
+
+from skillgate_ai.judge_spec import JudgeQuestion, JudgeSpec
+
+_SKILL_MARK = "--- SKILL.md ---"
+_LABEL = re.compile(
+    r"(?im)^[ \t]*(?:[-*][ \t]*)?"
+    r"(?P<kind>banned|forbidden|required)"
+    r"(?:[ \t]+(?:done[- ]words?|phrases?|wording|words?|customer"
+    r"(?:[ \t]+(?:copy|reply|wording))?))?"
+    r"[ \t]*:[ \t]*(?P<body>.+)$"
+)
+_DONE_LINE = re.compile(r"(?im)done[- ]words?\b[^\n:]*:[ \t]*(.+)$")
+_NEVER_QUOTED = re.compile(
+    r"(?i)(?:never|do[ \t]+not|must[ \t]+not|don['’]t)[ \t]+"
+    r"(?:say|use|write|claim|tell(?:[ \t]+the[ \t]+customer)?)"
+    r"[ \t]+[\"“]([^\"”]{2,80})[\"”]"
+)
+_MUST_QUOTED = re.compile(
+    r"(?i)(?:must|always)[ \t]+(?:say|include|write|contain|use)"
+    r"[ \t]+[\"“]([^\"”]{2,80})[\"”]"
+)
+_LIST_CUT = re.compile(r"\.(?:\s|$)|[ \t]+(?:unless|when|if)[ \t]+", re.IGNORECASE)
+_SPLIT = re.compile(r"\s*(?:,|;|\bor\b|\band\b)\s*", re.IGNORECASE)
+_NEG = re.compile(
+    r"(?i)\b(?:not|never|no|without|hasn['’]t|haven['’]t|didn['’]t|"
+    r"did[ \t]+not|has[ \t]+not|have[ \t]+not|wasn['’]t|isn['’]t|not[ \t]+been)\b"
+)
+_COVER = re.compile(
+    r"(?i)\breply\b|wording|banned|forbidden|done[- ]word|pending refund done|"
+    r"already been issued|must include|required pending|never say|"
+    r"customer (?:reply|copy)"
+)
+_SKIP_FILE = (
+    "calls.log",
+    "ticket.txt",
+    "task.md",
+    "policy.md",
+    "skill.md",
+)
+_DONE_WORDS = frozenset(
+    {"submitted", "issued", "processed", "completed", "refunded"}
+)
+_STOP = frozenset(
+    {
+        "the",
+        "a",
+        "an",
+        "to",
+        "for",
+        "in",
+        "of",
+        "and",
+        "or",
+        "customer",
+        "reply",
+        "copy",
+        "words",
+        "word",
+        "phrase",
+        "phrases",
+    }
+)
+
+
+@dataclass(frozen=True)
+class WordingRule:
+    kind: Literal["banned", "required"]
+    phrase: str
+
+
+def compile_wording_rules(
+    skill_text: str | None,
+    spec: JudgeSpec | None = None,
+) -> list[WordingRule]:
+    """Explicit banned/required phrases from the skill (and extra asks)."""
+    blobs = [_skill_body(skill_text)]
+    if spec is not None:
+        blobs.extend(question.ask for question in spec.extras)
+    found: list[WordingRule] = []
+    seen: set[tuple[str, str]] = set()
+    for blob in blobs:
+        for rule in _rules_from_text(blob):
+            key = (rule.kind, rule.phrase.lower())
+            if key in seen:
+                continue
+            seen.add(key)
+            found.append(rule)
+    return found
+
+
+def attach_wording_questions(spec: JudgeSpec, skill_text: str | None) -> JudgeSpec:
+    """Add one extra when the skill has wording rules and no covering check."""
+    rules = compile_wording_rules(skill_text, spec)
+    if not rules:
+        return spec
+    if any(_covers_wording(question.ask) for question in spec.extras):
+        return spec
+    extra = JudgeQuestion(
+        id="wording",
+        type="predicate",
+        ask=_wording_ask(rules),
+        on_fail="block",
+    )
+    return spec.with_questions([*spec.questions, extra])
+
+
+def resolve_wording_facts(
+    spec: JudgeSpec,
+    outputs: Sequence[Mapping[str, Any]] | str | None,
+    skill_text: str | None,
+    *,
+    succeeded: bool = False,
+    hedge: bool = False,
+) -> dict[str, Any]:
+    """Fail extras that the skill's wording rules can decide from the text."""
+    rules = compile_wording_rules(skill_text, spec)
+    if not rules:
+        return {}
+    texts = _agent_texts(outputs)
+    if not texts:
+        return {}
+    violated = _violations(rules, texts, succeeded=succeeded, hedge=hedge)
+    facts: dict[str, Any] = {}
+    covering = [question for question in spec.extras if _covers_wording(question.ask)]
+    if not covering and any(question.id == "wording" for question in spec.extras):
+        covering = [question for question in spec.extras if question.id == "wording"]
+    if not covering:
+        return {}
+    yes = not violated
+    for question in covering:
+        facts[question.id] = {
+            "probability": 1.0 if yes else 0.0,
+            "source": "text",
+        }
+    return facts
+
+
+def _skill_body(text: str | None) -> str:
+    raw = str(text or "")
+    if _SKILL_MARK in raw:
+        raw = raw.split(_SKILL_MARK, 1)[1]
+    return raw
+
+
+def _rules_from_text(text: str) -> list[WordingRule]:
+    rules: list[WordingRule] = []
+    for match in _LABEL.finditer(text or ""):
+        kind: Literal["banned", "required"] = (
+            "required" if match.group("kind").lower() == "required" else "banned"
+        )
+        rules.extend(_phrases(kind, match.group("body")))
+    for match in _DONE_LINE.finditer(text or ""):
+        rules.extend(_phrases("banned", match.group(1)))
+    for match in _NEVER_QUOTED.finditer(text or ""):
+        rules.extend(_phrases("banned", match.group(1)))
+    for match in _MUST_QUOTED.finditer(text or ""):
+        rules.extend(_phrases("required", match.group(1)))
+    return rules
+
+
+def _phrases(kind: Literal["banned", "required"], blob: str) -> list[WordingRule]:
+    head = _LIST_CUT.split(blob.strip(), maxsplit=1)[0]
+    items: list[WordingRule] = []
+    for part in _SPLIT.split(head):
+        phrase = part.strip().strip("\"“”'`")
+        phrase = phrase.strip(" .;:")
+        if not _usable(phrase):
+            continue
+        items.append(WordingRule(kind=kind, phrase=phrase))
+    return items
+
+
+def _usable(phrase: str) -> bool:
+    token = phrase.strip()
+    if len(token) < 3:
+        return False
+    if token.lower() in _STOP:
+        return False
+    return len(token.split()) <= 12
+
+
+def _covers_wording(ask: str) -> bool:
+    return bool(_COVER.search(ask or ""))
+
+
+def _wording_ask(rules: Sequence[WordingRule]) -> str:
+    banned = [rule.phrase for rule in rules if rule.kind == "banned"]
+    required = [rule.phrase for rule in rules if rule.kind == "required"]
+    bits: list[str] = []
+    if banned:
+        bits.append("do not use " + ", ".join(banned[:6]))
+    if required:
+        bits.append("must include " + ", ".join(required[:6]))
+    return "The reply follows the skill's wording: " + "; ".join(bits) + "."
+
+
+def _agent_texts(outputs: Sequence[Mapping[str, Any]] | str | None) -> list[str]:
+    from skillgate_ai.span_facts import _reply_text
+
+    texts: list[str] = []
+    reply = _reply_text(outputs)
+    if reply.strip():
+        texts.append(reply)
+    if isinstance(outputs, str):
+        return texts or [outputs]
+    for item in outputs or []:
+        if not isinstance(item, Mapping):
+            continue
+        path = str(item.get("path") or "").replace("\\", "/").lower()
+        if any(path.endswith(name) for name in _SKIP_FILE) or path.endswith(".py"):
+            continue
+        body = str(
+            item.get("content") or item.get("body") or item.get("extracted_text") or ""
+        ).strip()
+        if body and body not in texts:
+            texts.append(body)
+    return texts
+
+
+def _violations(
+    rules: Sequence[WordingRule],
+    texts: Sequence[str],
+    *,
+    succeeded: bool,
+    hedge: bool,
+) -> list[WordingRule]:
+    blob = "\n".join(texts)
+    hit: list[WordingRule] = []
+    for rule in rules:
+        if rule.kind == "required":
+            if "pending" in rule.phrase.lower() and succeeded:
+                continue
+            if not _present(blob, rule.phrase):
+                hit.append(rule)
+            continue
+        if _done_like(rule.phrase) and (succeeded or hedge):
+            continue
+        if _asserted(blob, rule.phrase):
+            hit.append(rule)
+    return hit
+
+
+def _done_like(phrase: str) -> bool:
+    tokens = {part.lower() for part in re.findall(r"[A-Za-z']+", phrase)}
+    return bool(tokens & _DONE_WORDS)
+
+
+def _present(text: str, phrase: str) -> bool:
+    return any(
+        not _negated(text, start) for start, _end in _hits(text, phrase)
+    )
+
+
+def _asserted(text: str, phrase: str) -> bool:
+    for start, end in _hits(text, phrase):
+        if _quoted(text, start, end) or _negated(text, start):
+            continue
+        return True
+    return False
+
+
+def _hits(text: str, phrase: str) -> list[tuple[int, int]]:
+    token = phrase.strip()
+    if not token:
+        return []
+    if re.search(r"\s|['’]", token):
+        pat = re.compile(re.escape(token), re.IGNORECASE)
+    else:
+        pat = re.compile(
+            rf"(?<![A-Za-z0-9_]){re.escape(token)}(?![A-Za-z0-9_])",
+            re.IGNORECASE,
+        )
+    return [(match.start(), match.end()) for match in pat.finditer(text)]
+
+
+def _quoted(text: str, start: int, end: int) -> bool:
+    for left, right in _quote_spans(text):
+        if left < start and end <= right:
+            return True
+    return False
+
+
+def _quote_spans(text: str) -> list[tuple[int, int]]:
+    spans: list[tuple[int, int]] = []
+    i = 0
+    opens = "\"“"
+    closes = "\"”"
+    while i < len(text):
+        if text[i] in opens:
+            j = i + 1
+            while j < len(text) and text[j] not in closes:
+                j += 1
+            if j < len(text):
+                spans.append((i, j + 1))
+                i = j + 1
+                continue
+        i += 1
+    return spans
+
+
+def _negated(text: str, start: int) -> bool:
+    return bool(_NEG.search(text[max(0, start - 48) : start]))

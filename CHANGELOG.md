@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.7.12
+
+- When a skill states explicit banned phrases or required/forbidden wording, those lines are compiled into deterministic text checks on the customer reply and output files. A hit fails the gate. The judge cannot override it. CLI, JSON, and the UI label that answer `from the log/text`, not `from the judge`. Quoting the user, or a negation such as `has not been submitted`, does not trip the check. A pending refund reply that says `I've submitted a full refund` is red. Until 0.7.12 is published, install from source.
+
 ## 0.7.11
 
 - After majority voting, a blocking verdict whose confidence is still below 0.5 is **unsure, needs review**. It is not a gate fail (exit 0, `gate: needs review`, task `status: unsure`). Deploy stays pending. High-confidence fails still fail in one call. The pass mark is unchanged.

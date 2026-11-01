@@ -711,15 +711,18 @@ def _live_verdict(
         str(item) for item in (judge.get("warnings") or []) if str(item).strip()
     ]
     stamped = {**judge, "warnings": warnings}
+    extra = [
+        str(item).strip()
+        for item in (judge.get("extra_failures") or [])
+        if str(item).strip()
+    ]
     if expect_skill is None:
-        extra = [
-            str(item).strip()
-            for item in (judge.get("extra_failures") or [])
-            if str(item).strip()
-        ]
         if judge.get("score_no_trigger") and extra:
             return False, extra, stamped
         return det_passed, det_failures, stamped
+    if extra:
+        stamped = {**stamped, "passed": False}
+        return False, extra, stamped
     if judge.get("status") == "error":
         reason = str(stamped.get("reason") or "").strip()
         if not reason:

@@ -474,6 +474,28 @@ describe("openedCheckAnswers / low confidence", () => {
     })
   })
 
+  it("labels a wording check from the log/text", () => {
+    const rows = openedCheckAnswers({
+      ...passTask,
+      judge: {
+        ...passTask.judge,
+        cells: {
+          ...passTask.judge!.cells,
+          pending_done: {
+            label: "does not call a pending refund done",
+            choice: "No",
+            source: "text",
+          },
+        },
+      },
+    })
+    expect(rows.at(-1)).toMatchObject({
+      id: "pending_done",
+      answer: "No",
+      source: "from the log/text",
+    })
+  })
+
   it("labels a custom check scored from the log", () => {
     const rows = openedCheckAnswers({
       ...passTask,
