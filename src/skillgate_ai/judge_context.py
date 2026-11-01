@@ -19,6 +19,7 @@ from skillgate_ai.judge_bank import (
     extract_choice,
     extract_reason,
     is_built_reason,
+    is_run_fact_reason,
 )
 from skillgate_ai.openai_http import redact_secrets
 from skillgate_ai.pack_files import GOLDEN_TAIL_CHARS, read_capped_text
@@ -365,7 +366,9 @@ _ADHERENCE_NOTE = (
     "only when a listed rule was skipped in a small way. Do not hedge or split "
     "confidence between Fully followed and Minor deviation when no listed rule was "
     "broken. Style, tool choice, or extra steps that are not listed rules are not a "
-    "deviation and must not lower confidence."
+    "deviation and must not lower confidence. An honest pending / not-done / "
+    "no-refund customer reply, when the task could not complete, is Fully followed "
+    "— never Violated."
 )
 
 
@@ -443,6 +446,30 @@ def _state_call_names(state: Mapping[str, Any] | None) -> list[str]:
         if isinstance(tools, list):
             for item in tools:
                 add(item)
+    files = state.get("workspace_files") or state.get("artifacts")
+    if isinstance(files, list):
+        for row in files:
+            if not isinstance(row, Mapping):
+                continue
+            path_name = str(row.get("path") or "").replace("\\", "/").lower()
+            if not path_name.endswith("calls.log"):
+                continue
+            body = str(row.get("content") or row.get("body") or row.get("extracted_text") or "")
+            for line in body.splitlines():
+                blob = line.strip()
+                if not blob.startswith("{"):
+                    continue
+                try:
+                    obj = json.loads(blob)
+                except json.JSONDecodeError:
+                    continue
+                if not isinstance(obj, dict):
+                    continue
+                argv = obj.get("argv")
+                if isinstance(argv, list) and argv:
+                    add(argv[0])
+                elif isinstance(argv, str) and argv.split():
+                    add(argv.split()[0])
     return names
 
 
@@ -642,22 +669,52 @@ def apply_why_reasons(
                 mapping[value] = description or value
         lookup[name] = mapping
     for key, cell in cells.items():
-        if not isinstance(cell, dict) or str(cell.get("reason") or "").strip():
+        if not isinstance(cell, dict):
             continue
-        blob = answers.get(key)
+        existing = str(cell.get("reason") or "").strip()
+        if existing and not is_built_reason(existing):
+            continue
+        blob = answers.get(key) if isinstance(answers, Mapping) else None
         written = extract_reason(blob) if blob is not None else None
         if written and not is_built_reason(written):
             cell["reason"] = written
             continue
         why_key = f"{key}{WHY_SUFFIX}"
-        why = answers.get(why_key)
+        why = answers.get(why_key) if isinstance(answers, Mapping) else None
         choice = extract_choice(why) if why is not None else None
-        if not choice or choice == _WHY_NONE:
-            continue
-        reason = (lookup.get(why_key) or {}).get(choice) or ""
+        mapping = lookup.get(why_key) or {}
+        reason = ""
+        if choice and choice != _WHY_NONE:
+            reason = mapping.get(choice) or ""
         if not reason and isinstance(why, Mapping):
             reason = str(why.get("reason") or why.get("description") or "").strip()
+        if (not reason or reason.lower().startswith("no short evidence")) and why is None:
+            preferred = ("tools", "reply", "rules", "expected", "path")
+            reason = next(
+                (
+                    mapping[value]
+                    for value in preferred
+                    if value in mapping and is_run_fact_reason(mapping[value])
+                ),
+                "",
+            )
+            if not reason:
+                reason = next(
+                    (
+                        desc
+                        for value, desc in mapping.items()
+                        if value != _WHY_NONE and is_run_fact_reason(desc)
+                    ),
+                    "",
+                )
         if not reason or reason.lower().startswith("no short evidence"):
+            continue
+        if is_run_fact_reason(reason):
+            cell["reason"] = reason
+            cell["source"] = "run"
+            if isinstance(blob, dict):
+                blob["reason"] = reason
+                blob["source"] = "run"
             continue
         if is_built_reason(reason):
             continue
@@ -677,6 +734,57 @@ def stamp_why_on_answers(
         for key, blob in answers.items()
         if isinstance(blob, dict) and not str(key).endswith(WHY_SUFFIX)
     }
+    apply_why_reasons(cells, answers, questions)
+
+
+def stamp_run_fact_reasons(
+    cells: dict[str, Any],
+    answers: dict[str, Any],
+    *,
+    outputs: Any = None,
+    skill_text: str | None = None,
+    expected_text: str | None = None,
+) -> None:
+    """Fill empty cells with this-run Job result / Tools used lines, labeled run facts."""
+    from skillgate_ai.span_facts import _argv_of, _parse_calls_log, _reply_text
+
+    reply = _reply_text(outputs)
+    commands: list[dict[str, Any]] = []
+    for row in _parse_calls_log(outputs):
+        argv = _argv_of(row)
+        if argv:
+            commands.append({"argv": [str(argv[0])]})
+    files: list[dict[str, Any]] = []
+    if isinstance(outputs, list):
+        for item in outputs:
+            if not isinstance(item, Mapping):
+                continue
+            files.append(
+                {
+                    "path": item.get("path"),
+                    "content": item.get("content")
+                    or item.get("body")
+                    or item.get("extracted_text"),
+                }
+            )
+    state = {
+        "actual_output": {"body": reply},
+        "workspace_files": files,
+        "expected_outcome": expected_text or "",
+        "skill_instructions": skill_text or "",
+        "agent_trajectory": {"commands": commands},
+    }
+    questions = with_run_reason_questions(
+        [
+            {
+                "type": "choice",
+                "name": key,
+                "instructions": CHECK_CELL_LABELS.get(key) or SOFT_CELL_LABELS.get(key) or key,
+            }
+            for key in (*CHECK_CELL_ORDER, *SOFT_CELL_ORDER)
+        ],
+        state,
+    )
     apply_why_reasons(cells, answers, questions)
 
 

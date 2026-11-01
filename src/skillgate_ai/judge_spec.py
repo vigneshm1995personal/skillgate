@@ -97,6 +97,7 @@ class JudgeSpec:
     questions: tuple[JudgeQuestion, ...]
     min_confidence: float = DEFAULT_MIN_CONFIDENCE
     score_no_trigger: bool = False
+    expected_text: str = ""
 
     @property
     def extras(self) -> tuple[JudgeQuestion, ...]:

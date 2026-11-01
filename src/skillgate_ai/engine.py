@@ -920,7 +920,16 @@ def _run_task(
                     task, sandbox.workspace, baseline=file_baseline
                 )
                 spec = (
-                    spec_for_task(skill_root, {"id": task.id, "judge": judged or {}})
+                    spec_for_task(
+                        skill_root,
+                        {
+                            "id": task.id,
+                            "judge": judged or {},
+                            "prompt": task.prompt,
+                            "name": getattr(task, "name", "") or "",
+                            "scenario": getattr(task, "scenario", "") or "",
+                        },
+                    )
                     if skill_root is not None
                     else builtin_spec()
                 )

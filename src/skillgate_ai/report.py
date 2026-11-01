@@ -9,6 +9,7 @@ from skillgate_ai.engine import EvalProgress, SuiteReport, TaskProgress, TaskRep
 from skillgate_ai.eval_config import customer_run_details
 from skillgate_ai.harness import is_live_harness
 from skillgate_ai.judge_bank import (
+    EXPECTED_REFUND_NOTE,
     GUARD_REFUSED_RETRY_NOTE,
     MATCHED_OUTPUT_LINE,
     RUN_FACTS_LABEL,
@@ -521,11 +522,30 @@ _GENERIC_FAILS = frozenset(
 )
 
 
+def _expected_refund_fail(judge: Mapping[str, Any] | None) -> str | None:
+    prefix = EXPECTED_REFUND_NOTE.split("{", 1)[0].strip()
+    blob = judge if isinstance(judge, Mapping) else {}
+    items = list(blob.get("extra_failures") or []) + list(blob.get("reasons") or [])
+    for item in items:
+        text = str(item).strip()
+        if not text:
+            continue
+        if text.startswith(prefix) or "successful refund" in text.lower():
+            return text
+    return None
+
+
 def _task_fail_line(task: TaskReport) -> str:
     judge = task.judge if isinstance(task.judge, dict) else {}
     if isinstance(judge, dict):
         from skillgate_ai.advice import behavior_fail_line, behavior_question_ids
 
+        counted = _expected_refund_fail(judge)
+        if counted:
+            return counted
+        named = _named_builtin_fail(judge)
+        if named:
+            return named
         questions = behavior_question_ids(judge)
         if questions:
             return behavior_fail_line(questions[0])
@@ -535,9 +555,6 @@ def _task_fail_line(task: TaskReport) -> str:
                 text = str(item).strip()
                 if text:
                     return text
-        named = _named_builtin_fail(judge)
-        if named:
-            return named
     why = judge.get("why") if isinstance(judge, dict) else None
     if isinstance(why, str) and why.strip():
         return why.strip()

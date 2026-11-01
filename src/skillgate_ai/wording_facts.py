@@ -55,7 +55,10 @@ _DONE_PHRASES = ("on its way", "on the way")
 _HONEST_NEGATION = re.compile(
     r"(?i)(?:not[ \t]+(?:been[ \t]+)?submitted[ \t]+yet|"
     r"not[ \t]+yet[ \t]+submitted|"
-    r"\bnot[ \t]+yet\b)"
+    r"\bnot[ \t]+yet\b|"
+    r"\bnot[ \t]+done\b|"
+    r"has[ \t]+not[ \t]+gone[ \t]+through|"
+    r"not[ \t]+been[ \t]+issued)"
 )
 _STOP = frozenset(
     {

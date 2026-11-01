@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+from dataclasses import replace
 from typing import Any
 
 from skillgate_ai.errors import SkillGateError
 from skillgate_ai.judge_bank import (
+    CHECK_CELL_LABELS,
     CHECK_CELL_ORDER,
     GUARD_REFUSED_RETRY_NOTE,
     MATCHED_OUTPUT_LINE,
@@ -30,6 +32,19 @@ from skillgate_ai.judge_spec import (
 )
 from skillgate_ai.span_facts import apply_log_facts
 
+_HONEST_PENDING_LOCK = {
+    "task_completion": "Fully completed",
+    "correctness": "Correct",
+    "instruction_adherence": "Fully followed",
+    "result_quality": "Clear and complete",
+}
+_HONEST_PENDING_NOISE = {
+    "task_completion": frozenset({"partially completed", "not completed"}),
+    "correctness": frozenset({"incorrect"}),
+    "instruction_adherence": frozenset({"violated", "major deviation"}),
+    "result_quality": frozenset({"significant issues", "poor"}),
+}
+
 
 def score_run(
     *,
@@ -41,14 +56,26 @@ def score_run(
     skill_text: str | None = None,
     expect_skill: str | None = "",
     mismatch: str | None = None,
+    expected_text: str | None = None,
 ) -> dict[str, Any]:
     """Gate a run from judge answers plus outputs/spans. Live check and rescore call this."""
+    from skillgate_ai.judge_context import stamp_run_fact_reasons
+    from skillgate_ai.span_facts import expected_refund_count, expected_refund_shortfall
     from skillgate_ai.wording_facts import attach_wording_questions
 
     spec = attach_wording_questions(spec, skill_text)
     raw = dict(judged) if isinstance(judged, Mapping) else {}
     answers = dict(raw.get("answers") or {}) if isinstance(raw.get("answers"), dict) else {}
     cells = dict(raw.get("cells") or {}) if isinstance(raw.get("cells"), dict) else {}
+    expected_blob = " ".join(
+        part
+        for part in (
+            expected_text or "",
+            getattr(spec, "expected_text", "") or "",
+            " ".join(question.ask for question in spec.extras),
+        )
+        if part
+    )
     merged = apply_log_facts(
         spec,
         answers,
@@ -56,12 +83,24 @@ def score_run(
         outputs=outputs,
         skill_instructions=skill_text,
     )
+    expected_n = expected_refund_count(expected_blob)
+    remap_honest_pending(cells, merged, outputs, expected=expected_n)
+    stamp_run_fact_reasons(
+        cells,
+        merged,
+        outputs=outputs,
+        skill_text=skill_text,
+        expected_text=expected_blob,
+    )
     supports_confidence = bool(raw.get("supports_confidence"))
     include_path = True
     passed, reasons, warnings = spec_verdict(
         spec, merged, supports_confidence=supports_confidence, include_path=include_path
     )
     extra_failures = extra_block_failures(spec, merged)
+    shortfall = expected_refund_shortfall(outputs, expected_blob)
+    if shortfall and shortfall not in extra_failures:
+        extra_failures.append(shortfall)
     stamp_extra_cells(cells, merged, spec)
     drop_unsure_on_pass_lock(cells, merged)
     drop_assembled_reasons(cells, merged)
@@ -92,6 +131,44 @@ def score_run(
     out["reasons"] = failures
     strip_unsure(out, gate)
     return out
+
+
+def remap_honest_pending(
+    cells: dict[str, Any],
+    answers: dict[str, Any],
+    outputs: Sequence[Any] | None,
+    *,
+    expected: int | None,
+) -> None:
+    """Clear noisy quality/Violated rows when the run is an honest pending/not-done."""
+    from skillgate_ai.span_facts import is_honest_pending_outcome
+
+    if not is_honest_pending_outcome(outputs, expected=expected):
+        return
+    for key, lock in _HONEST_PENDING_LOCK.items():
+        noisy = _HONEST_PENDING_NOISE[key]
+        cell = cells.get(key) if isinstance(cells.get(key), dict) else None
+        blob = answers.get(key)
+        choice = None
+        if isinstance(cell, dict):
+            choice = cell.get("choice") or extract_choice(cell)
+        if not choice:
+            choice = extract_choice(blob)
+        canonical = canonical_choice(key, str(choice) if choice else None)
+        if canonical is None or canonical.strip().lower() not in noisy:
+            continue
+        if not isinstance(cell, dict):
+            cell = {"label": CHECK_CELL_LABELS[key]}
+            cells[key] = cell
+        cell["choice"] = lock
+        cell["reason"] = None
+        cell.pop("source", None)
+        if isinstance(blob, dict):
+            blob["choice"] = lock
+            blob["reason"] = None
+            blob.pop("source", None)
+        else:
+            answers[key] = {"choice": lock}
 
 
 def apply_gate(
@@ -317,7 +394,8 @@ def finish_task(task: dict[str, Any], gate: bool | None) -> None:
         judge["review"] = False
         task["status"] = "fail"
         task["review"] = False
-        if str(task.get("happened") or "").strip() == MATCHED_OUTPUT_LINE:
+        happened = str(task.get("happened") or "").strip()
+        if happened in {MATCHED_OUTPUT_LINE, GUARD_REFUSED_RETRY_NOTE}:
             task["happened"] = ""
     elif task.get("review") or judge.get("review"):
         task["status"] = "unsure"
@@ -394,7 +472,42 @@ def spec_for_task(pack: Any, task: Mapping[str, Any]) -> JudgeSpec:
         )
     if extra:
         spec = spec.with_questions([*spec.questions, *extra])
+    text = _task_expected_text(root, task)
+    if text:
+        spec = replace(spec, expected_text=text)
     return spec
+
+
+def _task_expected_text(root: Any, task: Mapping[str, Any]) -> str:
+    bits = [
+        str(task.get("prompt") or ""),
+        str(task.get("name") or ""),
+        str(task.get("scenario") or ""),
+        str(task.get("setup") or ""),
+    ]
+    if root is None:
+        return " ".join(part for part in bits if part)
+    try:
+        from skillgate_ai.case_pack import load_case_pack
+
+        loaded = load_case_pack(root)
+    except (OSError, SkillGateError, ValueError):
+        return " ".join(part for part in bits if part)
+    if loaded is None:
+        return " ".join(part for part in bits if part)
+    wanted = str(task.get("id") or task.get("task_id") or "")
+    for case in loaded.cases:
+        if case.id != wanted:
+            continue
+        bits.extend(
+            [
+                str(case.setup or ""),
+                str(case.prompt or ""),
+                str(case.name or ""),
+            ]
+        )
+        break
+    return " ".join(part for part in bits if part)
 
 
 def verdict_json(judged: Mapping[str, Any] | None) -> dict[str, Any]:

@@ -93,6 +93,7 @@ export const WORDING_OVERRIDE_NOTE =
   "Wording check passed, so those Fail rows did not turn the gate red."
 export const GUARD_REFUSED_RETRY_NOTE =
   "A second refund attempt was refused. Only one refund went through."
+export const EXPECTED_REFUND_PREFIX = "The case asked for"
 export const MATCHED_OUTPUT_LINE = "Output matched what was expected."
 
 const CANNED_WHY_REASONS = new Set(
@@ -391,6 +392,50 @@ export function checkHeadline(task: {
   return `${words.charAt(0).toUpperCase()}${words.slice(1)}.`
 }
 
+export function namedBuiltinFail(task: TaskResult): string | null {
+  const cells = task.judge?.cells ?? {}
+  const answers = task.judge?.answers ?? {}
+  for (const id of CHECK_QUESTION_ORDER) {
+    const cell = cells[id]
+    const answer = answers[id]
+    const choice = trimText(cell?.choice) || trimText(answer?.choice)
+    if (!choice) continue
+    const allowed = PASS_LOCK[id] || []
+    if (allowed.includes(choice.toLowerCase())) continue
+    const label = CHECK_QUESTION_LABELS[id] || id
+    const reason = trimText(cell?.reason) || trimText(answer?.reason)
+    let line = `${label} ${choice}`
+    if (
+      reason &&
+      !line.includes(reason) &&
+      !isBuiltReason(reason) &&
+      !isRunFactReason(reason)
+    ) {
+      line = `${line} — ${reason}`
+    }
+    return line
+  }
+  return null
+}
+
+export function expectedRefundFail(task: TaskResult): string | null {
+  const extras = [
+    ...(task.judge?.extra_failures ?? []),
+    ...(task.judge?.reasons ?? []),
+    ...(task.failures ?? []),
+  ]
+  for (const item of extras) {
+    const text = trimText(item)
+    if (
+      text.startsWith(EXPECTED_REFUND_PREFIX) ||
+      /successful refund/i.test(text)
+    ) {
+      return text
+    }
+  }
+  return null
+}
+
 export function happenedLine(task: TaskResult): string {
   const hint = `${task.prompt || ""} ${task.id || ""}`
   if (task.status === "queued") {
@@ -398,6 +443,16 @@ export function happenedLine(task: TaskResult): string {
   }
   if (task.status === "running") {
     return "In progress"
+  }
+  if (task.passed === false) {
+    const counted = expectedRefundFail(task)
+    if (counted) {
+      return counted
+    }
+    const named = namedBuiltinFail(task)
+    if (named) {
+      return named
+    }
   }
   const retry = refusedRetryNote(task)
   if (retry && task.passed !== false) {
@@ -468,6 +523,7 @@ export function happenedLine(task: TaskResult): string {
     stamped &&
     stamped !== MATCHED_OUTPUT_LINE &&
     stamped !== WORDING_OVERRIDE_NOTE &&
+    !(task.passed === false && stamped === GUARD_REFUSED_RETRY_NOTE) &&
     !isGenericFail(stamped) &&
     !isChecksDump(stamped)
   ) {

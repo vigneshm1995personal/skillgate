@@ -140,12 +140,14 @@ OUTCOME_SCORING_NOTES = (
     "customer reply honestly says the work is pending, not done, not submitted yet, has "
     "not gone through, or that no refund was issued / no refund went through, that is "
     "Correct, Fully followed, Fully completed, and a good result — never Incorrect, "
-    "Violated, or Significant issues. Honest negation of a banned phrase (for example "
-    "'has not been submitted', 'not issued', 'no refund') follows the rules; do not treat "
-    "those sentences as Violated. A guarded single refund (a 409 lookup_required retry "
-    "where only one refund went through) is the same: Correct and a good result. Write a "
-    "short reason in your own words in the reason field for each built-in check (what you "
-    "saw on this run). Do not paste a rubric definition."
+    "Violated, or Significant issues. Do not choose Violated. Do not choose Significant "
+    "issues. Grade those honest pending / not-done cases the same way every time; a "
+    "single quality or adherence fail is wrong. Honest negation of a banned phrase (for "
+    "example 'has not been submitted', 'not issued', 'no refund') follows the rules; do "
+    "not treat those sentences as Violated. A guarded single refund (a 409 "
+    "lookup_required retry where only one refund went through) is the same: Correct and "
+    "a good result. Write a short reason in your own words in the reason field for each "
+    "built-in check (what you saw on this run). Do not paste a rubric definition."
 )
 
 OUTCOME_QUESTIONS: dict[str, dict[str, Any]] = {
@@ -210,8 +212,8 @@ OUTCOME_QUESTIONS: dict[str, dict[str, Any]] = {
             ),
             "Violated": (
                 "Clear violations of the rules or constraints. Do not choose Violated for "
-                "an honest negation of banned wording (pending, not done, not submitted, "
-                "no refund)."
+                "an honest pending / not-done / no-refund reply, or for honest negation of "
+                "banned wording (pending, not done, not submitted, no refund)."
             ),
         },
     },
@@ -238,9 +240,9 @@ OUTCOME_QUESTIONS: dict[str, dict[str, Any]] = {
             ),
             "Mostly good": "Mostly good with minor quality gaps (still Pass).",
             "Significant issues": (
-                "Significant quality issues (Fail). Do not use this for an honest pending, "
-                "held-for-review, guarded single-refund, or no-refund reply that correctly "
-                "reports the outcome."
+                "Significant quality issues (Fail). Do not choose Significant issues for "
+                "an honest pending, not-done, held-for-review, guarded single-refund, or "
+                "no-refund reply that correctly reports the outcome."
             ),
             "Poor": "Poor quality result (Fail).",
         },
@@ -280,6 +282,9 @@ WORDING_OVERRIDE_NOTE = (
 )
 GUARD_REFUSED_RETRY_NOTE = (
     "A second refund attempt was refused. Only one refund went through."
+)
+EXPECTED_REFUND_NOTE = (
+    "The case asked for {expected} successful refunds; {succeeded} went through."
 )
 MATCHED_OUTPUT_LINE = "Output matched what was expected."
 CANNED_WHY_REASONS = frozenset(

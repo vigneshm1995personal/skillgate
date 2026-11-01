@@ -1018,6 +1018,45 @@ describe("openedCheckAnswers / low confidence", () => {
     expect(row?.warning).toBe(GUARD_REFUSED_RETRY_NOTE)
   })
 
+  it("names Violated / Significant issues on a red c8, not the guard warning", () => {
+    const task: TaskResult = {
+      id: "c8",
+      passed: false,
+      status: "fail",
+      happened: GUARD_REFUSED_RETRY_NOTE,
+      judge: {
+        warnings: [GUARD_REFUSED_RETRY_NOTE],
+        extra_failures: [],
+        answers: {
+          q0: { probability: 1, source: "log", warning: GUARD_REFUSED_RETRY_NOTE },
+          instruction_adherence: { choice: "Violated" },
+          result_quality: { choice: "Significant issues" },
+        },
+        cells: {
+          q0: {
+            label: "no duplicate refund calls",
+            choice: "Yes",
+            probability: 1,
+            warning: GUARD_REFUSED_RETRY_NOTE,
+            passed: true,
+          },
+          instruction_adherence: {
+            label: "Followed the rules?",
+            choice: "Violated",
+            reason: "The reply broke a listed rule.",
+          },
+          result_quality: {
+            label: "Delivered a good result?",
+            choice: "Significant issues",
+          },
+        },
+      },
+    }
+    const line = happenedLine(task)
+    expect(line).not.toBe(GUARD_REFUSED_RETRY_NOTE)
+    expect(line).toMatch(/Violated|Significant issues/)
+  })
+
   it("does not say Output matched what was expected on a failing row", () => {
     expect(
       happenedLine({

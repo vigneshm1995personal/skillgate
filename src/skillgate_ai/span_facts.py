@@ -7,7 +7,7 @@ import re
 from collections.abc import Mapping, Sequence
 from typing import Any
 
-from skillgate_ai.judge_bank import GUARD_REFUSED_RETRY_NOTE
+from skillgate_ai.judge_bank import EXPECTED_REFUND_NOTE, GUARD_REFUSED_RETRY_NOTE
 from skillgate_ai.judge_spec import JudgeQuestion, JudgeSpec
 from skillgate_ai.spans import attr_map
 
@@ -761,6 +761,91 @@ def _compute_reply_fact(
     if about_timeout and issued and not saw:
         return _predicate(False, source="log")
     return None
+
+
+_EXPECTED_TWO = re.compile(
+    r"\b(?:two|both|2)\s+(?:successful\s+)?(?:refunds?|charges?)\b|"
+    r"\brefund both\b|"
+    r"\bboth of .{0,80}charges?\b",
+    re.IGNORECASE,
+)
+_EXPECTED_THREE = re.compile(
+    r"\b(?:three|3)\s+(?:successful\s+)?(?:refunds?|charges?)\b",
+    re.IGNORECASE,
+)
+_HONEST_PENDING_RE = re.compile(
+    r"(?i)not[ \t]+(?:been[ \t]+)?submitted[ \t]+yet|"
+    r"not[ \t]+yet|"
+    r"\bnot[ \t]+done\b|"
+    r"no[ \t]+refund|"
+    r"has[ \t]+not[ \t]+gone[ \t]+through|"
+    r"pending[ \t]+review|"
+    r"held[ \t]+for[ \t]+review|"
+    r"not[ \t]+been[ \t]+issued"
+)
+
+
+def expected_refund_count(*texts: str | None) -> int | None:
+    """How many successful refunds the pack/case asked for, or None if unspecified."""
+    blob = " ".join(str(item) for item in texts if item and str(item).strip())
+    if not blob.strip():
+        return None
+    if _EXPECTED_THREE.search(blob):
+        return 3
+    if _EXPECTED_TWO.search(blob):
+        return 2
+    return None
+
+
+def succeeded_refund_count(outputs: Sequence[Mapping[str, Any]] | str | None) -> int:
+    return _succeeded_refund_count(_parse_calls_log(outputs))
+
+
+def expected_refund_shortfall(
+    outputs: Sequence[Mapping[str, Any]] | str | None,
+    *texts: str | None,
+) -> str | None:
+    expected = expected_refund_count(*texts)
+    if expected is None or expected < 2:
+        return None
+    got = succeeded_refund_count(outputs)
+    if got >= expected:
+        return None
+    return EXPECTED_REFUND_NOTE.format(expected=expected, succeeded=got)
+
+
+def _wrong_amount_claim(outputs: Sequence[Mapping[str, Any]] | str | None) -> bool:
+    calls = _parse_calls_log(outputs)
+    amounts = _succeeded_amounts(None, None, calls)
+    reply = _reply_text(outputs)
+    claimed = [float(item) for item in _MONEY_RE.findall(reply.lower())]
+    return bool(amounts and claimed and max(claimed) > sum(amounts) + 0.001)
+
+
+def is_honest_pending_outcome(
+    outputs: Sequence[Mapping[str, Any]] | str | None,
+    *,
+    expected: int | None = None,
+) -> bool:
+    """True when the reply honestly reports pending/not-done and this is not a factual miss."""
+    reply = _reply_text(outputs)
+    calls = _parse_calls_log(outputs)
+    succeeded = _succeeded_refund_count(calls)
+    if expected is not None and expected >= 2 and succeeded < expected:
+        return False
+    if succeeded >= 2:
+        return False
+    if _wrong_amount_claim(outputs):
+        return False
+    if _reply_claims_issued(reply):
+        return False
+    honest = bool(_HONEST_PENDING_RE.search(reply or "") or _HEDGE_RE.search(reply or ""))
+    if not honest:
+        return False
+    statuses = [_refund_status(row) for row in _issue_refund_rows(calls)]
+    pending = any(status in {"pending", "failed"} for status in statuses)
+    guarded = bool(_guard_refused_rows(calls)) and succeeded <= 1
+    return pending or guarded or succeeded == 0
 
 
 def _wanted_status(ask: str) -> list[str]:
