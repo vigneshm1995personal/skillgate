@@ -1,0 +1,209 @@
+{
+  "id": "notyet",
+  "task_id": "notyet",
+  "name": "notyet",
+  "prompt": "File the refund reply: copy draft.txt to output/reply.txt verbatim.",
+  "expect_skill": "reply-guard4",
+  "selected_skill": "reply-guard4",
+  "passed": false,
+  "status": "fail",
+  "review": false,
+  "failures": [
+    "Followed the rules? Violated (need Fully followed or Minor deviation)"
+  ],
+  "outputs": [
+    {
+      "path": "output/reply.txt",
+      "content": "Hi Dana, the refund is not yet submitted. USD 0.00 has been returned so far. Best, Support\n"
+    }
+  ],
+  "spans": [],
+  "scores": [
+    {
+      "scorer": "skill_trigger",
+      "passed": true,
+      "headline": "Skill triggered",
+      "detail": "Triggered `reply-guard4`"
+    }
+  ],
+  "judge": {
+    "status": "completed",
+    "passed": false,
+    "review": false,
+    "supports_confidence": true,
+    "reasons": [
+      "Followed the rules? Violated (need Fully followed or Minor deviation)"
+    ],
+    "extra_failures": [],
+    "warnings": [],
+    "answers": {
+      "task_completion": {
+        "choice": "Fully completed",
+        "confidence": 0.64
+      },
+      "correctness": {
+        "choice": "Correct",
+        "confidence": 0.6
+      },
+      "instruction_adherence": {
+        "choice": "Violated",
+        "confidence": 0.36
+      },
+      "evidence_action_validity": {
+        "choice": "Fully supported",
+        "confidence": 0.75
+      },
+      "result_quality": {
+        "choice": "Clear and complete",
+        "confidence": 0.35
+      },
+      "wording": {
+        "choice": "Yes",
+        "reason": "The reply follows the skill's wording.",
+        "probability": 1.0,
+        "source": "text",
+        "passed": true
+      },
+      "run_facts_job_result": {
+        "choice": "Job result in the reply: Hi Dana, the refund is not yet submitted. USD 0.00 has been returned so far. Best, Supp\u2026",
+        "reason": "Job result in the reply: Hi Dana, the refund is not yet submitted. USD 0.00 has been returned so far. Best, Supp\u2026",
+        "source": "run",
+        "passed": true
+      }
+    },
+    "cells": {
+      "task_completion": {
+        "label": "Got the job done?",
+        "choice": "Fully completed",
+        "confidence": 0.64
+      },
+      "correctness": {
+        "label": "Got it right?",
+        "choice": "Correct",
+        "confidence": 0.6
+      },
+      "instruction_adherence": {
+        "label": "Followed the rules?",
+        "choice": "Violated",
+        "confidence": 0.36
+      },
+      "evidence_action_validity": {
+        "label": "Used the right evidence/actions?",
+        "choice": "Fully supported",
+        "confidence": 0.75
+      },
+      "result_quality": {
+        "label": "Delivered a good result?",
+        "choice": "Clear and complete",
+        "confidence": 0.35
+      },
+      "path_efficiency": {
+        "label": "How it ran",
+        "choice": "Acceptable",
+        "confidence": 0.45
+      },
+      "wording": {
+        "label": "The reply follows the skill's wording: do not use submitted, I've submitted, we've submitted, processed, issued, sent, started, initiated, completed, on its way.",
+        "choice": "Yes",
+        "reason": "The reply follows the skill's wording.",
+        "probability": 1.0,
+        "source": "text",
+        "passed": true
+      },
+      "run_facts_job_result": {
+        "label": "Job result",
+        "choice": "Job result in the reply: Hi Dana, the refund is not yet submitted. USD 0.00 has been returned so far. Best, Supp\u2026",
+        "reason": "Job result in the reply: Hi Dana, the refund is not yet submitted. USD 0.00 has been returned so far. Best, Supp\u2026",
+        "source": "run",
+        "passed": true
+      }
+    },
+    "questions": {
+      "wording": {
+        "instructions": "The reply follows the skill's wording: do not use submitted, I've submitted, we've submitted, processed, issued, sent, started, initiated, completed, on its way.",
+        "type": "predicate"
+      }
+    },
+    "votes": [
+      {
+        "task_completion": {
+          "choice": "Fully completed",
+          "confidence": 0.58
+        },
+        "correctness": {
+          "choice": "Correct",
+          "confidence": 0.52
+        },
+        "instruction_adherence": {
+          "choice": "Violated",
+          "confidence": 0.32
+        },
+        "evidence_action_validity": {
+          "choice": "Fully supported",
+          "confidence": 0.63
+        },
+        "result_quality": {
+          "choice": "Clear and complete",
+          "confidence": 0.33
+        },
+        "path_efficiency": {
+          "choice": "Acceptable",
+          "confidence": 0.43
+        }
+      },
+      {
+        "task_completion": {
+          "choice": "Fully completed",
+          "confidence": 0.6
+        },
+        "correctness": {
+          "choice": "Correct",
+          "confidence": 0.55
+        },
+        "instruction_adherence": {
+          "choice": "Violated",
+          "confidence": 0.32
+        },
+        "evidence_action_validity": {
+          "choice": "Fully supported",
+          "confidence": 0.75
+        },
+        "result_quality": {
+          "choice": "Clear and complete",
+          "confidence": 0.28
+        },
+        "path_efficiency": {
+          "choice": "Acceptable",
+          "confidence": 0.45
+        }
+      },
+      {
+        "task_completion": {
+          "choice": "Fully completed",
+          "confidence": 0.64
+        },
+        "correctness": {
+          "choice": "Correct",
+          "confidence": 0.6
+        },
+        "instruction_adherence": {
+          "choice": "Violated",
+          "confidence": 0.36
+        },
+        "evidence_action_validity": {
+          "choice": "Fully supported",
+          "confidence": 0.73
+        },
+        "result_quality": {
+          "choice": "Clear and complete",
+          "confidence": 0.35
+        },
+        "path_efficiency": {
+          "choice": "Acceptable",
+          "confidence": 0.43
+        }
+      }
+    ]
+  },
+  "happened": "Followed the rules? Violated"
+}

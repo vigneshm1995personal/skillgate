@@ -8,8 +8,39 @@ from typing import Any
 from skillgate_ai.engine import EvalProgress, SuiteReport, TaskProgress, TaskReport
 from skillgate_ai.eval_config import customer_run_details
 from skillgate_ai.harness import is_live_harness
-from skillgate_ai.judge_bank import UNSURE_REVIEW
+from skillgate_ai.judge_bank import (
+    AMOUNT_MISMATCH_NOTE,
+    EXPECTED_REFUND_NOTE,
+    GUARD_REFUSED_RETRY_NOTE,
+    MATCHED_OUTPUT_LINE,
+    RUN_FACTS_LABEL,
+    UNSURE_REVIEW,
+    WORDING_OVERRIDE_NOTE,
+    is_built_reason,
+    is_run_fact_reason,
+    votes_line,
+)
 from skillgate_ai.metrics import suite_metrics_summary
+
+
+def _task_has_guard_warning(task: TaskReport) -> bool:
+    judge = task.judge if isinstance(task.judge, dict) else {}
+    warnings = judge.get("warnings") if isinstance(judge, dict) else []
+    if any(str(item).strip() == GUARD_REFUSED_RETRY_NOTE for item in (warnings or [])):
+        return True
+    cells = judge.get("cells") if isinstance(judge.get("cells"), dict) else {}
+    answers = judge.get("answers") if isinstance(judge.get("answers"), dict) else {}
+    blobs = [
+        *(cells.values() if isinstance(cells, dict) else ()),
+        *(answers.values() if isinstance(answers, dict) else ()),
+    ]
+    for blob in blobs:
+        if (
+            isinstance(blob, dict)
+            and str(blob.get("warning") or "").strip() == GUARD_REFUSED_RETRY_NOTE
+        ):
+            return True
+    return False
 
 
 def _report_gate(report: SuiteReport) -> str:
@@ -19,6 +50,8 @@ def _report_gate(report: SuiteReport) -> str:
         return "not scored"
     if any(getattr(task, "review", False) for task in report.tasks):
         return "needs review"
+    if report.passed is True and any(_task_has_guard_warning(task) for task in report.tasks):
+        return "warning"
     return "green"
 
 
@@ -51,10 +84,14 @@ def format_cli(report: SuiteReport) -> str:
             lines.append(f"  REVIEW  {task.task_id} — {UNSURE_REVIEW}")
             lines.extend(f"       {item}" for item in _extra_source_lines(task))
             continue
+        if task.passed is True and _task_has_guard_warning(task):
+            lines.append(f"  WARNING  {task.task_id} — {GUARD_REFUSED_RETRY_NOTE}")
+            lines.extend(f"       {item}" for item in _extra_source_lines(task))
+            continue
         if task.passed is True:
             lines.append(f"  PASS  {task.task_id}")
             for warning in _task_warnings(task):
-                if warning == UNSURE_REVIEW:
+                if warning in {UNSURE_REVIEW, WORDING_OVERRIDE_NOTE}:
                     continue
                 lines.append(f"       {warning}")
             lines.extend(f"       {item}" for item in _extra_source_lines(task))
@@ -66,14 +103,18 @@ def format_cli(report: SuiteReport) -> str:
         lines.append(f"  FAIL  {task.task_id} — {why}")
         lines.extend(f"       {item}" for item in _extra_source_lines(task))
         if task.advice:
-            lines.append(f"       why:  {task.advice.why}")
-            lines.append(f"       fix:  {task.advice.change}")
+            advice_why = str(task.advice.why or "").strip()
+            if not _is_q0_no_summary(advice_why, task):
+                lines.append(f"       why:  {advice_why}")
+                lines.append(f"       fix:  {task.advice.change}")
     lines.append("")
     if raw_gate == "needs review":
         unsure = ", ".join(
             t.task_id for t in report.tasks if getattr(t, "review", False)
         )
         lines.append(f"Gate needs review. Unsure tasks: {unsure}")
+    elif raw_gate == "warning":
+        lines.append("Gate is warning.")
     elif report.passed is True:
         lines.append("Gate is green.")
     elif report.passed is None:
@@ -113,6 +154,9 @@ def format_github(report: SuiteReport) -> str:
     elif raw_gate == "needs review":
         gate = "NEEDS REVIEW"
         emoji = "⚪"
+    elif raw_gate == "warning":
+        gate = "WARNING"
+        emoji = "🟡"
     else:
         gate = "NOT SCORED"
         emoji = "⚪"
@@ -136,6 +180,8 @@ def format_github(report: SuiteReport) -> str:
     for task in report.tasks:
         if task.passed is True and getattr(task, "review", False):
             result = "review"
+        elif task.passed is True and _task_has_guard_warning(task):
+            result = "WARNING"
         elif task.passed is True:
             result = "pass"
         elif task.passed is False:
@@ -144,7 +190,11 @@ def format_github(report: SuiteReport) -> str:
             result = "not scored"
         if task.passed is False:
             what = _task_fail_line(task)
-            extra = "; ".join(task.failures[1:]) if len(task.failures) > 1 else ""
+            extra = "; ".join(
+                str(item)
+                for item in task.failures[1:]
+                if str(item).strip() and not _is_q0_no_summary(str(item), task)
+            )
             if extra:
                 what = f"{what}; {extra}"
         else:
@@ -155,7 +205,7 @@ def format_github(report: SuiteReport) -> str:
         lines += ["", "### Failed tasks — what to change", ""]
         for task in failed:
             lines.append(f"**{task.task_id}** — {_task_fail_line(task)}")
-            if task.advice:
+            if task.advice and not _is_q0_no_summary(task.advice.why, task):
                 lines.append("")
                 lines.append(task.advice.why)
                 lines.append("")
@@ -272,7 +322,15 @@ def _progress_task_to_dict(task: TaskProgress) -> dict:
             usage=task.usage,
         )
     )
-    payload["status"] = task.status
+    if task.status == "done" and payload.get("status") in {
+        "warning",
+        "unsure",
+        "fail",
+        "pass",
+    }:
+        pass
+    else:
+        payload["status"] = task.status
     payload["review"] = bool(getattr(task, "review", False))
     payload["skipped"] = bool(task.skipped)
     payload.pop("advice", None)
@@ -311,13 +369,53 @@ def _task_status(task: TaskReport) -> str:
         return "fail"
     if getattr(task, "review", False):
         return "unsure"
+    if _task_has_guard_warning(task):
+        return "warning"
     return "pass"
+
+
+def _sanitize_judge(task: TaskReport) -> dict | None:
+    judge = task.judge
+    if not isinstance(judge, dict):
+        return judge
+    out = dict(judge)
+    stale = {WORDING_OVERRIDE_NOTE}
+    decided = task.passed is True or task.passed is False
+    if decided and not getattr(task, "review", False):
+        stale.add(UNSURE_REVIEW)
+    out["warnings"] = [
+        str(item).strip()
+        for item in (out.get("warnings") or [])
+        if str(item).strip() and str(item).strip() not in stale
+    ]
+    if decided and not getattr(task, "review", False):
+        cells = out.get("cells") if isinstance(out.get("cells"), dict) else {}
+        cleaned: dict[str, Any] = {}
+        for key, cell in cells.items():
+            if isinstance(cell, dict) and cell.get("status") == "unsure":
+                cell = dict(cell)
+                cell.pop("status", None)
+            cleaned[key] = cell
+        if cells:
+            out["cells"] = cleaned
+        out["review"] = False
+    return out
 
 
 def _task_to_dict(task: TaskReport) -> dict:
     answers, kind = _task_check_answers(task)
-    return {
+    from skillgate_ai.run_details import (
+        agent_reply,
+        case_name,
+        case_scenario,
+        hydrate_task,
+        tool_calls,
+    )
+
+    payload = {
         "id": task.task_id,
+        "name": getattr(task, "name", "") or task.task_id,
+        "scenario": getattr(task, "scenario", "") or task.prompt,
         "prompt": task.prompt,
         "passed": task.passed,
         "review": bool(getattr(task, "review", False)),
@@ -332,7 +430,7 @@ def _task_to_dict(task: TaskReport) -> dict:
         "files": list(task.files),
         "outputs": list(getattr(task, "outputs", None) or []),
         "usage": task.usage,
-        "judge": task.judge,
+        "judge": _sanitize_judge(task),
         "metrics": getattr(task, "metrics", None),
         "model": getattr(task, "model", None),
         "happened": _task_happened(task),
@@ -350,6 +448,11 @@ def _task_to_dict(task: TaskReport) -> dict:
             for s in task.scores
         ],
     }
+    payload["name"] = case_name(payload) or payload["name"]
+    payload["scenario"] = case_scenario(payload) or payload["scenario"]
+    payload["reply"] = agent_reply(payload)
+    payload["tool_calls"] = tool_calls(payload)
+    return hydrate_task(payload)
 
 
 def _judge_stamp(report: SuiteReport) -> dict:
@@ -427,63 +530,120 @@ _GENERIC_FAILS = frozenset(
 )
 
 
+def _expected_refund_fail(judge: Mapping[str, Any] | None) -> str | None:
+    prefix = EXPECTED_REFUND_NOTE.split("{", 1)[0].strip()
+    blob = judge if isinstance(judge, Mapping) else {}
+    items = list(blob.get("extra_failures") or []) + list(blob.get("reasons") or [])
+    for item in items:
+        text = str(item).strip()
+        if not text:
+            continue
+        if text.startswith(prefix) or "successful refund" in text.lower():
+            return text
+    return None
+
+
+def _amount_mismatch_fail(judge: Mapping[str, Any] | None) -> str | None:
+    prefix = AMOUNT_MISMATCH_NOTE.split("{", 1)[0].strip()
+    blob = judge if isinstance(judge, Mapping) else {}
+    items = list(blob.get("extra_failures") or []) + list(blob.get("reasons") or [])
+    for item in items:
+        text = str(item).strip()
+        if not text:
+            continue
+        if text.startswith(prefix) or (
+            "billing/tool log" in text.lower() and "stated usd" in text.lower()
+        ):
+            return text
+    return None
+
+
+def _is_q0_no_summary(text: str | None, task: TaskReport | None = None) -> bool:
+    raw = str(text or "").strip()
+    if not raw:
+        return False
+    if ("→ No" in raw or "-> No" in raw) and (
+        raw.startswith("q") or "q0" in raw or "behavior failed this check" in raw.lower()
+    ):
+        return True
+    judge = task.judge if task is not None and isinstance(task.judge, dict) else {}
+    questions = judge.get("questions") if isinstance(judge.get("questions"), dict) else {}
+    for meta in questions.values() if isinstance(questions, dict) else ():
+        ask = ""
+        if isinstance(meta, dict):
+            ask = str(meta.get("instructions") or "").strip()
+        if ask and (raw == f"{ask} No" or raw.startswith(ask)):
+            return True
+    return False
+
+
 def _task_fail_line(task: TaskReport) -> str:
     judge = task.judge if isinstance(task.judge, dict) else {}
     if isinstance(judge, dict):
         from skillgate_ai.advice import behavior_fail_line, behavior_question_ids
 
-        questions = behavior_question_ids(judge)
-        if questions:
-            return behavior_fail_line(questions[0])
-        extras = judge.get("extra_failures")
-        if isinstance(extras, list):
-            for item in extras:
-                text = str(item).strip()
-                if text:
-                    return text
+        counted = _expected_refund_fail(judge)
+        if counted:
+            return counted
+        amount = _amount_mismatch_fail(judge)
+        if amount:
+            return amount
         named = _named_builtin_fail(judge)
         if named:
             return named
+        extras = judge.get("extra_failures")
+        extra_texts = [
+            str(item).strip()
+            for item in (extras or [])
+            if isinstance(extras, list) and str(item).strip()
+            and not _is_q0_no_summary(str(item).strip(), task)
+        ]
+        questions = behavior_question_ids(judge)
+        if questions and not named:
+            qid = str(questions[0])
+            if not qid.startswith("q") or not qid[1:].isdigit():
+                return behavior_fail_line(qid)
+        for text in extra_texts:
+            if any(
+                text.startswith(label)
+                for label in (
+                    "Got the job done?",
+                    "Got it right?",
+                    "Followed the rules?",
+                    "Used the right evidence/actions?",
+                    "Delivered a good result?",
+                )
+            ):
+                return text
+        if extra_texts:
+            return extra_texts[0]
     why = judge.get("why") if isinstance(judge, dict) else None
     if isinstance(why, str) and why.strip():
         return why.strip()
     for item in task.failures:
         text = str(item).strip()
         if text and text.lower() not in _GENERIC_FAILS:
+            if ("→ No" in text or "-> No" in text) and (
+                text.startswith("q") or "q0" in text
+            ):
+                continue
             return text
     return "This check did not pass."
 
 
 def _named_builtin_fail(judge: dict[str, Any]) -> str | None:
-    from skillgate_ai.judge_bank import (
-        CHECK_CELL_LABELS,
-        PASS_LOCK,
-        canonical_choice,
-        extract_choice,
-    )
+    from skillgate_ai.judge_bank import CHECK_CELL_LABELS
+    from skillgate_ai.score import builtin_fail_lines
 
+    lines = builtin_fail_lines(judge)
+    if lines:
+        return lines[0]
     for item in judge.get("reasons") or []:
         text = str(item).strip()
         if not text or text.lower() in _GENERIC_FAILS:
             continue
         if any(text.startswith(label) for label in CHECK_CELL_LABELS.values()):
             return text
-    cells = judge.get("cells") if isinstance(judge.get("cells"), dict) else {}
-    for key, label in CHECK_CELL_LABELS.items():
-        cell = cells.get(key) if isinstance(cells, dict) else None
-        if not isinstance(cell, dict):
-            continue
-        choice = str(cell.get("choice") or extract_choice(cell) or "").strip()
-        if not choice:
-            continue
-        canonical = canonical_choice(key, choice)
-        if canonical and canonical.strip().lower() in PASS_LOCK[key]:
-            continue
-        reason = str(cell.get("reason") or "").strip()
-        line = f"{label} {choice}"
-        if reason and reason not in line:
-            line = f"{line} — {reason}"
-        return line
     return None
 
 
@@ -491,14 +651,22 @@ def _task_happened(task: TaskReport) -> str:
     """Plain What happened line. Never blank."""
     if task.passed is None:
         return "not scored"
-    if task.passed:
-        warnings = _task_warnings(task)
-        if warnings:
-            return warnings[0]
-        if task.expect_skill is None:
-            return "No skill was picked, as expected."
-        return "Output matched what was expected."
-    return _task_fail_line(task)
+    if task.passed is False:
+        return _task_fail_line(task)
+    if getattr(task, "review", False):
+        return UNSURE_REVIEW
+    if _task_has_guard_warning(task):
+        return GUARD_REFUSED_RETRY_NOTE
+    warnings = [
+        item
+        for item in _task_warnings(task)
+        if item not in {UNSURE_REVIEW, WORDING_OVERRIDE_NOTE}
+    ]
+    if warnings:
+        return warnings[0]
+    if task.expect_skill is None:
+        return "No skill was picked, as expected."
+    return MATCHED_OUTPUT_LINE
 
 
 def _scoring_endpoint(report: SuiteReport) -> str | None:
@@ -512,7 +680,13 @@ def _scoring_endpoint(report: SuiteReport) -> str | None:
     return None
 
 
-def _cell_answer(cell: dict, answer: Any = None) -> str:
+def _cell_answer(
+    cell: dict,
+    answer: Any = None,
+    *,
+    clean_pass: bool = False,
+    hard_fail: bool = False,
+) -> str:
     merged = dict(cell)
     if isinstance(answer, dict):
         for key in ("choice", "probability", "score"):
@@ -520,7 +694,7 @@ def _cell_answer(cell: dict, answer: Any = None) -> str:
                 merged[key] = answer[key]
         if answer.get("status"):
             merged["status"] = answer.get("status")
-    if str(merged.get("status") or "") == "unsure":
+    if str(merged.get("status") or "") == "unsure" and not clean_pass and not hard_fail:
         return UNSURE_REVIEW
     choice = str(merged.get("choice") or "").strip()
     if choice:
@@ -561,16 +735,80 @@ def _task_check_answers(task: TaskReport) -> tuple[list[dict[str, str]], str]:
         else:
             pairs = ((str(cell.get("label") or ""), cell) for cell in cells)
         for key, cell in pairs:
+            if str(key).endswith("_why"):
+                continue
+            answer = answers_map.get(key)
             row = {
+                "id": key,
                 "label": str(cell.get("label") or "").strip() or "Check",
-                "answer": _cell_answer(cell, answers_map.get(key)),
+                "answer": _cell_answer(
+                    cell,
+                    answer,
+                    clean_pass=bool(task.passed and not getattr(task, "review", False)),
+                    hard_fail=task.passed is False,
+                ),
             }
-            source = _check_source(cell, answers_map.get(key), key)
+            source = _check_source(cell, answer, key)
             if source:
                 row["source"] = source
                 label = _source_label(source)
                 if label:
                     row["source_label"] = label
+            elif key in (
+                "task_completion",
+                "correctness",
+                "instruction_adherence",
+                "evidence_action_validity",
+                "result_quality",
+                "path_efficiency",
+            ):
+                row["source"] = "judge"
+                row["source_label"] = "from the judge"
+            score_val = None
+            for blob in (cell, answer if isinstance(answer, dict) else None):
+                if not isinstance(blob, dict):
+                    continue
+                for field in ("confidence", "probability", "score"):
+                    raw = blob.get(field)
+                    if isinstance(raw, (int, float)) and not isinstance(raw, bool):
+                        score_val = float(raw)
+                        break
+                if score_val is not None:
+                    break
+            if score_val is not None:
+                row["score"] = score_val
+            reason = ""
+            for blob in (cell, answer if isinstance(answer, dict) else None):
+                if not isinstance(blob, dict):
+                    continue
+                text = str(blob.get("reason") or "").strip()
+                if text:
+                    reason = text
+                    break
+            builtins = {
+                "task_completion",
+                "correctness",
+                "instruction_adherence",
+                "evidence_action_validity",
+                "result_quality",
+                "path_efficiency",
+            }
+            if reason and is_run_fact_reason(reason) and key not in builtins:
+                row["reason"] = reason
+                row["source"] = "run"
+                row["source_label"] = RUN_FACTS_LABEL
+            elif reason and is_run_fact_reason(reason) and key in builtins:
+                if row.get("source_label") == "from the judge":
+                    row.pop("source_label", None)
+                    row.pop("source", None)
+            elif reason and not is_built_reason(reason):
+                row["reason"] = reason
+            elif not reason and row.get("source_label") == "from the judge":
+                row.pop("source_label", None)
+                row.pop("source", None)
+            votes = votes_line(judge.get("votes"), key)
+            if votes:
+                row["votes"] = votes
             rows.append(row)
         return rows, "openai"
     rows: list[dict[str, str]] = []
@@ -580,31 +818,35 @@ def _task_check_answers(task: TaskReport) -> tuple[list[dict[str, str]], str]:
         extra = ""
         if score.detail and score.detail != title:
             extra = f" — {score.detail}"
-        rows.append({"label": title, "answer": f"{mark}{extra}"})
+        rows.append(
+            {
+                "label": title,
+                "answer": f"{mark}{extra}",
+                "score": 1.0 if score.passed else 0.0,
+                "reason": str(score.detail or "").strip(),
+                "source": "log/text",
+                "source_label": "from the log/text",
+            }
+        )
     return rows, "builtin"
 
 
 def _source_label(source: str | None) -> str | None:
-    raw = str(source or "").strip().lower()
-    if raw in {"text", "log/text"}:
-        return "from the log/text"
-    if raw == "log":
-        return "from the log"
-    if raw == "judge":
-        return "from the judge"
-    return None
+    from skillgate_ai.run_details import source_label
+
+    return source_label(source) or None
 
 
 def _check_source(cell: Mapping[str, Any] | None, answer: Any, key: str) -> str | None:
     from skillgate_ai.judge_bank import CHECK_CELL_ORDER, SOFT_CELL_ORDER
 
-    if key in CHECK_CELL_ORDER or key in SOFT_CELL_ORDER:
-        return None
     for blob in (cell, answer if isinstance(answer, dict) else None):
         if isinstance(blob, dict):
             raw = str(blob.get("source") or "").strip().lower()
-            if raw in {"log", "judge", "text", "log/text"}:
+            if raw in {"log", "judge", "text", "log/text", "run"}:
                 return raw
+    if key in CHECK_CELL_ORDER or key in SOFT_CELL_ORDER:
+        return "judge"
     return "judge"
 
 
@@ -616,7 +858,7 @@ def _extra_source_lines(task: TaskReport) -> list[str]:
     answers = judge.get("answers") if isinstance(judge.get("answers"), dict) else {}
     lines: list[str] = []
     for key, cell in cells.items():
-        if key in CHECK_CELL_ORDER or key in SOFT_CELL_ORDER:
+        if key in CHECK_CELL_ORDER or key in SOFT_CELL_ORDER or str(key).endswith("_why"):
             continue
         if not isinstance(cell, dict):
             continue
@@ -624,7 +866,12 @@ def _extra_source_lines(task: TaskReport) -> list[str]:
         if not source:
             continue
         label = str(cell.get("label") or key).strip()
-        choice = _cell_answer(cell, answers.get(key))
+        choice = _cell_answer(
+            cell,
+            answers.get(key),
+            clean_pass=bool(task.passed and not getattr(task, "review", False)),
+            hard_fail=task.passed is False,
+        )
         lines.append(f"{label}  {choice}  ({source})")
     return lines
 

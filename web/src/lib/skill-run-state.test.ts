@@ -11,7 +11,10 @@ import {
   pinBelongsToSkill,
   runForCheck,
   shownGateRun,
+  shownHistoryOrGate,
+  skillKeysMatch,
   skillSlotKey,
+  historyOpenPatch,
 } from "./skill-run-state"
 
 const greenGate: RunRecord = {
@@ -94,6 +97,94 @@ describe("shownGateRun / liveGateRun", () => {
     ).toBe(false)
     const older = { ...emptySkillRunSlot(), gate: greenGate, pin: redGate }
     expect(isViewingOlderRun(older, "pdf")).toBe(true)
+  })
+
+  it("opening the newest red run fills Gate when live gate was empty", () => {
+    const stub: RunRecord = {
+      ...redGate,
+      report: { skill: "pdf", passed_count: 0, task_count: 2 },
+    }
+    const opened = historyOpenPatch(emptySkillRunSlot(), {
+      ...redGate,
+      report: {
+        skill: "pdf",
+        passed_count: 0,
+        task_count: 2,
+        tasks: [{ id: "c8-duplicate", passed: false, status: "done" }],
+      },
+    })
+    expect(shownGateRun(opened, "pdf")?.id).toBe("full-red")
+    expect(shownGateRun(opened, "pdf")?.report?.tasks).toHaveLength(1)
+    expect(isViewingOlderRun(opened, "pdf")).toBe(false)
+    const replaced = historyOpenPatch(
+      { ...emptySkillRunSlot(), gate: stub },
+      opened.pin!
+    )
+    expect(shownGateRun(replaced, "pdf")?.report?.tasks).toHaveLength(1)
+  })
+
+  it("opening an older red keeps the live green gate", () => {
+    const opened = historyOpenPatch(
+      { ...emptySkillRunSlot(), gate: greenGate },
+      redGate
+    )
+    expect(shownGateRun(opened, "pdf")?.id).toBe("full-red")
+    expect(liveGateRun(opened, "pdf")?.id).toBe("full-green")
+    expect(isViewingOlderRun(opened, "pdf")).toBe(true)
+  })
+
+  it("opening a red run fills Gate before a skill is selected", () => {
+    const opened = historyOpenPatch(emptySkillRunSlot(), {
+      ...redGate,
+      report: {
+        skill: "pdf",
+        passed_count: 0,
+        task_count: 2,
+        tasks: [{ id: "c8-duplicate", passed: false, status: "done" }],
+      },
+    })
+    expect(shownGateRun(opened, "")?.id).toBe("full-red")
+    expect(shownGateRun(opened, "")?.report?.tasks).toHaveLength(1)
+  })
+
+  it("treats a path-shaped skill as the same as its folder slug", () => {
+    expect(skillKeysMatch("/tmp/.h/q10b1/skills/pdf", "pdf")).toBe(true)
+    expect(pinBelongsToSkill(redGate, "")).toBe(true)
+    expect(
+      pinBelongsToSkill(
+        { ...redGate, skill: "/tmp/.h/q10b1/skills/pdf", report: { ...redGate.report, skill: "/tmp/.h/q10b1/skills/pdf" } },
+        "pdf"
+      )
+    ).toBe(true)
+  })
+
+  it("history overlay shows a red run even when the skill slot is empty", () => {
+    expect(
+      shownHistoryOrGate(emptySkillRunSlot(), "", {
+        ...redGate,
+        report: {
+          skill: "pdf",
+          passed_count: 0,
+          task_count: 1,
+          tasks: [{ id: "c8-duplicate", passed: false, status: "done" }],
+        },
+      })?.id
+    ).toBe("full-red")
+  })
+
+  it("opening a red run matches a path-shaped skill onto the slug slot", () => {
+    const opened = historyOpenPatch(emptySkillRunSlot(), {
+      ...redGate,
+      skill: "/tmp/.h/q10b1/skills/pdf",
+      report: {
+        skill: "/tmp/.h/q10b1/skills/pdf",
+        passed_count: 0,
+        task_count: 1,
+        tasks: [{ id: "c8-duplicate", passed: false, status: "done" }],
+      },
+    })
+    expect(shownGateRun(opened, "pdf")?.id).toBe("full-red")
+    expect(shownGateRun(opened, "pdf")?.report?.tasks).toHaveLength(1)
   })
 })
 

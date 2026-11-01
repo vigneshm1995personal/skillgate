@@ -127,12 +127,10 @@ def test_low_confidence_majority_fail_is_unsure_not_a_gate_fail() -> None:
         ]
     )
     judged = _score(_judge(post))
-    assert judged["passed"] is True
-    assert judged["review"] is True
+    assert judged["passed"] is False
+    assert not judged.get("review")
     assert judged["answers"]["task_completion"]["choice"] == "Not completed"
-    assert judged["cells"]["task_completion"]["status"] == "unsure"
-    assert UNSURE_REVIEW in judged["warnings"]
-    assert judged["reasons"] == []
+    assert any("Not completed" in str(item) for item in (judged.get("reasons") or []))
     assert len(post.calls) == 3
 
 
@@ -187,29 +185,26 @@ def test_high_confidence_pass_does_not_flip_to_review() -> None:
 
 def test_fixture_c6_success_low_conf_fail_is_review_not_red() -> None:
     blob = _load("c6-success-rep3.json")
-    passed, reasons, warnings, _ = _rescore(blob)
+    passed, reasons, _warnings, _ = _rescore(blob)
     assert blob["passed"] is False
-    assert passed is True
-    assert reasons == []
-    assert UNSURE_REVIEW in warnings
+    assert passed is False
+    assert any("Major deviation" in item or "Significant issues" in item for item in reasons)
 
 
 def test_fixture_c4_rep2_got_it_right_at_016_is_review() -> None:
     blob = _load("c4-partial-rep2.json")
     assert blob["answers"]["correctness"]["confidence"] == 0.16
-    passed, reasons, warnings, _ = _rescore(blob)
-    assert passed is True
-    assert reasons == []
-    assert UNSURE_REVIEW in warnings
+    passed, reasons, _warnings, _ = _rescore(blob)
+    assert passed is False
+    assert any("Incorrect" in item for item in reasons)
 
 
 def test_fixture_c2_rep3_low_conf_fail_is_review() -> None:
     blob = _load("c2-timeout-rep3.json")
-    passed, reasons, warnings, _ = _rescore(blob)
+    passed, reasons, _warnings, _ = _rescore(blob)
     assert blob["passed"] is False
-    assert passed is True
-    assert reasons == []
-    assert UNSURE_REVIEW in warnings
+    assert passed is False
+    assert reasons
 
 
 def test_previously_passing_fixture_does_not_flip_to_fail() -> None:

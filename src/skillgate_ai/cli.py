@@ -425,6 +425,71 @@ _KEY_ENV_HELP = (
 )
 
 
+@app.command("rescore")
+def rescore_cmd(
+    run_id: str = typer.Argument(..., help="Saved run id"),
+    pack: Path | None = typer.Option(None, "--pack", help="Skill pack"),
+    json_out: bool = typer.Option(False, "--json", help="Machine JSON"),
+    case_id: str | None = typer.Option(
+        None, "--case", help="Show this case only (name or id)"
+    ),
+) -> None:
+    """Re-score a saved run from outputs and spans. Does not call the agent."""
+    from skillgate_ai.catalog import catalog_entries
+    from skillgate_ai.rescore import find_history_run, rescore_saved_run
+    from skillgate_ai.run_details import format_run_show, redact_run_value
+
+    try:
+        dest = None
+        row = None
+        if pack is not None:
+            dest = _resolve_pack_arg(pack)
+            row = find_history_run(dest, run_id)
+        else:
+            for entry in catalog_entries(_boot()):
+                path = Path(entry["absolute"])
+                found = find_history_run(path, run_id)
+                if found is not None:
+                    row = found
+                    dest = path
+                    break
+            if row is None:
+                dest = _resolve_pack_arg(None)
+                row = find_history_run(dest, run_id)
+        if row is None or dest is None:
+            raise SkillGateError(f"No run named {run_id}.", exit_code=2)
+        scored = rescore_saved_run(dest, row)
+        from uuid import uuid4
+
+        from skillgate_ai.history import append_eval
+
+        new_id = uuid4().hex[:12]
+        scored = dict(scored)
+        scored["run_id"] = new_id
+        append_eval(
+            dest,
+            run_id=new_id,
+            passed=scored.get("passed") if isinstance(scored.get("passed"), bool) else None,
+            report=scored.get("report") if isinstance(scored.get("report"), dict) else None,
+        )
+    except SkillGateError as exc:
+        console.print(exc.render())
+        raise typer.Exit(exc.exit_code) from None
+    if json_out:
+        _emit_json(redact_run_value(scored))
+    else:
+        try:
+            console.print(format_run_show(scored, case_id=case_id, detail=True))
+        except SkillGateError as exc:
+            console.print(exc.render())
+            raise typer.Exit(exc.exit_code) from None
+    if scored.get("passed") is False:
+        raise typer.Exit(1)
+    if scored.get("passed") is True:
+        raise typer.Exit(0)
+    raise typer.Exit(2)
+
+
 @app.command("check")
 def check_pack(
     pack: Path = typer.Argument(..., help="Skill pack directory (SKILL.md + evals/)"),

@@ -19,6 +19,7 @@ from test_qa_56_round4 import (
 
 from skillgate_ai.engine import SuiteReport, TaskReport, _live_verdict, stabilize_adherence_review
 from skillgate_ai.ingest import ingest_skill
+from skillgate_ai.judge_bank import outcome_verdict
 from skillgate_ai.judge_spec import extra_question_passed, spec_verdict
 from skillgate_ai.report import format_cli, report_to_dict
 from skillgate_ai.scorers import Score
@@ -128,7 +129,10 @@ def test_q13_c3_pending_submitted_is_red_from_the_text() -> None:
     assert merged["q0"]["source"] == "text"
     passed, reasons, _ = spec_verdict(spec, merged, supports_confidence=True)
     assert passed is False
-    assert any("pending refund done" in item.lower() for item in reasons)
+    assert any(
+        "pending refund done" in item.lower() or "banned wording" in item.lower()
+        for item in reasons
+    )
     judged = {
         "status": "completed",
         "passed": True,
@@ -608,6 +612,88 @@ def test_missing_reply_is_red_without_a_connector_pack() -> None:
     assert not any("banned wording" in item.lower() for item in failures)
 
 
+def test_wording_extra_does_not_override_judge_fails() -> None:
+    from skillgate_ai.judge_bank import WORDING_OVERRIDE_NOTE
+    from skillgate_ai.report import format_cli
+    from skillgate_ai.run_details import format_run_show
+
+    ask = wording_ask(compile_wording_rules(SKILL_BOTPRESS_4B_FULL))
+    reply = "The refund has not been submitted yet. USD 0.00 has been returned so far."
+    facts = _wording_on(SKILL_BOTPRESS_4B_FULL, reply)
+    judged = _judge_wording_red(extra_ok=True, extra_source="text", extra_label=ask)
+    judged["answers"]["q0"] = {**judged["answers"]["q0"], **facts["q0"]}
+    judged["cells"]["q0"] = {**judged["cells"]["q0"], **facts["q0"]}
+    judged["reasons"] = [
+        "Delivered a good result? Significant issues (need Clear and complete)",
+    ]
+    judged["cells"]["result_quality"] = {
+        "label": "Delivered a good result?",
+        "choice": "Significant issues",
+        "confidence": 0.9,
+    }
+    judged["answers"]["result_quality"] = {"choice": "Significant issues", "confidence": 0.9}
+    judged["cells"]["correctness"]["choice"] = "Correct"
+    judged["cells"]["instruction_adherence"]["choice"] = "Fully followed"
+    judged["answers"]["correctness"] = {"choice": "Correct", "confidence": 0.91}
+    judged["answers"]["instruction_adherence"] = {
+        "choice": "Fully followed",
+        "confidence": 0.88,
+    }
+    out = stabilize_adherence_review(judged, _scores())
+    assert facts["q0"].get("honest_negation") is True
+    assert out["passed"] is not True
+    assert WORDING_OVERRIDE_NOTE not in (out.get("warnings") or [])
+    gate, failures, stamped = _live_verdict(
+        out, "ticket-deflector", det_passed=True, det_failures=[], trigger_passed=True
+    )
+    assert gate is False
+    assert any("Delivered a good result" in item for item in failures)
+    assert WORDING_OVERRIDE_NOTE not in ((stamped or {}).get("warnings") or [])
+    task = TaskReport(
+        task_id="rg4-negations",
+        prompt="pending refund",
+        expect_skill="ticket-deflector",
+        passed=False,
+        scores=_scores(),
+        selected_skill="ticket-deflector",
+        judge=stamped or out,
+        failures=list(failures),
+    )
+    report = SuiteReport(
+        suite="suite",
+        title="Refund desk",
+        skill="ticket-deflector",
+        harness="cursor-agent",
+        sandbox="local",
+        passed=False,
+        tasks=[task],
+    )
+    cli = format_cli(report)
+    assert WORDING_OVERRIDE_NOTE not in cli
+    text = format_run_show(
+        {
+            "run_id": "no-override",
+            "passed": False,
+            "report": {
+                "gate": "red",
+                "passed": False,
+                "passed_count": 0,
+                "task_count": 1,
+                "tasks": [
+                    {
+                        "id": "rg4-negations",
+                        "name": "rg4-negations",
+                        "passed": False,
+                        "judge": stamped or out,
+                    }
+                ],
+            },
+        },
+        detail=True,
+    )
+    assert WORDING_OVERRIDE_NOTE not in text
+
+
 def test_rg4_negation_stays_green_when_text_passes() -> None:
     replies = (
         "The refund has not been submitted yet. USD 0.00 has been returned so far.",
@@ -627,7 +713,48 @@ def test_rg4_negation_stays_green_when_text_passes() -> None:
                 "Got it right? Incorrect (need Correct) — used submitted",
                 "Followed the rules? Violated (need Fully followed) — banned wording",
             ],
-        ) is True
+        ) is False
+        judged = _judge_wording_red(
+            extra_ok=True, extra_source="text", extra_label=ask
+        )
+        judged["reasons"] = [
+            "Delivered a good result? Significant issues (need Clear and complete)",
+        ]
+        judged["cells"]["correctness"]["choice"] = "Correct"
+        judged["cells"]["instruction_adherence"]["choice"] = "Fully followed"
+        judged["cells"]["result_quality"] = {
+            "label": "Delivered a good result?",
+            "choice": "Significant issues",
+            "confidence": 0.9,
+        }
+        judged["answers"]["correctness"] = {"choice": "Correct", "confidence": 0.91}
+        judged["answers"]["instruction_adherence"] = {
+            "choice": "Fully followed",
+            "confidence": 0.88,
+        }
+        judged["answers"]["result_quality"] = {
+            "choice": "Significant issues",
+            "confidence": 0.9,
+        }
+        judged["answers"]["q0"] = {**judged["answers"]["q0"], **facts["q0"]}
+        judged["cells"]["q0"] = {**judged["cells"]["q0"], **facts["q0"]}
+        out = stabilize_adherence_review(judged, _scores())
+        gate, _failures, _stamped = _live_verdict(
+            out, "ticket-deflector", det_passed=True, det_failures=[], trigger_passed=True
+        )
+        assert gate is False, reply
+        judged["cells"]["result_quality"]["choice"] = "Clear and complete"
+        judged["answers"]["result_quality"] = {
+            "choice": "Clear and complete",
+            "confidence": 0.9,
+        }
+        judged["reasons"] = []
+        judged["passed"] = True
+        out = stabilize_adherence_review(judged, _scores())
+        gate, _failures, _stamped = _live_verdict(
+            out, "ticket-deflector", det_passed=True, det_failures=[], trigger_passed=True
+        )
+        assert gate is True, reply
 
 
 def test_wrong_amount_gone_through_stays_red_when_wording_passes() -> None:
@@ -643,6 +770,57 @@ def test_wrong_amount_gone_through_stays_red_when_wording_passes() -> None:
             "Delivered a good result? Significant issues",
         ],
     ) is False
+
+
+def test_stored_reason_quoting_usd_does_not_redden_rg4() -> None:
+    """Verdict pass/fail never reads the stored per-check reason text."""
+    usd_why = (
+        'The agent replied: "The refund has not been submitted yet. '
+        'USD 0.00 has been returned so far."'
+    )
+    answers = {
+        "task_completion": {"choice": "Fully completed"},
+        "correctness": {"choice": "Incorrect", "reason": usd_why},
+        "instruction_adherence": {"choice": "Violated", "reason": usd_why},
+        "evidence_action_validity": {"choice": "Fully supported"},
+        "result_quality": {"choice": "Clear and complete"},
+    }
+    _passed, reasons = outcome_verdict(answers)
+    blob = " ".join(reasons)
+    assert "USD 0.00" not in blob
+    assert "The agent replied" not in blob
+    assert "Connector calls:" not in blob
+    ask = wording_ask(compile_wording_rules(SKILL_BOTPRESS_4B_FULL))
+    reply = "The refund has not been submitted yet. USD 0.00 has been returned so far."
+    facts = _wording_on(SKILL_BOTPRESS_4B_FULL, reply)
+    judged = _judge_wording_red(extra_ok=True, extra_source="text", extra_label=ask)
+    judged["reasons"] = [
+        "Got it right? Incorrect (need Correct) — used submitted",
+        "Followed the rules? Violated (need Fully followed) — banned wording",
+    ]
+    judged["answers"]["correctness"] = answers["correctness"]
+    judged["answers"]["instruction_adherence"] = answers["instruction_adherence"]
+    judged["answers"]["q0"] = {**judged["answers"]["q0"], **facts["q0"]}
+    judged["cells"]["q0"] = {**judged["cells"]["q0"], **facts["q0"]}
+    for key in ("correctness", "instruction_adherence"):
+        judged["cells"][key]["reason"] = usd_why
+    out = stabilize_adherence_review(judged, _scores())
+    gate, _failures, _stamped = _live_verdict(
+        out, "ticket-deflector", det_passed=True, det_failures=[], trigger_passed=True
+    )
+    assert gate is False
+    reasons_blob = " ".join(str(item) for item in (out.get("reasons") or []))
+    assert "USD 0.00" not in reasons_blob
+    assert _gate_with_text_pass(
+        extra_label=ask,
+        extra=facts["q0"],
+        reasons=[
+            "Got it right? Incorrect (need Correct) — used submitted",
+            "Followed the rules? Violated (need Fully followed) — banned wording",
+        ],
+    ) is False
+
+
 
 
 def test_wrong_amount_stays_red_when_wording_passes() -> None:

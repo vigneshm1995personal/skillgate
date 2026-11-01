@@ -6,6 +6,7 @@ import re
 from typing import Any, Mapping
 
 from skillgate_ai.errors import SkillGateError
+from skillgate_ai.judge_context import attach_adherence_context
 from skillgate_ai.judge_openai import (
     DEFAULT_TIMEOUT_SEC,
     _answers_from_decisions_list,
@@ -53,7 +54,10 @@ class ClefBackend:
         del images
         include_path = _path_is_recorded(state.get("path"))
         resolved = spec if spec is not None else builtin_spec()
-        questions = spec_decisions_questions(resolved, include_path=include_path)
+        questions = attach_adherence_context(
+            spec_decisions_questions(resolved, include_path=include_path),
+            state,
+        )
         result = post_openai_json(
             self._url(),
             api_key=self.api_key,

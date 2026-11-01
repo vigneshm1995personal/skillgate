@@ -118,7 +118,10 @@ def test_openrouter_sends_custom_questions_and_a_no_fails() -> None:
     assert judged["passed"] is False
     assert judged["extra_failures"] == [f"{ASK} No"]
     assert judged["cells"]["tests_unchanged"]["choice"] == "No"
-    assert judged["cells"]["tests_unchanged"]["reason"] == f"{ASK} No"
+    assert judged["cells"]["tests_unchanged"].get("reason") not in {
+        ASK,
+        f"{ASK} No",
+    }
     assert judged["cells"]["no_special_casing"]["choice"] == "yes"
     assert judged["cells"]["honest_status"]["choice"] == "4"
     task = TaskReport(

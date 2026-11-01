@@ -711,8 +711,9 @@ def test_login_cursor_says_already_signed_in(monkeypatch: pytest.MonkeyPatch) ->
 
 
 def test_version_is_078() -> None:
-    assert __version__ == "0.7.13"
+    assert __version__ == "0.7.14"
     changelog = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+    assert "## 0.7.14" in changelog
     assert "## 0.7.13" in changelog
     assert "## 0.7.12" in changelog
     assert "## 0.7.11" in changelog

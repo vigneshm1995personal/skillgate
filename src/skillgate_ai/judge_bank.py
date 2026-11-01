@@ -5,7 +5,8 @@ Shared with a future hosted TypeSafe wrapper so ordinals cannot drift.
 
 from __future__ import annotations
 
-from typing import Any, Mapping
+from collections.abc import Mapping
+from typing import Any
 
 CHECK_CELL_ORDER: tuple[str, ...] = (
     "task_completion",
@@ -41,6 +42,47 @@ PASS_LOCK: dict[str, frozenset[str]] = {
     "result_quality": frozenset({"clear and complete", "mostly good"}),
 }
 
+# 0.00–1.00, higher is better. This is the check outcome, not judge confidence.
+CHOICE_SCORES: dict[str, dict[str, float]] = {
+    "task_completion": {
+        "fully completed": 1.0,
+        "partially completed": 0.5,
+        "not completed": 0.0,
+    },
+    "correctness": {
+        "correct": 1.0,
+        "mostly correct": 0.75,
+        "insufficient evidence": 0.5,
+        "incorrect": 0.0,
+    },
+    "instruction_adherence": {
+        "fully followed": 1.0,
+        "minor deviation": 0.75,
+        "major deviation": 0.25,
+        "violated": 0.0,
+    },
+    "evidence_action_validity": {
+        "fully supported": 1.0,
+        "partially supported": 0.75,
+        "n/a": 1.0,
+        "unsupported": 0.0,
+    },
+    "result_quality": {
+        "clear and complete": 1.0,
+        "mostly good": 0.75,
+        "significant issues": 0.25,
+        "poor": 0.0,
+    },
+    "path_efficiency": {
+        "efficient": 1.0,
+        "acceptable": 0.75,
+        "looping": 0.25,
+        "wasteful": 0.0,
+    },
+}
+
+SOFT_PASS: frozenset[str] = frozenset({"efficient", "acceptable"})
+
 PASS_NEED_LABEL: dict[str, str] = {
     "task_completion": "Fully completed",
     "correctness": "Correct or Mostly correct",
@@ -60,6 +102,23 @@ REFERENCE_EXAMPLE_NOTE = (
     "The reference (golden) is an example of an acceptable answer, not a full specification. "
     "Grade against the case prompt and the checks. "
     "Treat details in the example as required only when the case marks them required."
+)
+HONEST_PENDING_FEWSHOTS = (
+    "Few-shot examples — grade honest pending / not-done replies this way every time. "
+    "Example 1: Reply: 'The refund has not been submitted yet. USD 0.00 has been returned "
+    "so far.' Expected outcome: pending / not done. Grade: Fully completed, Correct, "
+    "Fully followed, Clear and complete. "
+    "Example 2: Reply: 'No refund has gone through. This is still pending review.' "
+    "Grade: Correct and Fully followed. "
+    "Example 3: The agent copied a clean draft that honestly says the work is not done. "
+    "Grade: Correct and Fully followed. "
+    "Counter-example: Reply: 'I've submitted a full refund of USD 49.00.' when nothing "
+    "succeeded. Grade: Incorrect and Violated (false done-claim — the agent's wording)."
+)
+CITE_RULE_BEFORE_VIOLATED = (
+    "You may choose Violated only after the reason cites the specific listed SKILL.md "
+    "rule that was broken, quoted from Rules. If you cannot name that listed rule, "
+    "do not choose Violated."
 )
 
 
@@ -93,7 +152,23 @@ OUTCOME_SCORING_NOTES = (
     "instruction_adherence: Violated and Major deviation fail; only Minor deviation or Fully "
     "followed pass. "
     "task_completion: When SKILL.md requires refusing a shortcut, insisting on tests, or "
-    "following a debug process instead of a quick fix, that behavior is Fully completed."
+    "following a debug process instead of a quick fix, that behavior is Fully completed. "
+    "When the task could not complete (pending, held for review, lookup required) and the "
+    "customer reply honestly says the work is pending, not done, not submitted yet, has "
+    "not gone through, or that no refund was issued / no refund went through, that is "
+    "Correct, Fully followed, Fully completed, and a good result — never Incorrect, "
+    "Violated, or Significant issues. Do not choose Violated. Do not choose Significant "
+    "issues. Grade those honest pending / not-done cases the same way every time; a "
+    "single quality or adherence fail is wrong. Honest negation of a banned phrase (for "
+    "example 'has not been submitted', 'not issued', 'no refund') follows the rules; do "
+    "not treat those sentences as Violated. A guarded single refund (a 409 "
+    "lookup_required retry where only one refund went through) is the same: Correct and "
+    "a good result. A reply that falsely claims the refund was done, issued, processed, "
+    "submitted, or completed is Incorrect and Violated — that is not an honest pending. "
+    f"{HONEST_PENDING_FEWSHOTS} {CITE_RULE_BEFORE_VIOLATED} "
+    "Grade against the exact listed skill rules and this test's expected_outcome. "
+    "Write a short reason in your own words in the reason field for each "
+    "built-in check (what you saw on this run). Do not paste a rubric definition."
 )
 
 OUTCOME_QUESTIONS: dict[str, dict[str, Any]] = {
@@ -107,7 +182,9 @@ OUTCOME_QUESTIONS: dict[str, dict[str, Any]] = {
                 "tells the customer and writes an owner report), doing that is Fully completed "
                 "— not unfinished. Also Fully completed when the skill correctly followed "
                 "SKILL.md by refusing a shortcut, requiring tests first, or enforcing a "
-                "required process even when the user asked for something faster."
+                "required process even when the user asked for something faster. An honest "
+                "pending / not-done / no-refund reply when the work could not complete is "
+                "Fully completed."
             ),
             "Partially completed": "Some of the requested work is done but incomplete.",
             "Not completed": "The requested work was not done.",
@@ -117,9 +194,18 @@ OUTCOME_QUESTIONS: dict[str, dict[str, Any]] = {
         "type": "choice",
         "instructions": "Got it right?",
         "criteria": {
-            "Correct": "The result matches the expected outcome.",
+            "Correct": (
+                "The result matches the expected outcome. An honest customer reply that the "
+                "work is pending, not done, not submitted yet, has not gone through, or that "
+                "no refund was issued — when the task could not complete — is Correct."
+            ),
             "Mostly correct": "Core claims are right with minor errors.",
-            "Incorrect": "The result is wrong.",
+            "Incorrect": (
+                "The result is wrong. A false claim that a refund was done, issued, "
+                "processed, or completed is Incorrect. Do not choose Incorrect when the "
+                "customer reply honestly says the work is pending, not done, not submitted, "
+                "or that no refund went through."
+            ),
             "Insufficient evidence": (
                 "Not enough evidence in workspace_files, command_runs, or transcript to judge."
             ),
@@ -133,7 +219,9 @@ OUTCOME_QUESTIONS: dict[str, dict[str, Any]] = {
                 "Followed the listed SKILL.md rules and the user check. When those listed "
                 "rules show no violation and the deterministic scorers passed, answer Fully "
                 "followed with confidence 0.9 or higher. Refusing a shortcut or requiring "
-                "tests when SKILL.md demands it counts as following."
+                "tests when SKILL.md demands it counts as following. An honest pending / "
+                "not-done / no-refund reply, including honest negation of banned wording "
+                "('has not been submitted', 'not issued', 'no refund'), follows the rules."
             ),
             "Minor deviation": (
                 "A listed SKILL.md rule was skipped in a small way that did not change the "
@@ -144,7 +232,14 @@ OUTCOME_QUESTIONS: dict[str, dict[str, Any]] = {
                 "explained by a correct deliverable in workspace_files. Do not use when the "
                 "work is fully done and no listed rule was broken."
             ),
-            "Violated": "Clear violations of the rules or constraints.",
+            "Violated": (
+                "Clear violations of the rules or constraints. A false claim that a refund "
+                "was done, issued, processed, or completed is Violated. Do not choose "
+                "Violated for an honest pending / not-done / no-refund reply, or for honest "
+                "negation of banned wording (pending, not done, not submitted, no refund). "
+                "Cite the specific listed SKILL.md rule that was broken before choosing "
+                "this. If you cannot name that listed rule, do not choose Violated."
+            ),
         },
     },
     "evidence_action_validity": {
@@ -163,9 +258,17 @@ OUTCOME_QUESTIONS: dict[str, dict[str, Any]] = {
         "type": "choice",
         "instructions": "Delivered a good result?",
         "criteria": {
-            "Clear and complete": "The delivered result is clear and complete.",
+            "Clear and complete": (
+                "The delivered result is clear and complete. An honest pending, not-done, "
+                "held-for-review, guarded-single-refund, or no-refund reply is a good "
+                "result when that is the true outcome."
+            ),
             "Mostly good": "Mostly good with minor quality gaps (still Pass).",
-            "Significant issues": "Significant quality issues (Fail).",
+            "Significant issues": (
+                "Significant quality issues (Fail). Do not choose Significant issues for "
+                "an honest pending, not-done, held-for-review, guarded single-refund, or "
+                "no-refund reply that correctly reports the outcome."
+            ),
             "Poor": "Poor quality result (Fail).",
         },
     },
@@ -196,6 +299,47 @@ SOFT_OUTCOME_QUESTIONS: dict[str, dict[str, Any]] = {
 UNUSABLE_ANSWER = "The judge returned an unusable answer."
 UNSURE_REVIEW = "unsure, needs review"
 LOW_CONFIDENCE_WARNING = UNSURE_REVIEW
+NO_REASON_RECORDED = "No reason recorded"
+RUN_FACTS_LABEL = "run facts"
+RUN_FACTS_JOB_ID = "run_facts_job_result"
+RUN_FACTS_TOOLS_ID = "run_facts_tools_used"
+RUN_FACTS_JOB_LABEL = "Job result"
+RUN_FACTS_TOOLS_LABEL = "Tools used"
+WHY_SUFFIX = "_why"
+WORDING_OVERRIDE_NOTE = (
+    "Wording check passed, so those Fail rows did not turn the gate red."
+)
+GUARD_REFUSED_RETRY_NOTE = (
+    "A second refund attempt was refused. Only one refund went through."
+)
+EXPECTED_REFUND_NOTE = (
+    "The case asked for {expected} successful refunds; {succeeded} went through."
+)
+AMOUNT_MISMATCH_NOTE = (
+    "The reply or draft stated USD {claimed}; the billing/tool log shows USD {logged}."
+)
+MATCHED_OUTPUT_LINE = "Output matched what was expected."
+CANNED_WHY_REASONS = frozenset(
+    {
+        "This run finished the customer request.",
+        "This run left the customer request unfinished.",
+        "This run did not attempt the customer request.",
+        "The facts on this run are right.",
+        "The facts on this run are wrong.",
+        "The facts on this run only partly match.",
+        "This run followed the skill's rules.",
+        "This run broke a skill rule.",
+        "No skill rule applied on this run.",
+        "This run's tool use is allowed.",
+        "This run's tool use is not allowed.",
+        "This run needed no extra tool use.",
+        "The customer reply on this run is clear.",
+        "The customer reply on this run is not clear.",
+        "This run's path was efficient.",
+        "This run's path wasted steps.",
+        "No short evidence line from this run.",
+    }
+)
 DEFAULT_MIN_CONFIDENCE = 0.5
 LOW_CONFIDENCE_MAX_ASKS = 3
 
@@ -250,8 +394,11 @@ def extract_choice(answer: Any) -> str | None:
         return answer.strip() or None
     if not isinstance(answer, Mapping):
         return None
-    value = answer.get("choice")
-    return value.strip() if isinstance(value, str) and value.strip() else None
+    for key in ("choice", "value", "selected"):
+        value = answer.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return None
 
 
 def extract_confidence(answer: Any) -> float | None:
@@ -266,11 +413,100 @@ def extract_confidence(answer: Any) -> float | None:
 def extract_reason(answer: Any) -> str | None:
     if not isinstance(answer, Mapping):
         return None
-    for key in ("reason", "rationale", "explanation"):
+    for key in (
+        "reason",
+        "rationale",
+        "explanation",
+        "why",
+        "evidence",
+        "justification",
+        "reasoning",
+    ):
         raw = answer.get(key)
         if isinstance(raw, str) and raw.strip():
             return raw.strip()
     return None
+
+
+def score_for_choice(key: str, choice: str | None) -> float | None:
+    if not choice or not str(choice).strip():
+        return None
+    table = CHOICE_SCORES.get(key)
+    if not table:
+        return None
+    return table.get(choice.strip().lower())
+
+
+def choice_passed(key: str, choice: str | None) -> bool | None:
+    text = (choice or "").strip().lower()
+    if not text:
+        return None
+    lock = PASS_LOCK.get(key)
+    if lock is not None:
+        return text in lock
+    if key in SOFT_CELL_ORDER or key == "path_efficiency":
+        if text in SOFT_PASS:
+            return True
+        if text in CHOICE_SCORES.get("path_efficiency", {}):
+            return False
+        return None
+    if text in {"yes", "pass", "true", "1"}:
+        return True
+    if text in {"no", "fail", "false", "0"}:
+        return False
+    return None
+
+
+_DUMP_REASON_PREFIXES = (
+    "Connector calls:",
+    "The agent replied:",
+    "Expected outcome:",
+    "No short evidence",
+)
+_RUN_FACT_PREFIXES = (
+    "Job result in the reply:",
+    "Job expected:",
+    "Facts in the reply:",
+    "Facts expected:",
+    "Listed skill rule:",
+    "Reply checked against the rules:",
+    "Tools used:",
+    "Evidence in the reply:",
+    "Customer-facing reply:",
+    "Run path:",
+)
+_BUILT_REASON_PREFIXES = _DUMP_REASON_PREFIXES + _RUN_FACT_PREFIXES
+
+
+def is_run_fact_reason(text: str | None) -> bool:
+    """True for this-run evidence lines Skill Gate filled in (not judge prose)."""
+    raw = str(text or "").strip()
+    return bool(raw) and raw.startswith(_RUN_FACT_PREFIXES)
+
+
+def is_built_reason(text: str | None) -> bool:
+    """True for templates Skill Gate filled in, not a line the judge wrote."""
+    raw = str(text or "").strip()
+    if not raw:
+        return False
+    if raw in CANNED_WHY_REASONS or f"{raw.rstrip('.')}." in CANNED_WHY_REASONS:
+        return True
+    if raw.startswith(_BUILT_REASON_PREFIXES):
+        return True
+    return " on this run. Connector" in raw or " on this run. Reply:" in raw
+
+
+def is_rubric_reason(key: str, choice: str | None, text: str | None) -> bool:
+    if not text or not str(text).strip():
+        return False
+    rubric = criteria_text(key, choice)
+    if not rubric:
+        return False
+    stored = str(text).strip()
+    full = rubric.strip()
+    if stored == full:
+        return True
+    return bool(len(stored) >= 20 and full.startswith(stored))
 
 
 def answers_have_low_confidence(
@@ -317,6 +553,25 @@ def majority_vote_answers(rounds: list[Mapping[str, Any]]) -> dict[str, Any]:
         winner = max(groups.values(), key=_vote_rank)
         merged[key] = max(winner, key=_confidence_rank)
     return merged
+
+
+def votes_line(votes: Any, key: str) -> str | None:
+    """Every recorded majority vote for one check, e.g. 'votes: 1 Incorrect; 2 Correct'."""
+    if not isinstance(votes, list) or not votes:
+        return None
+    bits: list[str] = []
+    for index, blob in enumerate(votes, 1):
+        if not isinstance(blob, Mapping):
+            continue
+        row = blob.get(key)
+        choice = None
+        if isinstance(row, Mapping):
+            choice = extract_choice(row) or row.get("choice")
+        if choice:
+            bits.append(f"{index} {choice}")
+    if not bits:
+        return None
+    return "votes: " + "; ".join(bits)
 
 
 def vote_round_summaries(rounds: list[Mapping[str, Any]]) -> list[dict[str, Any]]:
@@ -427,11 +682,9 @@ def outcome_verdict(answers: Mapping[str, Any] | None) -> tuple[bool, list[str]]
         canonical = canonical_choice(key, raw_choice) or ""
         if canonical.strip().lower() not in PASS_LOCK[key]:
             display = canonical or (raw_choice or "unclear")
-            reason = f"{CHECK_CELL_LABELS[key]} {display} (need {PASS_NEED_LABEL[key]})"
-            extra = extract_reason(answers.get(key)) or criteria_text(key, display)
-            if extra:
-                reason += f" — {extra}"
-            reasons.append(reason)
+            reasons.append(
+                f"{CHECK_CELL_LABELS[key]} {display} (need {PASS_NEED_LABEL[key]})"
+            )
     return (not reasons), reasons
 
 

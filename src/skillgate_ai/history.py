@@ -179,8 +179,13 @@ def load_compares(pack_root: str | Path, *, limit: int = 50) -> list[dict[str, A
 
 def _scrub_history_row(row: dict[str, Any]) -> dict[str, Any]:
     from skillgate_ai.api_payloads import scrub_browser_payload
+    from skillgate_ai.run_details import hydrate_report, redact_run_value
 
-    return scrub_browser_payload(row)
+    cleaned = scrub_browser_payload(row)
+    report = cleaned.get("report") if isinstance(cleaned, dict) else None
+    if isinstance(report, dict):
+        cleaned["report"] = hydrate_report(report)
+    return redact_run_value(cleaned)
 
 
 def append_deploy(

@@ -7,6 +7,11 @@ import re
 from collections.abc import Mapping, Sequence
 from typing import Any
 
+from skillgate_ai.judge_bank import (
+    AMOUNT_MISMATCH_NOTE,
+    EXPECTED_REFUND_NOTE,
+    GUARD_REFUSED_RETRY_NOTE,
+)
 from skillgate_ai.judge_spec import JudgeQuestion, JudgeSpec
 from skillgate_ai.spans import attr_map
 
@@ -285,6 +290,10 @@ def _compute_question(
         has_calls = bool(_output_file(outputs, "calls.log").strip())
         if has_calls and re.search(r"issue_refund", ask, re.IGNORECASE):
             count = logged
+            out = _predicate(_count_is_yes(ask, count), source="log")
+            if _guard_refused_rows(_parse_calls_log(outputs)) and _count_is_yes(ask, count):
+                out["warning"] = GUARD_REFUSED_RETRY_NOTE
+            return out
         elif file_name:
             count = count_file_reads(
                 spans, file_name, trajectory=trajectory, tool=tool
@@ -436,7 +445,15 @@ _HEDGE_RE = re.compile(
     r"rest (?:of the refund )?is still|still being handled",
     re.IGNORECASE,
 )
-_MONEY_RE = re.compile(r"(?:usd\s*)?(\d+\.\d{2})", re.IGNORECASE)
+_CLAIMED_MONEY_RE = re.compile(
+    r"(?:USD|EUR|\$|€)\s*(\d+\.\d{2})",
+    re.IGNORECASE,
+)
+_LOG_AMOUNT_FIELD_RE = re.compile(
+    r"(?:--amount\b|(?<![A-Za-z_])amount(?:_refunded)?)\s*[\"']?\s*[:=,]?\s*"
+    r"(?:USD|EUR|\$|€)?\s*[\"']?(\d+\.\d{2})",
+    re.IGNORECASE,
+)
 _ALREADY_ISSUED_ASK = re.compile(
     r"already been issued|ALREADY been issued|treats a timeout|"
     r"does not call a pending|reads the response body",
@@ -521,13 +538,103 @@ def _refund_status(row: Mapping[str, Any]) -> str:
         return "succeeded"
     if status == "pending":
         return "pending"
+    if status == "timeout" or "timeout" in msg or "timed out" in msg:
+        return "timeout"
     if status == "failed":
         return "failed"
-    if "timeout" in msg or "timed out" in msg:
-        return "timeout"
     if isinstance(http, int) and http != 200:
         return "failed"
     return status or "unknown"
+
+
+def _is_guard_refused(row: Mapping[str, Any]) -> bool:
+    resp = _response_of(row)
+    blob = json.dumps(resp, default=str).lower()
+    http = resp.get("http_status")
+    return http == 409 or "lookup_required" in blob
+
+
+def _guard_refused_rows(calls: Sequence[Mapping[str, Any]]) -> list[Mapping[str, Any]]:
+    return [row for row in _issue_refund_rows(calls) if _is_guard_refused(row)]
+
+
+def _lookup_tool(argv: Sequence[str]) -> bool:
+    if not argv:
+        return False
+    name = str(argv[0]).strip().lower()
+    return name in {"lookup", "lookup_charge"} or "lookup" in name
+
+
+def _refunds_in_lookup(resp: Mapping[str, Any]) -> int | None:
+    if "charges" in resp:
+        total = 0
+        for charge in resp.get("charges") or []:
+            if not isinstance(charge, Mapping):
+                continue
+            refunds = charge.get("refunds")
+            if isinstance(refunds, list):
+                total += sum(
+                    1
+                    for item in refunds
+                    if isinstance(item, Mapping)
+                    and str(item.get("status") or "").strip().lower() == "succeeded"
+                )
+                if refunds:
+                    continue
+            try:
+                if float(charge.get("amount_refunded") or 0) > 0:
+                    total += 1
+            except (TypeError, ValueError):
+                pass
+        return total
+    if "refunds" in resp:
+        refunds = resp.get("refunds") or []
+        return sum(
+            1
+            for item in refunds
+            if isinstance(item, Mapping)
+            and str(item.get("status") or "").strip().lower() == "succeeded"
+        )
+    return None
+
+
+def _lookup_refund_count(calls: Sequence[Mapping[str, Any]]) -> int | None:
+    counts: list[int] = []
+    for row in calls:
+        if not _lookup_tool(_argv_of(row)):
+            continue
+        n = _refunds_in_lookup(_response_of(row))
+        if n is not None:
+            counts.append(n)
+    return max(counts) if counts else None
+
+
+def _succeeded_refund_count(calls: Sequence[Mapping[str, Any]]) -> int:
+    """Refunds whose effect went through, not attempts the guard refused.
+
+    A timeout followed by a lookup or a later success counts as a success.
+    Guard-refused 409 lookup_required attempts do not move money.
+    """
+    succeeded = 0
+    timeouts = 0
+    for row in _issue_refund_rows(calls):
+        if _is_guard_refused(row):
+            continue
+        status = _refund_status(row)
+        if status == "succeeded":
+            succeeded += 1
+        elif status == "timeout":
+            timeouts += 1
+    lookup_n = _lookup_refund_count(calls)
+    landed_timeouts = 0
+    if timeouts and (
+        succeeded > 0 or (lookup_n or 0) > 0 or _lookup_shows_refund(calls)
+    ):
+        landed_timeouts = timeouts
+    effects = succeeded + landed_timeouts
+    if lookup_n is not None:
+        return max(effects, lookup_n)
+    return effects
 
 
 def _count_from_calls_log(
@@ -539,7 +646,7 @@ def _count_from_calls_log(
         re.IGNORECASE,
     ):
         return 0
-    return len(_issue_refund_rows(_parse_calls_log(outputs)))
+    return _succeeded_refund_count(_parse_calls_log(outputs))
 
 
 def _succeeded_amounts(
@@ -559,12 +666,12 @@ def _succeeded_amounts(
                 continue
             except (TypeError, ValueError):
                 pass
-        found = _MONEY_RE.findall(json.dumps(resp, default=str))
-        amounts.extend(float(item) for item in found)
+        found = _LOG_AMOUNT_FIELD_RE.findall(json.dumps(resp, default=str))
+        amounts.extend(float(item) for item in found if float(item) > 0.001)
     if amounts:
         return amounts
-    blob = " ".join(tool_results(spans, "issue_refund", trajectory=trajectory)).lower()
-    return [float(item) for item in _MONEY_RE.findall(blob)] if "succeed" in blob else []
+    blob = " ".join(tool_results(spans, "issue_refund", trajectory=trajectory))
+    return _money_values(blob, _LOG_AMOUNT_FIELD_RE) if "succeed" in blob.lower() else []
 
 
 def _lookup_shows_refund(calls: Sequence[Mapping[str, Any]]) -> bool:
@@ -646,10 +753,10 @@ def _compute_reply_fact(
         amounts = _succeeded_amounts(spans, trajectory, calls)
         if not amounts:
             tool = _primary_tool(ask, spans, trajectory=trajectory) or "issue_refund"
-            blob = " ".join(tool_results(spans, tool, trajectory=trajectory)).lower()
-            amounts = [float(item) for item in _MONEY_RE.findall(blob)]
+            blob = " ".join(tool_results(spans, tool, trajectory=trajectory))
+            amounts = _money_values(blob, _LOG_AMOUNT_FIELD_RE)
         if amounts and issued:
-            claimed = [float(item) for item in _MONEY_RE.findall(reply.lower())]
+            claimed = _money_values(reply, _CLAIMED_MONEY_RE)
             total = sum(amounts)
             if claimed and max(claimed) > total + 0.001:
                 return _predicate(False, source="log")
@@ -666,6 +773,125 @@ def _compute_reply_fact(
     if about_timeout and issued and not saw:
         return _predicate(False, source="log")
     return None
+
+
+_EXPECTED_TWO = re.compile(
+    r"\b(?:two|both|2)\s+(?:successful\s+)?(?:refunds?|charges?)\b|"
+    r"\brefund both\b|"
+    r"\bboth of .{0,80}charges?\b",
+    re.IGNORECASE,
+)
+_EXPECTED_THREE = re.compile(
+    r"\b(?:three|3)\s+(?:successful\s+)?(?:refunds?|charges?)\b",
+    re.IGNORECASE,
+)
+
+
+def expected_refund_count(*texts: str | None) -> int | None:
+    """How many successful refunds the pack/case asked for, or None if unspecified."""
+    blob = " ".join(str(item) for item in texts if item and str(item).strip())
+    if not blob.strip():
+        return None
+    if _EXPECTED_THREE.search(blob):
+        return 3
+    if _EXPECTED_TWO.search(blob):
+        return 2
+    return None
+
+
+def succeeded_refund_count(outputs: Sequence[Mapping[str, Any]] | str | None) -> int:
+    return _succeeded_refund_count(_parse_calls_log(outputs))
+
+
+def expected_refund_shortfall(
+    outputs: Sequence[Mapping[str, Any]] | str | None,
+    *texts: str | None,
+) -> str | None:
+    expected = expected_refund_count(*texts)
+    if expected is None or expected < 2:
+        return None
+    got = succeeded_refund_count(outputs)
+    if got >= expected:
+        return None
+    return EXPECTED_REFUND_NOTE.format(expected=expected, succeeded=got)
+
+
+def _wrong_amount_claim(outputs: Sequence[Mapping[str, Any]] | str | None) -> bool:
+    return amount_mismatch(outputs) is not None
+
+
+def _money_values(text: str, pattern: re.Pattern[str]) -> list[float]:
+    values: list[float] = []
+    for raw in pattern.findall(text or ""):
+        try:
+            value = float(raw)
+        except (TypeError, ValueError):
+            continue
+        if value <= 0.001:
+            continue
+        values.append(value)
+    return values
+
+
+def _claimed_amounts(outputs: Sequence[Mapping[str, Any]] | str | None) -> list[float]:
+    claimed: list[float] = []
+    for text in _amount_texts(outputs):
+        claimed.extend(_money_values(text, _CLAIMED_MONEY_RE))
+    return claimed
+
+
+def _amount_texts(outputs: Sequence[Mapping[str, Any]] | str | None) -> list[str]:
+    """Customer-facing copy only: reply and draft, never logs or timestamps."""
+    texts: list[str] = []
+    if isinstance(outputs, str):
+        if outputs.strip():
+            texts.append(outputs)
+        return texts
+    for name in ("reply.txt", "draft.txt"):
+        body = _output_file(outputs, name).strip()
+        if body:
+            texts.append(body)
+    return texts
+
+
+def _logged_money_amounts(
+    outputs: Sequence[Mapping[str, Any]] | str | None,
+) -> list[float]:
+    """Refund/charge amount fields from calls.log and billing.log only."""
+    texts: list[str] = []
+    if isinstance(outputs, str):
+        texts.append(outputs)
+    else:
+        for name in ("calls.log", "billing.log"):
+            body = _output_file(outputs, name).strip()
+            if body:
+                texts.append(body)
+    logged: list[float] = []
+    for text in texts:
+        logged.extend(_money_values(text, _LOG_AMOUNT_FIELD_RE))
+    return logged
+
+
+def amount_mismatch(
+    outputs: Sequence[Mapping[str, Any]] | str | None,
+) -> str | None:
+    """Fail when a currency-marked reply/draft amount is absent from the log."""
+    logged = _logged_money_amounts(outputs)
+    claimed = _claimed_amounts(outputs)
+    if not logged or not claimed:
+        return None
+    logged_set = {round(item, 2) for item in logged}
+    missing = [round(item, 2) for item in claimed if round(item, 2) not in logged_set]
+    if not missing:
+        return None
+    stated = round(max(missing), 2)
+    billed = round(max(logged), 2)
+    if abs(stated - billed) <= 0.001:
+        return None
+    return AMOUNT_MISMATCH_NOTE.format(
+        claimed=f"{stated:.2f}",
+        logged=f"{billed:.2f}",
+    )
 
 
 def _wanted_status(ask: str) -> list[str]:

@@ -8,11 +8,13 @@ import { mergeEvalSnapshot, seededRunningReport } from "@/lib/eval-row-state"
 import {
   deployAllowedForLiveGate,
   emptySkillRunSlot,
+  historyOpenPatch,
   isTryoutRun,
   isViewingOlderRun,
   liveGateRun,
   patchSkillSlot,
-  shownGateRun,
+  pinBelongsToSkill,
+  shownHistoryOrGate,
   skillSlotKey,
   type RunPurpose,
   type SkillRunSlot,
@@ -84,6 +86,7 @@ export function useEvalSession(opts: EvalSessionOpts) {
   const [slots, setSlots] = useState<Record<string, SkillRunSlot>>({})
   const slotsRef = useRef(slots)
   slotsRef.current = slots
+  const [historyView, setHistoryView] = useState<RunRecord | null>(null)
   const [connectionLost, setConnectionLost] = useState(false)
   const pollsRef = useRef(new Map<string, AbortController>())
   const pollMetaRef = useRef(
@@ -111,8 +114,13 @@ export function useEvalSession(opts: EvalSessionOpts) {
   const slot = slots[skillKey] ?? emptySkillRunSlot()
   const liveGateResult = liveGateRun(slot, skillKey)
   const tryoutResult = slot.tryout
-  const viewingPinnedHistory = isViewingOlderRun(slot, skillKey)
-  const lastResult = shownGateRun(slot, skillKey)
+  const viewingPinnedHistory = isViewingOlderRun(
+    historyView && (!skillKey || pinBelongsToSkill(historyView, skillKey))
+      ? { ...slot, pin: historyView }
+      : slot,
+    skillKey
+  )
+  const lastResult = shownHistoryOrGate(slot, skillKey, historyView)
   const lastAdvice: Advice | null = lastResult?.report?.advice ?? null
   const gateRunning = slot.runningPurpose === "gate"
   const tryoutRunning = slot.runningPurpose === "tryout"
@@ -194,7 +202,19 @@ export function useEvalSession(opts: EvalSessionOpts) {
     }
     const last =
       hist?.last_run && !isTryoutRun(hist.last_run) ? hist.last_run : null
-    patchSlot(name, (current) => ({ ...current, gate: last }))
+    patchSlot(name, (current) => {
+      if (
+        last &&
+        current.pin?.id &&
+        current.pin.id === last.id
+      ) {
+        const pinTasks = current.pin.report?.tasks?.length ?? 0
+        const lastTasks = last.report?.tasks?.length ?? 0
+        const fuller = pinTasks >= lastTasks ? current.pin : last
+        return { ...current, gate: fuller, pin: fuller }
+      }
+      return { ...current, gate: last }
+    })
     if (last?.status === "running" && last.id) {
       const id = last.id
       void resumePoll(id, name, "gate")
@@ -316,6 +336,7 @@ export function useEvalSession(opts: EvalSessionOpts) {
         )
       }
       if (!tryout) {
+        setHistoryView(null)
         setEvalTab("gate")
         setCopiedFix(false)
       }
@@ -422,22 +443,30 @@ export function useEvalSession(opts: EvalSessionOpts) {
       setIntakeError("")
       try {
         const data = await api.getRun(item.id)
+        let catalog = skills
+        if (catalog.length === 0) {
+          catalog = await refreshSkills()
+        }
         const skillName = data.skill || data.report?.skill || item.skill || null
-        if (skillName) {
-          const match = skills.find((s) => matchesSkill(s, skillName))
-          if (match) {
-            setSkill(match)
-          }
-          await refreshSkillHistory(skillName)
-          if (isTryoutRun(data)) {
-            patchSlot(skillName, (current) => ({ ...current, tryout: data }))
-          } else {
-            patchSlot(skillName, (current) => ({ ...current, pin: data }))
-          }
+        const match = skillName
+          ? catalog.find((s) => matchesSkill(s, skillName))
+          : undefined
+        const slotKey = skillSlotKey(match) || skillName
+        if (match) {
+          setSkill(match)
+        }
+        if (!isTryoutRun(data)) {
+          setHistoryView(data)
+        }
+        if (slotKey) {
+          patchSlot(slotKey, (current) => historyOpenPatch(current, data))
         }
         setCopiedFix(false)
         setEvalTab("gate")
         setStage("eval")
+        if (slotKey) {
+          await refreshSkillHistory(slotKey)
+        }
         await refreshWorkspaceHistory()
       } catch (err) {
         const apiErr = asApiError(err)
@@ -448,6 +477,7 @@ export function useEvalSession(opts: EvalSessionOpts) {
     [
       patchSlot,
       refreshSkillHistory,
+      refreshSkills,
       refreshWorkspaceHistory,
       setCopiedFix,
       setEvalTab,
