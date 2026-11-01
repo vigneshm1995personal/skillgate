@@ -262,6 +262,8 @@ def check_rows(task: Mapping[str, Any] | None) -> list[dict[str, Any]]:
             if guessed is not None:
                 score = 1.0 if guessed else 0.0
         reason = _row_reason(key, choice, label, cell, answer, listed_row)
+        if reason == NO_REASON_RECORDED and src == "from the judge":
+            src = ""
         passed = cell.get("passed")
         if not isinstance(passed, bool):
             if listed_row.get("passed") is True or listed_row.get("passed") is False:

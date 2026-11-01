@@ -25,7 +25,6 @@ from skillgate_ai.harness import (
 )
 from skillgate_ai.ingest import Skill, ingest_skill, ingest_skills
 from skillgate_ai.judge import Judge, SkipJudge, default_judge, judge_stamp
-from skillgate_ai.judge_bank import UNUSABLE_ANSWER, WORDING_OVERRIDE_NOTE
 from skillgate_ai.live import KILL, CheckAborted, RunControl
 from skillgate_ai.observability import breadcrumb_task, report_eval_outcome, set_eval_passed, span
 from skillgate_ai.output_match import expected_output_mismatch_reason
@@ -84,164 +83,44 @@ def _extras_from_source(judged: Mapping[str, Any], source: str) -> bool:
     return False
 
 
-def _is_builtin_quality_reason(reason: object) -> bool:
-    from skillgate_ai.judge_bank import CHECK_CELL_LABELS
-
-    text = str(reason or "").strip()
-    return any(text.startswith(label) for label in CHECK_CELL_LABELS.values())
-
-
-def _is_result_quality_reason(reason: object) -> bool:
-    from skillgate_ai.judge_bank import CHECK_CELL_LABELS
-
-    return str(reason or "").strip().startswith(CHECK_CELL_LABELS["result_quality"])
-
-
-def _honest_negation_passed(judged: Mapping[str, Any]) -> bool:
-    """True when a passing text extra is an honest rg4 not-yet reply."""
-    from skillgate_ai.judge_bank import CHECK_CELL_ORDER, SOFT_CELL_ORDER
-
-    reserved = set(CHECK_CELL_ORDER) | set(SOFT_CELL_ORDER)
-    cells = judged.get("cells") if isinstance(judged.get("cells"), Mapping) else {}
-    answers = judged.get("answers") if isinstance(judged.get("answers"), Mapping) else {}
-    for blob in (cells, answers):
-        for key, row in blob.items():
-            if key in reserved or not isinstance(row, Mapping):
-                continue
-            if str(row.get("source") or "").strip().lower() != "text":
-                continue
-            if row.get("honest_negation") is True:
-                return True
-    return False
-
-
 def _blocking_choice_failed(judged: Mapping[str, Any]) -> bool:
-    """True when a builtin other than Delivered a good result? failed."""
-    from skillgate_ai.judge_bank import (
-        CHECK_CELL_ORDER,
-        PASS_LOCK,
-        canonical_choice,
-        extract_choice,
-    )
+    """True when any built-in Pass-lock cell failed. No exceptions."""
+    from skillgate_ai.score import builtin_choice_failed
 
-    cells = judged.get("cells") if isinstance(judged.get("cells"), Mapping) else {}
-    answers = judged.get("answers") if isinstance(judged.get("answers"), Mapping) else {}
-    for key in CHECK_CELL_ORDER:
-        if key == "result_quality":
-            continue
-        cell = cells.get(key) if isinstance(cells.get(key), Mapping) else {}
-        raw = answers.get(key)
-        choice = cell.get("choice") if isinstance(cell, Mapping) else None
-        if not choice:
-            choice = extract_choice(raw)
-        canonical = canonical_choice(key, str(choice) if choice else None)
-        allowed = PASS_LOCK.get(key) or frozenset()
-        if canonical is None:
-            continue
-        if canonical.strip().lower() not in allowed:
-            return True
-    return False
+    return builtin_choice_failed(judged)
 
 
 def stabilize_adherence_review(
     judged: dict[str, Any] | None,
     scores: list[Score] | list[dict[str, Any]] | None,
 ) -> dict[str, Any] | None:
-    """Passing extras and scorers keep a correct hedge from going red.
+    """Drop the unsure flag on Pass-lock cells. Never override a judge fail."""
+    from skillgate_ai.judge_bank import UNSURE_REVIEW
+    from skillgate_ai.score import builtin_choice_failed, drop_unsure_on_pass_lock
 
-    The 0.5 floor and the pass mark stay put. This drops the unsure flag on
-    builtin cells whose choice is already in PASS_LOCK when every deterministic
-    scorer passed. Incorrect, Partially completed, and Violated always stay
-    red — log extras and wording extras cannot clear them. Only Delivered a
-    good result? may be overridden, and only by an honest rg4 negation
-    (`not submitted yet` / `not yet`). A rewritten draft, a wrong amount, a
-    missing step, or an incomplete job still fails.
-    """
-    from skillgate_ai.judge_bank import (
-        CHECK_CELL_ORDER,
-        LOW_CONFIDENCE_WARNING,
-        PASS_LOCK,
-        canonical_choice,
-    )
-
+    del scores
     if not isinstance(judged, dict):
-        return judged
-    scorer_ok = True
-    for item in scores or []:
-        passed = item.passed if isinstance(item, Score) else item.get("passed")
-        if passed is False:
-            scorer_ok = False
-            break
-    if not scorer_ok:
         return judged
     cells = judged.get("cells")
     if not isinstance(cells, dict):
         return judged
-    extras_ok = _extras_all_passed(judged)
-    extras_text = extras_ok and _extras_from_text(judged)
     answers = judged.get("answers") if isinstance(judged.get("answers"), dict) else {}
     next_cells = dict(cells)
-    changed = False
-    for key in CHECK_CELL_ORDER:
-        cell = cells.get(key)
-        if not isinstance(cell, dict) or cell.get("status") != "unsure":
-            continue
-        raw = answers.get(key) if isinstance(answers, dict) else None
-        choice = cell.get("choice")
-        if not choice and isinstance(raw, dict):
-            choice = raw.get("choice")
-        canonical = canonical_choice(key, choice)
-        allowed = PASS_LOCK.get(key) or frozenset()
-        if canonical is None or canonical.strip().lower() not in allowed:
-            continue
-        cleaned = dict(cell)
-        cleaned.pop("status", None)
-        next_cells[key] = cleaned
-        changed = True
-    honest_rg4 = extras_text and _honest_negation_passed(judged)
-    if not changed and not honest_rg4:
-        return judged
+    drop_unsure_on_pass_lock(next_cells, answers)
     out = dict(judged)
-    if changed:
-        out["cells"] = next_cells
-        review = any(
-            isinstance(row, dict) and row.get("status") == "unsure"
-            for row in next_cells.values()
-        )
-        out["review"] = review
-        warnings = [
+    out["cells"] = next_cells
+    if builtin_choice_failed(out):
+        out["passed"] = False
+    if not any(
+        isinstance(cell, dict) and cell.get("status") == "unsure"
+        for cell in next_cells.values()
+    ):
+        out["review"] = False
+        out["warnings"] = [
             str(item).strip()
             for item in (out.get("warnings") or [])
-            if str(item).strip() and str(item).strip() != LOW_CONFIDENCE_WARNING
+            if str(item).strip() and str(item).strip() != UNSURE_REVIEW
         ]
-        if review:
-            warnings.append(LOW_CONFIDENCE_WARNING)
-        out["warnings"] = warnings
-    original = [
-        str(item).strip() for item in (out.get("reasons") or []) if str(item).strip()
-    ]
-    dropped_quality = False
-    if honest_rg4:
-        kept = [item for item in original if not _is_result_quality_reason(item)]
-        dropped = [item for item in original if _is_result_quality_reason(item)]
-        original = kept
-        if dropped:
-            dropped_quality = True
-            warnings = [
-                str(item).strip()
-                for item in (out.get("warnings") or [])
-                if str(item).strip()
-            ]
-            if WORDING_OVERRIDE_NOTE not in warnings:
-                warnings.append(WORDING_OVERRIDE_NOTE)
-            out["warnings"] = warnings
-    out["reasons"] = original
-    if _blocking_choice_failed(out):
-        out["passed"] = False
-    elif dropped_quality and not any(
-        _is_builtin_quality_reason(item) for item in original
-    ):
-        out["passed"] = True
     return out
 
 
@@ -788,71 +667,27 @@ def _live_verdict(
     mismatch: str | None = None,
     trigger_passed: bool | None = None,
 ) -> tuple[bool, list[str], dict[str, Any] | None]:
-    """Skip leaves det in charge. Errors fail closed. No-trigger keeps det.
-    A completed bool ``passed`` overrides, including a low-confidence Pass.
-    A failed skill trigger cannot pass or review. Gate ``passed`` is the
-    return value. Cell ``passed`` stays on the judge dict."""
-    if trigger_passed is False:
-        reasons = list(det_failures) or [
-            "Did not trigger (description does not match this request)"
-        ]
-        if not isinstance(judge, dict):
-            return False, reasons, judge
-        stamped = {**judge, "passed": False, "review": False}
-        return False, reasons, stamped
+    """Compatibility wrapper around ``apply_gate``. Prefer ``score_run``."""
+    from skillgate_ai.score import apply_gate, strip_unsure
+
     if not isinstance(judge, dict):
+        if trigger_passed is False:
+            reasons = list(det_failures) or [
+                "Did not trigger (description does not match this request)"
+            ]
+            return False, reasons, judge
         return det_passed, det_failures, judge
-    warnings = [
-        str(item) for item in (judge.get("warnings") or []) if str(item).strip()
-    ]
-    stamped = {**judge, "warnings": warnings}
-    extra = [
-        str(item).strip()
-        for item in (judge.get("extra_failures") or [])
-        if str(item).strip()
-    ]
-    if expect_skill is None:
-        if judge.get("score_no_trigger") and extra:
-            return False, extra, stamped
-        return det_passed, det_failures, stamped
-    if extra:
-        stamped = {**stamped, "passed": False}
-        return False, extra, stamped
-    if _blocking_choice_failed(stamped):
-        failures = [
-            str(item)
-            for item in (stamped.get("reasons") or [])
-            if str(item).strip()
-        ]
-        stamped = {**stamped, "passed": False}
-        return False, failures or ["Got it right? Incorrect"], stamped
-    if judge.get("status") == "error":
-        reason = str(stamped.get("reason") or "").strip()
-        if not reason:
-            reasons = judge.get("reasons") or []
-            if isinstance(reasons, list) and reasons:
-                reason = str(reasons[0]).strip()
-        if not reason:
-            reason = "Quality was not scored."
-        unscored = {
-            **stamped,
-            "passed": None,
-            "quality_unscored": True,
-            "reason": reason,
-        }
-        if not det_passed:
-            return False, list(det_failures), unscored
-        if reason == UNUSABLE_ANSWER:
-            return False, [reason], {**unscored, "passed": False}
-        return None, [reason], unscored
-    if judge.get("status") == "skip" or judge.get("passed") is None:
-        return det_passed, det_failures, judge
-    passed = bool(judge.get("passed"))
-    failures = [str(item) for item in (judge.get("reasons") or []) if str(item).strip()]
-    if not passed and not failures:
-        failures = list(det_failures) or ["The judge couldn't score this check."]
-    passed, failures = _apply_mismatch(passed, failures, mismatch)
-    return passed, failures, stamped
+    stamped = dict(judge)
+    gate, failures = apply_gate(
+        stamped,
+        expect_skill=expect_skill,
+        det_passed=det_passed,
+        det_failures=det_failures,
+        trigger_passed=True if trigger_passed is None else trigger_passed,
+        mismatch=mismatch,
+    )
+    strip_unsure(stamped, gate)
+    return gate, failures, stamped
 
 
 def _seed_skill_selection(workspace: Path, expect_skill: str | None) -> None:
@@ -1055,9 +890,6 @@ def _run_task(
             steps, errors, had_path = count_path_steps(spans, result.transcript)
             det_passed = all(s.passed for s in scores)
             det_failures = [s.headline or s.detail for s in scores if not s.passed]
-            trigger_passed = all(
-                s.passed for s in scores if s.scorer == "skill_trigger"
-            )
             review = False
             if task.expect_skill is None:
                 judged = (
@@ -1067,6 +899,10 @@ def _run_task(
                 )
                 passed, failures = det_passed, det_failures
             elif is_live_harness(harness.name):
+                from skillgate_ai.judge_spec import builtin_spec
+                from skillgate_ai.score import score_run, spec_for_task
+                from skillgate_ai.workspace_outputs import collect_workspace_outputs
+
                 judged, mismatch, golden_payload, actual_payload = _run_outcome_judge(
                     task,
                     artifacts,
@@ -1080,19 +916,27 @@ def _run_task(
                     skill_instructions=skills[0].body if skills else None,
                     file_baseline=file_baseline,
                 )
-                if isinstance(judged, dict):
-                    judged = stabilize_adherence_review(judged, scores)
-                passed, failures, judged = _live_verdict(
-                    judged,
-                    task.expect_skill,
-                    det_passed=det_passed,
-                    det_failures=det_failures,
+                outputs = collect_workspace_outputs(
+                    task, sandbox.workspace, baseline=file_baseline
+                )
+                spec = (
+                    spec_for_task(skill_root, {"id": task.id, "judge": judged or {}})
+                    if skill_root is not None
+                    else builtin_spec()
+                )
+                judged = score_run(
+                    spec=spec,
+                    judged=judged,
+                    outputs=outputs,
+                    spans=spans,
+                    scores=scores,
+                    skill_text=skills[0].body if skills else None,
+                    expect_skill=task.expect_skill,
                     mismatch=mismatch,
-                    trigger_passed=trigger_passed,
                 )
-                review = bool(passed) and bool(
-                    isinstance(judged, dict) and judged.get("review")
-                )
+                passed = judged.get("passed")
+                failures = [str(item) for item in (judged.get("reasons") or []) if str(item)]
+                review = bool(passed) and bool(judged.get("review"))
                 judged = _maybe_explain_fail(
                     judge,
                     passed,

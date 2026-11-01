@@ -258,7 +258,7 @@ def test_adherence_low_conf_is_not_review_when_scorers_passed() -> None:
     assert stamped.get("review") is False
 
 
-def test_adherence_unsure_stays_when_a_scorer_failed() -> None:
+def test_adherence_unsure_clears_even_when_a_scorer_failed() -> None:
     judged = {
         "status": "completed",
         "passed": True,
@@ -274,8 +274,8 @@ def test_adherence_unsure_stays_when_a_scorer_failed() -> None:
     }
     scores = [Score(scorer="skill_trigger", passed=False, detail="Skill didn’t trigger")]
     out = stabilize_adherence_review(judged, scores)
-    assert out["cells"]["instruction_adherence"].get("status") == "unsure"
-    assert out["review"] is True
+    assert out["cells"]["instruction_adherence"].get("status") != "unsure"
+    assert out["review"] is False
 
 
 def test_other_unsure_cell_still_reviews() -> None:

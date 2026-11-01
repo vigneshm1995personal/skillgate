@@ -690,7 +690,7 @@ def test_missing_judge_reason_is_not_labeled_as_from_the_judge() -> None:
     assert "No reason recorded" in text
     assert "Correct on this run" not in text
     blob = text.split("Got it right?", 1)[1].split("\n", 1)[0]
-    assert "from the judge" in blob
+    assert "from the judge" not in blob
     assert "No reason recorded" in text.split("Got it right?", 1)[1]
 
 
@@ -955,13 +955,14 @@ def test_jev_evaluate_does_not_stamp_canned_why() -> None:
         names = list(questions)
     else:
         names = [str(item.get("name") or "") for item in questions]
-    assert any(name.endswith("_why") for name in names)
+    assert not any(name.endswith("_why") for name in names)
     canned = "The facts on this run are right."
     assert judged["cells"]["correctness"].get("reason") not in {canned, canned.rstrip(".")}
     rows = {row["id"]: row for row in check_rows({"judge": judged, "passed": False})}
     assert canned not in rows["correctness"]["reason"]
-    assert rows["correctness"]["reason"] != "No reason recorded"
-    assert "Facts in the reply:" in rows["correctness"]["reason"]
+    assert "Facts in the reply:" not in rows["correctness"]["reason"]
+    assert rows["correctness"]["reason"] == "No reason recorded"
+    assert rows["correctness"].get("source_label") in {"", None}
 
 
 def test_passed_green_run_check_rows_do_not_say_unsure() -> None:

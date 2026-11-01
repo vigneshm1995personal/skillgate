@@ -612,8 +612,8 @@ def test_missing_reply_is_red_without_a_connector_pack() -> None:
     assert not any("banned wording" in item.lower() for item in failures)
 
 
-def test_wording_override_shows_a_visible_note() -> None:
-    from skillgate_ai.engine import WORDING_OVERRIDE_NOTE
+def test_wording_extra_does_not_override_judge_fails() -> None:
+    from skillgate_ai.judge_bank import WORDING_OVERRIDE_NOTE
     from skillgate_ai.report import format_cli
     from skillgate_ai.run_details import format_run_show
 
@@ -621,15 +621,17 @@ def test_wording_override_shows_a_visible_note() -> None:
     reply = "The refund has not been submitted yet. USD 0.00 has been returned so far."
     facts = _wording_on(SKILL_BOTPRESS_4B_FULL, reply)
     judged = _judge_wording_red(extra_ok=True, extra_source="text", extra_label=ask)
-    judged["reasons"] = [
-        "Got it right? Incorrect (need Correct) — used submitted",
-        "Followed the rules? Violated (need Fully followed) — banned wording",
-    ]
     judged["answers"]["q0"] = {**judged["answers"]["q0"], **facts["q0"]}
     judged["cells"]["q0"] = {**judged["cells"]["q0"], **facts["q0"]}
     judged["reasons"] = [
         "Delivered a good result? Significant issues (need Clear and complete)",
     ]
+    judged["cells"]["result_quality"] = {
+        "label": "Delivered a good result?",
+        "choice": "Significant issues",
+        "confidence": 0.9,
+    }
+    judged["answers"]["result_quality"] = {"choice": "Significant issues", "confidence": 0.9}
     judged["cells"]["correctness"]["choice"] = "Correct"
     judged["cells"]["instruction_adherence"]["choice"] = "Fully followed"
     judged["answers"]["correctness"] = {"choice": "Correct", "confidence": 0.91}
@@ -639,16 +641,23 @@ def test_wording_override_shows_a_visible_note() -> None:
     }
     out = stabilize_adherence_review(judged, _scores())
     assert facts["q0"].get("honest_negation") is True
-    assert out["passed"] is True
-    assert WORDING_OVERRIDE_NOTE in (out.get("warnings") or [])
+    assert out["passed"] is not True
+    assert WORDING_OVERRIDE_NOTE not in (out.get("warnings") or [])
+    gate, failures, stamped = _live_verdict(
+        out, "ticket-deflector", det_passed=True, det_failures=[], trigger_passed=True
+    )
+    assert gate is False
+    assert any("Delivered a good result" in item for item in failures)
+    assert WORDING_OVERRIDE_NOTE not in ((stamped or {}).get("warnings") or [])
     task = TaskReport(
         task_id="rg4-negations",
         prompt="pending refund",
         expect_skill="ticket-deflector",
-        passed=True,
+        passed=False,
         scores=_scores(),
         selected_skill="ticket-deflector",
-        judge=out,
+        judge=stamped or out,
+        failures=list(failures),
     )
     report = SuiteReport(
         suite="suite",
@@ -656,33 +665,33 @@ def test_wording_override_shows_a_visible_note() -> None:
         skill="ticket-deflector",
         harness="cursor-agent",
         sandbox="local",
-        passed=True,
+        passed=False,
         tasks=[task],
     )
     cli = format_cli(report)
-    assert WORDING_OVERRIDE_NOTE in cli
+    assert WORDING_OVERRIDE_NOTE not in cli
     text = format_run_show(
         {
-            "run_id": "override",
-            "passed": True,
+            "run_id": "no-override",
+            "passed": False,
             "report": {
-                "gate": "green",
-                "passed": True,
-                "passed_count": 1,
+                "gate": "red",
+                "passed": False,
+                "passed_count": 0,
                 "task_count": 1,
                 "tasks": [
                     {
                         "id": "rg4-negations",
                         "name": "rg4-negations",
-                        "passed": True,
-                        "judge": out,
+                        "passed": False,
+                        "judge": stamped or out,
                     }
                 ],
             },
         },
         detail=True,
     )
-    assert WORDING_OVERRIDE_NOTE in text
+    assert WORDING_OVERRIDE_NOTE not in text
 
 
 def test_rg4_negation_stays_green_when_text_passes() -> None:
@@ -729,6 +738,18 @@ def test_rg4_negation_stays_green_when_text_passes() -> None:
         }
         judged["answers"]["q0"] = {**judged["answers"]["q0"], **facts["q0"]}
         judged["cells"]["q0"] = {**judged["cells"]["q0"], **facts["q0"]}
+        out = stabilize_adherence_review(judged, _scores())
+        gate, _failures, _stamped = _live_verdict(
+            out, "ticket-deflector", det_passed=True, det_failures=[], trigger_passed=True
+        )
+        assert gate is False, reply
+        judged["cells"]["result_quality"]["choice"] = "Clear and complete"
+        judged["answers"]["result_quality"] = {
+            "choice": "Clear and complete",
+            "confidence": 0.9,
+        }
+        judged["reasons"] = []
+        judged["passed"] = True
         out = stabilize_adherence_review(judged, _scores())
         gate, _failures, _stamped = _live_verdict(
             out, "ticket-deflector", det_passed=True, det_failures=[], trigger_passed=True

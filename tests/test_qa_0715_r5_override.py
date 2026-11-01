@@ -132,15 +132,15 @@ def test_bare_incorrect_stays_red_on_honest_rg4() -> None:
     blob = " ".join(str(item) for item in (out.get("reasons") or []))
     assert "Incorrect" in blob
     assert "Partially completed" in blob
-    assert "Delivered a good result?" not in blob
-    assert WORDING_OVERRIDE_NOTE in (out.get("warnings") or [])
-    gate, _failures, _stamped = _live_verdict(
+    assert WORDING_OVERRIDE_NOTE not in (out.get("warnings") or [])
+    gate, failures, _stamped = _live_verdict(
         out, "ticket-deflector", det_passed=True, det_failures=[], trigger_passed=True
     )
     assert gate is False
+    assert any("Incorrect" in item or "Partially completed" in item for item in failures)
 
 
-def test_rg4_log_and_text_extras_still_show_override_note() -> None:
+def test_rg4_log_and_text_extras_do_not_override_judge_fails() -> None:
     ask = wording_ask(compile_wording_rules(SKILL_BOTPRESS_4B_FULL))
     reply = "The refund has not been submitted yet. USD 0.00 has been returned so far."
     facts = _wording_on(SKILL_BOTPRESS_4B_FULL, reply)
@@ -165,7 +165,7 @@ def test_rg4_log_and_text_extras_still_show_override_note() -> None:
     }
     out = stabilize_adherence_review(judged, _scores())
     assert out["passed"] is not True
-    assert WORDING_OVERRIDE_NOTE in (out.get("warnings") or [])
+    assert WORDING_OVERRIDE_NOTE not in (out.get("warnings") or [])
     blob = " ".join(str(item) for item in (out.get("reasons") or []))
     assert "Incorrect" in blob
     assert "Violated" in blob
@@ -173,68 +173,36 @@ def test_rg4_log_and_text_extras_still_show_override_note() -> None:
         out, "ticket-deflector", det_passed=True, det_failures=[], trigger_passed=True
     )
     assert gate is False
-    assert WORDING_OVERRIDE_NOTE in ((stamped or {}).get("warnings") or [])
+    assert WORDING_OVERRIDE_NOTE not in ((stamped or {}).get("warnings") or [])
 
 
-def test_why_questions_are_unique_per_cell_and_stamp_this_run_line() -> None:
-    from skillgate_ai.judge_context import apply_why_reasons, with_run_reason_questions
+def test_assembled_run_text_is_not_stamped_as_the_reason() -> None:
     from skillgate_ai.judge_openai import _cell_entry
+    from skillgate_ai.score import drop_assembled_reasons
 
-    reply = "I've processed one refund of USD 49.00."
-    questions = with_run_reason_questions(
-        [
-            {
-                "type": "choice",
-                "name": name,
-                "instructions": f"{name}?",
-                "choices": [{"value": "ok", "description": "ok"}],
-            }
-            for name in CHECK_CELL_ORDER
-        ],
-        {
-            "actual_output": {"body": reply},
-            "expected_outcome": "Issue two refunds of USD 49.00.",
-            "skill_instructions": "Never issue a duplicate refund.",
-            "agent_trajectory": {
-                "commands": [
-                    {"argv": ["lookup"]},
-                    {"argv": ["issue_refund", "--charge", "ch_3QX81"]},
-                ]
-            },
-        },
-    )
-    why = [item for item in questions if str(item.get("name") or "").endswith("_why")]
-    assert {str(item["name"]) for item in why} == {f"{name}_why" for name in CHECK_CELL_ORDER}
-    descriptions = [
-        str(choice.get("description") or "")
-        for item in why
-        for choice in item.get("choices") or []
-        if str(choice.get("value") or "") != "none"
-    ]
-    assert len(descriptions) == len(set(descriptions))
-    assert all("on this run are right" not in item.lower() for item in descriptions)
+    assembled = {
+        "correctness": "Facts in the reply: I've processed one refund of USD 49.00.",
+        "task_completion": "Job expected: Issue two refunds of USD 49.00.",
+        "instruction_adherence": "Listed skill rule: Never issue a duplicate refund.",
+        "evidence_action_validity": "Tools used: lookup, issue_refund",
+        "result_quality": "Customer-facing reply: I've processed one refund of USD 49.00.",
+    }
     cells = {
-        name: _cell_entry(name, {"choice": "Incorrect"}, {name: name})
+        name: _cell_entry(name, {"choice": "Incorrect", "reason": assembled[name]}, {name: name})
         for name in CHECK_CELL_ORDER
     }
     answers = {
-        "correctness_why": {"choice": "reply"},
-        "task_completion_why": {"choice": "expected"},
-        "instruction_adherence_why": {"choice": "rules"},
-        "evidence_action_validity_why": {"choice": "tools"},
-        "result_quality_why": {"choice": "reply"},
+        name: {"choice": "Incorrect", "reason": assembled[name]} for name in CHECK_CELL_ORDER
     }
-    apply_why_reasons(cells, answers, questions)
-    assert "Facts in the reply:" in str(cells["correctness"].get("reason") or "")
-    assert reply[:20] in str(cells["correctness"].get("reason") or "")
-    assert "Job expected:" in str(cells["task_completion"].get("reason") or "")
-    assert "Listed skill rule:" in str(cells["instruction_adherence"].get("reason") or "")
-    assert "Tools used:" in str(cells["evidence_action_validity"].get("reason") or "")
-    assert "Customer-facing reply:" in str(cells["result_quality"].get("reason") or "")
-    assert cells["correctness"]["reason"] != cells["result_quality"]["reason"]
-    canned = "The facts on this run are right."
+    drop_assembled_reasons(cells, answers)
     for name in CHECK_CELL_ORDER:
-        assert canned not in str(cells[name].get("reason") or "")
+        assert cells[name].get("reason") in {None, ""}
+        assert "Facts in the reply:" not in str(cells[name].get("reason") or "")
+        assert "Tools used:" not in str(cells[name].get("reason") or "")
+        written = _cell_entry(
+            name, {"choice": "Incorrect", "reason": "Only one refund went through."}, {name: name}
+        )
+        assert written["reason"] == "Only one refund went through."
 
 
 def test_red_run_check_rows_do_not_say_unsure() -> None:

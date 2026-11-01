@@ -24,16 +24,14 @@ from skillgate_ai.judge_bank import (
     extract_confidence,
     extract_probabilities,
     extract_reason,
+    is_built_reason,
     is_rubric_reason,
     majority_vote_answers,
     unusable_answers,
     vote_round_summaries,
 )
 from skillgate_ai.judge_context import (
-    apply_why_reasons,
     attach_adherence_context,
-    stamp_why_on_answers,
-    with_run_reason_questions,
     workspace_files_for_judge,
 )
 from skillgate_ai.judge_images import IMAGE_MAX_BYTES, IMAGE_MAX_COUNT, collect_images
@@ -154,7 +152,7 @@ def _tail(text: str, limit: int = TRANSCRIPT_TAIL_CHARS) -> str:
 def _cell_entry(key: str, answer: Any, labels: Mapping[str, str]) -> dict[str, Any]:
     choice = extract_choice(answer)
     reason = extract_reason(answer)
-    if reason and is_rubric_reason(key, choice, reason):
+    if reason and (is_rubric_reason(key, choice, reason) or is_built_reason(reason)):
         reason = None
     cell: dict[str, Any] = {
         "label": labels[key],
@@ -436,11 +434,8 @@ class DecisionsBackend(_OpenAIPosted):
             payload_input = text
         include_path = _path_is_recorded(state.get("path"))
         resolved = spec or builtin_spec()
-        questions = with_run_reason_questions(
-            attach_adherence_context(
-                spec_decisions_questions(resolved, include_path=include_path),
-                state,
-            ),
+        questions = attach_adherence_context(
+            spec_decisions_questions(resolved, include_path=include_path),
             state,
         )
         result = self.post_json(
@@ -464,7 +459,6 @@ class DecisionsBackend(_OpenAIPosted):
             include_path=include_path,
             spec=resolved,
         )
-        stamp_why_on_answers(answers, questions)
         finished = _finished_answers(
             answers,
             model=model_name,
@@ -632,20 +626,12 @@ class OutcomeJudge:
             answers.update(facts)
             evaluated = dict(evaluated)
             evaluated["answers"] = answers
-        why_questions = with_run_reason_questions(
-            attach_adherence_context(
-                spec_decisions_questions(resolved, include_path=_path_is_recorded(path)),
-                state,
-            ),
-            state,
-        )
         return self._stamp(
             evaluated,
             artifacts=artifacts,
             omitted=omitted,
             include_path=_path_is_recorded(path),
             spec=resolved,
-            why_questions=why_questions,
         )
 
     def _majority_reask(
@@ -749,7 +735,6 @@ class OutcomeJudge:
         omitted: list[dict[str, Any]],
         include_path: bool,
         spec: JudgeSpec | None = None,
-        why_questions: list[dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
         resolved = spec or builtin_spec()
         model = str(evaluated.get("model") or self.backend.model)
@@ -789,7 +774,6 @@ class OutcomeJudge:
                 payload["upstream"] = upstream.strip()
             return payload
         answers = evaluated.get("answers") if isinstance(evaluated.get("answers"), dict) else {}
-        stamp_why_on_answers(answers, why_questions)
         if not include_path:
             answers = {key: value for key, value in answers.items() if key not in SOFT_CELL_ORDER}
         confidence = bool(
@@ -873,7 +857,6 @@ class OutcomeJudge:
                     cleaned["type"] = "predicate"
                 cleaned.setdefault("source", source)
                 extra_answers[question.id] = cleaned
-        apply_why_reasons(cells, answers, why_questions)
         why_answers = {
             str(key): value
             for key, value in answers.items()
@@ -881,15 +864,6 @@ class OutcomeJudge:
         }
         merged_answers = {**pass_answers, **extra_answers, **why_answers}
         extra_questions = {q.id: {"instructions": q.ask, "type": q.type} for q in resolved.extras}
-        why_stored = {}
-        for item in why_questions or []:
-            name = str(item.get("name") or "")
-            if name.endswith(WHY_SUFFIX):
-                why_stored[name] = {
-                    "instructions": item.get("instructions"),
-                    "type": "choice",
-                    "choices": item.get("choices"),
-                }
         extra_failures = extra_block_failures(resolved, answers, skipped=skipped)
         payload = self._finish_payload(
             self._payload(
@@ -907,7 +881,6 @@ class OutcomeJudge:
                 questions={
                     **{k: all_questions()[k] for k in CHECK_CELL_ORDER},
                     **extra_questions,
-                    **why_stored,
                 },
                 soft_questions=soft_questions,
                 scoring_endpoint=_scoring_endpoint(evaluated),

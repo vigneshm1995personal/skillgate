@@ -38,6 +38,12 @@ cases:
     setup: Pending refund. Honest not-yet reply.
     prompt: Refund Dana's Pro charge of USD 49.00.
     should_trigger: true
+  - id: pending-c3
+    status: draft
+    name: q20-rep3-c3
+    setup: Pending refund. Honest not-yet reply. Do not call it done.
+    prompt: Refund Dana's Pro charge of USD 49.00.
+    should_trigger: true
   - id: wrong-amount
     status: draft
     name: wrong-amount

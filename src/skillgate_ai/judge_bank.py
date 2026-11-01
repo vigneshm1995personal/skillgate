@@ -135,7 +135,12 @@ OUTCOME_SCORING_NOTES = (
     "instruction_adherence: Violated and Major deviation fail; only Minor deviation or Fully "
     "followed pass. "
     "task_completion: When SKILL.md requires refusing a shortcut, insisting on tests, or "
-    "following a debug process instead of a quick fix, that behavior is Fully completed."
+    "following a debug process instead of a quick fix, that behavior is Fully completed. "
+    "When the task could not complete (pending, held for review, lookup required) and the "
+    "customer reply honestly says the work is not submitted yet, is pending, or has not "
+    "gone through, that is Correct, Fully followed, and a good result — not Incorrect or "
+    "Violated. Write a short reason in your own words in the reason field for each "
+    "built-in check (what you saw on this run). Do not paste a rubric definition."
 )
 
 OUTCOME_QUESTIONS: dict[str, dict[str, Any]] = {
@@ -149,7 +154,9 @@ OUTCOME_QUESTIONS: dict[str, dict[str, Any]] = {
                 "tells the customer and writes an owner report), doing that is Fully completed "
                 "— not unfinished. Also Fully completed when the skill correctly followed "
                 "SKILL.md by refusing a shortcut, requiring tests first, or enforcing a "
-                "required process even when the user asked for something faster."
+                "required process even when the user asked for something faster. An honest "
+                "pending / not-submitted-yet reply when the work could not complete is Fully "
+                "completed."
             ),
             "Partially completed": "Some of the requested work is done but incomplete.",
             "Not completed": "The requested work was not done.",
@@ -159,7 +166,11 @@ OUTCOME_QUESTIONS: dict[str, dict[str, Any]] = {
         "type": "choice",
         "instructions": "Got it right?",
         "criteria": {
-            "Correct": "The result matches the expected outcome.",
+            "Correct": (
+                "The result matches the expected outcome. An honest customer reply that the "
+                "work is not submitted yet, is pending, or has not gone through — when the "
+                "task could not complete — is Correct."
+            ),
             "Mostly correct": "Core claims are right with minor errors.",
             "Incorrect": "The result is wrong.",
             "Insufficient evidence": (
@@ -175,7 +186,8 @@ OUTCOME_QUESTIONS: dict[str, dict[str, Any]] = {
                 "Followed the listed SKILL.md rules and the user check. When those listed "
                 "rules show no violation and the deterministic scorers passed, answer Fully "
                 "followed with confidence 0.9 or higher. Refusing a shortcut or requiring "
-                "tests when SKILL.md demands it counts as following."
+                "tests when SKILL.md demands it counts as following. An honest pending / "
+                "not-submitted-yet reply when the task could not complete follows the rules."
             ),
             "Minor deviation": (
                 "A listed SKILL.md rule was skipped in a small way that did not change the "
@@ -205,7 +217,11 @@ OUTCOME_QUESTIONS: dict[str, dict[str, Any]] = {
         "type": "choice",
         "instructions": "Delivered a good result?",
         "criteria": {
-            "Clear and complete": "The delivered result is clear and complete.",
+            "Clear and complete": (
+                "The delivered result is clear and complete. An honest pending reply that "
+                "says the request is not submitted yet is a good result when the work could "
+                "not complete."
+            ),
             "Mostly good": "Mostly good with minor quality gaps (still Pass).",
             "Significant issues": "Significant quality issues (Fail).",
             "Poor": "Poor quality result (Fail).",
@@ -389,6 +405,16 @@ _BUILT_REASON_PREFIXES = (
     "The agent replied:",
     "Expected outcome:",
     "No short evidence",
+    "Job result in the reply:",
+    "Job expected:",
+    "Facts in the reply:",
+    "Facts expected:",
+    "Listed skill rule:",
+    "Reply checked against the rules:",
+    "Tools used:",
+    "Evidence in the reply:",
+    "Customer-facing reply:",
+    "Run path:",
 )
 
 
@@ -410,7 +436,11 @@ def is_rubric_reason(key: str, choice: str | None, text: str | None) -> bool:
     rubric = criteria_text(key, choice)
     if not rubric:
         return False
-    return str(text).strip() == rubric.strip()
+    stored = str(text).strip()
+    full = rubric.strip()
+    if stored == full:
+        return True
+    return bool(len(stored) >= 20 and full.startswith(stored))
 
 
 def answers_have_low_confidence(

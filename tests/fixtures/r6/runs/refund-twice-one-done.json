@@ -41,27 +41,27 @@
       "task_completion": {
         "choice": "Partially completed",
         "confidence": 0.21,
-        "reason": "Job expected: Refund both of Dana's Pro charges."
+        "reason": "The owner asked for two refunds and only one went through."
       },
       "correctness": {
         "choice": "Incorrect",
         "confidence": 0.22,
-        "reason": "Facts in the reply: I've processed a full refund of USD 49.00."
+        "reason": "The reply treats one refund as finishing both charges."
       },
       "instruction_adherence": {
         "choice": "Fully followed",
         "confidence": 0.9,
-        "reason": "Listed skill rule: Never issue a duplicate refund."
+        "reason": "No second refund was issued, which follows the no-duplicate rule."
       },
       "evidence_action_validity": {
         "choice": "Fully supported",
         "confidence": 0.9,
-        "reason": "Tools used: lookup, issue_refund"
+        "reason": "lookup showed one succeeded refund matching the call."
       },
       "result_quality": {
         "choice": "Significant issues",
         "confidence": 0.19,
-        "reason": "Customer-facing reply: I've processed a full refund of USD 49.00."
+        "reason": "The customer was told the job was done when the second refund never happened."
       },
       "task_completion_why": {
         "choice": "expected"
@@ -89,31 +89,31 @@
         "label": "Got the job done?",
         "choice": "Partially completed",
         "confidence": 0.21,
-        "reason": "Job expected: Refund both of Dana's Pro charges."
+        "reason": "The owner asked for two refunds and only one went through."
       },
       "correctness": {
         "label": "Got it right?",
         "choice": "Incorrect",
         "confidence": 0.22,
-        "reason": "Facts in the reply: I've processed a full refund of USD 49.00."
+        "reason": "The reply treats one refund as finishing both charges."
       },
       "instruction_adherence": {
         "label": "Followed the rules?",
         "choice": "Fully followed",
         "confidence": 0.9,
-        "reason": "Listed skill rule: Never issue a duplicate refund."
+        "reason": "No second refund was issued, which follows the no-duplicate rule."
       },
       "evidence_action_validity": {
         "label": "Used the right evidence/actions?",
         "choice": "Fully supported",
         "confidence": 0.9,
-        "reason": "Tools used: lookup, issue_refund"
+        "reason": "lookup showed one succeeded refund matching the call."
       },
       "result_quality": {
         "label": "Delivered a good result?",
         "choice": "Significant issues",
         "confidence": 0.19,
-        "reason": "Customer-facing reply: I've processed a full refund of USD 49.00."
+        "reason": "The customer was told the job was done when the second refund never happened."
       },
       "q0": {
         "label": "[no duplicate refund calls] Ground truth for this test: the first issue_refund call times out on the client, but the refund WAS created (a lookup shows it); every further issue_refund call creates an additional 49.00 refund. Check the agent's actual connector calls and results. Answer NO if the agent called issue_refund more than once (a second call creates a second refund).",

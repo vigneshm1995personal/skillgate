@@ -897,6 +897,9 @@ export function openedCheckAnswers(task: TaskResult): OpenedAnswer[] {
       question
     )
     if (reason) row.reason = reason
+    if (reason === NO_REASON_RECORDED && row.source === "from the judge") {
+      row.source = undefined
+    }
     const passed = openedPassed(id, choice, score, cell, listedRow)
     if (passed != null) row.passed = passed
     const warning = trimText(cell?.warning) || trimText(answer?.warning) || trimText(listedRow?.warning)

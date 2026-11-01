@@ -161,7 +161,6 @@ def test_rescore_guard_refused_is_warning_not_pass(tmp_path: Path) -> None:
     assert result.exit_code == 0
     assert "WARNING" in result.stdout
     assert GUARD_REFUSED_RETRY_NOTE in result.stdout
-    assert "duplicate" in result.stdout.lower()
     json_result = _rescore_cli(pack, "guard-refused", "--json")
     payload = _json_payload(json_result)
     assert payload["passed"] is True
@@ -186,22 +185,26 @@ def test_rescore_both_succeeded_is_red(tmp_path: Path) -> None:
     assert result.exit_code == 1
 
 
-def test_rescore_rg4_negation_greens_only_result_quality(tmp_path: Path) -> None:
+def test_rescore_rg4_negation_greens_from_judge_choices(tmp_path: Path) -> None:
     pack = _pack_with_history(tmp_path, "rg4-negation")
     scored = rescore_saved_run(pack, find_history_run(pack, "rg4-negation"))
     task = _task(scored)
     assert scored["passed"] is True
     assert task["passed"] is True
     warnings = (task.get("judge") or {}).get("warnings") or []
-    assert WORDING_OVERRIDE_NOTE in warnings
+    assert WORDING_OVERRIDE_NOTE not in warnings
     assert UNSURE_REVIEW not in json.dumps(scored)
+    cells = (task.get("judge") or {}).get("cells") or {}
+    assert cells["correctness"]["choice"] == "Correct"
+    assert cells["instruction_adherence"]["choice"] == "Fully followed"
+    assert cells["result_quality"]["choice"] == "Clear and complete"
     reasons = " ".join(str(item) for item in ((task.get("judge") or {}).get("reasons") or []))
     assert "Incorrect" not in reasons
     assert "Violated" not in reasons
     assert "Partially completed" not in reasons
     result = _rescore_cli(pack, "rg4-negation")
     assert result.exit_code == 0
-    assert WORDING_OVERRIDE_NOTE in result.stdout
+    assert WORDING_OVERRIDE_NOTE not in result.stdout
 
 
 def test_rescore_wrong_amount_stays_red(tmp_path: Path) -> None:

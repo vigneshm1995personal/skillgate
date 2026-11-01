@@ -669,7 +669,7 @@ describe("openedCheckAnswers / low confidence", () => {
     })
   })
 
-  it("labels a judge-scored custom check from the judge", () => {
+  it("does not label No reason recorded as from the judge", () => {
     const rows = openedCheckAnswers({
       ...passTask,
       judge: {
@@ -688,7 +688,37 @@ describe("openedCheckAnswers / low confidence", () => {
       },
     })
     expect(rows.at(-1)).toMatchObject({
+      reason: "No reason recorded",
+    })
+    expect(rows.at(-1)?.source).not.toBe("from the judge")
+  })
+
+  it("labels a judge-scored custom check from the judge when a reason was written", () => {
+    const rows = openedCheckAnswers({
+      ...passTask,
+      judge: {
+        ...passTask.judge,
+        answers: {
+          ...passTask.judge!.answers,
+          customer_reply: {
+            choice: "Yes",
+            source: "judge",
+            reason: "The customer reply said yes.",
+          },
+        },
+        cells: {
+          customer_reply: {
+            label: "Did the customer reply yes?",
+            choice: "Yes",
+            source: "judge",
+            reason: "The customer reply said yes.",
+          },
+        },
+      },
+    })
+    expect(rows.at(-1)).toMatchObject({
       source: "from the judge",
+      reason: "The customer reply said yes.",
     })
   })
 

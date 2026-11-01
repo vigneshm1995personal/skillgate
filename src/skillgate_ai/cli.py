@@ -459,6 +459,19 @@ def rescore_cmd(
         if row is None or dest is None:
             raise SkillGateError(f"No run named {run_id}.", exit_code=2)
         scored = rescore_saved_run(dest, row)
+        from uuid import uuid4
+
+        from skillgate_ai.history import append_eval
+
+        new_id = uuid4().hex[:12]
+        scored = dict(scored)
+        scored["run_id"] = new_id
+        append_eval(
+            dest,
+            run_id=new_id,
+            passed=scored.get("passed") if isinstance(scored.get("passed"), bool) else None,
+            report=scored.get("report") if isinstance(scored.get("report"), dict) else None,
+        )
     except SkillGateError as exc:
         console.print(exc.render())
         raise typer.Exit(exc.exit_code) from None
