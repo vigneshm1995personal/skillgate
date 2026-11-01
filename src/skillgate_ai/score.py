@@ -11,7 +11,6 @@ from skillgate_ai.judge_bank import (
     CHECK_CELL_LABELS,
     CHECK_CELL_ORDER,
     GUARD_REFUSED_RETRY_NOTE,
-    MATCHED_OUTPUT_LINE,
     PASS_LOCK,
     SOFT_CELL_ORDER,
     UNSURE_REVIEW,
@@ -119,6 +118,50 @@ def score_run(
     out["reasons"] = failures
     strip_unsure(out, gate)
     return out
+
+
+def _q0_no_summary(text: str | None) -> bool:
+    raw = str(text or "").strip()
+    if not raw:
+        return False
+    return ("→ No" in raw or "-> No" in raw) and (
+        raw.startswith("q")
+        or "q0" in raw.lower()
+        or "behavior failed this check" in raw.lower()
+    )
+
+
+def fail_happened_line(task: Mapping[str, Any], judge: Mapping[str, Any] | None = None) -> str:
+    """Named fail for History/CLI. Never a stale q0 → No stand-in."""
+    blob = judge if isinstance(judge, Mapping) else {}
+    if not blob:
+        blob = task.get("judge") if isinstance(task.get("judge"), Mapping) else {}
+    extras = [
+        str(item).strip()
+        for item in (blob.get("extra_failures") or [])
+        if str(item).strip() and not _q0_no_summary(str(item))
+    ]
+    amount_prefix = "The reply or draft stated"
+    amount = next(
+        (
+            item
+            for item in extras
+            if item.startswith(amount_prefix) or "billing/tool log" in item.lower()
+        ),
+        None,
+    )
+    if amount:
+        return amount
+    named = builtin_fail_lines(blob)
+    if named:
+        return named[0]
+    if extras:
+        return extras[0]
+    for item in task.get("failures") or []:
+        text = str(item).strip()
+        if text and not _q0_no_summary(text):
+            return text
+    return "This check did not pass."
 
 
 def builtin_fail_lines(judged: Mapping[str, Any]) -> list[str]:
@@ -383,9 +426,7 @@ def finish_task(task: dict[str, Any], gate: bool | None) -> None:
         judge["review"] = False
         task["status"] = "fail"
         task["review"] = False
-        happened = str(task.get("happened") or "").strip()
-        if happened in {MATCHED_OUTPUT_LINE, GUARD_REFUSED_RETRY_NOTE}:
-            task["happened"] = ""
+        task["happened"] = fail_happened_line(task, judge)
     elif task.get("review") or judge.get("review"):
         task["status"] = "unsure"
     task["judge"] = judge

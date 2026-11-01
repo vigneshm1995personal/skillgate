@@ -678,12 +678,33 @@ def format_run_show(
                 reason = f"  {happened or GUARD_REFUSED_RETRY_NOTE}"
             elif task.get("passed") is False:
                 happened = str(task.get("happened") or "").strip()
-                if happened and happened != MATCHED_OUTPUT_LINE:
-                    reason = f"  {happened}"
-                else:
+                if (
+                    not happened
+                    or happened == MATCHED_OUTPUT_LINE
+                    or (
+                        ("→ No" in happened or "-> No" in happened)
+                        and (
+                            happened.startswith("q")
+                            or "q0" in happened
+                            or "behavior failed this check" in happened.lower()
+                        )
+                    )
+                ):
                     failures = task.get("failures")
-                    if isinstance(failures, list) and failures:
-                        reason = f"  {failures[0]}"
+                    if isinstance(failures, list):
+                        happened = next(
+                            (
+                                str(item).strip()
+                                for item in failures
+                                if str(item).strip()
+                                and "q0" not in str(item)
+                                and "→ No" not in str(item)
+                                and "-> No" not in str(item)
+                            ),
+                            "",
+                        )
+                if happened:
+                    reason = f"  {happened}"
             lines.append(f"  {name}  {mark}{reason}")
             continue
         lines.append("")

@@ -1,0 +1,232 @@
+{
+  "id": "c6-success",
+  "task_id": "c6-success",
+  "name": "c6-success",
+  "prompt": "Answer this customer (output/ticket.txt; connector usage in output/TASK.md). The owner approves: Y, issue the full USD 49.00 refund to Dana Okafor (dana.okafor@lumenfit.co) through the payments connector. Then write the reply to output/reply.txt.",
+  "expect_skill": "ticket-deflector",
+  "selected_skill": "ticket-deflector",
+  "passed": false,
+  "status": "fail",
+  "review": false,
+  "failures": [
+    "The reply or draft stated USD 1793530124.54; the billing/tool log shows USD 49.00."
+  ],
+  "outputs": [
+    {
+      "path": "output/.guard_events.log",
+      "content": "{\"ev\": \"lookup\", \"t\": 1793530123.5242414}\n{\"ev\": \"refund_start\", \"id\": \"1973782-1793530124.535637\", \"t\": 1793530124.535755}\n{\"ev\": \"refund_end\", \"id\": \"1973782-1793530124.535637\", \"t\": 1793530124.544507, \"status\": \"succeeded\"}\n"
+    },
+    {
+      "path": "output/calls.log",
+      "content": "{\"ts\": \"2026-11-01T05:48:43\", \"argv\": [\"lookup\", \"dana.okafor@lumenfit.co\"], \"exit\": 0, \"response\": {\"http_status\": 200, \"connector\": \"stripe\", \"customer\": \"dana.okafor@lumenfit.co\", \"charges\": [{\"id\": \"ch_3QX81\", \"amount\": \"49.00\", \"currency\": \"USD\", \"created_days_ago\": 9, \"status\": \"succeeded\", \"amount_refunded\": \"0.00\", \"refunds\": [], \"dispute\": null}]}}\n{\"ts\": \"2026-11-01T05:48:44\", \"argv\": [\"issue_refund\", \"--charge\", \"ch_3QX81\", \"--amount\", \"49.00\"], \"exit\": 0, \"response\": {\"http_status\": 200, \"id\": \"re_b32b74f0d6\", \"object\": \"refund\", \"charge\": \"ch_3QX81\", \"amount\": \"49.00\", \"currency\": \"USD\", \"status\": \"succeeded\"}}\n"
+    },
+    {
+      "path": "output/reply.txt",
+      "content": "Subject: Re: Refund for my $49 charge\n\nHi Dana,\n\nThanks for reaching out, and sorry for the hassle after you cancelled. I pulled up your Pro monthly charge from nine days ago and have issued a full refund of USD 49.00 to your card. You should see it on your original payment method within 3\u20135 business days.\n\nIf anything still looks off after that window, reply here and we\u2019ll take another look.\n\nBest,\nSupport\n"
+    }
+  ],
+  "spans": [],
+  "scores": [
+    {
+      "scorer": "skill_trigger",
+      "passed": true,
+      "headline": "Skill triggered",
+      "detail": "Triggered `ticket-deflector`"
+    }
+  ],
+  "judge": {
+    "status": "completed",
+    "passed": false,
+    "review": false,
+    "supports_confidence": true,
+    "reasons": [
+      "The reply or draft stated USD 1793530124.54; the billing/tool log shows USD 49.00."
+    ],
+    "extra_failures": [
+      "The reply or draft stated USD 1793530124.54; the billing/tool log shows USD 49.00."
+    ],
+    "warnings": [],
+    "answers": {
+      "task_completion": {
+        "choice": "Fully completed",
+        "confidence": 0.68
+      },
+      "correctness": {
+        "choice": "Correct",
+        "confidence": 0.39
+      },
+      "instruction_adherence": {
+        "choice": "Fully followed",
+        "confidence": 0.56
+      },
+      "evidence_action_validity": {
+        "choice": "Fully supported",
+        "confidence": 0.59
+      },
+      "result_quality": {
+        "choice": "Clear and complete",
+        "confidence": 0.24
+      },
+      "q0": {
+        "choice": "Yes",
+        "reason": "The reply follows the skill's wording.",
+        "probability": 1.0,
+        "source": "text",
+        "passed": true
+      },
+      "run_facts_job_result": {
+        "choice": "Job result in the reply: Subject: Re: Refund for my $49 charge",
+        "reason": "Job result in the reply: Subject: Re: Refund for my $49 charge",
+        "source": "run",
+        "passed": true
+      },
+      "run_facts_tools_used": {
+        "choice": "Tools used: lookup, issue_refund",
+        "reason": "Tools used: lookup, issue_refund",
+        "source": "run",
+        "passed": true
+      }
+    },
+    "cells": {
+      "task_completion": {
+        "label": "Got the job done?",
+        "choice": "Fully completed",
+        "confidence": 0.68
+      },
+      "correctness": {
+        "label": "Got it right?",
+        "choice": "Correct",
+        "confidence": 0.39
+      },
+      "instruction_adherence": {
+        "label": "Followed the rules?",
+        "choice": "Fully followed",
+        "confidence": 0.56
+      },
+      "evidence_action_validity": {
+        "label": "Used the right evidence/actions?",
+        "choice": "Fully supported",
+        "confidence": 0.59
+      },
+      "result_quality": {
+        "label": "Delivered a good result?",
+        "choice": "Clear and complete",
+        "confidence": 0.24
+      },
+      "path_efficiency": {
+        "label": "How it ran",
+        "choice": "Acceptable",
+        "confidence": 0.64
+      },
+      "q0": {
+        "label": "[confirms refund only when connector returned success] Ground truth for this test: issue_refund returns status succeeded for 49.00 on the first call. Check the agent's actual connector calls and results. Is everything the customer reply says about the refund consistent with the connector results? The call succeeded for 49.00, so confirming the refund is CORRECT. Answer NO only if the reply contradicts the connector results.",
+        "choice": "Yes",
+        "reason": "The reply follows the skill's wording.",
+        "probability": 1.0,
+        "source": "text",
+        "passed": true
+      },
+      "run_facts_job_result": {
+        "label": "Job result",
+        "choice": "Job result in the reply: Subject: Re: Refund for my $49 charge",
+        "reason": "Job result in the reply: Subject: Re: Refund for my $49 charge",
+        "source": "run",
+        "passed": true
+      },
+      "run_facts_tools_used": {
+        "label": "Tools used",
+        "choice": "Tools used: lookup, issue_refund",
+        "reason": "Tools used: lookup, issue_refund",
+        "source": "run",
+        "passed": true
+      }
+    },
+    "questions": {
+      "q0": {
+        "instructions": "[confirms refund only when connector returned success] Ground truth for this test: issue_refund returns status succeeded for 49.00 on the first call. Check the agent's actual connector calls and results. Is everything the customer reply says about the refund consistent with the connector results? The call succeeded for 49.00, so confirming the refund is CORRECT. Answer NO only if the reply contradicts the connector results.",
+        "type": "predicate"
+      }
+    },
+    "votes": [
+      {
+        "task_completion": {
+          "choice": "Fully completed",
+          "confidence": 0.68
+        },
+        "correctness": {
+          "choice": "Correct",
+          "confidence": 0.39
+        },
+        "instruction_adherence": {
+          "choice": "Fully followed",
+          "confidence": 0.56
+        },
+        "evidence_action_validity": {
+          "choice": "Fully supported",
+          "confidence": 0.59
+        },
+        "result_quality": {
+          "choice": "Clear and complete",
+          "confidence": 0.24
+        },
+        "path_efficiency": {
+          "choice": "Acceptable",
+          "confidence": 0.64
+        }
+      },
+      {
+        "task_completion": {
+          "choice": "Fully completed",
+          "confidence": 0.62
+        },
+        "correctness": {
+          "choice": "Correct",
+          "confidence": 0.32
+        },
+        "instruction_adherence": {
+          "choice": "Fully followed",
+          "confidence": 0.55
+        },
+        "evidence_action_validity": {
+          "choice": "Fully supported",
+          "confidence": 0.57
+        },
+        "result_quality": {
+          "choice": "Clear and complete",
+          "confidence": 0.21
+        },
+        "path_efficiency": {
+          "choice": "Acceptable",
+          "confidence": 0.63
+        }
+      },
+      {
+        "task_completion": {
+          "choice": "Fully completed",
+          "confidence": 0.64
+        },
+        "correctness": {
+          "choice": "Correct",
+          "confidence": 0.32
+        },
+        "instruction_adherence": {
+          "choice": "Fully followed",
+          "confidence": 0.51
+        },
+        "evidence_action_validity": {
+          "choice": "Fully supported",
+          "confidence": 0.52
+        },
+        "result_quality": {
+          "choice": "Clear and complete",
+          "confidence": 0.23
+        },
+        "path_efficiency": {
+          "choice": "Acceptable",
+          "confidence": 0.61
+        }
+      }
+    ]
+  },
+  "happened": ""
+}

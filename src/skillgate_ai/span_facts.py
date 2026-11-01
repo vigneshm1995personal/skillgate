@@ -445,7 +445,15 @@ _HEDGE_RE = re.compile(
     r"rest (?:of the refund )?is still|still being handled",
     re.IGNORECASE,
 )
-_MONEY_RE = re.compile(r"(?:usd\s*)?(\d+\.\d{2})", re.IGNORECASE)
+_CLAIMED_MONEY_RE = re.compile(
+    r"(?:USD|EUR|\$|€)\s*(\d+\.\d{2})",
+    re.IGNORECASE,
+)
+_LOG_AMOUNT_FIELD_RE = re.compile(
+    r"(?:--amount\b|(?<![A-Za-z_])amount(?:_refunded)?)\s*[\"']?\s*[:=,]?\s*"
+    r"(?:USD|EUR|\$|€)?\s*[\"']?(\d+\.\d{2})",
+    re.IGNORECASE,
+)
 _ALREADY_ISSUED_ASK = re.compile(
     r"already been issued|ALREADY been issued|treats a timeout|"
     r"does not call a pending|reads the response body",
@@ -658,12 +666,12 @@ def _succeeded_amounts(
                 continue
             except (TypeError, ValueError):
                 pass
-        found = _MONEY_RE.findall(json.dumps(resp, default=str))
-        amounts.extend(float(item) for item in found)
+        found = _LOG_AMOUNT_FIELD_RE.findall(json.dumps(resp, default=str))
+        amounts.extend(float(item) for item in found if float(item) > 0.001)
     if amounts:
         return amounts
-    blob = " ".join(tool_results(spans, "issue_refund", trajectory=trajectory)).lower()
-    return [float(item) for item in _MONEY_RE.findall(blob)] if "succeed" in blob else []
+    blob = " ".join(tool_results(spans, "issue_refund", trajectory=trajectory))
+    return _money_values(blob, _LOG_AMOUNT_FIELD_RE) if "succeed" in blob.lower() else []
 
 
 def _lookup_shows_refund(calls: Sequence[Mapping[str, Any]]) -> bool:
@@ -745,10 +753,10 @@ def _compute_reply_fact(
         amounts = _succeeded_amounts(spans, trajectory, calls)
         if not amounts:
             tool = _primary_tool(ask, spans, trajectory=trajectory) or "issue_refund"
-            blob = " ".join(tool_results(spans, tool, trajectory=trajectory)).lower()
-            amounts = [float(item) for item in _MONEY_RE.findall(blob)]
+            blob = " ".join(tool_results(spans, tool, trajectory=trajectory))
+            amounts = _money_values(blob, _LOG_AMOUNT_FIELD_RE)
         if amounts and issued:
-            claimed = [float(item) for item in _MONEY_RE.findall(reply.lower())]
+            claimed = _money_values(reply, _CLAIMED_MONEY_RE)
             total = sum(amounts)
             if claimed and max(claimed) > total + 0.001:
                 return _predicate(False, source="log")
@@ -812,52 +820,72 @@ def _wrong_amount_claim(outputs: Sequence[Mapping[str, Any]] | str | None) -> bo
     return amount_mismatch(outputs) is not None
 
 
+def _money_values(text: str, pattern: re.Pattern[str]) -> list[float]:
+    values: list[float] = []
+    for raw in pattern.findall(text or ""):
+        try:
+            value = float(raw)
+        except (TypeError, ValueError):
+            continue
+        if value <= 0.001:
+            continue
+        values.append(value)
+    return values
+
+
 def _claimed_amounts(outputs: Sequence[Mapping[str, Any]] | str | None) -> list[float]:
     claimed: list[float] = []
     for text in _amount_texts(outputs):
-        for raw in _MONEY_RE.findall(text.lower()):
-            try:
-                value = float(raw)
-            except (TypeError, ValueError):
-                continue
-            if value <= 0.001:
-                continue
-            claimed.append(value)
+        claimed.extend(_money_values(text, _CLAIMED_MONEY_RE))
     return claimed
 
 
 def _amount_texts(outputs: Sequence[Mapping[str, Any]] | str | None) -> list[str]:
+    """Customer-facing copy only: reply and draft, never logs or timestamps."""
     texts: list[str] = []
-    reply = _reply_text(outputs)
-    if reply.strip():
-        texts.append(reply)
     if isinstance(outputs, str):
+        if outputs.strip():
+            texts.append(outputs)
         return texts
-    for item in outputs or []:
-        if not isinstance(item, Mapping):
-            continue
-        path = str(item.get("path") or "").replace("\\", "/").lower()
-        if path.endswith(("calls.log", "reply.txt")):
-            continue
-        body = str(
-            item.get("content") or item.get("body") or item.get("extracted_text") or ""
-        ).strip()
+    for name in ("reply.txt", "draft.txt"):
+        body = _output_file(outputs, name).strip()
         if body:
             texts.append(body)
     return texts
 
 
+def _logged_money_amounts(
+    outputs: Sequence[Mapping[str, Any]] | str | None,
+) -> list[float]:
+    """Refund/charge amount fields from calls.log and billing.log only."""
+    texts: list[str] = []
+    if isinstance(outputs, str):
+        texts.append(outputs)
+    else:
+        for name in ("calls.log", "billing.log"):
+            body = _output_file(outputs, name).strip()
+            if body:
+                texts.append(body)
+    logged: list[float] = []
+    for text in texts:
+        logged.extend(_money_values(text, _LOG_AMOUNT_FIELD_RE))
+    return logged
+
+
 def amount_mismatch(
     outputs: Sequence[Mapping[str, Any]] | str | None,
 ) -> str | None:
-    """Fail when the reply/draft amount disagrees with the billing or tool log."""
-    calls = _parse_calls_log(outputs)
-    logged = _succeeded_amounts(None, None, calls)
+    """Fail when a currency-marked reply/draft amount is absent from the log."""
+    logged = _logged_money_amounts(outputs)
     claimed = _claimed_amounts(outputs)
     if not logged or not claimed:
         return None
-    billed = round(sum(logged), 2)
-    stated = round(max(claimed), 2)
+    logged_set = {round(item, 2) for item in logged}
+    missing = [round(item, 2) for item in claimed if round(item, 2) not in logged_set]
+    if not missing:
+        return None
+    stated = round(max(missing), 2)
+    billed = round(max(logged), 2)
     if abs(stated - billed) <= 0.001:
         return None
     return AMOUNT_MISMATCH_NOTE.format(
