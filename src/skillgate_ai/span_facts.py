@@ -15,8 +15,16 @@ _TOOL_CALLED = re.compile(
     re.IGNORECASE,
 )
 _SNAKE = re.compile(r"\b([a-z][a-z0-9]*_[a-z0-9_]+)\b")
-_MORE_THAN_ONCE = re.compile(r"more than once|duplicate|second (?:call|refund)", re.IGNORECASE)
+_MORE_THAN_ONCE = re.compile(
+    r"more than once|at most once|duplicate|second (?:call|refund)",
+    re.IGNORECASE,
+)
+_AT_MOST_ONCE = re.compile(r"at most once", re.IGNORECASE)
+_NO_DUPLICATE = re.compile(r"\bno duplicate\b", re.IGNORECASE)
 _ANSWER_NO_IF = re.compile(r"answer\s+no\s+if", re.IGNORECASE)
+_FILE = re.compile(
+    r"`([^`]+?\.[A-Za-z0-9]+)`|\b([A-Za-z0-9_.-]+\.(?:txt|md|json|sql|csv|log|pdf|py))\b"
+)
 _REPLY = re.compile(r"\breply\b|\bcustomer (?:says|said|reply)\b", re.IGNORECASE)
 _RETURN = re.compile(r"\breturns?\b|\breturned\b|\bresult\b", re.IGNORECASE)
 _STATUS = re.compile(
@@ -45,6 +53,8 @@ _STOP = frozenset(
         "call",
         "calls",
         "called",
+        "reading",
+        "same",
         "return",
         "returned",
         "returns",
@@ -120,6 +130,47 @@ def tool_results(
     return out
 
 
+def count_file_reads(
+    spans: Sequence[Mapping[str, Any]] | None,
+    name: str,
+    *,
+    trajectory: Mapping[str, Any] | None = None,
+    tool: str | None = None,
+) -> int:
+    """How many logged calls mentioned ``name`` (a file like status.txt)."""
+    token = (name or "").strip()
+    if not token:
+        return 0
+    needle = token.lower()
+    tool_name = (tool or "").strip().lower()
+    count = 0
+    for span in spans or []:
+        if not isinstance(span, Mapping):
+            continue
+        attrs = attr_map(dict(span))
+        called = str(attrs.get("gen_ai.tool.name") or "").strip().lower()
+        args = str(attrs.get("gen_ai.tool.call.arguments") or "")
+        path = str(attrs.get("file.path") or "")
+        blob = f"{args} {path}".lower()
+        if needle not in blob:
+            continue
+        if tool_name and called and called != tool_name and tool_name not in blob:
+            continue
+        count += 1
+    if count or not trajectory:
+        return count
+    for row in trajectory.get("commands") or []:
+        if not isinstance(row, Mapping):
+            continue
+        blob = f"{row.get('tool') or ''} {row.get('args') or ''} {row.get('file') or ''}"
+        if needle not in blob.lower():
+            continue
+        if tool_name and tool_name not in blob.lower():
+            continue
+        count += 1
+    return count
+
+
 def resolve_log_facts(
     spec: JudgeSpec,
     spans: Sequence[Mapping[str, Any]] | None,
@@ -160,15 +211,23 @@ def _compute_question(
     if question.type != "predicate":
         return None
     ask = question.ask or ""
-    tool = _primary_tool(ask, spans, trajectory=trajectory)
-    if not tool:
-        return None
     kind = _fact_kind(ask)
+    file_name = _primary_file(ask)
+    tool = _primary_tool(ask, spans, trajectory=trajectory)
     if kind == "count":
-        count = count_tool_calls(spans, tool, trajectory=trajectory)
+        if file_name:
+            count = count_file_reads(
+                spans, file_name, trajectory=trajectory, tool=tool
+            )
+        elif tool:
+            count = count_tool_calls(spans, tool, trajectory=trajectory)
+        else:
+            return None
         if count == 0:
             return None
-        return _predicate(count <= 1, source="log")
+        return _predicate(_count_is_yes(ask, count), source="log")
+    if not tool:
+        return None
     if kind == "called":
         count = count_tool_calls(spans, tool, trajectory=trajectory)
         called = count > 0
@@ -257,6 +316,24 @@ def _fact_kind(ask: str) -> str | None:
     if _TOOL_CALLED.search(ask) or re.search(r"\b(?:was|were)\s+.{0,20}called\b", ask, re.IGNORECASE):
         return "called"
     return None
+
+
+def _primary_file(ask: str) -> str | None:
+    match = _FILE.search(ask or "")
+    if not match:
+        return None
+    return (match.group(1) or match.group(2) or "").strip() or None
+
+
+def _count_is_yes(ask: str, count: int) -> bool:
+    """Yes/No polarity for a count fact. Never rewrite the ask."""
+    text = ask or ""
+    no_if_more = bool(_ANSWER_NO_IF.search(text) and re.search(r"more than once", text, re.IGNORECASE))
+    if no_if_more or _AT_MOST_ONCE.search(text) or _NO_DUPLICATE.search(text):
+        return count <= 1
+    if re.search(r"more than once", text, re.IGNORECASE):
+        return count > 1
+    return count <= 1
 
 
 def _wanted_status(ask: str) -> list[str]:

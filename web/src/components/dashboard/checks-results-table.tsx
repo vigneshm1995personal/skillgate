@@ -305,7 +305,12 @@ function OpenedDetails({
               <dt className="font-medium">{item.label}</dt>
               <dd className="text-muted-foreground m-0">
                 {item.answer}
-                {item.source ? ` (${item.source})` : ""}
+                {item.source ? (
+                  <span className="check-source text-foreground/80">
+                    {" "}
+                    ({item.source})
+                  </span>
+                ) : null}
               </dd>
             </div>
           ))}

@@ -496,6 +496,64 @@ describe("openedCheckAnswers / low confidence", () => {
     })
   })
 
+  it("labels a custom check from check_answers when cells omit source", () => {
+    const rows = openedCheckAnswers({
+      ...passTask,
+      check_answers: [
+        {
+          label: "Did the agent call shell more than once?",
+          answer: "Yes",
+          source: "log",
+          source_label: "from the log",
+        },
+      ],
+      judge: {
+        ...passTask.judge,
+        cells: {
+          ...passTask.judge!.cells,
+          dup_shell: {
+            label: "Did the agent call shell more than once?",
+            choice: "Yes",
+          },
+        },
+        questions: {
+          dup_shell: {
+            type: "predicate",
+            instructions: "Did the agent call shell more than once?",
+          },
+        },
+      },
+    })
+    expect(rows.at(-1)).toMatchObject({
+      label: "Did the agent call shell more than once?",
+      answer: "Yes",
+      source: "from the log",
+    })
+  })
+
+  it("labels a judge-scored custom check from the judge", () => {
+    const rows = openedCheckAnswers({
+      ...passTask,
+      judge: {
+        ...passTask.judge,
+        answers: {
+          ...passTask.judge!.answers,
+          customer_reply: { choice: "Yes", source: "judge" },
+        },
+        cells: {
+          customer_reply: {
+            label: "Did the customer reply yes?",
+            choice: "Yes",
+            source: "judge",
+          },
+        },
+      },
+    })
+    expect(rows.at(-1)).toMatchObject({
+      source: "from the judge",
+    })
+  })
+
   it("names a chosen scoring provider and not Auto OpenAI", () => {
     expect(
       scoredByFromJudge({

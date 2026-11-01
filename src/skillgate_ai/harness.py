@@ -33,7 +33,6 @@ from skillgate_ai.usage import (
     render_stream_line,
 )
 
-
 AUTH_API_KEY = "api_key"
 AUTH_CLI_LOGIN = "cli_login"
 AUTH_NONE = "none"
@@ -178,6 +177,23 @@ def select_skill_from_descriptions(prompt: str, skills: list[Skill]) -> str | No
     return best.name
 
 
+def description_fits_request(prompt: str, skill: Skill) -> bool:
+    """True unless the description is a different job (no meaningful overlap).
+
+    Ranking uses overlap / prompt length, so a long legitimate prompt (a SQL
+    refusal, a refund success) can score below the 0.22 pick threshold. Trigger
+    scoring only vetoes a selected skill when the description has no content
+    overlap with the request — meal-planner vs a PDF, not a correct refusal.
+    """
+    task_tokens = tokenize(prompt)
+    desc_tokens = tokenize(skill.description)
+    if not task_tokens or not desc_tokens:
+        return False
+    if task_tokens & desc_tokens:
+        return True
+    return "pdf" in task_tokens and "pdf" in desc_tokens
+
+
 LIVE_HARNESS_NAMES = frozenset({"cursor-agent", "codex", "claude", "claude-code"})
 
 
@@ -226,7 +242,7 @@ class CursorAgentHarness:
         if self.cfg.cursor_api_key:
             env["CURSOR_API_KEY"] = self.cfg.cursor_api_key
         proc = sandbox.run(command, env=env, timeout=timeout_sec)
-        _raise_if_auth_failed(proc.stdout or "", proc.stderr or "")
+        _raise_if_cannot_run(proc.stdout or "", proc.stderr or "")
         transcript = _cursor_transcript(proc.stdout or "", proc.stderr or "")
         selected = _parse_selected(sandbox.workspace, transcript, skills)
         read_paths = _parse_read_paths(transcript)
@@ -622,7 +638,7 @@ class CodexCliHarness:
         if key:
             env["CODEX_API_KEY"] = key
         proc = sandbox.run(command, env=env, timeout=timeout_sec)
-        _raise_if_auth_failed(proc.stdout or "", proc.stderr or "")
+        _raise_if_cannot_run(proc.stdout or "", proc.stderr or "")
         transcript = _codex_transcript(proc.stdout or "", proc.stderr or "")
         if _codex_rejected_chatgpt_model(proc.stdout or "", proc.stderr or ""):
             rejected, accepted = _codex_rejected_model(proc.stdout or "", proc.stderr or "")
@@ -716,7 +732,7 @@ class ClaudeCodeHarness:
         if self.cfg.anthropic_api_key:
             env["ANTHROPIC_API_KEY"] = self.cfg.anthropic_api_key
         proc = sandbox.run(command, env=env, timeout=timeout_sec)
-        _raise_if_auth_failed(proc.stdout or "", proc.stderr or "")
+        _raise_if_cannot_run(proc.stdout or "", proc.stderr or "")
         requested = (self.cfg.anthropic_model or "").strip() or None
         if _claude_model_access_error(proc.stdout or "", proc.stderr or ""):
             raise HarnessError(
@@ -999,6 +1015,56 @@ _AUTH_FAILURE_RE = re.compile(
     r"|invalid api key",
     re.IGNORECASE,
 )
+
+
+USAGE_LIMIT_MESSAGE = "The agent hit a usage limit. This check cannot run."
+_USAGE_LIMIT_RE = re.compile(
+    r"ActionRequiredError|Weekly usage limit reached|usage limit reached",
+    re.IGNORECASE,
+)
+
+
+def usage_limit_message(stdout: str, stderr: str = "", transcript: str = "") -> str | None:
+    """Agent quota / usage-limit text is cannot-run, not a quality red."""
+    blob = "\n".join(part for part in (stdout, stderr, transcript) if part)
+    if not blob or not _USAGE_LIMIT_RE.search(blob):
+        return None
+    if _USAGE_LIMIT_RE.search(stderr or ""):
+        return USAGE_LIMIT_MESSAGE
+    if "ActionRequiredError" in blob:
+        return USAGE_LIMIT_MESSAGE
+    for line in blob.splitlines():
+        text = line.strip()
+        if not text.startswith("{"):
+            if _USAGE_LIMIT_RE.search(text) and "usage limit" in text.lower():
+                return USAGE_LIMIT_MESSAGE
+            continue
+        try:
+            obj = json.loads(text)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(obj, dict):
+            continue
+        kind = str(obj.get("type") or "")
+        errored = kind == "error" or (kind == "result" and obj.get("is_error") is True)
+        payload = " ".join(str(obj.get(key) or "") for key in ("message", "error", "result"))
+        if (errored or kind == "error") and _USAGE_LIMIT_RE.search(payload):
+            return USAGE_LIMIT_MESSAGE
+    if re.search(r"Weekly usage limit reached", blob, re.IGNORECASE):
+        return USAGE_LIMIT_MESSAGE
+    return None
+
+
+def _raise_if_cannot_run(stdout: str, stderr: str, transcript: str = "") -> None:
+    _raise_if_auth_failed(stdout, stderr)
+    message = usage_limit_message(stdout, stderr, transcript)
+    if message is None:
+        return
+    raise HarnessError(
+        message,
+        hint="Wait until the agent quota resets, then retry.",
+        exit_code=2,
+    )
 
 
 def auth_failure_message(stdout: str, stderr: str) -> str | None:

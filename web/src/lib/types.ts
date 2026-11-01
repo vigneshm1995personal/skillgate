@@ -409,6 +409,13 @@ export type TaskResult = {
   spans?: OtlpSpan[] | null
   metrics?: TaskMetrics | null
   vs_baseline?: VsBaseline | null
+  check_answers?: Array<{
+    id?: string
+    label?: string
+    answer?: string
+    source?: string
+    source_label?: string
+  }>
 }
 
 export type LiveLine = {

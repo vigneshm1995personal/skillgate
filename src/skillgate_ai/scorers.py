@@ -144,10 +144,13 @@ def score_skill_trigger(
         )
 
     if inferred == expected and skills:
-        from skillgate_ai.harness import select_skill_from_descriptions
+        from skillgate_ai.harness import description_fits_request
 
-        picked = select_skill_from_descriptions(task.prompt, list(skills))
-        if picked != expected:
+        matched = next(
+            (item for item in skills if _normalize_skill(getattr(item, "name", None)) == expected),
+            None,
+        )
+        if matched is not None and not description_fits_request(task.prompt, matched):
             return Score(
                 scorer="skill_trigger",
                 passed=False,

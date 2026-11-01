@@ -9,13 +9,19 @@ from pathlib import Path
 from typing import Any
 
 from skillgate_ai.advice import FixAdvice, advise_suite, advise_task
-from skillgate_ai.errors import IngestError, SuiteError
-from skillgate_ai.harness import Harness, HarnessResult, _write_selection, is_live_harness
+from skillgate_ai.errors import HarnessError, IngestError, SuiteError
+from skillgate_ai.harness import (
+    Harness,
+    HarnessResult,
+    _write_selection,
+    is_live_harness,
+    usage_limit_message,
+)
 from skillgate_ai.ingest import Skill, ingest_skill, ingest_skills
 from skillgate_ai.judge import Judge, SkipJudge, default_judge, judge_stamp
+from skillgate_ai.judge_bank import UNUSABLE_ANSWER
 from skillgate_ai.live import KILL, CheckAborted, RunControl
 from skillgate_ai.observability import breadcrumb_task, report_eval_outcome, set_eval_passed, span
-from skillgate_ai.judge_bank import UNUSABLE_ANSWER
 from skillgate_ai.output_match import expected_output_mismatch_reason
 from skillgate_ai.pack import resolve_input_file
 from skillgate_ai.sandbox import Sandbox, open_sandbox, prepare_workspace
@@ -24,6 +30,64 @@ from skillgate_ai.suite import SuiteSpec, TaskSpec, load_suite
 
 SKIP_FAILURE = "Skipped by user"
 KILL_FAILURE = "Killed by user"
+
+
+def stabilize_adherence_review(
+    judged: dict[str, Any] | None,
+    scores: list[Score] | list[dict[str, Any]] | None,
+) -> dict[str, Any] | None:
+    """A passing Followed the rules? with scorer evidence is not a review hedge.
+
+    The 0.5 floor and the pass mark stay put. This only drops the unsure flag
+    on instruction_adherence when every deterministic scorer passed and the
+    judge already picked a passing choice.
+    """
+    from skillgate_ai.judge_bank import LOW_CONFIDENCE_WARNING, PASS_LOCK, canonical_choice
+
+    if not isinstance(judged, dict):
+        return judged
+    scorer_ok = True
+    for item in scores or []:
+        passed = item.passed if isinstance(item, Score) else item.get("passed")
+        if passed is False:
+            scorer_ok = False
+            break
+    if not scorer_ok:
+        return judged
+    cells = judged.get("cells")
+    if not isinstance(cells, dict):
+        return judged
+    cell = cells.get("instruction_adherence")
+    if not isinstance(cell, dict) or cell.get("status") != "unsure":
+        return judged
+    answers = judged.get("answers") if isinstance(judged.get("answers"), dict) else {}
+    raw = answers.get("instruction_adherence") if isinstance(answers, dict) else None
+    choice = cell.get("choice")
+    if not choice and isinstance(raw, dict):
+        choice = raw.get("choice")
+    canonical = canonical_choice("instruction_adherence", choice)
+    allowed = PASS_LOCK["instruction_adherence"]
+    if canonical is None or canonical.strip().lower() not in allowed:
+        return judged
+    cells = dict(cells)
+    cleaned = dict(cell)
+    cleaned.pop("status", None)
+    cells["instruction_adherence"] = cleaned
+    out = dict(judged)
+    out["cells"] = cells
+    review = any(
+        isinstance(row, dict) and row.get("status") == "unsure" for row in cells.values()
+    )
+    out["review"] = review
+    warnings = [
+        str(item).strip()
+        for item in (out.get("warnings") or [])
+        if str(item).strip() and str(item).strip() != LOW_CONFIDENCE_WARNING
+    ]
+    if review:
+        warnings.append(LOW_CONFIDENCE_WARNING)
+    out["warnings"] = warnings
+    return out
 
 
 def _suite_passed(tasks: list[TaskReport]) -> bool | None:
@@ -749,6 +813,15 @@ def _run_task(
                     return _skipped_report(
                         task, KILL_FAILURE if exc.reason == KILL else SKIP_FAILURE
                     )
+            quota = usage_limit_message(
+                result.stdout or "", result.stderr or "", result.transcript or ""
+            )
+            if quota:
+                raise HarnessError(
+                    quota,
+                    hint="Wait until the agent quota resets, then retry.",
+                    exit_code=2,
+                )
             if control is not None and control.kill_requested:
                 ended = True
                 return _skipped_report(task, KILL_FAILURE)
@@ -814,6 +887,8 @@ def _run_task(
                     mismatch=mismatch,
                     trigger_passed=trigger_passed,
                 )
+                if passed and isinstance(judged, dict):
+                    judged = stabilize_adherence_review(judged, scores)
                 review = bool(passed) and bool(
                     isinstance(judged, dict) and judged.get("review")
                 )

@@ -57,10 +57,10 @@ function trimText(value: unknown): string {
 
 export function checkSource(value: unknown): string | undefined {
   const raw = trimText(value).toLowerCase()
-  if (raw === "log") {
+  if (raw === "log" || raw === "from the log") {
     return "from the log"
   }
-  if (raw === "judge") {
+  if (raw === "judge" || raw === "from the judge") {
     return "from the judge"
   }
   return undefined
@@ -543,12 +543,13 @@ export function openedCheckAnswers(task: TaskResult): OpenedAnswer[] {
   const hasCells = Boolean(
     cells && CHECK_QUESTION_ORDER.some((id) => id in cells)
   )
+  const listed = Array.isArray(task.check_answers) ? task.check_answers : []
   const extraKeys = [
     ...Object.keys(answers ?? {}),
     ...Object.keys(cells ?? {}),
     ...Object.keys(task.judge?.questions ?? {}),
   ].some((id) => !reservedQuestionId(id))
-  if (!hasAnswers && !hasCells && !extraKeys) {
+  if (!hasAnswers && !hasCells && !extraKeys && listed.length === 0) {
     return []
   }
   const unchecked = workDidNotHappen(task)
@@ -601,11 +602,34 @@ export function openedCheckAnswers(task: TaskResult): OpenedAnswer[] {
         id,
       answer: unchecked && !failedBehavior.has(id) ? "Not checked" : choice || "—",
     }
-    const source = checkSource(answers?.[id]?.source || cell?.source)
+    const listedRow = listed.find(
+      (row) =>
+        trimText(row?.label) === extra.label ||
+        trimText(row?.id) === id
+    )
+    const source = checkSource(
+      answers?.[id]?.source ||
+        cell?.source ||
+        listedRow?.source_label ||
+        listedRow?.source
+    )
     if (source) {
       extra.source = source
     }
     extras.push(extra)
+  }
+  for (const [index, row] of listed.entries()) {
+    const label = trimText(row?.label)
+    if (!label || extras.some((item) => item.label === label)) {
+      continue
+    }
+    const source = checkSource(row?.source_label || row?.source)
+    extras.push({
+      id: trimText(row?.id) || `listed-${index}`,
+      label,
+      answer: trimText(row?.answer) || "—",
+      ...(source ? { source } : {}),
+    })
   }
   return [...builtins, ...extras]
 }

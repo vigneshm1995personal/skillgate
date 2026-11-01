@@ -132,8 +132,8 @@ OUTCOME_QUESTIONS: dict[str, dict[str, Any]] = {
             "Fully followed": (
                 "Followed the listed SKILL.md rules and the user check. When those listed "
                 "rules show no violation and the deterministic scorers passed, answer Fully "
-                "followed with high confidence. Refusing a shortcut or requiring tests when "
-                "SKILL.md demands it counts as following."
+                "followed with confidence 0.9 or higher. Refusing a shortcut or requiring "
+                "tests when SKILL.md demands it counts as following."
             ),
             "Minor deviation": (
                 "A listed SKILL.md rule was skipped in a small way that did not change the "

@@ -350,9 +350,11 @@ _EVIDENCE_CAP = 1500
 _ADHERENCE_NOTE = (
     "Grade only against the listed rules and the evidence below. "
     "When the listed rules show no violation and the deterministic scorers passed, "
-    "answer Fully followed with high confidence. Use Minor deviation only when a "
-    "listed rule was skipped in a small way. Do not hedge or split confidence "
-    "between Fully followed and Minor deviation when no listed rule was broken."
+    "answer Fully followed with high confidence (0.9 or above). Use Minor deviation "
+    "only when a listed rule was skipped in a small way. Do not hedge or split "
+    "confidence between Fully followed and Minor deviation when no listed rule was "
+    "broken. Style, tool choice, or extra steps that are not listed rules are not a "
+    "deviation and must not lower confidence."
 )
 
 

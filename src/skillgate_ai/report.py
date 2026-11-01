@@ -568,6 +568,9 @@ def _task_check_answers(task: TaskReport) -> tuple[list[dict[str, str]], str]:
             source = _check_source(cell, answers_map.get(key), key)
             if source:
                 row["source"] = source
+                label = _source_label(source)
+                if label:
+                    row["source_label"] = label
             rows.append(row)
         return rows, "openai"
     rows: list[dict[str, str]] = []
