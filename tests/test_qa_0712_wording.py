@@ -19,6 +19,7 @@ from test_qa_56_round4 import (
 
 from skillgate_ai.engine import SuiteReport, TaskReport, _live_verdict, stabilize_adherence_review
 from skillgate_ai.ingest import ingest_skill
+from skillgate_ai.judge_bank import outcome_verdict
 from skillgate_ai.judge_spec import extra_question_passed, spec_verdict
 from skillgate_ai.report import format_cli, report_to_dict
 from skillgate_ai.scorers import Score
@@ -646,6 +647,52 @@ def test_wrong_amount_gone_through_stays_red_when_wording_passes() -> None:
             "Delivered a good result? Significant issues",
         ],
     ) is False
+
+
+def test_stored_reason_quoting_usd_does_not_redden_rg4() -> None:
+    """Verdict pass/fail never reads the stored per-check reason text."""
+    usd_why = (
+        'The agent replied: "The refund has not been submitted yet. '
+        'USD 0.00 has been returned so far."'
+    )
+    answers = {
+        "task_completion": {"choice": "Fully completed"},
+        "correctness": {"choice": "Incorrect", "reason": usd_why},
+        "instruction_adherence": {"choice": "Violated", "reason": usd_why},
+        "evidence_action_validity": {"choice": "Fully supported"},
+        "result_quality": {"choice": "Clear and complete"},
+    }
+    _passed, reasons = outcome_verdict(answers)
+    blob = " ".join(reasons)
+    assert "USD 0.00" not in blob
+    assert "The agent replied" not in blob
+    assert "Connector calls:" not in blob
+    ask = wording_ask(compile_wording_rules(SKILL_BOTPRESS_4B_FULL))
+    reply = "The refund has not been submitted yet. USD 0.00 has been returned so far."
+    facts = _wording_on(SKILL_BOTPRESS_4B_FULL, reply)
+    judged = _judge_wording_red(extra_ok=True, extra_source="text", extra_label=ask)
+    judged["reasons"] = reasons
+    judged["answers"]["correctness"] = answers["correctness"]
+    judged["answers"]["instruction_adherence"] = answers["instruction_adherence"]
+    judged["answers"]["q0"] = {**judged["answers"]["q0"], **facts["q0"]}
+    judged["cells"]["q0"] = {**judged["cells"]["q0"], **facts["q0"]}
+    for key in ("correctness", "instruction_adherence"):
+        judged["cells"][key]["reason"] = usd_why
+    out = stabilize_adherence_review(judged, _scores())
+    gate, _failures, _stamped = _live_verdict(
+        out, "ticket-deflector", det_passed=True, det_failures=[], trigger_passed=True
+    )
+    assert gate is True
+    assert _gate_with_text_pass(
+        extra_label=ask,
+        extra=facts["q0"],
+        reasons=[
+            f"Got it right? Incorrect (need Correct) — {usd_why}",
+            f"Followed the rules? Violated (need Fully followed) — {usd_why}",
+        ],
+    ) is True
+
+
 
 
 def test_wrong_amount_stays_red_when_wording_passes() -> None:

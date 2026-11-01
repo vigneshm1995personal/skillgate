@@ -13,6 +13,7 @@ from skillgate_ai.judge_bank import (
     UNSURE_REVIEW,
     WHY_SUFFIX,
     choice_passed,
+    is_built_reason,
     is_rubric_reason,
     score_for_choice,
 )
@@ -174,6 +175,8 @@ def _row_reason(
                 break
     for text in texts:
         if is_rubric_reason(key, choice, text):
+            continue
+        if is_built_reason(text):
             continue
         if _reason_repeats_prompt(label, choice, text):
             continue

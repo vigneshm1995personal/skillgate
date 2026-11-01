@@ -354,6 +354,24 @@ def choice_passed(key: str, choice: str | None) -> bool | None:
     return None
 
 
+_BUILT_REASON_PREFIXES = (
+    "Connector calls:",
+    "The agent replied:",
+    "Expected outcome:",
+    "No short evidence",
+)
+
+
+def is_built_reason(text: str | None) -> bool:
+    """True for templates Skill Gate filled in, not a line the judge wrote."""
+    raw = str(text or "").strip()
+    if not raw:
+        return False
+    if raw.startswith(_BUILT_REASON_PREFIXES):
+        return True
+    return " on this run. Connector" in raw or " on this run. Reply:" in raw
+
+
 def is_rubric_reason(key: str, choice: str | None, text: str | None) -> bool:
     if not text or not str(text).strip():
         return False
@@ -517,13 +535,9 @@ def outcome_verdict(answers: Mapping[str, Any] | None) -> tuple[bool, list[str]]
         canonical = canonical_choice(key, raw_choice) or ""
         if canonical.strip().lower() not in PASS_LOCK[key]:
             display = canonical or (raw_choice or "unclear")
-            reason = f"{CHECK_CELL_LABELS[key]} {display} (need {PASS_NEED_LABEL[key]})"
-            extra = extract_reason(answers.get(key))
-            if extra and is_rubric_reason(key, display, extra):
-                extra = None
-            if extra:
-                reason += f" — {extra}"
-            reasons.append(reason)
+            reasons.append(
+                f"{CHECK_CELL_LABELS[key]} {display} (need {PASS_NEED_LABEL[key]})"
+            )
     return (not reasons), reasons
 
 

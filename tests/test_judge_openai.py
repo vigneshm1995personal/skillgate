@@ -176,11 +176,13 @@ def test_decisions_request_shape() -> None:
     assert payload["model"] == "gpt-6-luna"
     assert set(payload.keys()) == {"model", "input", "questions"}
     questions = payload["questions"]
-    assert len(questions) == 5
+    mains = [item for item in questions if not str(item["name"]).endswith("_why")]
+    assert len(mains) == 5
     assert all(item["type"] == "choice" for item in questions)
-    names = [item["name"] for item in questions]
+    names = [item["name"] for item in mains]
     assert "path_efficiency" not in names
     assert names == [item["name"] for item in decisions_questions(include_path=False)]
+    assert any(str(item["name"]).endswith("_why") for item in questions)
     task = next(item for item in questions if item["name"] == "task_completion")
     assert set(task.keys()) == {"type", "name", "instructions", "choices"}
     assert task["instructions"] == "Got the job done? Pick exactly one."
@@ -826,7 +828,9 @@ def test_path_asked_when_recorded() -> None:
     judged = _score(_judge(post), path={"steps": 6, "errors": 0, "had_path": True})
     assert judged["passed"] is True
     names = [item["name"] for item in post.calls[0]["json"]["questions"]]
-    assert names[-1] == "path_efficiency"
+    mains = [name for name in names if not str(name).endswith("_why")]
+    assert mains[-1] == "path_efficiency"
+    assert "path_efficiency_why" in names
     assert judged["soft_answers"]["path_efficiency"]["choice"] == "Efficient"
     assert judged["cells"]["path_efficiency"]["choice"] == "Efficient"
 

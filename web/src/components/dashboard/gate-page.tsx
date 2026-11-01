@@ -156,10 +156,12 @@ export function GatePage({ embedded = false }: { embedded?: boolean }) {
     scopedResult?.timeout_sec
   const configDiff = scopedResult?.config_diff ?? []
   const passWarnings = (() => {
+    const green = report?.gate === "green" || report?.passed === true
     const base = (scopedResult?.gate_warnings ?? [])
       .map(customerGateCopy)
       .filter(Boolean)
       .filter((item) => !hidePassFileWarning(item, report))
+      .filter((item) => !(green && item.includes("unsure")))
     const unsure = suiteUnsureWarning(report)
     if (unsure && !base.some((item) => item.includes("unsure"))) {
       return [...base, unsure]

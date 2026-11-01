@@ -792,40 +792,75 @@ def test_cell_entry_keeps_the_judge_reason() -> None:
     assert "ch_3QX81" in (cell.get("reason") or "")
 
 
-def test_why_question_choice_is_stored_as_the_check_reason() -> None:
+def test_shared_call_dump_is_not_shown_as_a_judge_reason() -> None:
+    dump = "Connector calls: lookup, issue_refund"
+    task = _refund_task()
+    task["judge"]["cells"]["task_completion"]["reason"] = dump
+    task["judge"]["answers"]["task_completion"]["reason"] = dump
+    rows = {row["id"]: row for row in check_rows(task)}
+    assert rows["task_completion"]["reason"] == "No reason recorded"
+    text = format_run_show(
+        {"run_id": "b88788af8f81", "passed": False, "report": _refund_report()},
+        detail=True,
+        case_id="c3-pending",
+    )
+    job = text.split("Got the job done?", 1)[1]
+    assert dump not in job.split("The reply follows", 1)[0]
+
+
+def test_why_picks_are_unique_per_check_not_a_shared_dump() -> None:
+    from skillgate_ai.judge_bank import CHECK_CELL_ORDER, SOFT_CELL_ORDER
     from skillgate_ai.judge_context import apply_why_reasons, with_run_reason_questions
     from skillgate_ai.judge_openai import _cell_entry
 
+    names = [*CHECK_CELL_ORDER, *SOFT_CELL_ORDER]
     questions = with_run_reason_questions(
         [
             {
                 "type": "choice",
-                "name": "correctness",
-                "instructions": "Got it right? Pick exactly one.",
-                "choices": [{"value": "Correct", "description": "Right."}],
+                "name": name,
+                "instructions": f"{name}?",
+                "choices": [{"value": "ok", "description": "ok"}],
             }
+            for name in names
         ],
-        {
-            "actual_output": {"body": REPLY},
-            "agent_trajectory": {
-                "commands": [
-                    {"argv": ["lookup"]},
-                    {"argv": ["issue_refund", "--charge", "ch_3QX81"]},
-                ]
-            },
-        },
+        {"actual_output": {"body": REPLY}},
     )
-    why = next(item for item in questions if item["name"] == "correctness_why")
-    assert why["type"] == "choice"
-    assert any("issue_refund" in str(row.get("description") or "") for row in why["choices"])
-    cell = _cell_entry("correctness", {"choice": "Correct", "confidence": 0.24}, {"correctness": "Got it right?"})
-    apply_why_reasons(
-        {"correctness": cell},
-        {"correctness_why": {"choice": "calls"}},
-        questions,
-    )
-    assert "issue_refund" in (cell.get("reason") or "")
-    assert cell["reason"] != RUBRIC_CORRECT
+    why_sets: list[tuple[str, ...]] = []
+    for item in questions:
+        if not str(item.get("name") or "").endswith("_why"):
+            continue
+        descs = tuple(
+            str(row.get("description") or "")
+            for row in (item.get("choices") or [])
+            if isinstance(row, dict)
+        )
+        why_sets.append(descs)
+        blob = " ".join(descs)
+        assert "Connector calls:" not in blob
+        assert "The agent replied:" not in blob
+        assert "Expected outcome:" not in blob
+    assert len(why_sets) >= 5
+    assert len(set(why_sets)) == len(why_sets)
+    cells = {
+        name: _cell_entry(name, {"choice": "Correct"}, {name: name})
+        for name in CHECK_CELL_ORDER
+    }
+    answers = {
+        "task_completion_why": {"choice": "finished"},
+        "correctness_why": {"choice": "facts_wrong"},
+        "instruction_adherence_why": {"choice": "rules_broke"},
+        "evidence_action_validity_why": {"choice": "tools_ok"},
+        "result_quality_why": {"choice": "reply_clear"},
+    }
+    apply_why_reasons(cells, answers, questions)
+    reasons = [str(cells[name].get("reason") or "") for name in CHECK_CELL_ORDER]
+    assert all(reasons)
+    assert len(set(reasons)) == len(reasons)
+    for line in reasons:
+        assert "Connector calls:" not in line
+        assert "The agent replied:" not in line
+        assert line != RUBRIC_CORRECT
 
 
 def test_check_rows_skip_why_companion_answers() -> None:
@@ -860,7 +895,12 @@ def test_jev_evaluate_stores_the_why_choice_on_the_cell() -> None:
             "evidence_action_validity": {"choice": "Fully supported"},
             "result_quality": {"choice": "Clear and complete"},
             "path_efficiency": {"choice": "Acceptable"},
-            "correctness_why": {"choice": "calls"},
+            "task_completion_why": {"choice": "finished"},
+            "correctness_why": {"choice": "facts_wrong"},
+            "instruction_adherence_why": {"choice": "rules_broke"},
+            "evidence_action_validity_why": {"choice": "tools_ok"},
+            "result_quality_why": {"choice": "reply_clear"},
+            "path_efficiency_why": {"choice": "path_ok"},
         }
         return FakeResponse(200, {"model": "jev", "answers": answers})
 
@@ -885,7 +925,22 @@ def test_jev_evaluate_stores_the_why_choice_on_the_cell() -> None:
         },
         actual_output={"body": REPLY},
     )
-    assert "issue_refund" in (judged["cells"]["correctness"].get("reason") or "")
+    reasons = [
+        str(judged["cells"][key].get("reason") or "")
+        for key in (
+            "task_completion",
+            "correctness",
+            "instruction_adherence",
+            "evidence_action_validity",
+            "result_quality",
+        )
+    ]
+    assert all(reasons)
+    assert len(set(reasons)) == len(reasons)
+    for line in reasons:
+        assert "Connector calls:" not in line
+        assert "The agent replied:" not in line
+        assert line != "No reason recorded"
     rows = {row["id"]: row for row in check_rows({"judge": judged, "passed": True})}
-    assert "issue_refund" in rows["correctness"]["reason"]
+    assert rows["correctness"]["reason"] == judged["cells"]["correctness"]["reason"]
     assert rows["correctness"]["reason"] != "No reason recorded"

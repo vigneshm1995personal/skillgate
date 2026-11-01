@@ -54,6 +54,26 @@ describe("happenedLine", () => {
     ).toBe("unsure, needs review")
   })
 
+  it("does not show a stray unsure on a passed 8/8 green run", () => {
+    const green = {
+      ...passTask,
+      happened: "unsure, needs review",
+      passed: true,
+      review: false,
+      status: "done" as const,
+    }
+    expect(happenedLine(green)).toBe("Output matched what was expected.")
+    expect(
+      suiteUnsureWarning({
+        gate: "green",
+        passed: true,
+        passed_count: 8,
+        task_count: 8,
+        tasks: Array.from({ length: 8 }, () => green),
+      })
+    ).toBeNull()
+  })
+
   it("says no skill was picked on a passing no-trigger check", () => {
     expect(
       happenedLine({
@@ -961,6 +981,31 @@ describe("caseRowTitle / caseScenario / formatCheckScore", () => {
       },
     })
     expect(rows.find((row) => row.id === "correctness")?.reason).toContain("ch_3QX81")
+  })
+
+  it("does not show a shared call dump as a judge reason", () => {
+    const rows = openedCheckAnswers({
+      ...passTask,
+      judge: {
+        ...passTask.judge,
+        cells: {
+          correctness: {
+            choice: "Correct",
+            reason: "Connector calls: lookup, issue_refund",
+          },
+        },
+        answers: {
+          ...passTask.judge!.answers,
+          correctness: {
+            choice: "Correct",
+            reason: "Connector calls: lookup, issue_refund",
+          },
+        },
+      },
+    })
+    expect(rows.find((row) => row.id === "correctness")?.reason).toBe(
+      "No reason recorded"
+    )
   })
 
   it("does not print the custom-check prompt twice", () => {

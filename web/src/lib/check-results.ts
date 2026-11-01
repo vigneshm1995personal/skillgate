@@ -367,6 +367,23 @@ export function happenedLine(task: TaskResult): string {
   if (task.status === "running") {
     return "In progress"
   }
+  const passedClean =
+    task.passed === true && task.review !== true && task.status !== "unsure"
+  if (passedClean) {
+    const stampedPass = trimText(task.happened)
+    if (
+      stampedPass &&
+      stampedPass !== UNSURE_REVIEW &&
+      !isGenericFail(stampedPass) &&
+      !isChecksDump(stampedPass)
+    ) {
+      return scorerCodeToPlain(stampedPass, hint)
+    }
+    if (task.expect_skill === null && !task.selected_skill) {
+      return "No skill was picked, as expected."
+    }
+    return "Output matched what was expected."
+  }
   if (
     (task.review === true || task.status === "unsure") &&
     task.passed !== false
@@ -388,16 +405,6 @@ export function happenedLine(task: TaskResult): string {
       return judgeWhy
     }
     return "Skipped"
-  }
-  if (task.passed) {
-    const stampedPass = trimText(task.happened)
-    if (stampedPass && !isGenericFail(stampedPass) && !isChecksDump(stampedPass)) {
-      return scorerCodeToPlain(stampedPass, hint)
-    }
-    if (task.expect_skill === null && !task.selected_skill) {
-      return "No skill was picked, as expected."
-    }
-    return "Output matched what was expected."
   }
   const behavior = behaviorQuestionIds(task)
   if (behavior.length) {
@@ -627,6 +634,22 @@ function reasonRepeatsPrompt(label: string, choice: string, reason: string): boo
   return false
 }
 
+function isBuiltReason(reason: string): boolean {
+  const text = reason.trim()
+  if (!text) return false
+  if (
+    text.startsWith("Connector calls:") ||
+    text.startsWith("The agent replied:") ||
+    text.startsWith("Expected outcome:") ||
+    text.startsWith("No short evidence")
+  ) {
+    return true
+  }
+  return (
+    text.includes(" on this run. Connector") || text.includes(" on this run. Reply:")
+  )
+}
+
 function isRubricReason(
   reason: string,
   question?: JudgeQuestion | null
@@ -660,6 +683,7 @@ function openedReason(
   ].filter(Boolean)
   for (const text of texts) {
     if (isRubricReason(text, question)) continue
+    if (isBuiltReason(text)) continue
     if (reasonRepeatsPrompt(label, choice, text)) continue
     return text
   }

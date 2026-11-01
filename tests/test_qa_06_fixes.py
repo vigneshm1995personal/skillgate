@@ -202,7 +202,10 @@ def test_score_extra_is_posted_as_label_objects() -> None:
                     "evidence_action_validity": "Fully supported",
                     "result_quality": "Clear and complete",
                 }
-                answers.append({"name": name, "choice": mapping[name]})
+                if name.endswith("_why"):
+                    answers.append({"name": name, "choice": "none"})
+                else:
+                    answers.append({"name": name, "choice": mapping[name]})
         return {"status": "ok", "data": {"answers": answers, "model": "gpt-6-luna"}}
 
     backend = DecisionsBackend(api_key="sk-test", model="gpt-6-luna")

@@ -99,13 +99,30 @@ _NON_WORDING_FAIL = re.compile(
     r"did not write|no owner|skipped the",
     re.IGNORECASE,
 )
+_STORED_WHY_TAIL = re.compile(
+    r"^(The agent replied:|Connector calls:|Expected outcome:|No short evidence)",
+    re.IGNORECASE,
+)
+
+
+def _verdict_line(reason: object) -> str:
+    """Choice/label line only. Stored per-check reasons are display, not verdict."""
+    from skillgate_ai.judge_bank import is_built_reason
+
+    text = str(reason or "").strip()
+    if " — " not in text:
+        return text
+    head, tail = text.split(" — ", 1)
+    if _STORED_WHY_TAIL.search(tail.strip()) or is_built_reason(tail):
+        return head
+    return text
 
 
 def _wording_only_builtin_reason(reason: object) -> bool:
     """Judge restated a wording extra. Real quality fails keep their reasons."""
     if not _is_builtin_quality_reason(reason):
         return False
-    return not _NON_WORDING_FAIL.search(str(reason or ""))
+    return not _NON_WORDING_FAIL.search(_verdict_line(reason))
 
 
 def _honest_negation_passed(judged: Mapping[str, Any]) -> bool:

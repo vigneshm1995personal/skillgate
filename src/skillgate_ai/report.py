@@ -8,7 +8,7 @@ from typing import Any
 from skillgate_ai.engine import EvalProgress, SuiteReport, TaskProgress, TaskReport
 from skillgate_ai.eval_config import customer_run_details
 from skillgate_ai.harness import is_live_harness
-from skillgate_ai.judge_bank import UNSURE_REVIEW
+from skillgate_ai.judge_bank import UNSURE_REVIEW, is_built_reason
 from skillgate_ai.metrics import suite_metrics_summary
 
 
@@ -496,7 +496,7 @@ def _named_builtin_fail(judge: dict[str, Any]) -> str | None:
             continue
         reason = str(cell.get("reason") or "").strip()
         line = f"{label} {choice}"
-        if reason and reason not in line:
+        if reason and reason not in line and not is_built_reason(reason):
             line = f"{line} — {reason}"
         return line
     return None
@@ -507,7 +507,11 @@ def _task_happened(task: TaskReport) -> str:
     if task.passed is None:
         return "not scored"
     if task.passed:
-        warnings = _task_warnings(task)
+        if getattr(task, "review", False):
+            return UNSURE_REVIEW
+        warnings = [
+            item for item in _task_warnings(task) if item != UNSURE_REVIEW
+        ]
         if warnings:
             return warnings[0]
         if task.expect_skill is None:
@@ -621,7 +625,7 @@ def _task_check_answers(task: TaskReport) -> tuple[list[dict[str, str]], str]:
                 if text:
                     reason = text
                     break
-            if reason:
+            if reason and not is_built_reason(reason):
                 row["reason"] = reason
             rows.append(row)
         return rows, "openai"
