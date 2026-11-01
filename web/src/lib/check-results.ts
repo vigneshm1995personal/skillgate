@@ -49,6 +49,8 @@ export type OpenedAnswer = {
   id: string
   label: string
   answer: string
+  score?: number
+  reason?: string
   source?: string
 }
 
@@ -235,6 +237,37 @@ export function plainFailReason(raw: string, hint = ""): string | null {
   }
   const rest = text.replace(CHECKS_DUMP, "").trim()
   return rest ? scorerCodeToPlain(rest, hint) : null
+}
+
+export function caseRowTitle(task: {
+  id?: string | null
+  name?: string | null
+  prompt?: string | null
+}): string {
+  const name = trimText(task.name)
+  if (name) {
+    return name
+  }
+  const id = trimText(task.id)
+  if (id) {
+    return id
+  }
+  return checkHeadline(task)
+}
+
+export function caseScenario(task: {
+  scenario?: string | null
+  setup?: string | null
+  prompt?: string | null
+}): string {
+  return trimText(task.scenario) || trimText(task.setup) || trimText(task.prompt)
+}
+
+export function formatCheckScore(value: unknown): string {
+  if (typeof value !== "number" || Number.isNaN(value)) {
+    return ""
+  }
+  return value.toFixed(2)
 }
 
 export function checkHeadline(task: {
@@ -464,6 +497,19 @@ export function scoredByLine(
   return ""
 }
 
+function answerScore(
+  answer?: JudgeAnswer | null,
+  cell?: { probability?: number; confidence?: number; score?: number } | null,
+  listed?: { score?: number } | null
+): number | undefined {
+  for (const value of [answer?.confidence, answer?.probability, answer?.score, cell?.confidence, cell?.probability, cell?.score, listed?.score]) {
+    if (typeof value === "number" && !Number.isNaN(value)) {
+      return value
+    }
+  }
+  return undefined
+}
+
 function cellWouldPass(id: string, choice: string): boolean {
   return PASS_LOCK[id]?.includes(choice.trim().toLowerCase()) ?? false
 }
@@ -563,7 +609,10 @@ export function openedCheckAnswers(task: TaskResult): OpenedAnswer[] {
     const choice =
       trimText(answers?.[id]?.choice) || trimText(cells?.[id]?.choice)
     const unsure = cells?.[id]?.status === "unsure"
-    return {
+    const listedRow = listed.find(
+      (row) => trimText(row?.id) === id || trimText(row?.label) === (CHECK_QUESTION_LABELS[id] || "")
+    )
+    const row: OpenedAnswer = {
       id,
       label: trimText(question?.instructions) || CHECK_QUESTION_LABELS[id] || id,
       answer: unchecked
@@ -571,7 +620,19 @@ export function openedCheckAnswers(task: TaskResult): OpenedAnswer[] {
         : unsure
           ? UNSURE_REVIEW
           : choice || "—",
+      source: checkSource(
+        answers?.[id]?.source ||
+          cells?.[id]?.source ||
+          listedRow?.source_label ||
+          listedRow?.source ||
+          "judge"
+      ),
     }
+    const score = answerScore(answers?.[id], cells?.[id], listedRow)
+    if (score != null) row.score = score
+    const reason = trimText(answers?.[id]?.reason) || trimText(cells?.[id]?.reason) || trimText(listedRow?.reason)
+    if (reason) row.reason = reason
+    return row
   })
   const seen = new Set<string>(CHECK_QUESTION_ORDER)
   seen.add("path_efficiency")
@@ -620,6 +681,13 @@ export function openedCheckAnswers(task: TaskResult): OpenedAnswer[] {
     if (source) {
       extra.source = source
     }
+    const score = answerScore(answers?.[id], cell, listedRow)
+    if (score != null) extra.score = score
+    const reason =
+      trimText(answers?.[id]?.reason) ||
+      trimText(cell?.reason) ||
+      trimText(listedRow?.reason)
+    if (reason) extra.reason = reason
     extras.push(extra)
   }
   const builtinLabels = new Set(Object.values(CHECK_QUESTION_LABELS))
@@ -640,6 +708,8 @@ export function openedCheckAnswers(task: TaskResult): OpenedAnswer[] {
       label,
       answer: trimText(row?.answer) || "—",
       ...(source ? { source } : {}),
+      ...(typeof row?.score === "number" ? { score: row.score } : {}),
+      ...(trimText(row?.reason) ? { reason: trimText(row.reason) } : {}),
     })
   }
   return [...builtins, ...extras]

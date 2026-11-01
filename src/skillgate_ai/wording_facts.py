@@ -161,8 +161,21 @@ def resolve_wording_facts(
     _ = hedge
     violated = _violations(rules, texts, succeeded=succeeded)
     yes = not violated
+    if yes:
+        reason = "The reply follows the skill's wording."
+    else:
+        phrases = ", ".join(f'"{rule.phrase}"' for rule in violated)
+        reason = (
+            f"The reply uses banned wording: {phrases}."
+            if phrases
+            else "The reply uses banned wording."
+        )
     facts: dict[str, Any] = {
-        question.id: {"probability": 1.0 if yes else 0.0, "source": "text"}
+        question.id: {
+            "probability": 1.0 if yes else 0.0,
+            "source": "text",
+            "reason": reason,
+        }
         for question in covering
     }
     if yes and _HONEST_NEGATION.search(reply or ""):

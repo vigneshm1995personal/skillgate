@@ -123,7 +123,7 @@ Preview the generated text check with `skillgate judge show skills/your-skill` o
 
 Blocking questions fail the check (`on_fail` is Fail the check). By default that is the five built-in checks: **Got the job done?**, **Got it right?**, **Followed the rules?**, **Used the right evidence/actions?**, and **Delivered a good result?**. **How it ran** is Warn only. Extra questions you add default to Fail the check. A 0.33 on **Followed the rules?** is blocking, so it is re-asked.
 
-A red names the failing check and includes the judge's reason. Example: `Got the job done? Not completed (need Fully completed) — The refund is impossible, so the bot told the customer.` CLI, GitHub summary, and the What happened column all use that line. After a run is saved, `skillgate history show RUN` prints it without calling an agent.
+A red names the failing check and includes the judge's reason. Example: `Got the job done? Not completed (need Fully completed) — The refund is impossible, so the bot told the customer.` CLI, GitHub summary, and the What happened column all use that line. After a run is saved, `skillgate history show RUN` prints it without calling an agent. Add `--detail` for scores, reasons, the agent reply, and connector calls, or `--case NAME` for one case.
 
 ## GitHub Action (optional secret)
 

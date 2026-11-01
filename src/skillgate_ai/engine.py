@@ -258,6 +258,8 @@ class TaskReport:
     metrics: dict[str, Any] | None = None
     model: str | None = None
     review: bool = False
+    name: str = ""
+    scenario: str = ""
 
     def failed_scorers(self) -> list[Score]:
         return [s for s in self.scores if not s.passed]
@@ -592,6 +594,24 @@ def _resolve_task_spec(skill_root: Path, pack: Any, case: Any):
     return resolve_judge_spec(project=project, pack=pack_block, case=case_block)
 
 
+def _case_labels(skill_root: Path | None, task: TaskSpec) -> tuple[str, str]:
+    name = task.id
+    scenario = task.prompt
+    if skill_root is None:
+        return name, scenario
+    try:
+        from skillgate_ai.case_pack import case_for_task, load_case_pack
+
+        case = case_for_task(load_case_pack(skill_root), task.id)
+    except Exception:
+        return name, scenario
+    if case is None:
+        return name, scenario
+    named = str(getattr(case, "name", "") or "").strip()
+    setup = str(getattr(case, "setup", "") or "").strip()
+    return named or case.id, setup or case.prompt or scenario
+
+
 def _score_rows(scores: list[Score]) -> list[dict[str, Any]]:
     return [
         {
@@ -907,6 +927,7 @@ def _run_task(
 
                 if task_missing_golden(skill_root, task.id):
                     ended = True
+                    case_name, case_scenario = _case_labels(skill_root, task)
                     return TaskReport(
                         task_id=task.id,
                         prompt=task.prompt,
@@ -915,6 +936,8 @@ def _run_task(
                         scores=[],
                         selected_skill=None,
                         failures=[MISSING_GOLDEN_REASON],
+                        name=case_name,
+                        scenario=case_scenario,
                     )
             for item in task.files:
                 rel = str(item.src).replace("\\", "/").lstrip("/")
@@ -1113,6 +1136,7 @@ def _run_task(
             )
             from skillgate_ai.workspace_outputs import collect_workspace_outputs
 
+            case_name, case_scenario = _case_labels(skill_root, task)
             return TaskReport(
                 task_id=task.id,
                 prompt=task.prompt,
@@ -1135,6 +1159,8 @@ def _run_task(
                 metrics=metrics,
                 model=result.model,
                 review=review,
+                name=case_name,
+                scenario=case_scenario,
             )
     finally:
         if control is not None:
@@ -1157,6 +1183,8 @@ def _skipped_report(task: TaskSpec, reason: str) -> TaskReport:
         failures=[reason],
         skipped=True,
         metrics=evaluate_task_metrics(None, None, "", getattr(task, "budgets", None)),
+        name=task.id,
+        scenario=task.prompt,
     )
 
 

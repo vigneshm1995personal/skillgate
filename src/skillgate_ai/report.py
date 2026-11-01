@@ -316,8 +316,12 @@ def _task_status(task: TaskReport) -> str:
 
 def _task_to_dict(task: TaskReport) -> dict:
     answers, kind = _task_check_answers(task)
-    return {
+    from skillgate_ai.run_details import agent_reply, case_name, case_scenario, tool_calls
+
+    payload = {
         "id": task.task_id,
+        "name": getattr(task, "name", "") or task.task_id,
+        "scenario": getattr(task, "scenario", "") or task.prompt,
         "prompt": task.prompt,
         "passed": task.passed,
         "review": bool(getattr(task, "review", False)),
@@ -350,6 +354,11 @@ def _task_to_dict(task: TaskReport) -> dict:
             for s in task.scores
         ],
     }
+    payload["name"] = case_name(payload) or payload["name"]
+    payload["scenario"] = case_scenario(payload) or payload["scenario"]
+    payload["reply"] = agent_reply(payload)
+    payload["tool_calls"] = tool_calls(payload)
+    return payload
 
 
 def _judge_stamp(report: SuiteReport) -> dict:
@@ -561,16 +570,51 @@ def _task_check_answers(task: TaskReport) -> tuple[list[dict[str, str]], str]:
         else:
             pairs = ((str(cell.get("label") or ""), cell) for cell in cells)
         for key, cell in pairs:
+            answer = answers_map.get(key)
             row = {
+                "id": key,
                 "label": str(cell.get("label") or "").strip() or "Check",
-                "answer": _cell_answer(cell, answers_map.get(key)),
+                "answer": _cell_answer(cell, answer),
             }
-            source = _check_source(cell, answers_map.get(key), key)
+            source = _check_source(cell, answer, key)
             if source:
                 row["source"] = source
                 label = _source_label(source)
                 if label:
                     row["source_label"] = label
+            elif key in (
+                "task_completion",
+                "correctness",
+                "instruction_adherence",
+                "evidence_action_validity",
+                "result_quality",
+                "path_efficiency",
+            ):
+                row["source"] = "judge"
+                row["source_label"] = "from the judge"
+            score_val = None
+            for blob in (cell, answer if isinstance(answer, dict) else None):
+                if not isinstance(blob, dict):
+                    continue
+                for field in ("confidence", "probability", "score"):
+                    raw = blob.get(field)
+                    if isinstance(raw, (int, float)) and not isinstance(raw, bool):
+                        score_val = float(raw)
+                        break
+                if score_val is not None:
+                    break
+            if score_val is not None:
+                row["score"] = score_val
+            reason = ""
+            for blob in (cell, answer if isinstance(answer, dict) else None):
+                if not isinstance(blob, dict):
+                    continue
+                text = str(blob.get("reason") or "").strip()
+                if text:
+                    reason = text
+                    break
+            if reason:
+                row["reason"] = reason
             rows.append(row)
         return rows, "openai"
     rows: list[dict[str, str]] = []
@@ -580,31 +624,35 @@ def _task_check_answers(task: TaskReport) -> tuple[list[dict[str, str]], str]:
         extra = ""
         if score.detail and score.detail != title:
             extra = f" — {score.detail}"
-        rows.append({"label": title, "answer": f"{mark}{extra}"})
+        rows.append(
+            {
+                "label": title,
+                "answer": f"{mark}{extra}",
+                "score": 1.0 if score.passed else 0.0,
+                "reason": str(score.detail or "").strip(),
+                "source": "log/text",
+                "source_label": "from the log/text",
+            }
+        )
     return rows, "builtin"
 
 
 def _source_label(source: str | None) -> str | None:
-    raw = str(source or "").strip().lower()
-    if raw in {"text", "log/text"}:
-        return "from the log/text"
-    if raw == "log":
-        return "from the log"
-    if raw == "judge":
-        return "from the judge"
-    return None
+    from skillgate_ai.run_details import source_label
+
+    return source_label(source) or None
 
 
 def _check_source(cell: Mapping[str, Any] | None, answer: Any, key: str) -> str | None:
     from skillgate_ai.judge_bank import CHECK_CELL_ORDER, SOFT_CELL_ORDER
 
-    if key in CHECK_CELL_ORDER or key in SOFT_CELL_ORDER:
-        return None
     for blob in (cell, answer if isinstance(answer, dict) else None):
         if isinstance(blob, dict):
             raw = str(blob.get("source") or "").strip().lower()
             if raw in {"log", "judge", "text", "log/text"}:
                 return raw
+    if key in CHECK_CELL_ORDER or key in SOFT_CELL_ORDER:
+        return "judge"
     return "judge"
 
 

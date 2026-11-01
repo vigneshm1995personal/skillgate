@@ -1,0 +1,561 @@
+"""0.7.13: history/gate run details — case name, scores, reply, tools."""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+import pytest
+from conftest import ROOT, plain_text
+from typer.testing import CliRunner
+
+from skillgate_ai.cli import app
+from skillgate_ai.errors import SkillGateError
+from skillgate_ai.history import append_eval, load_history
+from skillgate_ai.openai_http import redact_secrets
+from skillgate_ai.report import report_to_dict
+from skillgate_ai.run_details import (
+    agent_reply,
+    case_name,
+    case_scenario,
+    check_rows,
+    format_run_show,
+    redact_run_text,
+    task_detail,
+    tool_calls,
+)
+
+SHARED_PROMPT = (
+    "A customer wrote in asking for a refund of $49.00 on charge ch_3QX81. "
+    "Look up the account, follow the skill, and reply to the customer."
+)
+REPLY = (
+    "I've submitted a full refund of USD 49.00 to your original card. "
+    "Once our payment provider completes their review, the credit should appear."
+)
+CALLS_LOG = (
+    json.dumps(
+        {
+            "argv": ["lookup", "dana.okafor@lumenfit.co"],
+            "exit": 0,
+            "response": {
+                "http_status": 200,
+                "charges": [{"id": "ch_3QX81", "amount": "49.00"}],
+            },
+        }
+    )
+    + "\n"
+    + json.dumps(
+        {
+            "argv": ["issue_refund", "--charge", "ch_3QX81", "--amount", "49.00"],
+            "exit": 0,
+            "response": {
+                "http_status": 200,
+                "id": "re_48bdbc33ec",
+                "amount": "49.00",
+                "status": "pending",
+                "note": "Refund held for manual review. Funds have not been returned.",
+            },
+        }
+    )
+    + "\n"
+)
+
+
+def _isolate_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("SKILLGATE_ROOT", str(tmp_path))
+    monkeypatch.chdir(tmp_path)
+    return home
+
+
+def _refund_task(**extra: object) -> dict:
+    task = {
+        "id": "c3-pending",
+        "name": "Pending refund — do not claim submitted",
+        "scenario": (
+            "Dana asked to refund $49. The payments connector returned pending, "
+            "held for manual review."
+        ),
+        "prompt": SHARED_PROMPT,
+        "passed": False,
+        "happened": (
+            "The reply uses banned wording: \"I've submitted a full refund\"."
+        ),
+        "outputs": [
+            {"path": "output/reply.txt", "body": REPLY},
+            {"path": "output/calls.log", "body": CALLS_LOG},
+        ],
+        "judge": {
+            "status": "completed",
+            "passed": False,
+            "cells": {
+                "task_completion": {
+                    "label": "Got the job done?",
+                    "choice": "Fully completed",
+                    "reason": "The bot looked up the charge and called the connector.",
+                    "confidence": 0.91,
+                },
+                "wording": {
+                    "label": "The reply follows the skill's wording.",
+                    "choice": "No",
+                    "probability": 0.0,
+                    "source": "text",
+                    "reason": (
+                        'The reply uses banned wording: "I\'ve submitted a full refund".'
+                    ),
+                },
+            },
+            "answers": {
+                "task_completion": {
+                    "choice": "Fully completed",
+                    "confidence": 0.91,
+                    "reason": "The bot looked up the charge and called the connector.",
+                },
+                "wording": {
+                    "probability": 0.0,
+                    "source": "text",
+                    "reason": (
+                        'The reply uses banned wording: "I\'ve submitted a full refund".'
+                    ),
+                },
+            },
+            "questions": {
+                "wording": {
+                    "type": "predicate",
+                    "instructions": "The reply follows the skill's wording.",
+                }
+            },
+        },
+    }
+    task.update(extra)
+    return task
+
+
+def _refund_report(tasks: list[dict] | None = None) -> dict:
+    rows = tasks or [_refund_task()]
+    return {
+        "skill": "refund-desk",
+        "title": "Refund desk",
+        "passed": False,
+        "gate": "red",
+        "passed_count": 0,
+        "task_count": len(rows),
+        "tasks": rows,
+        "scored_by": "Scored by the judge",
+    }
+
+
+def test_case_name_prefers_name_then_id() -> None:
+    assert case_name(_refund_task()) == "Pending refund — do not claim submitted"
+    assert case_name({"id": "c3-pending", "prompt": SHARED_PROMPT}) == "c3-pending"
+    assert case_name({"prompt": SHARED_PROMPT}) == ""
+
+
+def test_case_scenario_uses_setup_then_prompt() -> None:
+    assert "Dana asked" in case_scenario(_refund_task())
+    assert case_scenario({"id": "c3-pending", "prompt": SHARED_PROMPT}) == SHARED_PROMPT
+    assert case_scenario({"id": "c3-pending", "setup": "Ticket is pending."}) == (
+        "Ticket is pending."
+    )
+
+
+def test_check_rows_include_score_reason_and_source() -> None:
+    rows = check_rows(_refund_task())
+    by_label = {row["label"]: row for row in rows}
+    job = by_label["Got the job done?"]
+    assert job["score"] == pytest.approx(0.91)
+    assert "looked up the charge" in job["reason"]
+    assert job["source_label"] == "from the judge"
+    wording = by_label["The reply follows the skill's wording."]
+    assert wording["score"] == pytest.approx(0.0)
+    assert "banned wording" in wording["reason"]
+    assert wording["source_label"] == "from the log/text"
+    assert wording["passed"] is False
+
+
+def test_reply_and_connector_calls_from_outputs() -> None:
+    task = _refund_task()
+    assert "I've submitted a full refund" in agent_reply(task)
+    calls = tool_calls(task)
+    names = [row["name"] for row in calls]
+    assert "lookup" in names
+    assert "issue_refund" in names
+    refund = next(row for row in calls if row["name"] == "issue_refund")
+    assert "ch_3QX81" in json.dumps(refund["arguments"])
+    assert "pending" in json.dumps(refund["response"]).lower()
+
+
+def test_redact_run_text_strips_keys() -> None:
+    blob = (
+        "Authorization: Bearer sk-live-abcdefghijklmnopqrstuvwxyz012345 "
+        "OPENAI_API_KEY=sk-proj-ABCDEFGHIJKLMNOPQRSTUV "
+        "password=hunter2 extra"
+    )
+    cleaned = redact_run_text(blob)
+    assert "sk-live-abcdefghijklmnopqrstuvwxyz012345" not in cleaned
+    assert "sk-proj-ABCDEFGHIJKLMNOPQRSTUV" not in cleaned
+    assert "hunter2" not in cleaned
+    assert "***" in cleaned
+
+
+def test_task_detail_redacts_secrets_in_reply_and_tools() -> None:
+    task = _refund_task(
+        outputs=[
+            {
+                "path": "output/reply.txt",
+                "body": "Call us with key sk-live-abcdefghijklmnopqrstuvwxyz012345.",
+            },
+            {
+                "path": "output/calls.log",
+                "body": json.dumps(
+                    {
+                        "argv": ["lookup", "--api-key", "sk-live-abcdefghijklmnopqrstuvwxyz012345"],
+                        "response": {"token": "sk-live-abcdefghijklmnopqrstuvwxyz012345"},
+                    }
+                ),
+            },
+        ]
+    )
+    detail = task_detail(task)
+    blob = json.dumps(detail)
+    assert "sk-live-abcdefghijklmnopqrstuvwxyz012345" not in blob
+    assert "***" in blob
+
+
+def test_old_history_task_still_renders() -> None:
+    old = {
+        "id": "extract-hello",
+        "prompt": "Extract the text from hello.pdf.",
+        "passed": True,
+        "happened": "Output matched what was expected.",
+    }
+    detail = task_detail(old)
+    assert detail["name"] == "extract-hello"
+    assert "hello.pdf" in detail["scenario"]
+    assert detail["passed"] is True
+    assert detail["checks"] == []
+    assert detail["reply"] == ""
+    assert detail["tool_calls"] == []
+    text = format_run_show(
+        {
+            "run_id": "old-1",
+            "passed": True,
+            "report": {
+                "passed_count": 1,
+                "task_count": 1,
+                "tasks": [old],
+            },
+        },
+        detail=True,
+    )
+    assert "extract-hello" in text
+    assert "hello.pdf" in text
+    assert "pass" in text.lower()
+
+
+def test_format_run_show_uses_case_name_not_shared_prompt() -> None:
+    text = format_run_show(
+        {
+            "run_id": "run-blog",
+            "passed": False,
+            "report": _refund_report(),
+        }
+    )
+    assert "Pending refund — do not claim submitted" in text
+    assert SHARED_PROMPT not in text
+    assert "run-blog" in text
+    assert "fail" in text.lower()
+
+
+def test_format_run_show_detail_prints_score_reason_reply_tools() -> None:
+    text = format_run_show(
+        {
+            "run_id": "run-blog",
+            "passed": False,
+            "report": _refund_report(),
+        },
+        detail=True,
+    )
+    assert "Dana asked" in text
+    assert "0.91" in text
+    assert "from the judge" in text
+    assert "from the log/text" in text
+    assert "banned wording" in text
+    assert "I've submitted a full refund" in text
+    assert "issue_refund" in text
+    assert "pending" in text.lower()
+
+
+def test_format_run_show_case_filters_one_task() -> None:
+    other = _refund_task(
+        id="c6-success",
+        name="Successful refund",
+        passed=True,
+        outputs=[{"path": "output/reply.txt", "body": "Your refund is on its way."}],
+    )
+    row = {
+        "run_id": "run-blog",
+        "passed": False,
+        "report": _refund_report([_refund_task(), other]),
+    }
+    one = format_run_show(row, case_id="c3-pending")
+    assert "Pending refund" in one
+    assert "Successful refund" not in one
+    with pytest.raises(SkillGateError, match="no-such"):
+        format_run_show(row, case_id="no-such")
+
+
+def test_history_show_cli_detail_and_case(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _isolate_home(tmp_path, monkeypatch)
+    pack = tmp_path / "skills" / "refund-desk"
+    (pack / "evals").mkdir(parents=True)
+    (pack / "SKILL.md").write_text(
+        "---\nname: refund-desk\ndescription: Handle refund tickets.\n---\n# refund-desk\n",
+        encoding="utf-8",
+    )
+    append_eval(
+        pack,
+        run_id="run-blog",
+        passed=False,
+        report=_refund_report(),
+    )
+    runner = CliRunner()
+    listed = runner.invoke(app, ["history", "show", "run-blog", "--pack", str(pack)])
+    listed_out = plain_text(listed.stdout + listed.stderr)
+    assert listed.exit_code == 0, listed_out
+    assert "Pending refund" in listed_out
+    assert SHARED_PROMPT not in listed_out
+
+    detailed = runner.invoke(
+        app, ["history", "show", "run-blog", "--pack", str(pack), "--detail"]
+    )
+    detail_out = plain_text(detailed.stdout + detailed.stderr)
+    assert detailed.exit_code == 0, detail_out
+    assert "0.91" in detail_out
+    assert "from the log/text" in detail_out
+    assert "issue_refund" in detail_out
+    assert "I've submitted a full refund" in detail_out
+
+    one = runner.invoke(
+        app,
+        ["history", "show", "run-blog", "--pack", str(pack), "--case", "c3-pending"],
+    )
+    one_out = plain_text(one.stdout + one.stderr)
+    assert one.exit_code == 0, one_out
+    assert "Dana asked" in one_out
+
+    missing = runner.invoke(
+        app,
+        ["history", "show", "run-blog", "--pack", str(pack), "--case", "no-such"],
+    )
+    missing_out = plain_text(missing.stdout + missing.stderr)
+    assert missing.exit_code != 0, missing_out
+    assert "no-such" in missing_out.lower() or "No case" in missing_out
+
+    secret = runner.invoke(
+        app, ["history", "show", "run-blog", "--pack", str(pack), "--json"]
+    )
+    secret_out = plain_text(secret.stdout + secret.stderr)
+    assert "sk-" not in secret_out.lower() or "sk-***" in secret_out
+
+
+def test_history_show_does_not_touch_real_home(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    original_home = Path.home()
+    home = _isolate_home(tmp_path, monkeypatch)
+    pack = tmp_path / "skills" / "refund-desk"
+    (pack / "evals").mkdir(parents=True)
+    (pack / "SKILL.md").write_text(
+        "---\nname: refund-desk\ndescription: Handle refund tickets.\n---\n# refund-desk\n",
+        encoding="utf-8",
+    )
+    before = set()
+    marker = original_home / ".skillgate-0713-marker"
+    if original_home.exists():
+        before = {path.name for path in original_home.glob(".skillgate*")}
+    append_eval(pack, run_id="run-home", passed=True, report={"passed_count": 1, "task_count": 1})
+    result = CliRunner().invoke(
+        app, ["history", "show", "run-home", "--pack", str(pack), "--detail"]
+    )
+    assert result.exit_code == 0, result.stdout
+    assert Path.home() == home
+    assert str(home) != str(original_home)
+    assert not marker.exists()
+    if original_home.exists():
+        after = {path.name for path in original_home.glob(".skillgate*")}
+        assert after == before
+
+
+def test_report_to_dict_stamps_run_details() -> None:
+    from skillgate_ai.engine import SuiteReport, TaskReport
+
+    task = TaskReport(
+        task_id="c3-pending",
+        prompt=SHARED_PROMPT,
+        expect_skill="refund-desk",
+        passed=False,
+        scores=[],
+        selected_skill="refund-desk",
+        name="Pending refund — do not claim submitted",
+        scenario="Dana asked to refund $49. The connector returned pending.",
+        outputs=[
+            {"path": "output/reply.txt", "body": REPLY},
+            {"path": "output/calls.log", "body": CALLS_LOG},
+        ],
+        judge={
+            "status": "completed",
+            "cells": {
+                "wording": {
+                    "label": "The reply follows the skill's wording.",
+                    "choice": "No",
+                    "probability": 0.0,
+                    "source": "text",
+                    "reason": 'The reply uses banned wording: "I\'ve submitted a full refund".',
+                }
+            },
+            "answers": {
+                "wording": {"probability": 0.0, "source": "text"}
+            },
+        },
+    )
+    payload = report_to_dict(
+        SuiteReport(
+            suite="suite",
+            title="Refunds",
+            skill="refund-desk",
+            harness="cursor-agent",
+            sandbox="local",
+            passed=False,
+            tasks=[task],
+        )
+    )
+    row = payload["tasks"][0]
+    assert row["name"] == "Pending refund — do not claim submitted"
+    assert "Dana asked" in row["scenario"]
+    assert "I've submitted" in row["reply"]
+    assert any(item["name"] == "issue_refund" for item in row["tool_calls"])
+    wording = next(
+        item
+        for item in row["check_answers"]
+        if "wording" in item["label"].lower() or item.get("source") == "text"
+    )
+    assert wording.get("score") == pytest.approx(0.0)
+    assert wording.get("reason")
+    assert wording.get("source_label") == "from the log/text"
+
+
+def test_wording_facts_include_written_reason() -> None:
+    from skillgate_ai.judge_spec import JudgeQuestion, JudgeSpec
+    from skillgate_ai.wording_facts import resolve_wording_facts
+
+    spec = JudgeSpec(
+        questions=(
+            JudgeQuestion(
+                id="wording",
+                type="predicate",
+                ask="The reply follows the skill's wording: do not use I've submitted a full refund.",
+                on_fail="block",
+            ),
+        ),
+    )
+    skill = (
+        'Never say "I\'ve submitted a full refund" unless the connector returned succeeded.\n'
+        'Banned phrases: "I\'ve submitted a full refund".\n'
+    )
+    facts = resolve_wording_facts(
+        spec,
+        [{"path": "output/reply.txt", "body": REPLY}],
+        skill,
+    )
+    row = facts["wording"]
+    assert row["probability"] == pytest.approx(0.0)
+    assert row["source"] == "text"
+    assert "banned" in str(row.get("reason") or "").lower()
+
+
+def test_case_labels_read_pack_name_and_setup(tmp_path: Path) -> None:
+    from skillgate_ai.engine import TaskSpec, _case_labels
+
+    pack = tmp_path / "refund-desk"
+    (pack / "evals").mkdir(parents=True)
+    (pack / "SKILL.md").write_text(
+        "---\nname: refund-desk\ndescription: Handle refund tickets.\n---\n# refund-desk\n",
+        encoding="utf-8",
+    )
+    (pack / "evals" / "cases.yaml").write_text(
+        "schema: 1\n"
+        "skill: refund-desk\n"
+        "cases:\n"
+        "  - id: c3-pending\n"
+        "    status: pinned\n"
+        "    name: Pending refund — do not claim submitted\n"
+        "    setup: Dana asked to refund $49. The connector returned pending.\n"
+        "    prompt: |\n"
+        f"      {SHARED_PROMPT}\n"
+        "    should_trigger: false\n",
+        encoding="utf-8",
+    )
+    name, scenario = _case_labels(
+        pack,
+        TaskSpec(
+            id="c3-pending",
+            prompt=SHARED_PROMPT,
+            expect_skill="refund-desk",
+            scorers=[],
+        ),
+    )
+    assert name == "Pending refund — do not claim submitted"
+    assert "Dana asked" in scenario
+
+
+def test_ui_markup_renders_run_details() -> None:
+    table = (
+        ROOT / "web" / "src" / "components" / "dashboard" / "checks-results-table.tsx"
+    ).read_text(encoding="utf-8")
+    legacy = (
+        ROOT / "src" / "skillgate_ai" / "local_ui" / "static" / "app.js"
+    ).read_text(encoding="utf-8")
+    for blob in (table, legacy):
+        assert "caseRowTitle" in blob or "case-name" in blob
+        assert "scenario" in blob.lower() or "case-setup" in blob
+        assert "item.score" in blob or "check-score" in blob
+        assert "item.reason" in blob or "check-reason" in blob
+        assert "from the log/text" in blob or "item.source" in blob
+        assert "agent-reply" in blob or "Agent reply" in blob
+        assert "tool-call" in blob or "Connector" in blob
+    assert "OpenAI" not in table
+    assert "Jev" not in table
+
+
+def test_load_history_scrubs_keys_from_new_fields(tmp_path: Path) -> None:
+    pack = tmp_path / "skill"
+    append_eval(
+        pack,
+        run_id="secret-run",
+        passed=False,
+        report={
+            "tasks": [
+                {
+                    "id": "c3-pending",
+                    "reply": "key sk-live-abcdefghijklmnopqrstuvwxyz012345",
+                    "tool_calls": [
+                        {
+                            "name": "lookup",
+                            "arguments": {"api_key": "sk-live-abcdefghijklmnopqrstuvwxyz012345"},
+                            "response": {"ok": True},
+                        }
+                    ],
+                }
+            ]
+        },
+    )
+    rows = load_history(pack)
+    blob = json.dumps(rows)
+    assert "sk-live-abcdefghijklmnopqrstuvwxyz012345" not in blob
+    assert redact_secrets("sk-live-abcdefghijklmnopqrstuvwxyz012345") == "sk-***"

@@ -193,7 +193,11 @@ def scrub_browser_payload(value: Any) -> Any:
 
 
 def history_row_to_run(row: dict[str, Any], skill_path: Path) -> dict[str, Any]:
+    from skillgate_ai.run_details import hydrate_report
+
     report = row.get("report") if isinstance(row.get("report"), dict) else None
+    if isinstance(report, dict):
+        report = hydrate_report(report)
     passed = row.get("passed")
     error = row.get("error") if isinstance(row.get("error"), dict) else None
     harness = (report or {}).get("harness")
