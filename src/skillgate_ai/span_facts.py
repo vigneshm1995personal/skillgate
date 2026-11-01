@@ -27,12 +27,17 @@ _FILE = re.compile(
     r"`([^`]+?\.[A-Za-z0-9]+)`|\b([A-Za-z0-9_.-]+\.(?:txt|md|json|sql|csv|log|pdf|py))\b"
 )
 _REPLY = re.compile(r"\breply\b|\bcustomer (?:says|said|reply)\b", re.IGNORECASE)
-_RETURN = re.compile(r"\breturns?\b|\breturned\b|\bresult\b", re.IGNORECASE)
+_RETURN = re.compile(r"\breturns?\b|\breturned\b|\bresult\b(?!s)", re.IGNORECASE)
 _STATUS = re.compile(
     r"\b(succeeded|success|timeout|timed out|failed|502|error)\b",
     re.IGNORECASE,
 )
 _WORD = r"(?<![A-Za-z0-9_]){name}(?![A-Za-z0-9_])"
+_INVOKE_TOOLS = frozenset({"shell", "bash", "command", "exec"})
+_WRITE_PAYLOAD = re.compile(
+    r'"(?:content|contents|body|text)"\s*:',
+    re.IGNORECASE,
+)
 LOG_FACT_KINDS = frozenset({"count", "called", "return"})
 _STOP = frozenset(
     {
@@ -71,11 +76,10 @@ def count_tool_calls(
     *,
     trajectory: Mapping[str, Any] | None = None,
 ) -> int:
-    """How many times ``name`` was invoked in span args (or trajectory fallback)."""
+    """How many times ``name`` was invoked, not merely mentioned in a write."""
     token = (name or "").strip()
     if not token:
         return 0
-    pat = re.compile(_WORD.format(name=re.escape(token)))
     count = 0
     for span in spans or []:
         if not isinstance(span, Mapping):
@@ -83,17 +87,32 @@ def count_tool_calls(
         attrs = attr_map(dict(span))
         tool = str(attrs.get("gen_ai.tool.name") or "")
         args = str(attrs.get("gen_ai.tool.call.arguments") or "")
-        if tool == token or pat.search(f"{tool} {args}"):
+        if _span_invokes(tool, args, token):
             count += 1
     if count or not trajectory:
         return count
     for row in trajectory.get("commands") or []:
         if not isinstance(row, Mapping):
             continue
-        blob = f"{row.get('tool') or ''} {row.get('args') or ''}"
-        if pat.search(blob):
+        tool = str(row.get("tool") or "")
+        args = str(row.get("args") or "")
+        if _span_invokes(tool, args, token):
             count += 1
     return count
+
+
+def _span_invokes(tool: str, args: str, token: str) -> bool:
+    called = (tool or "").strip().lower()
+    name = (token or "").strip().lower()
+    if not name:
+        return False
+    if called == name:
+        return True
+    if _WRITE_PAYLOAD.search(args or ""):
+        return False
+    if called and called not in _INVOKE_TOOLS:
+        return False
+    return bool(re.search(_WORD.format(name=re.escape(name)), args or "", re.IGNORECASE))
 
 
 def tool_results(
@@ -221,7 +240,11 @@ def _compute_question(
     file_name = _primary_file(ask)
     tool = _primary_tool(ask, spans, trajectory=trajectory)
     if kind == "count":
-        if file_name:
+        logged = _count_from_calls_log(ask, outputs)
+        has_calls = bool(_output_file(outputs, "calls.log").strip())
+        if has_calls and re.search(r"issue_refund", ask, re.IGNORECASE):
+            count = logged
+        elif file_name:
             count = count_file_reads(
                 spans, file_name, trajectory=trajectory, tool=tool
             )
@@ -229,10 +252,7 @@ def _compute_question(
             count = count_tool_calls(spans, tool, trajectory=trajectory)
         else:
             count = 0
-        logged = _count_from_calls_log(ask, outputs)
-        if logged:
-            count = max(count, logged)
-        if count == 0:
+        if count == 0 and not (spans or trajectory or has_calls):
             return None
         return _predicate(_count_is_yes(ask, count), source="log")
     if kind == "called":
