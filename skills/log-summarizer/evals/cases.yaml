@@ -32,7 +32,7 @@ cases:
       - "Errors: 0"
   - id: no-trigger-unrelated
     status: pinned
-    prompt: Draft a project overview from a brief.
+    prompt: Write a pytest for a FastAPI /health endpoint.
     should_trigger: false
     input:
       files: []

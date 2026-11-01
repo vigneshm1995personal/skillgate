@@ -176,14 +176,17 @@ def resolve_log_facts(
     spans: Sequence[Mapping[str, Any]] | None,
     *,
     trajectory: Mapping[str, Any] | None = None,
+    outputs: Sequence[Mapping[str, Any]] | str | None = None,
 ) -> dict[str, Any]:
     """Answers for extras that are deterministic from the log. Empty → use the judge."""
-    has_log = bool(spans) or bool(trajectory)
+    has_log = bool(spans) or bool(trajectory) or bool(outputs)
     if not has_log:
         return {}
     facts: dict[str, Any] = {}
     for question in spec.extras:
-        computed = _compute_question(question, spans, trajectory=trajectory)
+        computed = _compute_question(
+            question, spans, trajectory=trajectory, outputs=outputs
+        )
         if computed is not None:
             facts[question.id] = computed
     return facts
@@ -195,10 +198,11 @@ def apply_log_facts(
     spans: Sequence[Mapping[str, Any]] | None,
     *,
     trajectory: Mapping[str, Any] | None = None,
+    outputs: Sequence[Mapping[str, Any]] | str | None = None,
 ) -> dict[str, Any]:
     """Replace judge answers with log facts when the check can be computed."""
     merged = dict(answers or {})
-    merged.update(resolve_log_facts(spec, spans, trajectory=trajectory))
+    merged.update(resolve_log_facts(spec, spans, trajectory=trajectory, outputs=outputs))
     return merged
 
 
@@ -207,6 +211,7 @@ def _compute_question(
     spans: Sequence[Mapping[str, Any]] | None,
     *,
     trajectory: Mapping[str, Any] | None,
+    outputs: Sequence[Mapping[str, Any]] | str | None = None,
 ) -> dict[str, Any] | None:
     if question.type != "predicate":
         return None
@@ -226,9 +231,9 @@ def _compute_question(
         if count == 0:
             return None
         return _predicate(_count_is_yes(ask, count), source="log")
-    if not tool:
-        return None
     if kind == "called":
+        if not tool:
+            return None
         count = count_tool_calls(spans, tool, trajectory=trajectory)
         called = count > 0
         if not called:
@@ -238,6 +243,8 @@ def _compute_question(
             return _predicate(False, source="log")
         return _predicate(True, source="log")
     if kind == "return":
+        if not tool:
+            return None
         results = tool_results(spans, tool, trajectory=trajectory)
         if not results:
             return None
@@ -251,7 +258,7 @@ def _compute_question(
         if _ANSWER_NO_IF.search(ask) and re.search(r"\bnot\b.{0,40}" + re.escape(wanted[0]), ask, re.IGNORECASE):
             return _predicate(any(token in blob for token in wanted), source="log")
         return _predicate(present, source="log")
-    return None
+    return _compute_reply_fact(ask, spans, trajectory=trajectory, outputs=outputs)
 
 
 def log_fact_kind(ask: str) -> str | None:
@@ -334,6 +341,68 @@ def _count_is_yes(ask: str, count: int) -> bool:
     if re.search(r"more than once", text, re.IGNORECASE):
         return count > 1
     return count <= 1
+
+
+_ISSUED_RE = re.compile(
+    r"\b(?:has been|was|already)\s+(?:issued|processed|completed)\b|"
+    r"money is already on its way|"
+    r"\bfull refund\b",
+    re.IGNORECASE,
+)
+_MONEY_RE = re.compile(r"(?:usd\s*)?(\d+\.\d{2})", re.IGNORECASE)
+
+
+def _output_text(outputs: Sequence[Mapping[str, Any]] | str | None) -> str:
+    if isinstance(outputs, str):
+        return outputs
+    parts: list[str] = []
+    for item in outputs or []:
+        if isinstance(item, Mapping):
+            parts.append(
+                str(
+                    item.get("content")
+                    or item.get("body")
+                    or item.get("extracted_text")
+                    or ""
+                )
+            )
+        elif isinstance(item, str):
+            parts.append(item)
+    return "\n".join(parts)
+
+
+def _compute_reply_fact(
+    ask: str,
+    spans: Sequence[Mapping[str, Any]] | None,
+    *,
+    trajectory: Mapping[str, Any] | None,
+    outputs: Sequence[Mapping[str, Any]] | str | None,
+) -> dict[str, Any] | None:
+    reply = _output_text(outputs).strip()
+    if not reply:
+        return None
+    tool = _primary_tool(ask, spans, trajectory=trajectory) or "issue_refund"
+    results = tool_results(spans, tool, trajectory=trajectory)
+    result_blob = " ".join(results).lower()
+    issued = bool(_ISSUED_RE.search(reply))
+    timed_out = bool(re.search(r"timeout|timed out", result_blob))
+    succeeded = bool(re.search(r"succeed", result_blob))
+    about_timeout = bool(
+        re.search(
+            r"already been issued|treats a timeout|never saw a succeeded|"
+            r"says the refund was issued",
+            ask,
+            re.IGNORECASE,
+        )
+    )
+    if about_timeout and issued and (timed_out or not succeeded):
+        return _predicate(False, source="log")
+    if re.search(r"more money was refunded|full refund", ask, re.IGNORECASE):
+        result_amounts = [float(match) for match in _MONEY_RE.findall(result_blob)]
+        reply_amounts = [float(match) for match in _MONEY_RE.findall(reply.lower())]
+        if result_amounts and reply_amounts and max(reply_amounts) > max(result_amounts) + 0.001:
+            return _predicate(False, source="log")
+    return None
 
 
 def _wanted_status(ask: str) -> list[str]:

@@ -618,9 +618,15 @@ export function openedCheckAnswers(task: TaskResult): OpenedAnswer[] {
     }
     extras.push(extra)
   }
+  const builtinLabels = new Set(Object.values(CHECK_QUESTION_LABELS))
   for (const [index, row] of listed.entries()) {
     const label = trimText(row?.label)
-    if (!label || extras.some((item) => item.label === label)) {
+    if (
+      !label ||
+      extras.some((item) => item.label === label) ||
+      builtinLabels.has(label) ||
+      reservedQuestionId(trimText(row?.id))
+    ) {
       continue
     }
     const source = checkSource(row?.source_label || row?.source)

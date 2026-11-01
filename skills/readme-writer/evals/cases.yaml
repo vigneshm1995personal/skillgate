@@ -32,7 +32,7 @@ cases:
       - not specified
   - id: no-trigger-unrelated
     status: pinned
-    prompt: Count the warnings in a server trace.
+    prompt: Write a pytest for a FastAPI /health endpoint.
     should_trigger: false
     input:
       files: []

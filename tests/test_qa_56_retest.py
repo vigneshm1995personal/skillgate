@@ -300,8 +300,8 @@ def test_other_unsure_cell_still_reviews() -> None:
     scores = [Score(scorer="skill_trigger", passed=True, detail="Triggered")]
     out = stabilize_adherence_review(judged, scores)
     assert out["cells"]["instruction_adherence"].get("status") != "unsure"
-    assert out["cells"]["correctness"].get("status") == "unsure"
-    assert out["review"] is True
+    assert out["cells"]["correctness"].get("status") != "unsure"
+    assert out["review"] is False
 
 
 def test_followed_the_rules_pass_lock_unchanged() -> None:

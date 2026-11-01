@@ -22,7 +22,6 @@ export function BuiltInChecks({ skill }: { skill?: string | null }) {
 
   useEffect(() => {
     let cancelled = false
-    setRows(null)
     setError(null)
     api
       .listChecks(skill)

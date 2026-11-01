@@ -112,7 +112,7 @@ def score_skill_trigger(
     trigger for the prompt (keeps sabotaged-description suites red).
 
     For ``expect_skill is None`` (no-trigger negatives): any resolved skill —
-    including one inferred solely from a real ``SKILL.md`` read in
+    including one inferred solely from a real skill-folder read in
     ``read_paths`` — is a fail. Prompt/prose path mentions should not appear
     in ``read_paths`` (harness ``_parse_read_paths`` requires tool/shell
     evidence). Engine also omits staging skill packs on null-expect tasks.
@@ -366,10 +366,10 @@ def _normalize_skill(value: str | None) -> str | None:
 
 def _skill_from_path(path: str) -> str | None:
     normalized = path.replace("\\", "/")
-    match = re.search(r"(?:^|/)(?:\.skillgate/)?skills/([^/]+)/SKILL\.md$", normalized)
+    match = re.search(r"(?:^|/)(?:\.skillgate/)?skills/([^/]+)/", normalized)
     if match:
         return match.group(1)
     parts = Path(normalized).parts
-    if parts and parts[-1] == "SKILL.md" and len(parts) >= 2:
+    if len(parts) >= 2 and parts[-1].lower() == "skill.md":
         return parts[-2]
     return None

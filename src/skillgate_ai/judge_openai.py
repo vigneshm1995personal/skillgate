@@ -570,7 +570,12 @@ class OutcomeJudge:
             else None
         )
         spans = kwargs.get("spans") if isinstance(kwargs.get("spans"), list) else None
-        facts = resolve_log_facts(resolved, spans, trajectory=trajectory)
+        facts = resolve_log_facts(
+            resolved,
+            spans,
+            trajectory=trajectory,
+            outputs=state.get("workspace_files"),
+        )
         ask_spec = resolved
         if facts:
             ask_spec = resolved.with_questions(

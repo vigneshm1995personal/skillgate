@@ -496,6 +496,18 @@ describe("openedCheckAnswers / low confidence", () => {
     })
   })
 
+  it("does not repeat builtin answers already shown from check_answers", () => {
+    const rows = openedCheckAnswers({
+      ...passTask,
+      check_answers: [
+        { label: "Got the job done?", answer: "Fully completed" },
+        { label: "Did the totals match?", answer: "Yes" },
+      ],
+    })
+    expect(rows.filter((row) => row.label === "Got the job done?")).toHaveLength(1)
+    expect(rows.map((row) => row.label)).toContain("Did the totals match?")
+  })
+
   it("labels a custom check from check_answers when cells omit source", () => {
     const rows = openedCheckAnswers({
       ...passTask,
