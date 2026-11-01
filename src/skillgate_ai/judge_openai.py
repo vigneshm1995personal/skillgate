@@ -30,6 +30,7 @@ from skillgate_ai.judge_bank import (
     vote_round_summaries,
 )
 from skillgate_ai.judge_context import (
+    apply_why_reasons,
     attach_adherence_context,
     stamp_why_on_answers,
     with_run_reason_questions,
@@ -343,6 +344,8 @@ def _normalize_answers(
 
 def _answers_from_decisions_list(payload: Mapping[str, Any]) -> dict[str, Any]:
     rows = payload.get("answers")
+    if rows in (None, {}, []):
+        rows = payload.get("decisions")
     mapped: dict[str, Any] = {}
     if isinstance(rows, list):
         for item in rows:
@@ -629,12 +632,20 @@ class OutcomeJudge:
             answers.update(facts)
             evaluated = dict(evaluated)
             evaluated["answers"] = answers
+        why_questions = with_run_reason_questions(
+            attach_adherence_context(
+                spec_decisions_questions(resolved, include_path=_path_is_recorded(path)),
+                state,
+            ),
+            state,
+        )
         return self._stamp(
             evaluated,
             artifacts=artifacts,
             omitted=omitted,
             include_path=_path_is_recorded(path),
             spec=resolved,
+            why_questions=why_questions,
         )
 
     def _majority_reask(
@@ -738,6 +749,7 @@ class OutcomeJudge:
         omitted: list[dict[str, Any]],
         include_path: bool,
         spec: JudgeSpec | None = None,
+        why_questions: list[dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
         resolved = spec or builtin_spec()
         model = str(evaluated.get("model") or self.backend.model)
@@ -777,7 +789,7 @@ class OutcomeJudge:
                 payload["upstream"] = upstream.strip()
             return payload
         answers = evaluated.get("answers") if isinstance(evaluated.get("answers"), dict) else {}
-        stamp_why_on_answers(answers)
+        stamp_why_on_answers(answers, why_questions)
         if not include_path:
             answers = {key: value for key, value in answers.items() if key not in SOFT_CELL_ORDER}
         confidence = bool(
@@ -861,8 +873,23 @@ class OutcomeJudge:
                     cleaned["type"] = "predicate"
                 cleaned.setdefault("source", source)
                 extra_answers[question.id] = cleaned
-        merged_answers = {**pass_answers, **extra_answers}
+        apply_why_reasons(cells, answers, why_questions)
+        why_answers = {
+            str(key): value
+            for key, value in answers.items()
+            if str(key).endswith(WHY_SUFFIX)
+        }
+        merged_answers = {**pass_answers, **extra_answers, **why_answers}
         extra_questions = {q.id: {"instructions": q.ask, "type": q.type} for q in resolved.extras}
+        why_stored = {}
+        for item in why_questions or []:
+            name = str(item.get("name") or "")
+            if name.endswith(WHY_SUFFIX):
+                why_stored[name] = {
+                    "instructions": item.get("instructions"),
+                    "type": "choice",
+                    "choices": item.get("choices"),
+                }
         extra_failures = extra_block_failures(resolved, answers, skipped=skipped)
         payload = self._finish_payload(
             self._payload(
@@ -877,7 +904,11 @@ class OutcomeJudge:
                 citations=citations,
                 usage=evaluated.get("usage"),
                 warnings=warnings,
-                questions={**{k: all_questions()[k] for k in CHECK_CELL_ORDER}, **extra_questions},
+                questions={
+                    **{k: all_questions()[k] for k in CHECK_CELL_ORDER},
+                    **extra_questions,
+                    **why_stored,
+                },
                 soft_questions=soft_questions,
                 scoring_endpoint=_scoring_endpoint(evaluated),
             ),

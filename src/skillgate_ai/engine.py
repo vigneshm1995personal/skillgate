@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import os
-import re
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -92,52 +91,10 @@ def _is_builtin_quality_reason(reason: object) -> bool:
     return any(text.startswith(label) for label in CHECK_CELL_LABELS.values())
 
 
-_NON_WORDING_FAIL = re.compile(
-    r"rewrit|verbatim|copy the draft|did not copy|changed the required|"
-    r"wrong amount|amount refunded|usd\s*\d|4\.90|49\.00|"
-    r"owner[- ]?report|missing step|reply\.txt missing|"
-    r"did not write|no owner|skipped the",
-    re.IGNORECASE,
-)
-_WORDING_RESTATE = re.compile(
-    r"wording|banned|\bsubmitted\b|\bissued\b|\bprocessed\b|phrase|not yet",
-    re.IGNORECASE,
-)
-_STORED_WHY_TAIL = re.compile(
-    r"^(The agent replied:|Connector calls:|Expected outcome:|No short evidence)",
-    re.IGNORECASE,
-)
-
-
-def _verdict_line(reason: object) -> str:
-    """Choice/label line only. Stored per-check reasons are display, not verdict."""
-    from skillgate_ai.judge_bank import is_built_reason
-
-    text = str(reason or "").strip()
-    if " — " not in text:
-        return text
-    head, tail = text.split(" — ", 1)
-    if _STORED_WHY_TAIL.search(tail.strip()) or is_built_reason(tail):
-        return head
-    return text
-
-
 def _is_result_quality_reason(reason: object) -> bool:
     from skillgate_ai.judge_bank import CHECK_CELL_LABELS
 
     return str(reason or "").strip().startswith(CHECK_CELL_LABELS["result_quality"])
-
-
-def _wording_only_builtin_reason(reason: object) -> bool:
-    """True for Delivered a good result?, or a wording restatement of another row."""
-    if _is_result_quality_reason(reason):
-        return True
-    if not _is_builtin_quality_reason(reason):
-        return False
-    line = _verdict_line(reason)
-    if _NON_WORDING_FAIL.search(line):
-        return False
-    return bool(_WORDING_RESTATE.search(line))
 
 
 def _honest_negation_passed(judged: Mapping[str, Any]) -> bool:
@@ -158,6 +115,34 @@ def _honest_negation_passed(judged: Mapping[str, Any]) -> bool:
     return False
 
 
+def _blocking_choice_failed(judged: Mapping[str, Any]) -> bool:
+    """True when a builtin other than Delivered a good result? failed."""
+    from skillgate_ai.judge_bank import (
+        CHECK_CELL_ORDER,
+        PASS_LOCK,
+        canonical_choice,
+        extract_choice,
+    )
+
+    cells = judged.get("cells") if isinstance(judged.get("cells"), Mapping) else {}
+    answers = judged.get("answers") if isinstance(judged.get("answers"), Mapping) else {}
+    for key in CHECK_CELL_ORDER:
+        if key == "result_quality":
+            continue
+        cell = cells.get(key) if isinstance(cells.get(key), Mapping) else {}
+        raw = answers.get(key)
+        choice = cell.get("choice") if isinstance(cell, Mapping) else None
+        if not choice:
+            choice = extract_choice(raw)
+        canonical = canonical_choice(key, str(choice) if choice else None)
+        allowed = PASS_LOCK.get(key) or frozenset()
+        if canonical is None:
+            continue
+        if canonical.strip().lower() not in allowed:
+            return True
+    return False
+
+
 def stabilize_adherence_review(
     judged: dict[str, Any] | None,
     scores: list[Score] | list[dict[str, Any]] | None,
@@ -166,14 +151,11 @@ def stabilize_adherence_review(
 
     The 0.5 floor and the pass mark stay put. This drops the unsure flag on
     builtin cells whose choice is already in PASS_LOCK when every deterministic
-    scorer passed. A failing choice at low confidence stays review unless extra
-    checks exist, none failed, and the scorers passed. When log extras all pass,
-    only a judge fail on Delivered a good result? is dropped. Incorrect,
-    Partially completed, and every other builtin fail stay red. A passing text
-    check drops Delivered a good result? — and a wording restatement of another
-    row — only for an honest rg4 negation (`not submitted yet` / `not yet`).
-    A rewritten draft, a wrong amount, a missing step, or an incomplete job
-    still fails.
+    scorer passed. Incorrect, Partially completed, and Violated always stay
+    red — log extras and wording extras cannot clear them. Only Delivered a
+    good result? may be overridden, and only by an honest rg4 negation
+    (`not submitted yet` / `not yet`). A rewritten draft, a wrong amount, a
+    missing step, or an incomplete job still fails.
     """
     from skillgate_ai.judge_bank import (
         CHECK_CELL_ORDER,
@@ -196,7 +178,6 @@ def stabilize_adherence_review(
     if not isinstance(cells, dict):
         return judged
     extras_ok = _extras_all_passed(judged)
-    extras_log = extras_ok and _extras_from_log(judged)
     extras_text = extras_ok and _extras_from_text(judged)
     answers = judged.get("answers") if isinstance(judged.get("answers"), dict) else {}
     next_cells = dict(cells)
@@ -211,15 +192,14 @@ def stabilize_adherence_review(
             choice = raw.get("choice")
         canonical = canonical_choice(key, choice)
         allowed = PASS_LOCK.get(key) or frozenset()
-        if not extras_ok and (
-            canonical is None or canonical.strip().lower() not in allowed
-        ):
+        if canonical is None or canonical.strip().lower() not in allowed:
             continue
         cleaned = dict(cell)
         cleaned.pop("status", None)
         next_cells[key] = cleaned
         changed = True
-    if not changed and not extras_log and not extras_text:
+    honest_rg4 = extras_text and _honest_negation_passed(judged)
+    if not changed and not honest_rg4:
         return judged
     out = dict(judged)
     if changed:
@@ -240,13 +220,13 @@ def stabilize_adherence_review(
     original = [
         str(item).strip() for item in (out.get("reasons") or []) if str(item).strip()
     ]
-    dropped_wording = False
-    if extras_text and _honest_negation_passed(judged):
-        kept = [item for item in original if not _wording_only_builtin_reason(item)]
-        dropped = [item for item in original if _wording_only_builtin_reason(item)]
+    dropped_quality = False
+    if honest_rg4:
+        kept = [item for item in original if not _is_result_quality_reason(item)]
+        dropped = [item for item in original if _is_result_quality_reason(item)]
         original = kept
         if dropped:
-            dropped_wording = True
+            dropped_quality = True
             warnings = [
                 str(item).strip()
                 for item in (out.get("warnings") or [])
@@ -255,15 +235,10 @@ def stabilize_adherence_review(
             if WORDING_OVERRIDE_NOTE not in warnings:
                 warnings.append(WORDING_OVERRIDE_NOTE)
             out["warnings"] = warnings
-    if extras_log:
-        original = [item for item in original if not _is_result_quality_reason(item)]
-        if not changed:
-            out["review"] = any(
-                isinstance(row, dict) and row.get("status") == "unsure"
-                for row in cells.values()
-            )
     out["reasons"] = original
-    if (extras_log or dropped_wording) and not any(
+    if _blocking_choice_failed(out):
+        out["passed"] = False
+    elif dropped_quality and not any(
         _is_builtin_quality_reason(item) for item in original
     ):
         out["passed"] = True
@@ -843,6 +818,14 @@ def _live_verdict(
     if extra:
         stamped = {**stamped, "passed": False}
         return False, extra, stamped
+    if _blocking_choice_failed(stamped):
+        failures = [
+            str(item)
+            for item in (stamped.get("reasons") or [])
+            if str(item).strip()
+        ]
+        stamped = {**stamped, "passed": False}
+        return False, failures or ["Got it right? Incorrect"], stamped
     if judge.get("status") == "error":
         reason = str(stamped.get("reason") or "").strip()
         if not reason:

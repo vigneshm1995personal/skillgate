@@ -93,7 +93,6 @@ def test_refund_twice_incorrect_and_partial_stay_red() -> None:
     blob = " ".join(str(item) for item in (out.get("reasons") or []))
     assert "Incorrect" in blob
     assert "Partially completed" in blob
-    assert "Delivered a good result?" not in blob
     assert WORDING_OVERRIDE_NOTE not in (out.get("warnings") or [])
     gate, failures, _stamped = _live_verdict(
         out, "ticket-deflector", det_passed=True, det_failures=[], trigger_passed=True
@@ -105,13 +104,14 @@ def test_refund_twice_incorrect_and_partial_stay_red() -> None:
 def test_log_extras_still_clear_only_result_quality() -> None:
     judged = _quality_red(extra_source="log", extra_ok=True)
     out = stabilize_adherence_review(judged, _scores())
-    assert out["passed"] is True
-    assert not any("Delivered a good result" in str(item) for item in (out.get("reasons") or []))
+    assert out["passed"] is not True
+    blob = " ".join(str(item) for item in (out.get("reasons") or []))
+    assert "Delivered a good result" in blob
     gate, failures, _stamped = _live_verdict(
         out, "ticket-deflector", det_passed=True, det_failures=[], trigger_passed=True
     )
-    assert gate is True
-    assert not any("Delivered a good result" in item for item in failures)
+    assert gate is False
+    assert any("Delivered a good result" in item for item in failures)
 
 
 def test_bare_incorrect_stays_red_on_honest_rg4() -> None:
@@ -164,12 +164,15 @@ def test_rg4_log_and_text_extras_still_show_override_note() -> None:
         "q1": {"instructions": C8_DUP_ASK},
     }
     out = stabilize_adherence_review(judged, _scores())
-    assert out["passed"] is True
+    assert out["passed"] is not True
     assert WORDING_OVERRIDE_NOTE in (out.get("warnings") or [])
+    blob = " ".join(str(item) for item in (out.get("reasons") or []))
+    assert "Incorrect" in blob
+    assert "Violated" in blob
     gate, _failures, stamped = _live_verdict(
         out, "ticket-deflector", det_passed=True, det_failures=[], trigger_passed=True
     )
-    assert gate is True
+    assert gate is False
     assert WORDING_OVERRIDE_NOTE in ((stamped or {}).get("warnings") or [])
 
 

@@ -95,6 +95,8 @@ def rescore_saved_run(pack: Path, row: dict[str, Any]) -> dict[str, Any]:
         task["judge"] = stamped if stamped is not None else judged
         task["passed"] = gate
         task["failures"] = failures
+        _restamp_why(task, skill_text)
+        _finish_task(task, gate)
         if gate is True:
             passed_count += 1
         elif gate is False:
@@ -113,10 +115,17 @@ def rescore_saved_run(pack: Path, row: dict[str, Any]) -> dict[str, Any]:
             task.get("review") or (isinstance(task.get("judge"), dict) and task["judge"].get("review"))
             for task in tasks
         )
+        warning = any(str(task.get("status") or "") == "warning" for task in tasks)
         report["passed"] = True
-        report["gate"] = "needs review" if review else "green"
+        if review:
+            report["gate"] = "needs review"
+        elif warning:
+            report["gate"] = "warning"
+        else:
+            report["gate"] = "green"
         out["passed"] = True
         out["gate"] = report["gate"]
+    out.pop("status", None)
     out["report"] = report
     return out
 
@@ -175,6 +184,8 @@ def _stamp_extra_cells(
     merged: dict[str, Any],
     spec: JudgeSpec,
 ) -> None:
+    from skillgate_ai.judge_bank import GUARD_REFUSED_RETRY_NOTE
+
     for question in spec.extras:
         fact = merged.get(question.id)
         if not isinstance(fact, dict):
@@ -186,8 +197,106 @@ def _stamp_extra_cells(
                 cell[key] = fact[key]
         probability = fact.get("probability")
         if isinstance(probability, (int, float)) and not isinstance(probability, bool):
-            cell["choice"] = "Yes" if float(probability) >= 0.8 else "No"
+            yes = float(probability) >= 0.8
+            cell["probability"] = float(probability)
+            cell["choice"] = "Yes" if yes else "No"
+            cell["passed"] = yes
+            merged[question.id] = {**fact, "choice": cell["choice"], "passed": yes}
+        note = str(fact.get("warning") or cell.get("warning") or "").strip()
+        if note:
+            cell["warning"] = note
+            if note == GUARD_REFUSED_RETRY_NOTE:
+                cell["passed"] = True
         cells[question.id] = cell
+
+
+def _restamp_why(task: dict[str, Any], skill_text: str | None) -> None:
+    from skillgate_ai.judge_bank import CHECK_CELL_LABELS, CHECK_CELL_ORDER
+    from skillgate_ai.judge_context import apply_why_reasons, with_run_reason_questions
+    from skillgate_ai.span_facts import _parse_calls_log, _reply_text
+
+    judge = task.get("judge") if isinstance(task.get("judge"), dict) else None
+    if not isinstance(judge, dict):
+        return
+    cells = judge.get("cells") if isinstance(judge.get("cells"), dict) else {}
+    answers = judge.get("answers") if isinstance(judge.get("answers"), dict) else {}
+    outputs = task.get("outputs") if isinstance(task.get("outputs"), list) else []
+    reply = _reply_text(outputs)
+    calls = _parse_calls_log(outputs)
+    argv0 = []
+    for row in calls:
+        argv = row.get("argv") if isinstance(row, dict) else None
+        if isinstance(argv, list) and argv:
+            argv0.append({"argv": argv})
+    state = {
+        "actual_output": {"body": reply},
+        "expected_outcome": str(task.get("prompt") or task.get("scenario") or ""),
+        "skill_instructions": skill_text or "",
+        "agent_trajectory": {"commands": argv0},
+    }
+    questions = with_run_reason_questions(
+        [
+            {
+                "type": "choice",
+                "name": name,
+                "instructions": CHECK_CELL_LABELS[name],
+            }
+            for name in CHECK_CELL_ORDER
+        ],
+        state,
+    )
+    apply_why_reasons(cells, answers, questions)
+    stored = judge.get("questions") if isinstance(judge.get("questions"), dict) else {}
+    for item in questions:
+        name = str(item.get("name") or "")
+        if name.endswith("_why"):
+            stored[name] = {
+                "instructions": item.get("instructions"),
+                "type": "choice",
+                "choices": item.get("choices"),
+            }
+    judge["questions"] = stored
+    judge["cells"] = cells
+    judge["answers"] = answers
+
+
+def _finish_task(task: dict[str, Any], gate: bool) -> None:
+    from skillgate_ai.judge_bank import GUARD_REFUSED_RETRY_NOTE, UNSURE_REVIEW
+    from skillgate_ai.run_details import hydrate_task
+
+    judge = task.get("judge") if isinstance(task.get("judge"), dict) else {}
+    warnings = [
+        str(item).strip()
+        for item in (judge.get("warnings") or [])
+        if str(item).strip()
+    ]
+    review = bool(task.get("review") or judge.get("review"))
+    if gate is True:
+        warnings = [item for item in warnings if item != UNSURE_REVIEW]
+        if isinstance(judge, dict):
+            judge["warnings"] = warnings
+            judge["review"] = False
+        task["review"] = False
+        review = False
+        if GUARD_REFUSED_RETRY_NOTE in warnings:
+            task["status"] = "warning"
+        else:
+            task["status"] = "pass"
+        task["happened"] = (
+            GUARD_REFUSED_RETRY_NOTE
+            if GUARD_REFUSED_RETRY_NOTE in warnings
+            else ""
+        )
+    elif gate is False:
+        warnings = [item for item in warnings if item != UNSURE_REVIEW]
+        if isinstance(judge, dict):
+            judge["warnings"] = warnings
+        task["status"] = "fail"
+        task["review"] = False
+    elif review:
+        task["status"] = "unsure"
+    task["judge"] = judge
+    hydrate_task(task)
 
 
 def _score_bits(scores: list[Any]) -> tuple[bool, list[str], bool]:

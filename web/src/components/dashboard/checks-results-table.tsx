@@ -87,6 +87,8 @@ export function ChecksResultsTable({
                 ? "PASS"
                 : chip === "fail"
                   ? "FAIL"
+                  : chip === "warning"
+                    ? "WARNING"
                   : chip === "review"
                     ? "REVIEW"
                   : chip === "running"
@@ -200,7 +202,7 @@ function CheckPair({
             "w-[5.5rem] py-2 pr-3 align-top font-semibold whitespace-nowrap",
             chip === "pass" && "text-success",
             chip === "fail" && "text-destructive",
-            chip === "review" && "text-warning",
+            (chip === "review" || chip === "warning") && "text-warning",
             (chip === "queued" || chip === "running" || chip === "skipped") &&
               "text-muted-foreground font-medium"
           )}
@@ -320,7 +322,9 @@ function OpenedDetails({
               <dt className="font-medium">{item.label}</dt>
               <dd className="text-muted-foreground m-0">
                 {item.answer}
-                {item.passed === true ? (
+                {item.warning ? (
+                  <span className="text-warning"> WARNING</span>
+                ) : item.passed === true ? (
                   <span className="text-success"> PASS</span>
                 ) : item.passed === false ? (
                   <span className="text-destructive"> FAIL</span>

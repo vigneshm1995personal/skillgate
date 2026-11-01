@@ -9,6 +9,7 @@ from typing import Any
 
 from skillgate_ai.errors import SkillGateError
 from skillgate_ai.judge_bank import (
+    GUARD_REFUSED_RETRY_NOTE,
     NO_REASON_RECORDED,
     UNSURE_REVIEW,
     WHY_SUFFIX,
@@ -270,6 +271,16 @@ def check_rows(task: Mapping[str, Any] | None) -> list[dict[str, Any]]:
                 if guessed is None and score is not None:
                     guessed = score >= _PREDICATE_PASS
                 passed = guessed
+        warning = str(
+            cell.get("warning")
+            or answer.get("warning")
+            or listed_row.get("warning")
+            or ""
+        ).strip()
+        if warning == GUARD_REFUSED_RETRY_NOTE:
+            passed = True
+            if score is None:
+                score = 1.0
         status = str(cell.get("status") or "").strip().lower()
         if (
             status == "unsure"
@@ -291,6 +302,8 @@ def check_rows(task: Mapping[str, Any] | None) -> list[dict[str, Any]]:
         }
         if score is not None:
             row["score"] = score
+        if warning:
+            row["warning"] = warning
         rows.append(row)
 
     if isinstance(cells, Mapping):
@@ -505,6 +518,7 @@ def hydrate_task(task: dict[str, Any]) -> dict[str, Any]:
             "source": row.get("source"),
             "source_label": row.get("source_label"),
             "passed": row.get("passed"),
+            "warning": row.get("warning"),
         }
         for row in detail["checks"]
     ]
@@ -527,7 +541,13 @@ def _mark(task: Mapping[str, Any]) -> str:
         task.get("review") or task.get("status") == "unsure"
     ):
         return "review"
+    if task.get("passed") is True and str(task.get("status") or "") == "warning":
+        return "warning"
     if task.get("passed") is True:
+        judge = task.get("judge") if isinstance(task.get("judge"), Mapping) else {}
+        warnings = judge.get("warnings") if isinstance(judge, Mapping) else []
+        if any(str(item).strip() == GUARD_REFUSED_RETRY_NOTE for item in (warnings or [])):
+            return "warning"
         return "pass"
     if task.get("passed") is False:
         return "fail"
@@ -568,6 +588,8 @@ def format_run_show(
     cannot_run = "cannot run" in str((err or {}).get("message") or "").lower()
     if passed_flag is True and str(report.get("gate") or "") == "needs review":
         gate = "review"
+    elif passed_flag is True and str(report.get("gate") or "") == "warning":
+        gate = "warning"
     elif passed_flag is True:
         gate = "pass"
     elif passed_flag is False:
@@ -598,6 +620,9 @@ def format_run_show(
             reason = ""
             if mark == "review":
                 reason = "  unsure, needs review"
+            elif mark == "warning":
+                happened = str(task.get("happened") or "").strip()
+                reason = f"  {happened or GUARD_REFUSED_RETRY_NOTE}"
             elif task.get("passed") is False:
                 happened = str(task.get("happened") or "").strip()
                 if happened:
@@ -609,7 +634,9 @@ def format_run_show(
             lines.append(f"  {name}  {mark}{reason}")
             continue
         lines.append("")
-        lines.append(f"{name}  {mark.upper() if mark in {'pass', 'fail'} else mark}")
+        lines.append(
+            f"{name}  {mark.upper() if mark in {'pass', 'fail', 'warning'} else mark}"
+        )
         scenario = detail_row["scenario"]
         if scenario:
             lines.append("  Setup")
@@ -618,13 +645,28 @@ def format_run_show(
         if checks:
             lines.append("  Checks")
             for item in checks:
-                bit = "PASS" if item.get("passed") is True else (
-                    "FAIL" if item.get("passed") is False else "—"
+                bit = (
+                    "WARNING"
+                    if item.get("warning")
+                    else "PASS"
+                    if item.get("passed") is True
+                    else "FAIL"
+                    if item.get("passed") is False
+                    else "—"
                 )
                 score = _score_text(item.get("score"))
                 src = item.get("source_label") or ""
                 reason = item.get("reason") or ""
-                extra = "  ".join(part for part in (score, reason, f"({src})" if src else "") if part)
+                extra = "  ".join(
+                    part
+                    for part in (
+                        str(item.get("answer") or "").strip(),
+                        score,
+                        reason,
+                        f"({src})" if src else "",
+                    )
+                    if part
+                )
                 label = item.get("label") or item.get("id") or "Check"
                 lines.append(f"  {label}  {bit}" + (f"  {extra}" if extra else ""))
         judge = task.get("judge") if isinstance(task.get("judge"), Mapping) else {}

@@ -627,6 +627,16 @@ def test_wording_override_shows_a_visible_note() -> None:
     ]
     judged["answers"]["q0"] = {**judged["answers"]["q0"], **facts["q0"]}
     judged["cells"]["q0"] = {**judged["cells"]["q0"], **facts["q0"]}
+    judged["reasons"] = [
+        "Delivered a good result? Significant issues (need Clear and complete)",
+    ]
+    judged["cells"]["correctness"]["choice"] = "Correct"
+    judged["cells"]["instruction_adherence"]["choice"] = "Fully followed"
+    judged["answers"]["correctness"] = {"choice": "Correct", "confidence": 0.91}
+    judged["answers"]["instruction_adherence"] = {
+        "choice": "Fully followed",
+        "confidence": 0.88,
+    }
     out = stabilize_adherence_review(judged, _scores())
     assert facts["q0"].get("honest_negation") is True
     assert out["passed"] is True
@@ -694,7 +704,36 @@ def test_rg4_negation_stays_green_when_text_passes() -> None:
                 "Got it right? Incorrect (need Correct) — used submitted",
                 "Followed the rules? Violated (need Fully followed) — banned wording",
             ],
-        ) is True
+        ) is False
+        judged = _judge_wording_red(
+            extra_ok=True, extra_source="text", extra_label=ask
+        )
+        judged["reasons"] = [
+            "Delivered a good result? Significant issues (need Clear and complete)",
+        ]
+        judged["cells"]["correctness"]["choice"] = "Correct"
+        judged["cells"]["instruction_adherence"]["choice"] = "Fully followed"
+        judged["cells"]["result_quality"] = {
+            "label": "Delivered a good result?",
+            "choice": "Significant issues",
+            "confidence": 0.9,
+        }
+        judged["answers"]["correctness"] = {"choice": "Correct", "confidence": 0.91}
+        judged["answers"]["instruction_adherence"] = {
+            "choice": "Fully followed",
+            "confidence": 0.88,
+        }
+        judged["answers"]["result_quality"] = {
+            "choice": "Significant issues",
+            "confidence": 0.9,
+        }
+        judged["answers"]["q0"] = {**judged["answers"]["q0"], **facts["q0"]}
+        judged["cells"]["q0"] = {**judged["cells"]["q0"], **facts["q0"]}
+        out = stabilize_adherence_review(judged, _scores())
+        gate, _failures, _stamped = _live_verdict(
+            out, "ticket-deflector", det_passed=True, det_failures=[], trigger_passed=True
+        )
+        assert gate is True, reply
 
 
 def test_wrong_amount_gone_through_stays_red_when_wording_passes() -> None:
@@ -748,7 +787,9 @@ def test_stored_reason_quoting_usd_does_not_redden_rg4() -> None:
     gate, _failures, _stamped = _live_verdict(
         out, "ticket-deflector", det_passed=True, det_failures=[], trigger_passed=True
     )
-    assert gate is True
+    assert gate is False
+    reasons_blob = " ".join(str(item) for item in (out.get("reasons") or []))
+    assert "USD 0.00" not in reasons_blob
     assert _gate_with_text_pass(
         extra_label=ask,
         extra=facts["q0"],
@@ -756,7 +797,7 @@ def test_stored_reason_quoting_usd_does_not_redden_rg4() -> None:
             "Got it right? Incorrect (need Correct) — used submitted",
             "Followed the rules? Violated (need Fully followed) — banned wording",
         ],
-    ) is True
+    ) is False
 
 
 

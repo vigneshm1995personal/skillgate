@@ -321,8 +321,11 @@ def extract_choice(answer: Any) -> str | None:
         return answer.strip() or None
     if not isinstance(answer, Mapping):
         return None
-    value = answer.get("choice")
-    return value.strip() if isinstance(value, str) and value.strip() else None
+    for key in ("choice", "value", "selected"):
+        value = answer.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return None
 
 
 def extract_confidence(answer: Any) -> float | None:

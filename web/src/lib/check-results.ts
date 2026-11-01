@@ -138,6 +138,7 @@ export type OpenedAnswer = {
   reason?: string
   source?: string
   passed?: boolean | null
+  warning?: string
 }
 
 function trimText(value: unknown): string {
@@ -878,8 +879,9 @@ export function openedCheckAnswers(task: TaskResult): OpenedAnswer[] {
       reason?: string | null
       passed?: boolean
       status?: string
+      warning?: string
     } | null,
-    listedRow?: { score?: number; reason?: string; passed?: boolean } | null,
+    listedRow?: { score?: number; reason?: string; passed?: boolean; warning?: string } | null,
     question?: JudgeQuestion | null
   ): OpenedAnswer => {
     const score = answerScore(id, choice, answer, cell, listedRow)
@@ -897,6 +899,12 @@ export function openedCheckAnswers(task: TaskResult): OpenedAnswer[] {
     if (reason) row.reason = reason
     const passed = openedPassed(id, choice, score, cell, listedRow)
     if (passed != null) row.passed = passed
+    const warning = trimText(cell?.warning) || trimText(answer?.warning) || trimText(listedRow?.warning)
+    if (warning === GUARD_REFUSED_RETRY_NOTE) {
+      row.warning = warning
+      row.passed = true
+      row.score = 1
+    }
     return row
   }
   const builtins = CHECK_QUESTION_ORDER.map((id) => {

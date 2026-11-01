@@ -900,6 +900,37 @@ describe("openedCheckAnswers / low confidence", () => {
     }
     expect(refusedRetryNote(task)).toBe(GUARD_REFUSED_RETRY_NOTE)
     expect(happenedLine(task)).toBe(GUARD_REFUSED_RETRY_NOTE)
+    const warned = {
+      ...task,
+      status: "warning" as const,
+      judge: {
+        ...task.judge,
+        warnings: [GUARD_REFUSED_RETRY_NOTE],
+        answers: {
+          ...task.judge?.answers,
+          q0: { probability: 1, source: "log", warning: GUARD_REFUSED_RETRY_NOTE },
+        },
+        cells: {
+          ...task.judge?.cells,
+          q0: {
+            label: "no duplicate refund calls",
+            choice: "Yes",
+            probability: 1,
+            source: "log",
+            warning: GUARD_REFUSED_RETRY_NOTE,
+            passed: true,
+          },
+        },
+        questions: {
+          ...task.judge?.questions,
+          q0: { instructions: "no duplicate refund calls", type: "predicate" },
+        },
+      },
+    }
+    const row = openedCheckAnswers(warned).find((item) => item.id === "q0")
+    expect(row?.warning).toBe(GUARD_REFUSED_RETRY_NOTE)
+    expect(row?.passed).toBe(true)
+    expect(row?.score).toBe(1)
   })
 
   it("marks rubric answers Not checked when the script never ran", () => {

@@ -93,6 +93,9 @@ describe("taskChip / taskState", () => {
     expect(taskChip({ id: "wrong", status: "done", passed: false })).toBe(
       "fail"
     )
+    expect(
+      taskChip({ id: "c8", status: "warning", passed: true })
+    ).toBe("warning")
   })
 
   it("treats historical rows without status as done only when passed is a boolean", () => {

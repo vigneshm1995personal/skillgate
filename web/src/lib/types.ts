@@ -246,6 +246,7 @@ export type JudgeAnswer = {
   reason?: string
   confidence?: number | null
   source?: string
+  warning?: string
 }
 
 export type JudgeUsage = {
@@ -398,7 +399,7 @@ export type TaskResult = {
   setup?: string | null
   passed?: boolean | null
   review?: boolean
-  status?: "queued" | "running" | "done" | "unsure" | "pass" | "fail"
+  status?: "queued" | "running" | "done" | "unsure" | "pass" | "fail" | "warning"
   skipped?: boolean
   prompt?: string
   reply?: string | null
@@ -430,6 +431,7 @@ export type TaskResult = {
     source?: string
     source_label?: string
     passed?: boolean
+    warning?: string
   }>
 }
 

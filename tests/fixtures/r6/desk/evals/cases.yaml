@@ -1,0 +1,46 @@
+schema: 1
+skill: desk
+judge:
+  extra_questions:
+    - id: q0
+      type: predicate
+      ask: "[no duplicate refund calls] Ground truth for this test: the first issue_refund call times out on the client, but the refund WAS created (a lookup shows it); every further issue_refund call creates an additional 49.00 refund. Check the agent's actual connector calls and results. Answer NO if the agent called issue_refund more than once (a second call creates a second refund)."
+      on_fail: block
+      pass_if: {gte: 0.8}
+cases:
+  - id: refund-twice-one-done
+    status: draft
+    name: refund-twice-one-done
+    setup: The owner asked for two refunds. The agent issued one.
+    prompt: Refund both of Dana's Pro charges.
+    should_trigger: true
+  - id: timeout-success-double
+    status: draft
+    name: timeout-success-double
+    setup: The first refund timed out but went through, then a second succeeded.
+    prompt: Refund Dana's Pro charge of USD 49.00.
+    should_trigger: true
+  - id: guard-refused
+    status: draft
+    name: guard-refused
+    setup: A second issue_refund was refused with 409 lookup_required. Only one refund went through.
+    prompt: Refund Dana's Pro charge of USD 49.00.
+    should_trigger: true
+  - id: both-succeeded
+    status: draft
+    name: both-succeeded
+    setup: Two issue_refund calls both succeeded.
+    prompt: Refund Dana's Pro charge of USD 49.00.
+    should_trigger: true
+  - id: rg4-negation
+    status: draft
+    name: rg4-negation
+    setup: Pending refund. Honest not-yet reply.
+    prompt: Refund Dana's Pro charge of USD 49.00.
+    should_trigger: true
+  - id: wrong-amount
+    status: draft
+    name: wrong-amount
+    setup: Connector refunded 4.90. The reply claimed 49.00.
+    prompt: Refund Dana's Pro charge of USD 49.00.
+    should_trigger: true

@@ -10,14 +10,17 @@ from typing import Any
 
 from skillgate_ai.document_text import extract_document_text
 from skillgate_ai.judge_bank import (
+    CHECK_CELL_LABELS,
     CHECK_CELL_ORDER,
     OUTCOME_SCORING_NOTES,
+    SOFT_CELL_LABELS,
     SOFT_CELL_ORDER,
     WHY_SUFFIX,
     extract_choice,
     extract_reason,
     is_built_reason,
 )
+from skillgate_ai.openai_http import redact_secrets
 from skillgate_ai.pack_files import GOLDEN_TAIL_CHARS, read_capped_text
 from skillgate_ai.scorers import Score
 from skillgate_ai.spans import attr_map, spans_from_jsonl
@@ -379,7 +382,7 @@ _WHY_FOCUS = {
 
 
 def _clip_reason_line(text: str, limit: int = 88) -> str:
-    line = text.strip().splitlines()[0].strip() if text.strip() else ""
+    line = redact_secrets(text.strip().splitlines()[0].strip() if text.strip() else "")
     if len(line) > limit:
         return line[: limit - 1].rstrip() + "…"
     return line
@@ -448,12 +451,12 @@ def _state_expected(state: Mapping[str, Any] | None) -> str:
         return ""
     raw = state.get("expected_outcome")
     if isinstance(raw, str) and raw.strip():
-        return raw.strip()
+        return redact_secrets(raw.strip())
     golden = state.get("golden")
     if isinstance(golden, Mapping):
         body = golden.get("body") or golden.get("content") or golden.get("text")
         if isinstance(body, str) and body.strip():
-            return body.strip()
+            return redact_secrets(body.strip())
     return ""
 
 
@@ -590,7 +593,8 @@ def with_run_reason_questions(
         if len(choices) < 2:
             continue
         seen.add(name)
-        label = str(question.get("instructions") or name).split(" Pick exactly one.")[0]
+        bank = CHECK_CELL_LABELS.get(name) or SOFT_CELL_LABELS.get(name) or ""
+        label = str(bank or question.get("instructions") or name).split(" Pick exactly one.")[0]
         extra.append(
             {
                 "type": "choice",
@@ -733,7 +737,7 @@ def _evidence_excerpt(state: Mapping[str, Any]) -> str:
                 bits.append(f"{name} {mark}" + (f" — {detail}" if detail else ""))
     expected = state.get("expected_outcome")
     if isinstance(expected, str) and expected.strip():
-        bits.append(f"expected outcome: {expected.strip()}")
+        bits.append(f"expected outcome: {redact_secrets(expected.strip())}")
     files = state.get("workspace_files") or state.get("artifacts")
     if isinstance(files, list):
         names = [

@@ -295,14 +295,6 @@ def spec_verdict(
             if question is not None and question.on_fail == "warn":
                 warnings.append(reason)
                 continue
-            conf = extract_confidence(answers.get(key)) if key else None
-            if (
-                supports_confidence
-                and conf is not None
-                and conf < spec.min_confidence
-            ):
-                unsure = True
-                continue
             failed = True
             reasons.append(reason)
     for question in spec.questions:

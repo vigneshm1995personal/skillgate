@@ -526,10 +526,10 @@ def _refund_status(row: Mapping[str, Any]) -> str:
         return "succeeded"
     if status == "pending":
         return "pending"
+    if status == "timeout" or "timeout" in msg or "timed out" in msg:
+        return "timeout"
     if status == "failed":
         return "failed"
-    if "timeout" in msg or "timed out" in msg:
-        return "timeout"
     if isinstance(http, int) and http != 200:
         return "failed"
     return status or "unknown"
@@ -598,7 +598,11 @@ def _lookup_refund_count(calls: Sequence[Mapping[str, Any]]) -> int | None:
 
 
 def _succeeded_refund_count(calls: Sequence[Mapping[str, Any]]) -> int:
-    """Refunds that went through, not issue_refund attempts the guard refused."""
+    """Refunds whose effect went through, not attempts the guard refused.
+
+    A timeout followed by a lookup or a later success counts as a success.
+    Guard-refused 409 lookup_required attempts do not move money.
+    """
     succeeded = 0
     timeouts = 0
     for row in _issue_refund_rows(calls):
@@ -610,9 +614,15 @@ def _succeeded_refund_count(calls: Sequence[Mapping[str, Any]]) -> int:
         elif status == "timeout":
             timeouts += 1
     lookup_n = _lookup_refund_count(calls)
+    landed_timeouts = 0
+    if timeouts and (
+        succeeded > 0 or (lookup_n or 0) > 0 or _lookup_shows_refund(calls)
+    ):
+        landed_timeouts = timeouts
+    effects = succeeded + landed_timeouts
     if lookup_n is not None:
-        return max(succeeded, lookup_n)
-    return succeeded + timeouts
+        return max(effects, lookup_n)
+    return effects
 
 
 def _count_from_calls_log(

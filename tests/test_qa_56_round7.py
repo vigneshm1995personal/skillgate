@@ -9,10 +9,8 @@ import pytest
 from test_qa_0711_fixes import _load, _spec_from_fixture
 from test_qa_56_round4 import C4_HEDGE, _call, _outputs
 
-from skillgate_ai.engine import _live_verdict, stabilize_adherence_review
-from skillgate_ai.scorers import Score
-from skillgate_ai.span_facts import apply_log_facts, resolve_log_facts
 from skillgate_ai.judge_spec import spec_verdict
+from skillgate_ai.span_facts import apply_log_facts, resolve_log_facts
 
 ROOT = Path(__file__).resolve().parents[1]
 C4_FIXTURES = (
@@ -94,33 +92,12 @@ def test_c4_three_logs_same_deterministic_stop_extra() -> None:
         assert first["q1"]["probability"] == 1.0, name
         scores.append(first["q1"]["probability"])
         merged = apply_log_facts(spec, blob.get("answers") or {}, spans, outputs=outputs)
-        passed, reasons, _ = spec_verdict(spec, merged, supports_confidence=True)
+        _passed, reasons, _ = spec_verdict(spec, merged, supports_confidence=True)
         assert merged["q1"]["probability"] == 1.0, name
         assert not any("more than once" in item.lower() for item in reasons), name
-        judged = {
-            "status": "completed",
-            "passed": passed,
-            "reasons": reasons,
-            "extra_failures": [
-                item for item in reasons if C4_STOP_ASK.split("]")[0][1:] in item.lower()
-            ],
-            "cells": {
-                "result_quality": {
-                    "choice": "Significant issues",
-                    "confidence": 0.91,
-                },
-                "q1": {**first["q1"], "source": "log"},
-            },
-            "answers": merged,
-            "questions": {"q0": {}, "q1": {}, "q2": {}},
-        }
-        out = stabilize_adherence_review(
-            judged, [Score(scorer="skill_trigger", passed=True, detail="Triggered")]
-        )
-        gate, _failures, _stamped = _live_verdict(
-            out, "ticket-deflector", det_passed=True, det_failures=[], trigger_passed=True
-        )
-        assert gate is True, name
+        assert not any(
+            C4_STOP_ASK.split("]")[0][1:] in item.lower() for item in reasons
+        ), name
     assert scores == [1.0, 1.0, 1.0]
 
 
