@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.7.12
+
+- When a skill states explicit banned phrases or required/forbidden wording, those lines are compiled into deterministic text checks on `output/reply.txt`. A hit fails the gate. The judge cannot override a passing or failing text check on that same wording rule. A judge fail that only restates a passing wording extra does not turn the gate red. Other judge verdicts (a rewritten draft, a wrong amount, a missing step, a false full-refund claim) still fail the gate. CLI, JSON, and the UI label that answer `from the log/text`, not `from the judge`. Write quoted lists (`Banned phrases:`, `Banned phrase:`, `Required wording:`, or `Nowhere in the reply use "…"`). Preview lists every compiled phrase (`skillgate judge show`, `skillgate checks show wording --pack`, or **Text checks from the skill**). Quoting the user, or a negation such as `has not been submitted` / `not yet submitted`, does not trip the check. A pending refund reply that says `I've submitted a full refund` or `submitted a full refund of USD 49.00` is red, including capitals, trailing punctuation, and a curly `’`. An honest pending reply that also says `USD 0.00` so far is green. A missing `reply.txt` fails with `reply.txt missing`. A cases.yaml missing `schema` or another required field exits 2 and names the field, without dumping the file. A second check while one is running exits 2. Until 0.7.12 is published, install from source.
+
 ## 0.7.11
 
 - After majority voting, a blocking verdict whose confidence is still below 0.5 is **unsure, needs review**. It is not a gate fail (exit 0, `gate: needs review`, task `status: unsure`). Deploy stays pending. High-confidence fails still fail in one call. The pass mark is unchanged.

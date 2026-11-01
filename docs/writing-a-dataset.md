@@ -135,7 +135,28 @@ skillgate ui
 
 `skillgate case list` and **View Dataset** on the skill page show the same cases. A live result comes from **Run** or `skillgate check`.
 
-A red names the failing check and includes the judge's reason, for example `Got the job done? Not completed (need Fully completed) — …`. After majority voting, a blocking answer still below 0.5 confidence is `unsure, needs review` (not a fail). Custom checks about tool-call counts, whether a tool was called, what it returned, or what the customer reply said versus `output/calls.log` are scored from the log when that is possible. The CLI, JSON, and UI label those answers `from the log` or `from the judge`. Use "more than once" / "at most once" / "duplicate", a file name such as `status.txt`, "called `tool_name`", or "returned" / "result" in the ask (backtick or snake_case tool name) if you want the log to score it. How majority re-asking works, which questions are blocking (`Followed the rules?` is one), where to read `tasks[].judge.votes`, and that `--no-judge` still needs an agent are in [Bring your own judge](judge.md). List saved run ids with `skillgate history --pack skills/json-response`.
+A red names the failing check and includes the judge's reason, for example `Got the job done? Not completed (need Fully completed) — …`. After majority voting, a blocking answer still below 0.5 confidence is `unsure, needs review` (not a fail). Custom checks about tool-call counts, whether a tool was called, what it returned, or what the customer reply said versus `output/calls.log` are scored from the log when that is possible. The CLI, JSON, and UI label those answers `from the log`, `from the log/text`, or `from the judge`. Explicit banned or required wording in the skill is scored from `output/reply.txt`. A missing reply fails that extra. A passing text check answers that wording rule. A judge fail that only restates it does not turn the gate red. Incorrect, Violated, or Major deviation about a rewritten draft, a wrong amount, or a missing step still fail. Use "more than once" / "at most once" / "duplicate", a file name such as `status.txt`, "called `tool_name`", or "returned" / "result" in the ask (backtick or snake_case tool name) if you want the log to score it. How majority re-asking works, which questions are blocking (`Followed the rules?` is one), where to read `tasks[].judge.votes`, and that `--no-judge` still needs an agent are in [Bring your own judge](judge.md). List saved run ids with `skillgate history --pack skills/json-response`.
+
+## Banned and required wording
+
+Put the phrases in quotes. These all compile the same deterministic text check:
+
+```text
+- Banned phrases: never say "I've submitted", "we've submitted", "issued"
+- Banned phrase: "I've submitted"
+- Nowhere in the reply use "submitted", "I've submitted", "issued"
+- Required wording: "USD 0.00"
+- Required wording: the reply must include "USD 0.00"
+```
+
+A match fails the check, including capitals, trailing punctuation, and a curly `’`. Quoting the customer, or a negation such as `has not been submitted` or `not yet submitted`, does not fail. Score only `output/reply.txt` — a missing reply is red, and `answer.txt` does not stand in for it. A passing text check clears a judge fail that only restates that wording rule. Preview the generated check before you run:
+
+```bash
+skillgate judge show skills/your-skill
+skillgate checks show wording --pack skills/your-skill
+```
+
+In the local UI, open **Checks**, then **Text checks from the skill**.
 
 ## Common mistakes
 

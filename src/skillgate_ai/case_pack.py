@@ -132,7 +132,7 @@ class PackCase(BaseModel):
 
 class CasePack(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
-    schema_version: Literal[1] = Field(default=1, alias="schema")
+    schema_version: Literal[1] = Field(alias="schema")
     skill: str
     cases: list[PackCase]
     budgets: CaseBudgets | None = None
@@ -251,7 +251,10 @@ def load_case_pack(skill_path: str | Path) -> CasePack | None:
     try:
         pack = CasePack.model_validate(raw)
     except Exception as exc:
-        raise SuiteError(friendly_validation_error(exc, kind="Case pack", raw=raw)) from None
+        raise SuiteError(
+            friendly_validation_error(exc, kind="Case pack", raw=raw),
+            exit_code=2,
+        ) from None
     folder = root.name
     if not folder_matches_skill(folder, pack.skill):
         raise SuiteError(

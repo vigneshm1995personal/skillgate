@@ -251,6 +251,7 @@ export const api = {
         id: string
         label: string
         builtin: boolean
+        source?: string | null
         prompt: string
       }>
     }>(`/api/checks${query}`, undefined, STATUS_TIMEOUT_MS)

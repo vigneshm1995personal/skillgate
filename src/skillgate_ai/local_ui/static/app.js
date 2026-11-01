@@ -589,6 +589,7 @@ function namedFailLine(task) {
 
 function sourceLabel(value) {
   const raw = String(value || "").trim().toLowerCase();
+  if (raw === "text" || raw === "log/text" || raw === "from the log/text") return "from the log/text";
   if (raw === "log" || raw === "from the log") return "from the log";
   if (raw === "judge" || raw === "from the judge") return "from the judge";
   return "";

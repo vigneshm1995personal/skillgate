@@ -319,6 +319,7 @@ def test_ui_source_labels_are_in_the_rendered_markup() -> None:
     assert "check-source" in table
     assert "from the log" in table or "item.source" in table
     assert "from the log" in legacy
+    assert "from the log/text" in legacy
     assert "from the judge" in legacy
 
 

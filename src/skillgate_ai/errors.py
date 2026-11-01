@@ -235,7 +235,9 @@ def _loc_label(
     if not loc:
         return ""
     if loc[0] in {"schema", "schema_version"}:
-        shown = inp if inp is not None else (raw or {}).get("schema")
+        shown = inp if isinstance(inp, (int, str)) else (raw or {}).get("schema")
+        if isinstance(shown, (dict, list)):
+            shown = None
         if shown is not None:
             return f"schema {shown}"
         return "schema"
@@ -250,6 +252,8 @@ def _loc_label(
                 return f"case {case_id} ({field})"
             return f"case {case_id}"
         return f"case #{idx + 1}"
+    if len(loc) == 1 and isinstance(loc[0], str):
+        return str(loc[0])
     if loc[0] == "tasks" and len(loc) >= 2 and isinstance(loc[1], int):
         idx = loc[1]
         task_id = _task_id_at(raw, idx)

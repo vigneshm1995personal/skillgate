@@ -71,6 +71,77 @@ export function BuiltInChecks({ skill }: { skill?: string | null }) {
   )
 }
 
+export function GeneratedTextChecks({ skill }: { skill?: string | null }) {
+  const [rows, setRows] = useState<CheckRow[] | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    setError(null)
+    if (!skill) {
+      setRows([])
+      return
+    }
+    api
+      .listChecks(skill)
+      .then((data) => {
+        if (!cancelled) {
+          setRows(
+            data.checks.filter(
+              (row) => row.source === "text" || row.id === "wording"
+            )
+          )
+        }
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) {
+          setError(err instanceof ApiError ? err.message : "Could not load checks.")
+          setRows([])
+        }
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [skill])
+
+  if (error) {
+    return <p className="text-sm text-muted-foreground">{error}</p>
+  }
+  if (!rows) {
+    return <p className="text-sm text-muted-foreground">Loading…</p>
+  }
+  if (rows.length === 0) {
+    return (
+      <p className="text-sm text-muted-foreground">
+        No text checks from this skill. Quote banned or required phrases in SKILL.md
+        to generate one.
+      </p>
+    )
+  }
+  return (
+    <div id="text-checks-from-skill" className="flex flex-col gap-2">
+      <p className="text-sm font-medium">Text checks from the skill</p>
+      <Accordion id="generated-text-checks" className="rounded-lg border px-3">
+        {rows.map((row) => (
+          <AccordionItem key={row.id} value={row.id}>
+            <AccordionTrigger id={`check-prompt-${row.id}`}>
+              {row.label}
+            </AccordionTrigger>
+            <AccordionContent>
+              <pre
+                id={`check-prompt-body-${row.id}`}
+                className="max-h-80 overflow-auto rounded-lg border bg-muted p-3 font-mono text-xs whitespace-pre-wrap"
+              >
+                {row.prompt}
+              </pre>
+            </AccordionContent>
+          </AccordionItem>
+        ))}
+      </Accordion>
+    </div>
+  )
+}
+
 export function CheckPromptPreview({ question }: { question: ExtraQuestion }) {
   const [open, setOpen] = useState(false)
   const [prompt, setPrompt] = useState<string | null>(null)

@@ -72,7 +72,7 @@ def test_bad_case_id_names_the_case(tmp_path: Path) -> None:
         encoding="utf-8",
     )
     result = runner.invoke(app, ["check", str(pack)])
-    assert result.exit_code == 1, result.stdout
+    assert result.exit_code == 2, result.stdout
     combined = result.stdout + result.stderr
     assert "Bad_ID" in combined
     assert "cases.0.id" not in combined

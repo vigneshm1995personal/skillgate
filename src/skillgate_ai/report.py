@@ -586,6 +586,8 @@ def _task_check_answers(task: TaskReport) -> tuple[list[dict[str, str]], str]:
 
 def _source_label(source: str | None) -> str | None:
     raw = str(source or "").strip().lower()
+    if raw in {"text", "log/text"}:
+        return "from the log/text"
     if raw == "log":
         return "from the log"
     if raw == "judge":
@@ -601,7 +603,7 @@ def _check_source(cell: Mapping[str, Any] | None, answer: Any, key: str) -> str 
     for blob in (cell, answer if isinstance(answer, dict) else None):
         if isinstance(blob, dict):
             raw = str(blob.get("source") or "").strip().lower()
-            if raw in {"log", "judge"}:
+            if raw in {"log", "judge", "text", "log/text"}:
                 return raw
     return "judge"
 

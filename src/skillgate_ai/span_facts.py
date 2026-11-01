@@ -197,6 +197,7 @@ def resolve_log_facts(
     *,
     trajectory: Mapping[str, Any] | None = None,
     outputs: Sequence[Mapping[str, Any]] | str | None = None,
+    skill_instructions: str | None = None,
 ) -> dict[str, Any]:
     """Answers for extras that are deterministic from the log. Empty → use the judge."""
     has_log = bool(spans) or bool(trajectory) or bool(outputs)
@@ -209,7 +210,14 @@ def resolve_log_facts(
         )
         if computed is not None:
             facts[question.id] = computed
-    return facts
+    return _merge_wording_facts(
+        spec,
+        facts,
+        spans,
+        trajectory=trajectory,
+        outputs=outputs,
+        skill_instructions=skill_instructions,
+    )
 
 
 def apply_log_facts(
@@ -219,11 +227,44 @@ def apply_log_facts(
     *,
     trajectory: Mapping[str, Any] | None = None,
     outputs: Sequence[Mapping[str, Any]] | str | None = None,
+    skill_instructions: str | None = None,
 ) -> dict[str, Any]:
     """Replace judge answers with log facts when the check can be computed."""
     merged = dict(answers or {})
-    merged.update(resolve_log_facts(spec, spans, trajectory=trajectory, outputs=outputs))
+    merged.update(
+        resolve_log_facts(
+            spec,
+            spans,
+            trajectory=trajectory,
+            outputs=outputs,
+            skill_instructions=skill_instructions,
+        )
+    )
     return merged
+
+
+def _merge_wording_facts(
+    spec: JudgeSpec,
+    facts: dict[str, Any],
+    spans: Sequence[Mapping[str, Any]] | None,
+    *,
+    trajectory: Mapping[str, Any] | None,
+    outputs: Sequence[Mapping[str, Any]] | str | None,
+    skill_instructions: str | None,
+) -> dict[str, Any]:
+    from skillgate_ai.wording_facts import resolve_wording_facts
+
+    reply = _reply_text(outputs)
+    wording = resolve_wording_facts(
+        spec,
+        outputs,
+        skill_instructions,
+        succeeded=_connector_succeeded(spans, trajectory, _parse_calls_log(outputs)),
+        hedge=_reply_hedges(reply),
+    )
+    for qid, fact in wording.items():
+        facts[qid] = fact
+    return facts
 
 
 def _compute_question(
@@ -290,9 +331,12 @@ def log_fact_kind(ask: str) -> str | None:
     return _fact_kind(ask)
 
 
-def _predicate(yes: bool, *, source: str) -> dict[str, Any]:
+def _predicate(yes: bool, *, source: str, reason: str | None = None) -> dict[str, Any]:
     value = 1.0 if yes else 0.0
-    return {"probability": value, "source": source}
+    out: dict[str, Any] = {"probability": value, "source": source}
+    if reason:
+        out["reason"] = reason
+    return out
 
 
 def _primary_tool(
@@ -368,10 +412,10 @@ def _count_is_yes(ask: str, count: int) -> bool:
 
 
 _ISSUED_RE = re.compile(
-    r"\b(?:has been|have been|was|already|i(?:['’]ve| have))\s+"
-    r"(?:issued|processed|completed)\b|"
+    r"\b(?:has been|have been|was|already|i(?:['’]ve| have)|we(?:['’]ve| have))\s+"
+    r"(?:issued|processed|completed|submitted)\b|"
     r"money is already on its way|"
-    r"(?:issued|processed)\s+a\s+(?:full\s+)?refund|"
+    r"(?:issued|processed|submitted)\s+a\s+(?:full\s+)?refund|"
     r"\bis on (?:its|the) way\b",
     re.IGNORECASE,
 )
@@ -381,8 +425,10 @@ _HEDGE_RE = re.compile(
     r"did(?:n['’]t| not) go through|attempt did|"
     r"nothing has been returned|no funds have been returned|"
     r"have not been returned|has not been returned|"
-    r"usd 0\.00 has been returned|0\.00 (?:has been returned|so far)|"
-    r"under review|is reviewing|reviewing that refund|"
+    r"usd 0\.00 has been returned|usd 0\.00 refunded|"
+    r"0\.00(?:\s+\w+){0,4}\s+so far|"
+    r"under review|for review|is reviewing|reviewing that refund|"
+    r"still pending|is pending\b|pending review|"
     r"could still (?:be declined|change)|"
     r"intend to (?:refund|return)|we intend|"
     r"can(?:not|'t) confirm|"
@@ -407,25 +453,6 @@ _AMOUNT_ASK = re.compile(
 )
 
 
-def _output_text(outputs: Sequence[Mapping[str, Any]] | str | None) -> str:
-    if isinstance(outputs, str):
-        return outputs
-    parts: list[str] = []
-    for item in outputs or []:
-        if isinstance(item, Mapping):
-            parts.append(
-                str(
-                    item.get("content")
-                    or item.get("body")
-                    or item.get("extracted_text")
-                    or ""
-                )
-            )
-        elif isinstance(item, str):
-            parts.append(item)
-    return "\n".join(parts)
-
-
 def _output_file(outputs: Sequence[Mapping[str, Any]] | str | None, name: str) -> str:
     if isinstance(outputs, str):
         return outputs if name in {"reply.txt", "calls.log"} else ""
@@ -445,10 +472,7 @@ def _output_file(outputs: Sequence[Mapping[str, Any]] | str | None, name: str) -
 
 
 def _reply_text(outputs: Sequence[Mapping[str, Any]] | str | None) -> str:
-    reply = _output_file(outputs, "reply.txt").strip()
-    if reply:
-        return reply
-    return _output_text(outputs).strip()
+    return _output_file(outputs, "reply.txt").strip()
 
 
 def _parse_calls_log(outputs: Sequence[Mapping[str, Any]] | str | None) -> list[dict[str, Any]]:
@@ -599,6 +623,10 @@ def _compute_reply_fact(
 ) -> dict[str, Any] | None:
     reply = _reply_text(outputs)
     if not reply:
+        if outputs is None:
+            return None
+        if _ALREADY_ISSUED_ASK.search(ask) or _REPLY.search(ask):
+            return _predicate(False, source="log", reason="reply.txt missing")
         return None
     calls = _parse_calls_log(outputs)
     issued = _reply_claims_issued(reply)

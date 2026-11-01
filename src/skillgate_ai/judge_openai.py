@@ -574,11 +574,16 @@ class OutcomeJudge:
             else None
         )
         spans = kwargs.get("spans") if isinstance(kwargs.get("spans"), list) else None
+        from skillgate_ai.wording_facts import attach_wording_questions
+
+        skill_text = state.get("skill_instructions") if isinstance(state, Mapping) else None
+        resolved = attach_wording_questions(resolved, skill_text if isinstance(skill_text, str) else None)
         facts = resolve_log_facts(
             resolved,
             spans,
             trajectory=trajectory,
             outputs=files,
+            skill_instructions=skill_text if isinstance(skill_text, str) else None,
         )
         ask_spec = resolved
         if facts:
@@ -811,7 +816,8 @@ class OutcomeJudge:
                 source = str(raw.get("source"))
             cell["source"] = source
             if cell.get("choice"):
-                cell["reason"] = f"{question.ask} {cell['choice']}"
+                named = str(raw.get("reason") or "").strip() if isinstance(raw, Mapping) else ""
+                cell["reason"] = named or f"{question.ask} {cell['choice']}"
             cells[question.id] = cell
             if isinstance(raw, Mapping):
                 cleaned = dict(raw)

@@ -58,6 +58,9 @@ function trimText(value: unknown): string {
 
 export function checkSource(value: unknown): string | undefined {
   const raw = trimText(value).toLowerCase()
+  if (raw === "text" || raw === "log/text" || raw === "from the log/text") {
+    return "from the log/text"
+  }
   if (raw === "log" || raw === "from the log") {
     return "from the log"
   }
