@@ -13,7 +13,7 @@ pip install skillgate-ai
 skillgate version
 ```
 
-(`pip install skillgate` is a different product.) Until 0.7.10 is published, install from source instead: clone this repo and `pip install -e .`.
+(`pip install skillgate` is a different product.) Until 0.7.11 is published, install from source instead: clone this repo and `pip install -e .`.
 
 Skill scripts run with that same Python — install the skill’s own packages there too (the pdf example needs `pypdf`).
 
@@ -174,4 +174,4 @@ jobs:
           SKILLGATE_JEV_API_KEY: ${{ secrets.SKILLGATE_JEV_API_KEY }}
 ```
 
-Leave `version` unset for the latest release. Until 0.7.10 is published, install from source (`pip install -e .`) instead of pinning that version. Pass keys as `SKILLGATE_*` variables. Or set `SKILLGATE_OPENAI_API_KEY` instead of `--key-env`. The `SKILLGATE_*` key names are the documented CI/Docker path and are always read.
+Leave `version` unset for the latest release. Until 0.7.11 is published, install from source (`pip install -e .`) instead of pinning that version. Pass keys as `SKILLGATE_*` variables. Or set `SKILLGATE_OPENAI_API_KEY` instead of `--key-env`. The `SKILLGATE_*` key names are the documented CI/Docker path and are always read.

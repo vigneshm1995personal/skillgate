@@ -60,6 +60,9 @@ def run_gate_decision(row: dict[str, Any]) -> tuple[str, str]:
         return "pending", "This run did not change the gate."
     if status == "error" or row.get("passed") is False:
         return "blocked", "Get a passing run to unlock Deploy."
+    report_gate = str((report or {}).get("gate") or row.get("gate") or "")
+    if report_gate == "needs review":
+        return "pending", "The judge was unsure. Review the run."
     if row.get("passed"):
         return "cleared", "Checks passed — Deploy is unlocked."
     return "pending", "Run checks to set the gate."
@@ -91,6 +94,7 @@ def local_gate(
     status: str,
     tryout: bool,
     gate_moved: bool | None = None,
+    report: dict[str, Any] | None = None,
 ) -> tuple[str, str]:
     """Live run completion (API worker). Mirrors run_gate_decision on a synthetic row."""
     moved = infer_gate_moved(
@@ -104,6 +108,8 @@ def local_gate(
         "tryout": tryout,
         "gate_moved": moved,
     }
+    if report:
+        row["report"] = report
     if status == "error":
         row["error"] = {"message": "error"}
         row["passed"] = None

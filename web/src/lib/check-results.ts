@@ -16,6 +16,7 @@ export const CHECK_QUESTION_LABELS: Record<string, string> = {
   instruction_adherence: "Followed the rules?",
   evidence_action_validity: "Used the right evidence/actions?",
   result_quality: "Delivered a good result?",
+  path_efficiency: "How it ran",
 }
 
 const PASS_LOCK: Record<string, string[]> = {
@@ -27,6 +28,7 @@ const PASS_LOCK: Record<string, string[]> = {
 }
 
 export const CONFIDENCE_WARN = 0.5
+export const UNSURE_REVIEW = "unsure, needs review"
 
 const CHECKS_DUMP = /^Checks:\s+/i
 const GENERIC_FAIL = "This check did not pass."
@@ -47,10 +49,22 @@ export type OpenedAnswer = {
   id: string
   label: string
   answer: string
+  source?: string
 }
 
 function trimText(value: unknown): string {
   return typeof value === "string" ? value.trim() : ""
+}
+
+export function checkSource(value: unknown): string | undefined {
+  const raw = trimText(value).toLowerCase()
+  if (raw === "log" || raw === "from the log") {
+    return "from the log"
+  }
+  if (raw === "judge" || raw === "from the judge") {
+    return "from the judge"
+  }
+  return undefined
 }
 
 function isChecksDump(text: string): boolean {
@@ -252,6 +266,12 @@ export function happenedLine(task: TaskResult): string {
   }
   if (task.status === "running") {
     return "In progress"
+  }
+  if (
+    (task.review === true || task.status === "unsure") &&
+    task.passed !== false
+  ) {
+    return UNSURE_REVIEW
   }
   if (task.skipped) {
     for (const item of task.failures ?? []) {
@@ -492,18 +512,24 @@ export function lowConfidenceWarning(task: TaskResult): string | null {
     }
     missing = true
   }
+  if (task.review || task.status === "unsure") {
+    return UNSURE_REVIEW
+  }
   if (numeric != null || missing) {
-    return "The judge wasn't sure about this one"
+    return UNSURE_REVIEW
   }
   return null
 }
 
 export function suiteUnsureWarning(
-  report?: Pick<Report, "tasks"> | null
+  report?: Pick<Report, "tasks" | "gate"> | null
 ): string | null {
+  if (report?.gate === "needs review") {
+    return UNSURE_REVIEW
+  }
   for (const task of report?.tasks ?? []) {
     if (lowConfidenceWarning(task)) {
-      return "The judge wasn't sure about this one"
+      return UNSURE_REVIEW
     }
   }
   return null
@@ -518,12 +544,13 @@ export function openedCheckAnswers(task: TaskResult): OpenedAnswer[] {
   const hasCells = Boolean(
     cells && CHECK_QUESTION_ORDER.some((id) => id in cells)
   )
+  const listed = Array.isArray(task.check_answers) ? task.check_answers : []
   const extraKeys = [
     ...Object.keys(answers ?? {}),
     ...Object.keys(cells ?? {}),
     ...Object.keys(task.judge?.questions ?? {}),
   ].some((id) => !reservedQuestionId(id))
-  if (!hasAnswers && !hasCells && !extraKeys) {
+  if (!hasAnswers && !hasCells && !extraKeys && listed.length === 0) {
     return []
   }
   const unchecked = workDidNotHappen(task)
@@ -532,10 +559,15 @@ export function openedCheckAnswers(task: TaskResult): OpenedAnswer[] {
     const question = task.judge?.questions?.[id]
     const choice =
       trimText(answers?.[id]?.choice) || trimText(cells?.[id]?.choice)
+    const unsure = cells?.[id]?.status === "unsure"
     return {
       id,
       label: trimText(question?.instructions) || CHECK_QUESTION_LABELS[id] || id,
-      answer: unchecked ? "Not checked" : choice || "—",
+      answer: unchecked
+        ? "Not checked"
+        : unsure
+          ? UNSURE_REVIEW
+          : choice || "—",
     }
   })
   const seen = new Set<string>(CHECK_QUESTION_ORDER)
@@ -563,13 +595,48 @@ export function openedCheckAnswers(task: TaskResult): OpenedAnswer[] {
       trimText(answers?.[id]?.choice) ||
       trimText(cell?.choice) ||
       (probability === null ? "" : String(probability))
-    extras.push({
+    const extra: OpenedAnswer = {
       id,
       label:
         trimText(question?.instructions) ||
         trimText(cell?.label) ||
         id,
       answer: unchecked && !failedBehavior.has(id) ? "Not checked" : choice || "—",
+    }
+    const listedRow = listed.find(
+      (row) =>
+        trimText(row?.label) === extra.label ||
+        trimText(row?.id) === id
+    )
+    const source = checkSource(
+      answers?.[id]?.source ||
+        cell?.source ||
+        listedRow?.source_label ||
+        listedRow?.source
+    )
+    if (source) {
+      extra.source = source
+    }
+    extras.push(extra)
+  }
+  const builtinLabels = new Set(Object.values(CHECK_QUESTION_LABELS))
+  for (const [index, row] of listed.entries()) {
+    const label = trimText(row?.label)
+    if (
+      !label ||
+      extras.some((item) => item.label === label) ||
+      builtinLabels.has(label) ||
+      reservedQuestionId(trimText(row?.id)) ||
+      label === "How it ran"
+    ) {
+      continue
+    }
+    const source = checkSource(row?.source_label || row?.source)
+    extras.push({
+      id: trimText(row?.id) || `listed-${index}`,
+      label,
+      answer: trimText(row?.answer) || "—",
+      ...(source ? { source } : {}),
     })
   }
   return [...builtins, ...extras]

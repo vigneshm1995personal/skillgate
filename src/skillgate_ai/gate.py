@@ -17,9 +17,8 @@ from skillgate_ai.config import LLMConfig, get_llm_config, load_env
 from skillgate_ai.demo_files import ensure_demo_pdfs
 from skillgate_ai.pack_schema import _example_marker_slug
 from skillgate_ai.engine import EvalProgress, SuiteReport, run_eval
-from skillgate_ai.errors import MissingLLMKeyError, SkillGateError
+from skillgate_ai.errors import SkillGateError, timeout_harness_error
 from skillgate_ai.eval_config import (
-    EvalConfigError,
     EvalRunConfig,
     apply_eval_config,
     resolve_eval_config,
@@ -309,12 +308,21 @@ def _execute_check(
                 config=run_cfg,
                 tryout=tryout,
             )
-    except SkillGateError as exc:
-        capture_run_failure(exc)
-        persist_root = skill_path or pack_root
-        err = {"message": exc.message, "hint": exc.hint}
+    except Exception as exc:
+        blocked = timeout_harness_error(exc)
+        if blocked is None:
+            if not isinstance(exc, SkillGateError):
+                raise
+            capture_run_failure(exc)
+            persist_root = skill_path or pack_root
+            err = {"message": exc.message, "hint": exc.hint}
+        else:
+            capture_run_failure(blocked)
+            persist_root = skill_path or pack_root
+            exc = blocked
+            err = {"message": blocked.message, "hint": blocked.hint}
         if persist_root and run_cfg is not None:
-            if isinstance(exc, (EvalConfigError, MissingLLMKeyError)):
+            if getattr(exc, "exit_code", None) == 2:
                 if started:
                     persist_eval(
                         pack_root=persist_root,

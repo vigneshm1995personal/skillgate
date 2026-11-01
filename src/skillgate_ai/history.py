@@ -84,7 +84,8 @@ def append_eval(
     if not moved:
         gate = None
     elif passed is True:
-        gate = "green"
+        report_gate = str((report or {}).get("gate") or "")
+        gate = "needs review" if report_gate == "needs review" else "green"
     elif passed is False:
         gate = "red"
     else:

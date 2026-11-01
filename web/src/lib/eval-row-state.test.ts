@@ -83,6 +83,18 @@ describe("taskChip / taskState", () => {
     expect(taskChip({ id: "d", status: "done", passed: null })).toBe("queued")
   })
 
+  it("marks a passed unsure task as review, not fail", () => {
+    expect(
+      taskChip({ id: "c6", status: "unsure", passed: true, review: true })
+    ).toBe("review")
+    expect(
+      taskChip({ id: "c6", status: "done", passed: true, review: true })
+    ).toBe("review")
+    expect(taskChip({ id: "wrong", status: "done", passed: false })).toBe(
+      "fail"
+    )
+  })
+
   it("treats historical rows without status as done only when passed is a boolean", () => {
     expect(taskState({ id: "old", passed: true })).toBe("done")
     expect(taskChip({ id: "old", passed: true })).toBe("pass")
@@ -212,6 +224,12 @@ describe("suiteResultKind", () => {
 
   it("is pass when the suite is done and checks passed", () => {
     expect(suiteResultKind({ status: "done" }, true, false)).toBe("pass")
+  })
+
+  it("is review when the suite finished needs review", () => {
+    expect(
+      suiteResultKind({ status: "done", gate: "needs review" }, true, false)
+    ).toBe("review")
   })
 
   it("is fail when the suite is done and checks did not pass", () => {

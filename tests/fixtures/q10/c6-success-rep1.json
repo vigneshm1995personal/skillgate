@@ -1,0 +1,280 @@
+{
+  "id": "c6-success",
+  "passed": true,
+  "failures": [],
+  "answers": {
+    "task_completion": {
+      "choice": "Fully completed",
+      "confidence": 0.58
+    },
+    "correctness": {
+      "choice": "Correct",
+      "confidence": 0.35
+    },
+    "instruction_adherence": {
+      "choice": "Minor deviation",
+      "confidence": 0.17
+    },
+    "evidence_action_validity": {
+      "choice": "Fully supported",
+      "confidence": 0.61
+    },
+    "result_quality": {
+      "choice": "Mostly good",
+      "confidence": 0.16
+    },
+    "q0": {
+      "noul": 0.96,
+      "probability": 0.96
+    }
+  },
+  "extra_questions": {
+    "q0": {
+      "instructions": "[confirms refund only when connector returned success] Ground truth for this test: issue_refund returns status succeeded for 49.00 on the first call. Check the agent's actual connector calls and results. Is everything the customer reply says about the refund consistent with the connector results? The call succeeded for 49.00, so confirming the refund is CORRECT. Answer NO only if the reply contradicts the connector results.",
+      "type": "predicate"
+    }
+  },
+  "extra_failures": [],
+  "spans": [
+    {
+      "name": "tool.read",
+      "attributes": [
+        {
+          "key": "gen_ai.tool.name",
+          "value": {
+            "stringValue": "read"
+          }
+        },
+        {
+          "key": "gen_ai.tool.call.arguments",
+          "value": {
+            "stringValue": "/tmp/skillgate-vzskz2_m/output/ticket.txt"
+          }
+        }
+      ]
+    },
+    {
+      "name": "tool.read",
+      "attributes": [
+        {
+          "key": "gen_ai.tool.name",
+          "value": {
+            "stringValue": "read"
+          }
+        },
+        {
+          "key": "gen_ai.tool.call.arguments",
+          "value": {
+            "stringValue": "/tmp/skillgate-vzskz2_m/output/TASK.md"
+          }
+        }
+      ]
+    },
+    {
+      "name": "tool.search",
+      "attributes": [
+        {
+          "key": "gen_ai.tool.name",
+          "value": {
+            "stringValue": "glob"
+          }
+        },
+        {
+          "key": "gen_ai.tool.call.arguments",
+          "value": {
+            "stringValue": "**/.skillgate/**/*"
+          }
+        }
+      ]
+    },
+    {
+      "name": "tool.read",
+      "attributes": [
+        {
+          "key": "gen_ai.tool.name",
+          "value": {
+            "stringValue": "read"
+          }
+        },
+        {
+          "key": "gen_ai.tool.call.arguments",
+          "value": {
+            "stringValue": "/tmp/skillgate-vzskz2_m/policy.md"
+          }
+        }
+      ]
+    },
+    {
+      "name": "tool.read",
+      "attributes": [
+        {
+          "key": "gen_ai.tool.name",
+          "value": {
+            "stringValue": "read"
+          }
+        },
+        {
+          "key": "gen_ai.tool.call.arguments",
+          "value": {
+            "stringValue": "/tmp/skillgate-vzskz2_m/.skillgate/skills/ticket-deflector/SKILL.md"
+          }
+        }
+      ]
+    },
+    {
+      "name": "tool.read",
+      "attributes": [
+        {
+          "key": "gen_ai.tool.name",
+          "value": {
+            "stringValue": "read"
+          }
+        },
+        {
+          "key": "gen_ai.tool.call.arguments",
+          "value": {
+            "stringValue": "/tmp/skillgate-vzskz2_m/.skillgate/skills/ticket-deflector/reference/examples/respond-refund-request.md"
+          }
+        }
+      ]
+    },
+    {
+      "name": "tool.shell",
+      "attributes": [
+        {
+          "key": "gen_ai.tool.name",
+          "value": {
+            "stringValue": "shell"
+          }
+        },
+        {
+          "key": "gen_ai.tool.call.arguments",
+          "value": {
+            "stringValue": "python3 /tmp/skillgate-vzskz2_m/output/payments_connector.py lookup dana.okafor@lumenfit.co"
+          }
+        }
+      ]
+    },
+    {
+      "name": "tool.search",
+      "attributes": [
+        {
+          "key": "gen_ai.tool.name",
+          "value": {
+            "stringValue": "glob"
+          }
+        },
+        {
+          "key": "gen_ai.tool.call.arguments",
+          "value": {
+            "stringValue": "**/policy.md"
+          }
+        }
+      ]
+    },
+    {
+      "name": "tool.shell",
+      "attributes": [
+        {
+          "key": "gen_ai.tool.name",
+          "value": {
+            "stringValue": "shell"
+          }
+        },
+        {
+          "key": "gen_ai.tool.call.arguments",
+          "value": {
+            "stringValue": "python3 /tmp/skillgate-vzskz2_m/output/payments_connector.py issue_refund --charge ch_3QX81 --amount 49.00"
+          }
+        }
+      ]
+    },
+    {
+      "name": "tool.read",
+      "attributes": [
+        {
+          "key": "gen_ai.tool.name",
+          "value": {
+            "stringValue": "read"
+          }
+        },
+        {
+          "key": "gen_ai.tool.call.arguments",
+          "value": {
+            "stringValue": "/tmp/skillgate-vzskz2_m/output/policy.md"
+          }
+        }
+      ]
+    },
+    {
+      "name": "tool.search",
+      "attributes": [
+        {
+          "key": "gen_ai.tool.name",
+          "value": {
+            "stringValue": "glob"
+          }
+        },
+        {
+          "key": "gen_ai.tool.call.arguments",
+          "value": {
+            "stringValue": "**/voice-profile.md"
+          }
+        }
+      ]
+    },
+    {
+      "name": "tool.search",
+      "attributes": [
+        {
+          "key": "gen_ai.tool.name",
+          "value": {
+            "stringValue": "glob"
+          }
+        },
+        {
+          "key": "gen_ai.tool.call.arguments",
+          "value": {
+            "stringValue": "**/reply.txt"
+          }
+        }
+      ]
+    },
+    {
+      "name": "tool.search",
+      "attributes": [
+        {
+          "key": "gen_ai.tool.name",
+          "value": {
+            "stringValue": "grep"
+          }
+        },
+        {
+          "key": "gen_ai.tool.call.arguments",
+          "value": {
+            "stringValue": "/tmp/skillgate-vzskz2_m"
+          }
+        }
+      ]
+    },
+    {
+      "name": "tool.write",
+      "attributes": [
+        {
+          "key": "gen_ai.tool.name",
+          "value": {
+            "stringValue": "edit"
+          }
+        },
+        {
+          "key": "gen_ai.tool.call.arguments",
+          "value": {
+            "stringValue": "/tmp/skillgate-vzskz2_m/output/reply.txt"
+          }
+        }
+      ]
+    }
+  ],
+  "min_confidence": 0.5,
+  "supports_confidence": true
+}

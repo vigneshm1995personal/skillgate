@@ -206,8 +206,15 @@ def parse_extra_question(raw: Mapping[str, Any] | Any) -> JudgeQuestion:
         raise SuiteError("Each extra question must be a mapping.", exit_code=2)
     qid = str(raw.get("id") or "").strip()
     if not qid or not QUESTION_ID_RE.match(qid) or len(qid) > 64:
+        suggested = re.sub(r"[^a-z0-9]+", "_", qid.lower()).strip("_")[:64]
+        hint = "The question was not added. Fix the id before running a check."
+        if suggested and suggested != qid and QUESTION_ID_RE.match(suggested):
+            hint = f"Use underscores: {suggested}. {hint}"
+        elif "-" in qid:
+            hint = f"Use underscores, not hyphens. {hint}"
         raise SuiteError(
             "Extra question id must be lowercase letters, digits, and underscores (max 64).",
+            hint=hint,
             exit_code=2,
         )
     if qid in RESERVED_IDS:
@@ -280,15 +287,24 @@ def spec_verdict(
     reasons: list[str] = []
     warnings: list[str] = []
     failed = False
+    unsure = False
     if not passed_lock:
         for reason in lock_reasons:
             key = _reason_key(reason)
             question = builtin_lock.get(key) if key else None
             if question is not None and question.on_fail == "warn":
                 warnings.append(reason)
-            else:
-                failed = True
-                reasons.append(reason)
+                continue
+            conf = extract_confidence(answers.get(key)) if key else None
+            if (
+                supports_confidence
+                and conf is not None
+                and conf < spec.min_confidence
+            ):
+                unsure = True
+                continue
+            failed = True
+            reasons.append(reason)
     for question in spec.questions:
         if question.id in skipped_ids:
             continue
@@ -307,9 +323,11 @@ def spec_verdict(
             failed = True
             reasons.append(detail)
     if not failed and supports_confidence:
-        warnings.extend(
-            low_confidence_for_spec(spec, answers, min_confidence=spec.min_confidence)
-        )
+        low = low_confidence_for_spec(spec, answers, min_confidence=spec.min_confidence)
+        if low:
+            unsure = True
+    if unsure:
+        warnings.append(LOW_CONFIDENCE_WARNING)
     return (not failed), reasons, warnings
 
 

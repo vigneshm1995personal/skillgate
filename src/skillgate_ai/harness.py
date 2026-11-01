@@ -21,7 +21,7 @@ from skillgate_ai.config import (
     no_agent_available_error,
     normalize_codex_reasoning_effort,
 )
-from skillgate_ai.errors import HarnessError, MissingLLMKeyError
+from skillgate_ai.errors import HarnessError, MissingLLMKeyError, agent_timeout_error
 from skillgate_ai.ingest import Skill, canonical_skill_name
 from skillgate_ai.sandbox import Sandbox
 from skillgate_ai.scorers import TriggerEvidence
@@ -32,7 +32,6 @@ from skillgate_ai.usage import (
     parse_usage_line,
     render_stream_line,
 )
-
 
 AUTH_API_KEY = "api_key"
 AUTH_CLI_LOGIN = "cli_login"
@@ -178,6 +177,23 @@ def select_skill_from_descriptions(prompt: str, skills: list[Skill]) -> str | No
     return best.name
 
 
+def description_fits_request(prompt: str, skill: Skill) -> bool:
+    """True unless the description is a different job (no meaningful overlap).
+
+    Ranking uses overlap / prompt length, so a long legitimate prompt (a SQL
+    refusal, a refund success) can score below the 0.22 pick threshold. Trigger
+    scoring only vetoes a selected skill when the description has no content
+    overlap with the request — meal-planner vs a PDF, not a correct refusal.
+    """
+    task_tokens = tokenize(prompt)
+    desc_tokens = tokenize(skill.description)
+    if not task_tokens or not desc_tokens:
+        return False
+    if task_tokens & desc_tokens:
+        return True
+    return "pdf" in task_tokens and "pdf" in desc_tokens
+
+
 LIVE_HARNESS_NAMES = frozenset({"cursor-agent", "codex", "claude", "claude-code"})
 
 
@@ -225,11 +241,11 @@ class CursorAgentHarness:
         env: dict[str, str] = {"SKILLGATE_TASK": prompt}
         if self.cfg.cursor_api_key:
             env["CURSOR_API_KEY"] = self.cfg.cursor_api_key
-        proc = sandbox.run(command, env=env, timeout=timeout_sec)
-        _raise_if_auth_failed(proc.stdout or "", proc.stderr or "")
+        proc = _sandbox_run(sandbox, command, env=env, timeout=timeout_sec)
+        _raise_if_cannot_run(proc.stdout or "", proc.stderr or "")
         transcript = _cursor_transcript(proc.stdout or "", proc.stderr or "")
         selected = _parse_selected(sandbox.workspace, transcript, skills)
-        read_paths = _parse_read_paths(transcript)
+        read_paths = _collect_read_paths(transcript, _jsonl_spans(proc.stdout or ""))
         if selected is None:
             selected = _infer_from_reads(read_paths, skills)
         _write_selection(sandbox.workspace, selected)
@@ -621,8 +637,8 @@ class CodexCliHarness:
         env: dict[str, str] = {"SKILLGATE_TASK": prompt}
         if key:
             env["CODEX_API_KEY"] = key
-        proc = sandbox.run(command, env=env, timeout=timeout_sec)
-        _raise_if_auth_failed(proc.stdout or "", proc.stderr or "")
+        proc = _sandbox_run(sandbox, command, env=env, timeout=timeout_sec)
+        _raise_if_cannot_run(proc.stdout or "", proc.stderr or "")
         transcript = _codex_transcript(proc.stdout or "", proc.stderr or "")
         if _codex_rejected_chatgpt_model(proc.stdout or "", proc.stderr or ""):
             rejected, accepted = _codex_rejected_model(proc.stdout or "", proc.stderr or "")
@@ -632,7 +648,7 @@ class CodexCliHarness:
                 hint=codex_chatgpt_model_hint(named, accepted=accepted),
             )
         selected = _parse_selected(sandbox.workspace, transcript, skills)
-        read_paths = _parse_read_paths(transcript)
+        read_paths = _collect_read_paths(transcript, _jsonl_spans(proc.stdout or ""))
         if selected is None:
             selected = _infer_from_reads(read_paths, skills)
         _write_selection(sandbox.workspace, selected)
@@ -715,8 +731,8 @@ class ClaudeCodeHarness:
         env: dict[str, str] = {"SKILLGATE_TASK": prompt}
         if self.cfg.anthropic_api_key:
             env["ANTHROPIC_API_KEY"] = self.cfg.anthropic_api_key
-        proc = sandbox.run(command, env=env, timeout=timeout_sec)
-        _raise_if_auth_failed(proc.stdout or "", proc.stderr or "")
+        proc = _sandbox_run(sandbox, command, env=env, timeout=timeout_sec)
+        _raise_if_cannot_run(proc.stdout or "", proc.stderr or "")
         requested = (self.cfg.anthropic_model or "").strip() or None
         if _claude_model_access_error(proc.stdout or "", proc.stderr or ""):
             raise HarnessError(
@@ -727,7 +743,7 @@ class ClaudeCodeHarness:
         model = _claude_used_model(proc.stdout or "")
         transcript = _cursor_transcript(proc.stdout or "", proc.stderr or "")
         selected = _parse_selected(sandbox.workspace, transcript, skills)
-        read_paths = _parse_read_paths(transcript)
+        read_paths = _collect_read_paths(transcript, _jsonl_spans(proc.stdout or ""))
         if selected is None:
             selected = _infer_from_reads(read_paths, skills)
         _write_selection(sandbox.workspace, selected)
@@ -999,6 +1015,125 @@ _AUTH_FAILURE_RE = re.compile(
     r"|invalid api key",
     re.IGNORECASE,
 )
+
+
+USAGE_LIMIT_MESSAGE = "The agent hit a usage limit. This check cannot run."
+MODEL_UNAVAILABLE_MESSAGE = "The agent couldn't use this model. This check cannot run."
+
+
+def _sandbox_run(
+    sandbox: Sandbox,
+    command: list[str],
+    *,
+    env: dict[str, str] | None,
+    timeout: int,
+) -> subprocess.CompletedProcess[str]:
+    try:
+        return sandbox.run(command, env=env, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        raise agent_timeout_error(timeout) from None
+
+
+_USAGE_LIMIT_RE = re.compile(
+    r"ActionRequiredError|Weekly usage limit reached|usage limit reached",
+    re.IGNORECASE,
+)
+_MODEL_UNAVAILABLE_RE = re.compile(
+    r"cannot use this model(?:\s*:\s*\S+)?",
+    re.IGNORECASE,
+)
+_SKILL_FILE_RE = re.compile(
+    r"[^\s'\"`]+/(?:\.skillgate/)?skills/[^/\s'\"`]+/[^\s'\"`]+"
+)
+
+
+def usage_limit_message(stdout: str, stderr: str = "", transcript: str = "") -> str | None:
+    """Agent quota / usage-limit text is cannot-run, not a quality red."""
+    blob = "\n".join(part for part in (stdout, stderr, transcript) if part)
+    if not blob or not _USAGE_LIMIT_RE.search(blob):
+        return None
+    if _USAGE_LIMIT_RE.search(stderr or ""):
+        return USAGE_LIMIT_MESSAGE
+    if "ActionRequiredError" in blob:
+        return USAGE_LIMIT_MESSAGE
+    for line in blob.splitlines():
+        text = line.strip()
+        if not text.startswith("{"):
+            if _USAGE_LIMIT_RE.search(text) and "usage limit" in text.lower():
+                return USAGE_LIMIT_MESSAGE
+            continue
+        try:
+            obj = json.loads(text)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(obj, dict):
+            continue
+        kind = str(obj.get("type") or "")
+        errored = kind == "error" or (kind == "result" and obj.get("is_error") is True)
+        payload = " ".join(str(obj.get(key) or "") for key in ("message", "error", "result"))
+        if (errored or kind == "error") and _USAGE_LIMIT_RE.search(payload):
+            return USAGE_LIMIT_MESSAGE
+    if re.search(r"Weekly usage limit reached", blob, re.IGNORECASE):
+        return USAGE_LIMIT_MESSAGE
+    return None
+
+
+def model_unavailable_message(stdout: str, stderr: str = "", transcript: str = "") -> str | None:
+    """Cursor 'Cannot use this model' is cannot-run, not a quality red.
+
+    Claude's 'There's an issue with the selected model' stays on the
+    Claude-specific handler so that message is unchanged.
+    """
+    blob = "\n".join(part for part in (stdout, stderr, transcript) if part)
+    if not blob or not _MODEL_UNAVAILABLE_RE.search(blob):
+        return None
+    if _MODEL_UNAVAILABLE_RE.search(stderr or ""):
+        return MODEL_UNAVAILABLE_MESSAGE
+    for line in blob.splitlines():
+        text = line.strip()
+        if not text.startswith("{"):
+            if _MODEL_UNAVAILABLE_RE.search(text):
+                return MODEL_UNAVAILABLE_MESSAGE
+            continue
+        try:
+            obj = json.loads(text)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(obj, dict):
+            continue
+        kind = str(obj.get("type") or "")
+        errored = kind == "error" or (kind == "result" and obj.get("is_error") is True)
+        payload = " ".join(str(obj.get(key) or "") for key in ("message", "error", "result"))
+        if (errored or kind == "error") and _MODEL_UNAVAILABLE_RE.search(payload):
+            return MODEL_UNAVAILABLE_MESSAGE
+    if _MODEL_UNAVAILABLE_RE.search(blob):
+        return MODEL_UNAVAILABLE_MESSAGE
+    return None
+
+
+def cannot_run_message(stdout: str, stderr: str = "", transcript: str = "") -> str | None:
+    return usage_limit_message(stdout, stderr, transcript) or model_unavailable_message(
+        stdout, stderr, transcript
+    )
+
+
+def _raise_if_cannot_run(stdout: str, stderr: str, transcript: str = "") -> None:
+    _raise_if_auth_failed(stdout, stderr)
+    quota = usage_limit_message(stdout, stderr, transcript)
+    if quota:
+        raise HarnessError(
+            quota,
+            hint="Wait until the agent quota resets, then retry.",
+            exit_code=2,
+        )
+    blocked = model_unavailable_message(stdout, stderr, transcript)
+    if blocked is None:
+        return
+    raise HarnessError(
+        blocked,
+        hint="Pick an available model, then retry.",
+        exit_code=2,
+    )
 
 
 def auth_failure_message(stdout: str, stderr: str) -> str | None:
@@ -1582,42 +1717,82 @@ def _skill_for_selection(selected: str, skills: list[Skill]) -> Skill:
 
 
 def _parse_read_paths(transcript: str) -> list[str]:
-    """SKILL.md paths from real tool/shell evidence only.
+    """Skill-folder paths from real tool/shell evidence only.
 
-    Counts:
+    Counts any file under ``skills/NAME/`` (not only ``SKILL.md``):
 
     - rendered Cursor/Codex lines (``$ read …``, ``$ cat …``)
     - raw stream-json / JSONL tool envelopes (``readToolCall``, ``"path":…``)
-    - shell ``cat …/SKILL.md`` inside unrendered command strings
+    - shell ``cat …/skills/NAME/…`` inside unrendered command strings
 
-    Inject/prompt prose that merely mentions a SKILL.md path does **not**
+    Inject/prompt prose that merely mentions a skill path does **not**
     count — that avoids false ``no-trigger-unrelated`` fails when the null-pin
     preamble or assistant restates forbid-paths.
     """
-    path_re = re.compile(r"[^\s'\"]+/SKILL\.md")
     out: list[str] = []
     for line in transcript.splitlines():
-        found = path_re.findall(line)
+        found = _SKILL_FILE_RE.findall(line.replace("\\", "/"))
         if not found:
             continue
         stripped = line.lstrip()
-        if stripped.startswith("$ "):
-            out.extend(found)
-        elif "readToolCall" in line or '"path"' in line:
-            out.extend(found)
-        elif "cat" in line and "SKILL.md" in line:
+        if (
+            stripped.startswith("$ ")
+            or "readToolCall" in line
+            or '"path"' in line
+            or ("cat" in line and "/skills/" in line.replace("\\", "/"))
+        ):
             out.extend(found)
     return out
+
+
+def _parse_read_paths_from_spans(spans: list[dict] | None) -> list[str]:
+    """Skill-folder paths recorded on tool spans (any file under skills/NAME/)."""
+    from skillgate_ai.spans import attr_map
+
+    out: list[str] = []
+    for span in spans or []:
+        if not isinstance(span, dict):
+            continue
+        attrs = attr_map(span)
+        blob = " ".join(
+            str(attrs.get(key) or "")
+            for key in (
+                "file.path",
+                "gen_ai.tool.call.arguments",
+                "gen_ai.tool.call.result",
+            )
+        )
+        out.extend(_SKILL_FILE_RE.findall(blob.replace("\\", "/")))
+    return out
+
+
+def _collect_read_paths(transcript: str, spans: list[dict] | None = None) -> list[str]:
+    found: list[str] = []
+    seen: set[str] = set()
+    for path in _parse_read_paths(transcript) + _parse_read_paths_from_spans(spans):
+        if path in seen:
+            continue
+        seen.add(path)
+        found.append(path)
+    return found
 
 
 def _infer_from_reads(paths: list[str], skills: list[Skill]) -> str | None:
     names = set()
     for path in paths:
-        for skill in skills:
-            if f"/{skill.name}/SKILL.md" in path.replace("\\", "/"):
-                names.add(skill.name)
+        named = _skill_name_from_path(path)
+        if named and any(skill.name == named for skill in skills):
+            names.add(named)
     if len(names) == 1:
         return next(iter(names))
+    return None
+
+
+def _skill_name_from_path(path: str) -> str | None:
+    normalized = path.replace("\\", "/")
+    match = re.search(r"(?:^|/)(?:\.skillgate/)?skills/([^/]+)/", normalized)
+    if match:
+        return match.group(1)
     return None
 
 

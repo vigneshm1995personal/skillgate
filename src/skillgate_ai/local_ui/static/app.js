@@ -550,6 +550,11 @@ function checksTable(tasks) {
 
 function happenedLine(task) {
   const generic = "This check did not pass.";
+  if (task && (task.review || task.status === "unsure") && task.passed !== false) {
+    const stamped = task && typeof task.happened === "string" ? task.happened.trim() : "";
+    if (stamped && stamped !== generic) return stamped;
+    return "unsure, needs review";
+  }
   const stamped = task && typeof task.happened === "string" ? task.happened.trim() : "";
   if (stamped && stamped !== generic) return stamped;
   const named = namedFailLine(task);
@@ -582,6 +587,13 @@ function namedFailLine(task) {
   return "";
 }
 
+function sourceLabel(value) {
+  const raw = String(value || "").trim().toLowerCase();
+  if (raw === "log" || raw === "from the log") return "from the log";
+  if (raw === "judge" || raw === "from the judge") return "from the judge";
+  return "";
+}
+
 function detailInnerHtml(task) {
   const judge = (task && task.judge) || {};
   const answers = Array.isArray(task && task.check_answers) ? task.check_answers : [];
@@ -593,7 +605,10 @@ function detailInnerHtml(task) {
       rows.forEach((item) => {
         const label = String(item.label || "").trim() || "Check";
         const answer = String(item.answer || "").trim() || "Not available";
-        parts.push(`<div><dt>${esc(label)}</dt><dd>${esc(answer)}</dd></div>`);
+        const source = sourceLabel(item.source);
+        parts.push(
+          `<div><dt>${esc(label)}</dt><dd>${esc(answer)}${source ? ` (${esc(source)})` : ""}</dd></div>`
+        );
       });
       parts.push("</dl>");
     }
@@ -604,7 +619,9 @@ function detailInnerHtml(task) {
       rows.forEach((item) => {
         const label = String(item.label || "").trim() || "Check";
         const answer = String(item.answer || "").trim();
-        parts.push(`<li>${esc(label)}${answer ? `: ${esc(answer)}` : ""}</li>`);
+        const source = sourceLabel(item.source);
+        const extra = [answer, source ? `(${source})` : ""].filter(Boolean).join(" ");
+        parts.push(`<li>${esc(label)}${extra ? `: ${esc(extra)}` : ""}</li>`);
       });
       parts.push("</ul>");
     } else {
@@ -686,10 +703,10 @@ async function showChecking(opts) {
   await swapIn(stage, checkingPanel(opts), 1, "run-panel");
 }
 
-function resultMarkHtml(ok, complete) {
-  const label = ok ? "Passed" : "Failed";
-  const cls = ["check-pop", ok ? "" : "fail", complete ? "complete" : ""].filter(Boolean).join(" ");
-  const d = ok ? "M22 37 l10 10 18-22" : "M24 24 L48 48 M48 24 L24 48";
+function resultMarkHtml(ok, complete, review) {
+  const label = review ? "Needs review" : ok ? "Passed" : "Failed";
+  const cls = ["check-pop", review ? "review" : ok ? "" : "fail", complete ? "complete" : ""].filter(Boolean).join(" ");
+  const d = ok || review ? "M22 37 l10 10 18-22" : "M24 24 L48 48 M48 24 L24 48";
   return `<div class="${cls}" aria-hidden="true">
     <svg viewBox="0 0 72 72" role="img" aria-label="${label}">
       <circle cx="36" cy="36" r="32" fill="none" stroke="currentColor" stroke-width="3"></circle>
@@ -868,8 +885,9 @@ async function paintResult(snap, path, opts) {
   }
   const tasks = report.tasks || [];
   const rows = tasks.map((t, i) => {
-    const mark = t.passed ? "PASS" : "FAIL";
-    const cls = t.passed ? "pass" : "fail";
+    const review = Boolean(t.review) || t.status === "unsure";
+    const mark = review ? "REVIEW" : t.passed ? "PASS" : "FAIL";
+    const cls = review ? "review" : t.passed ? "pass" : "fail";
     const extra = t.advice ? `<div class="muted">${esc(t.advice.why || "")}</div>` : "";
     const hid = `check-detail-${i}`;
     return `<tr class="check-row" tabindex="0" aria-expanded="false" aria-controls="${hid}">
@@ -896,11 +914,11 @@ async function paintResult(snap, path, opts) {
       <button type="button" id="apply">Apply description fix on this pack</button>` : ""}
     </div>`;
   }
-  const headline = gate === "green" ? "Passed" : "Failed";
+  const headline = gate === "green" ? "Passed" : gate === "needs review" ? "Needs review" : "Failed";
   const checkerLine = scoredByLine(report);
   const panel = $(`<div class="success">
-      ${resultMarkHtml(gate === "green", false)}
-      <p><span class="gate ${esc(gate)}">${headline}</span>
+      ${resultMarkHtml(gate === "green" || gate === "needs review", false, gate === "needs review")}
+      <p><span class="gate ${esc(gate === "needs review" ? "review" : gate)}">${headline}</span>
         · ${esc(report.passed_count ?? 0)}/${esc(report.task_count ?? tasks.length)} checks</p>
       <p class="muted">${esc(checkerLine)}</p>
     </div>`);

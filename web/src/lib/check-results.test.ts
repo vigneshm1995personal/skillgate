@@ -40,6 +40,17 @@ describe("happenedLine", () => {
     expect(happenedLine(passTask)).toBe("Output matched what was expected.")
   })
 
+  it("shows unsure, needs review instead of fail on a review task", () => {
+    expect(
+      happenedLine({
+        id: "c6-success",
+        passed: true,
+        review: true,
+        status: "unsure",
+      })
+    ).toBe("unsure, needs review")
+  })
+
   it("says no skill was picked on a passing no-trigger check", () => {
     expect(
       happenedLine({
@@ -463,6 +474,110 @@ describe("openedCheckAnswers / low confidence", () => {
     })
   })
 
+  it("labels a custom check scored from the log", () => {
+    const rows = openedCheckAnswers({
+      ...passTask,
+      judge: {
+        ...passTask.judge,
+        cells: {
+          ...passTask.judge!.cells,
+          no_duplicate_read: {
+            label: "Did the agent read status.txt at most once?",
+            choice: "Yes",
+            source: "log",
+          },
+        },
+      },
+    })
+    expect(rows.at(-1)).toMatchObject({
+      id: "no_duplicate_read",
+      answer: "Yes",
+      source: "from the log",
+    })
+  })
+
+  it("does not repeat builtin answers already shown from check_answers", () => {
+    const rows = openedCheckAnswers({
+      ...passTask,
+      check_answers: [
+        { label: "Got the job done?", answer: "Fully completed" },
+        { label: "Did the totals match?", answer: "Yes" },
+      ],
+    })
+    expect(rows.filter((row) => row.label === "Got the job done?")).toHaveLength(1)
+    expect(rows.map((row) => row.label)).toContain("Did the totals match?")
+  })
+
+  it("does not repeat How it ran from leftover check_answers", () => {
+    const rows = openedCheckAnswers({
+      ...passTask,
+      check_answers: [
+        { label: "How it ran", answer: "Direct" },
+        { label: "Did the totals match?", answer: "Yes" },
+      ],
+    })
+    expect(rows.filter((row) => row.label === "How it ran")).toHaveLength(0)
+    expect(rows.map((row) => row.label)).toContain("Did the totals match?")
+  })
+
+  it("labels a custom check from check_answers when cells omit source", () => {
+    const rows = openedCheckAnswers({
+      ...passTask,
+      check_answers: [
+        {
+          label: "Did the agent call shell more than once?",
+          answer: "Yes",
+          source: "log",
+          source_label: "from the log",
+        },
+      ],
+      judge: {
+        ...passTask.judge,
+        cells: {
+          ...passTask.judge!.cells,
+          dup_shell: {
+            label: "Did the agent call shell more than once?",
+            choice: "Yes",
+          },
+        },
+        questions: {
+          dup_shell: {
+            type: "predicate",
+            instructions: "Did the agent call shell more than once?",
+          },
+        },
+      },
+    })
+    expect(rows.at(-1)).toMatchObject({
+      label: "Did the agent call shell more than once?",
+      answer: "Yes",
+      source: "from the log",
+    })
+  })
+
+  it("labels a judge-scored custom check from the judge", () => {
+    const rows = openedCheckAnswers({
+      ...passTask,
+      judge: {
+        ...passTask.judge,
+        answers: {
+          ...passTask.judge!.answers,
+          customer_reply: { choice: "Yes", source: "judge" },
+        },
+        cells: {
+          customer_reply: {
+            label: "Did the customer reply yes?",
+            choice: "Yes",
+            source: "judge",
+          },
+        },
+      },
+    })
+    expect(rows.at(-1)).toMatchObject({
+      source: "from the judge",
+    })
+  })
+
   it("names a chosen scoring provider and not Auto OpenAI", () => {
     expect(
       scoredByFromJudge({
@@ -520,7 +635,7 @@ describe("openedCheckAnswers / low confidence", () => {
           },
         },
       })
-    ).toBe("The judge wasn't sure about this one")
+    ).toBe("unsure, needs review")
     expect(
       suiteUnsureWarning({
         tasks: [
@@ -536,7 +651,7 @@ describe("openedCheckAnswers / low confidence", () => {
           },
         ],
       })
-    ).toBe("The judge wasn't sure about this one")
+    ).toBe("unsure, needs review")
     expect(
       lowConfidenceWarning({
         ...passTask,
@@ -603,7 +718,7 @@ describe("openedCheckAnswers / low confidence", () => {
         },
       },
     })
-    expect(warning).toBe("The judge wasn't sure about this one")
+    expect(warning).toBe("unsure, needs review")
     expect(warning).not.toMatch(/0\.13|OpenAI was unsure/)
   })
 

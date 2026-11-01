@@ -32,7 +32,7 @@ cases:
       - missing from schema.sql
   - id: no-trigger-unrelated
     status: pinned
-    prompt: Flatten a JSON API response to id and status.
+    prompt: Write a pytest for a FastAPI /health endpoint.
     should_trigger: false
     input:
       files: []

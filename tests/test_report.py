@@ -166,25 +166,25 @@ def test_happened_uses_warning_on_pass() -> None:
             tasks=[
                 _task(
                     passed=True,
-                    judge={"warnings": ["The judge wasn't very sure about this one."]},
+                    judge={"warnings": ["unsure, needs review"]},
                 )
             ],
         )
     )
-    assert payload["tasks"][0]["happened"] == "The judge wasn't very sure about this one."
+    assert payload["tasks"][0]["happened"] == "unsure, needs review"
     text = format_github(
         _report(
             harness="cursor-agent",
             tasks=[
                 _task(
                     passed=True,
-                    judge={"warnings": ["The judge wasn't very sure about this one."]},
+                    judge={"warnings": ["unsure, needs review"]},
                 )
             ],
         )
     )
     assert "Output matched what was expected." not in text
-    assert "The judge wasn't very sure about this one." in text
+    assert "unsure, needs review" in text
 
 
 def test_happened_and_cli_lead_with_behavior_not_description() -> None:

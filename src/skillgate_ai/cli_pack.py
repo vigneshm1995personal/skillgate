@@ -159,7 +159,14 @@ def register_pack_commands(app: typer.Typer, case_app: typer.Typer, judge_app: t
             report = row.get("report") if isinstance(row.get("report"), dict) else {}
             passed = row.get("passed")
             if passed is None:
-                gate = "not scored" if report.get("tasks") else "not run"
+                err = row.get("error") if isinstance(row.get("error"), dict) else {}
+                message = str((err or {}).get("message") or "")
+                if "cannot run" in message.lower():
+                    gate = "cannot-run"
+                elif report.get("tasks") or str(report.get("gate") or "") == "not scored":
+                    gate = "not scored"
+                else:
+                    gate = "not run"
                 who = "Not scored"
             else:
                 who = report.get("scored_by") if isinstance(report.get("scored_by"), str) else ""
@@ -170,7 +177,11 @@ def register_pack_commands(app: typer.Typer, case_app: typer.Typer, judge_app: t
                     who = scored_by_phrase(
                         customer_scorer_name(stamp if isinstance(stamp, dict) else None)
                     )
-                gate = ("pass" if passed else "fail").ljust(4)
+                row_gate = str(report.get("gate") or row.get("gate") or "")
+                if passed is True and row_gate == "needs review":
+                    gate = "review"
+                else:
+                    gate = ("pass" if passed else "fail").ljust(4)
             passed = report.get("passed_count")
             total = report.get("task_count")
             if passed is not None and total is not None:
@@ -272,10 +283,16 @@ def register_pack_commands(app: typer.Typer, case_app: typer.Typer, judge_app: t
             return
         report = row.get("report") if isinstance(row.get("report"), dict) else {}
         passed_flag = row.get("passed")
-        if passed_flag is True:
+        err = row.get("error") if isinstance(row.get("error"), dict) else {}
+        cannot_run = "cannot run" in str((err or {}).get("message") or "").lower()
+        if passed_flag is True and str(report.get("gate") or "") == "needs review":
+            gate = "review"
+        elif passed_flag is True:
             gate = "pass"
         elif passed_flag is False:
             gate = "fail"
+        elif cannot_run:
+            gate = "cannot-run"
         elif report.get("tasks") or str(report.get("gate") or "") == "not scored":
             gate = "not scored"
         else:
@@ -298,9 +315,18 @@ def register_pack_commands(app: typer.Typer, case_app: typer.Typer, judge_app: t
                 continue
             tid = str(task.get("id") or task.get("task_id") or "")
             ok = task.get("passed")
-            mark = "pass" if ok is True else "fail" if ok is False else "not scored"
+            if ok is True and (task.get("review") or task.get("status") == "unsure"):
+                mark = "review"
+            elif ok is True:
+                mark = "pass"
+            elif ok is False:
+                mark = "fail"
+            else:
+                mark = "not scored"
             reason = ""
-            if ok is False:
+            if mark == "review":
+                reason = "  unsure, needs review"
+            elif ok is False:
                 happened = str(task.get("happened") or "").strip()
                 if happened:
                     reason = f"  {happened}"

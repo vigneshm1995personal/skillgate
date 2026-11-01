@@ -142,12 +142,37 @@ async function parseError(res: Response): Promise<ApiError> {
   })
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(path, init)
-  if (!res.ok) {
-    throw await parseError(res)
+const STATUS_TIMEOUT_MS = 8000
+
+async function request<T>(
+  path: string,
+  init?: RequestInit,
+  timeoutMs = 0
+): Promise<T> {
+  const controller =
+    timeoutMs > 0 && !init?.signal ? new AbortController() : null
+  const timer = controller
+    ? setTimeout(() => controller.abort(), timeoutMs)
+    : null
+  try {
+    const res = await fetch(path, {
+      ...init,
+      signal: init?.signal ?? controller?.signal,
+    })
+    if (!res.ok) {
+      throw await parseError(res)
+    }
+    return (await res.json()) as T
+  } catch (err) {
+    if (controller?.signal.aborted && !(init?.signal && init.signal.aborted)) {
+      throw new ApiError("The request timed out.")
+    }
+    throw err
+  } finally {
+    if (timer != null) {
+      clearTimeout(timer)
+    }
   }
-  return (await res.json()) as T
 }
 
 const jsonHeaders = { "Content-Type": "application/json" }
@@ -165,8 +190,9 @@ function packSkillName(skill: string): string {
 }
 
 export const api = {
-  status: () => request<StatusPayload>("/api/status"),
-  settingsKeys: () => request<SettingsKeysPayload>("/api/settings/keys"),
+  status: () => request<StatusPayload>("/api/status", undefined, STATUS_TIMEOUT_MS),
+  settingsKeys: () =>
+    request<SettingsKeysPayload>("/api/settings/keys", undefined, STATUS_TIMEOUT_MS),
   setSettingsKey: (name: SettingsKeyId, value: string) =>
     request<SettingsKeysPayload>(
       `/api/settings/keys/${encodeURIComponent(name)}`,
@@ -227,7 +253,7 @@ export const api = {
         builtin: boolean
         prompt: string
       }>
-    }>(`/api/checks${query}`)
+    }>(`/api/checks${query}`, undefined, STATUS_TIMEOUT_MS)
   },
   previewCheck: (question: {
     id: string
@@ -276,7 +302,7 @@ export const api = {
       headers: jsonHeaders,
       body: "{}",
     }),
-  me: () => request<AuthMePayload>("/api/auth/me"),
+  me: () => request<AuthMePayload>("/api/auth/me", undefined, STATUS_TIMEOUT_MS),
   signOut: () =>
     request<Record<string, never>>("/api/auth/signout", {
       method: "POST",

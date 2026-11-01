@@ -165,7 +165,7 @@ export function EvalPassFailPanel({
   stampMetrics,
   configDiff,
 }: {
-  kind: "pass" | "fail"
+  kind: "pass" | "fail" | "review"
   mode: EvalMarkMode
   deployAllowed: boolean
   passed: number
@@ -179,7 +179,8 @@ export function EvalPassFailPanel({
   stampMetrics: string | null
   configDiff: ConfigDiffEntry[]
 }) {
-  const headline = kind === "pass" ? "Passed" : "Failed"
+  const headline =
+    kind === "pass" ? "Passed" : kind === "review" ? "Needs review" : "Failed"
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-col items-center gap-2 pt-2 text-center">
@@ -187,7 +188,11 @@ export function EvalPassFailPanel({
         <p
           className={cn(
             "font-display text-5xl font-medium tracking-tight",
-            kind === "pass" ? "text-success" : "text-destructive"
+            kind === "pass"
+              ? "text-success"
+              : kind === "review"
+                ? "text-warning"
+                : "text-destructive"
           )}
         >
           {headline}
@@ -268,6 +273,9 @@ export function gateCoverageLine(
 ): string {
   if (deployAllowed) {
     return "Checks passed — Deploy is unlocked."
+  }
+  if (lastResult.gate === "needs review" || lastResult.report?.gate === "needs review") {
+    return lastResult.gate_reason || "The judge was unsure. Review the run."
   }
   if (reportPassed === true && !isLiveHarness(harness)) {
     return "Demo evals do not unlock Deploy. Run a live check."

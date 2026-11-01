@@ -42,7 +42,7 @@ def list_skill_git_versions(pack: Path) -> list[dict[str, str]]:
             capture_output=True,
             text=True,
         )
-    except (OSError, subprocess.CalledProcessError):
+    except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired):
         return []
     rows: list[dict[str, str]] = []
     for line in out.stdout.splitlines():
@@ -64,6 +64,11 @@ def find_git_root(pack: Path) -> Path:
             capture_output=True,
             text=True,
         )
+    except subprocess.TimeoutExpired:
+        raise CompareError(
+            "Couldn't read git for this skill folder.",
+            hint="Retry, or use history runs to compare versions.",
+        ) from None
     except (OSError, subprocess.CalledProcessError) as exc:
         raise CompareError(
             "This skill folder is not inside a git repository.",
@@ -85,6 +90,11 @@ def _materialize_ref(pack: Path, git_root: Path, ref: str, dest: Path) -> Path:
             check=True,
             capture_output=True,
         )
+    except subprocess.TimeoutExpired:
+        raise CompareError(
+            f"Git ref {ref!r} timed out.",
+            hint="Retry, or compare two history runs instead.",
+        ) from None
     except subprocess.CalledProcessError as exc:
         raise CompareError(
             f"Git ref {ref!r} is not valid for this skill path.",

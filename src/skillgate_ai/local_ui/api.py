@@ -25,7 +25,7 @@ from skillgate_ai.config import (
     missing_key_error,
 )
 from skillgate_ai.demo_files import ensure_demo_pdfs
-from skillgate_ai.errors import MissingLLMKeyError, SkillGateError
+from skillgate_ai.errors import MissingLLMKeyError, SkillGateError, timeout_harness_error
 from skillgate_ai.keys import set_vault_key
 from skillgate_ai.gate import run_check
 from skillgate_ai.judge import SkipJudge, resolve_judge
@@ -415,12 +415,20 @@ def _start_check(state: UiState, payload: dict[str, Any]) -> tuple[int, dict[str
             }
             record.payload = payload_out
         except Exception as exc:  # noqa: BLE001 — surface to the poller
-            message = exc.message if isinstance(exc, SkillGateError) else str(exc)
+            blocked = timeout_harness_error(exc)
+            if blocked is not None:
+                message = blocked.message
+                hint = blocked.hint
+                exit_code = blocked.exit_code
+            else:
+                message = exc.message if isinstance(exc, SkillGateError) else str(exc)
+                hint = getattr(exc, "hint", None)
+                exit_code = 1
             record.error = message
             record.payload = {
                 "run_id": run_id,
-                "exit_code": 1,
-                "error": {"message": message, "hint": getattr(exc, "hint", None)},
+                "exit_code": exit_code,
+                "error": {"message": message, "hint": hint},
             }
         finally:
             record.done = True

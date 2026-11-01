@@ -80,6 +80,35 @@ class HarnessError(SkillGateError):
     """Cursor Agent / Codex CLI / LLM / sandbox failed to start or finish."""
 
 
+AGENT_TIMEOUT_MESSAGE = "The agent timed out. This check cannot run."
+
+
+def agent_timeout_error(timeout_sec: int | float | None = None) -> HarnessError:
+    """Task timeout is cannot-run. Never include the command or prompt."""
+    hint = "Raise the timeout, or retry."
+    if timeout_sec is not None:
+        hint = f"The agent did not finish in {int(timeout_sec)}s. Raise the timeout, or retry."
+    return HarnessError(AGENT_TIMEOUT_MESSAGE, hint=hint, exit_code=2)
+
+
+def timeout_harness_error(
+    exc: BaseException | None = None,
+    *,
+    timeout_sec: int | float | None = None,
+) -> HarnessError | None:
+    """Map TimeoutExpired to cannot-run without stringifying the command."""
+    import subprocess
+
+    if not isinstance(exc, subprocess.TimeoutExpired):
+        return None
+    seconds = timeout_sec
+    if seconds is None:
+        raw = getattr(exc, "timeout", None)
+        if isinstance(raw, (int, float)):
+            seconds = raw
+    return agent_timeout_error(seconds)
+
+
 class SandboxError(SkillGateError):
     """Sandbox backend is unavailable or misconfigured."""
 

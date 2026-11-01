@@ -61,7 +61,7 @@ def ui_build_id() -> str:
             timeout=1,
         )
         return out.decode().strip()
-    except Exception:
+    except (OSError, subprocess.TimeoutExpired, subprocess.CalledProcessError, UnicodeDecodeError):
         return ""
 
 

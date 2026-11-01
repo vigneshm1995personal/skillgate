@@ -29,7 +29,7 @@ from skillgate_ai.compare import (
 )
 from skillgate_ai.compare_control import request_cancel_compare
 from skillgate_ai.config import get_llm_config, load_env
-from skillgate_ai.errors import MissingLLMKeyError
+from skillgate_ai.errors import MissingLLMKeyError, timeout_harness_error
 
 
 def _finish_compare_job(
@@ -173,7 +173,13 @@ def _start_models_compare(state: AppState, body: dict[str, Any]) -> dict[str, An
         except CompareError as exc:
             _fail_compare_job(state, compare_id, message=exc.message, hint=exc.hint)
         except Exception as exc:  # noqa: BLE001
-            _fail_compare_job(state, compare_id, message=str(exc))
+            blocked = timeout_harness_error(exc)
+            _fail_compare_job(
+                state,
+                compare_id,
+                message=blocked.message if blocked else str(exc),
+                hint=blocked.hint if blocked else None,
+            )
 
     threading.Thread(target=worker, name=f"skillgate-compare-{compare_id}", daemon=True).start()
     return {"compare_id": compare_id, "status": "running"}
@@ -213,7 +219,13 @@ def _start_versions_compare(state: AppState, body: dict[str, Any]) -> dict[str, 
         except CompareError as exc:
             _fail_compare_job(state, compare_id, message=exc.message, hint=exc.hint)
         except Exception as exc:  # noqa: BLE001
-            _fail_compare_job(state, compare_id, message=str(exc))
+            blocked = timeout_harness_error(exc)
+            _fail_compare_job(
+                state,
+                compare_id,
+                message=blocked.message if blocked else str(exc),
+                hint=blocked.hint if blocked else None,
+            )
 
     with state.lock:
         state.compares[compare_id] = {"compare_id": compare_id, "status": "running", "mode": "versions"}

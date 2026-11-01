@@ -187,7 +187,7 @@ def test_low_confidence_only_when_provider_supports_it() -> None:
     answers["task_completion"] = {"choice": "Fully completed"}
     passed, _, warnings = spec_verdict(spec, answers, supports_confidence=True)
     assert passed is True
-    assert warnings == ["The judge wasn't very sure about this one."]
+    assert warnings == ["unsure, needs review"]
     passed, _, warnings = spec_verdict(spec, answers, supports_confidence=False)
     assert passed is True
     assert warnings == []

@@ -70,6 +70,9 @@ export function gateTone(gate?: string | null, passed?: boolean | null) {
   if (gate === "blocked" || gate === "red") {
     return "red" as const
   }
+  if (gate === "needs review" || gate === "review") {
+    return "review" as const
+  }
   if (gate === "cleared" || gate === "green") {
     return "green" as const
   }
@@ -82,12 +85,15 @@ export function gateTone(gate?: string | null, passed?: boolean | null) {
   return "pending" as const
 }
 
-export function stampBadgeProps(kind: "pass" | "fail"): {
-  gate: "green" | "red"
+export function stampBadgeProps(kind: "pass" | "fail" | "review"): {
+  gate: "green" | "red" | "needs review"
   passed: boolean
 } {
   if (kind === "pass") {
     return { gate: "green", passed: true }
+  }
+  if (kind === "review") {
+    return { gate: "needs review", passed: true }
   }
   return { gate: "red", passed: false }
 }
@@ -111,6 +117,9 @@ export function GateBadge({
     return (
       <Badge variant="destructive">{gate === "blocked" ? "Blocked" : "RED"}</Badge>
     )
+  }
+  if (tone === "review") {
+    return <Badge variant="warning">REVIEW</Badge>
   }
   return <Badge variant="outline">Pending</Badge>
 }

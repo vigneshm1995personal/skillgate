@@ -1,7 +1,7 @@
 export const EVAL_MOTION_MS = 350
 export const CHECKING_MIN_MS = 700
 
-export type EvalHoldTarget = "checking" | "pass" | "fail" | "error"
+export type EvalHoldTarget = "checking" | "pass" | "fail" | "error" | "review"
 
 export function resultHoldPlan({
   target,

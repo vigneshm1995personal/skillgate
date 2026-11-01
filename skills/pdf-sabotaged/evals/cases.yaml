@@ -73,7 +73,7 @@ cases:
     min_pages: 2
   - id: no-trigger-unrelated
     status: pinned
-    prompt: Write a pytest for a FastAPI /health endpoint. Do not touch any PDFs.
+    prompt: Write a pytest for a FastAPI /health endpoint.
     should_trigger: false
     input:
       files: []

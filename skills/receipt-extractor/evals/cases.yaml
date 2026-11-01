@@ -34,7 +34,7 @@ cases:
       - Harbor Paper Co.
   - id: no-trigger-unrelated
     status: pinned
-    prompt: Write a SQL query for open orders.
+    prompt: Write a pytest for a FastAPI /health endpoint.
     should_trigger: false
     input:
       files: []

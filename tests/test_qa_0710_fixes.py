@@ -97,10 +97,13 @@ def test_low_confidence_majority_fail_keeps_the_pass_mark() -> None:
                 200,
                 decisions_payload({"task_completion": "Not completed"}, confidence=0.15),
             ),
-            FakeResponse(200, decisions_payload(confidence=0.88)),
             FakeResponse(
                 200,
-                decisions_payload({"task_completion": "Not completed"}, confidence=0.22),
+                decisions_payload({"task_completion": "Not completed"}, confidence=0.91),
+            ),
+            FakeResponse(
+                200,
+                decisions_payload({"task_completion": "Not completed"}, confidence=0.88),
             ),
         ]
     )

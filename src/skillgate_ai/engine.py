@@ -3,19 +3,31 @@
 from __future__ import annotations
 
 import os
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 from skillgate_ai.advice import FixAdvice, advise_suite, advise_task
-from skillgate_ai.errors import IngestError, SuiteError
-from skillgate_ai.harness import Harness, HarnessResult, _write_selection, is_live_harness
+from skillgate_ai.errors import (
+    HarnessError,
+    IngestError,
+    SuiteError,
+    timeout_harness_error,
+)
+from skillgate_ai.harness import (
+    Harness,
+    HarnessResult,
+    _write_selection,
+    cannot_run_message,
+    is_live_harness,
+    usage_limit_message,
+)
 from skillgate_ai.ingest import Skill, ingest_skill, ingest_skills
 from skillgate_ai.judge import Judge, SkipJudge, default_judge, judge_stamp
+from skillgate_ai.judge_bank import UNUSABLE_ANSWER
 from skillgate_ai.live import KILL, CheckAborted, RunControl
 from skillgate_ai.observability import breadcrumb_task, report_eval_outcome, set_eval_passed, span
-from skillgate_ai.judge_bank import UNUSABLE_ANSWER
 from skillgate_ai.output_match import expected_output_mismatch_reason
 from skillgate_ai.pack import resolve_input_file
 from skillgate_ai.sandbox import Sandbox, open_sandbox, prepare_workspace
@@ -24,6 +36,138 @@ from skillgate_ai.suite import SuiteSpec, TaskSpec, load_suite
 
 SKIP_FAILURE = "Skipped by user"
 KILL_FAILURE = "Killed by user"
+
+
+def _extras_all_passed(judged: Mapping[str, Any]) -> bool:
+    """True when extra checks exist and none of them failed."""
+    from skillgate_ai.judge_bank import CHECK_CELL_ORDER, SOFT_CELL_ORDER
+
+    failures = judged.get("extra_failures")
+    if isinstance(failures, list) and any(str(item).strip() for item in failures):
+        return False
+    reserved = set(CHECK_CELL_ORDER) | set(SOFT_CELL_ORDER)
+    cells = judged.get("cells") if isinstance(judged.get("cells"), Mapping) else {}
+    answers = judged.get("answers") if isinstance(judged.get("answers"), Mapping) else {}
+    questions = judged.get("questions") if isinstance(judged.get("questions"), Mapping) else {}
+    extra_ids = {
+        key
+        for blob in (cells, answers, questions)
+        for key in blob
+        if key not in reserved
+    }
+    return bool(extra_ids)
+
+
+def _extras_from_log(judged: Mapping[str, Any]) -> bool:
+    """True when at least one extra check was computed from the log."""
+    from skillgate_ai.judge_bank import CHECK_CELL_ORDER, SOFT_CELL_ORDER
+
+    reserved = set(CHECK_CELL_ORDER) | set(SOFT_CELL_ORDER)
+    cells = judged.get("cells") if isinstance(judged.get("cells"), Mapping) else {}
+    answers = judged.get("answers") if isinstance(judged.get("answers"), Mapping) else {}
+    for blob in (cells, answers):
+        for key, row in blob.items():
+            if key in reserved or not isinstance(row, Mapping):
+                continue
+            if str(row.get("source") or "").strip().lower() == "log":
+                return True
+    return False
+
+
+def _is_builtin_quality_reason(reason: object) -> bool:
+    from skillgate_ai.judge_bank import CHECK_CELL_LABELS
+
+    text = str(reason or "").strip()
+    return any(text.startswith(label) for label in CHECK_CELL_LABELS.values())
+
+
+def stabilize_adherence_review(
+    judged: dict[str, Any] | None,
+    scores: list[Score] | list[dict[str, Any]] | None,
+) -> dict[str, Any] | None:
+    """Passing extras and scorers keep a correct hedge from going red.
+
+    The 0.5 floor and the pass mark stay put. This drops the unsure flag on
+    builtin cells whose choice is already in PASS_LOCK when every deterministic
+    scorer passed. A failing choice at low confidence stays review unless extra
+    checks exist, none failed, and the scorers passed. When those extras were
+    computed from the log and they all passed, a judge-only builtin quality fail
+    is also dropped so an honest hedge does not turn the gate red.
+    """
+    from skillgate_ai.judge_bank import (
+        CHECK_CELL_ORDER,
+        LOW_CONFIDENCE_WARNING,
+        PASS_LOCK,
+        canonical_choice,
+    )
+
+    if not isinstance(judged, dict):
+        return judged
+    scorer_ok = True
+    for item in scores or []:
+        passed = item.passed if isinstance(item, Score) else item.get("passed")
+        if passed is False:
+            scorer_ok = False
+            break
+    if not scorer_ok:
+        return judged
+    cells = judged.get("cells")
+    if not isinstance(cells, dict):
+        return judged
+    extras_ok = _extras_all_passed(judged)
+    extras_log = extras_ok and _extras_from_log(judged)
+    answers = judged.get("answers") if isinstance(judged.get("answers"), dict) else {}
+    next_cells = dict(cells)
+    changed = False
+    for key in CHECK_CELL_ORDER:
+        cell = cells.get(key)
+        if not isinstance(cell, dict) or cell.get("status") != "unsure":
+            continue
+        raw = answers.get(key) if isinstance(answers, dict) else None
+        choice = cell.get("choice")
+        if not choice and isinstance(raw, dict):
+            choice = raw.get("choice")
+        canonical = canonical_choice(key, choice)
+        allowed = PASS_LOCK.get(key) or frozenset()
+        if not extras_ok and (
+            canonical is None or canonical.strip().lower() not in allowed
+        ):
+            continue
+        cleaned = dict(cell)
+        cleaned.pop("status", None)
+        next_cells[key] = cleaned
+        changed = True
+    if not changed and not extras_log:
+        return judged
+    out = dict(judged)
+    if changed:
+        out["cells"] = next_cells
+        review = any(
+            isinstance(row, dict) and row.get("status") == "unsure"
+            for row in next_cells.values()
+        )
+        out["review"] = review
+        warnings = [
+            str(item).strip()
+            for item in (out.get("warnings") or [])
+            if str(item).strip() and str(item).strip() != LOW_CONFIDENCE_WARNING
+        ]
+        if review:
+            warnings.append(LOW_CONFIDENCE_WARNING)
+        out["warnings"] = warnings
+    if extras_log:
+        out["passed"] = True
+        out["reasons"] = [
+            str(item).strip()
+            for item in (out.get("reasons") or [])
+            if str(item).strip() and not _is_builtin_quality_reason(item)
+        ]
+        if not changed:
+            out["review"] = any(
+                isinstance(row, dict) and row.get("status") == "unsure"
+                for row in cells.values()
+            )
+    return out
 
 
 def _suite_passed(tasks: list[TaskReport]) -> bool | None:
@@ -55,6 +199,7 @@ class TaskReport:
     spans: list[dict[str, Any]] | None = None
     metrics: dict[str, Any] | None = None
     model: str | None = None
+    review: bool = False
 
     def failed_scorers(self) -> list[Score]:
         return [s for s in self.scores if not s.passed]
@@ -76,6 +221,7 @@ class TaskProgress:
     usage: dict[str, Any] | None = None
     expect_skill: str | None = None
     selected_skill: str | None = None
+    review: bool = False
 
 
 @dataclass
@@ -483,6 +629,7 @@ def _run_outcome_judge(
         spec=spec,
         skill_instructions=instructions,
         agent_trajectory=trajectory,
+        spans=spans,
     )
     mismatch = expected_output_mismatch_reason(
         golden=golden_payload if isinstance(golden_payload, dict) else None,
@@ -544,10 +691,20 @@ def _live_verdict(
     det_passed: bool,
     det_failures: list[str],
     mismatch: str | None = None,
+    trigger_passed: bool | None = None,
 ) -> tuple[bool, list[str], dict[str, Any] | None]:
     """Skip leaves det in charge. Errors fail closed. No-trigger keeps det.
     A completed bool ``passed`` overrides, including a low-confidence Pass.
-    Gate ``passed`` is the return value. Cell ``passed`` stays on the judge dict."""
+    A failed skill trigger cannot pass or review. Gate ``passed`` is the
+    return value. Cell ``passed`` stays on the judge dict."""
+    if trigger_passed is False:
+        reasons = list(det_failures) or [
+            "Did not trigger (description does not match this request)"
+        ]
+        if not isinstance(judge, dict):
+            return False, reasons, judge
+        stamped = {**judge, "passed": False, "review": False}
+        return False, reasons, stamped
     if not isinstance(judge, dict):
         return det_passed, det_failures, judge
     warnings = [
@@ -736,6 +893,27 @@ def _run_task(
                     return _skipped_report(
                         task, KILL_FAILURE if exc.reason == KILL else SKIP_FAILURE
                     )
+                except Exception as exc:
+                    blocked = timeout_harness_error(exc, timeout_sec=timeout)
+                    if blocked is not None:
+                        raise blocked from None
+                    raise
+            blocked = cannot_run_message(
+                result.stdout or "", result.stderr or "", result.transcript or ""
+            )
+            if blocked:
+                hint = (
+                    "Wait until the agent quota resets, then retry."
+                    if usage_limit_message(
+                        result.stdout or "", result.stderr or "", result.transcript or ""
+                    )
+                    else "Pick an available model, then retry."
+                )
+                raise HarnessError(
+                    blocked,
+                    hint=hint,
+                    exit_code=2,
+                )
             if control is not None and control.kill_requested:
                 ended = True
                 return _skipped_report(task, KILL_FAILURE)
@@ -768,6 +946,10 @@ def _run_task(
             steps, errors, had_path = count_path_steps(spans, result.transcript)
             det_passed = all(s.passed for s in scores)
             det_failures = [s.headline or s.detail for s in scores if not s.passed]
+            trigger_passed = all(
+                s.passed for s in scores if s.scorer == "skill_trigger"
+            )
+            review = False
             if task.expect_skill is None:
                 judged = (
                     _no_trigger_skipped_judge(judge)
@@ -789,12 +971,18 @@ def _run_task(
                     skill_instructions=skills[0].body if skills else None,
                     file_baseline=file_baseline,
                 )
+                if isinstance(judged, dict):
+                    judged = stabilize_adherence_review(judged, scores)
                 passed, failures, judged = _live_verdict(
                     judged,
                     task.expect_skill,
                     det_passed=det_passed,
                     det_failures=det_failures,
                     mismatch=mismatch,
+                    trigger_passed=trigger_passed,
+                )
+                review = bool(passed) and bool(
+                    isinstance(judged, dict) and judged.get("review")
                 )
                 judged = _maybe_explain_fail(
                     judge,
@@ -885,6 +1073,7 @@ def _run_task(
                 judge=judged,
                 metrics=metrics,
                 model=result.model,
+                review=review,
             )
     finally:
         if control is not None:
@@ -1033,6 +1222,7 @@ def _eval_progress(
                     usage=getattr(done, "usage", None),
                     expect_skill=done.expect_skill,
                     selected_skill=done.selected_skill,
+                    review=bool(getattr(done, "review", False)),
                 )
             )
             continue

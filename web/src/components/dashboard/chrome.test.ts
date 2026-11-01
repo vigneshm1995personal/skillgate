@@ -14,6 +14,14 @@ describe("stampBadgeProps", () => {
     expect(gateTone(props.gate, props.passed)).toBe("green")
     expect(gateTone("blocked", false)).toBe("red")
   })
+
+  it("shows a needs-review run as REVIEW, not RED", () => {
+    const props = stampBadgeProps("review")
+    expect(props.passed).toBe(true)
+    expect(gateTone(props.gate, props.passed)).toBe("review")
+    expect(gateTone("needs review", true)).toBe("review")
+    expect(gateTone("needs review", true)).not.toBe("green")
+  })
 })
 
 describe("stageTitle", () => {
@@ -48,7 +56,9 @@ describe("hosted gate badge", () => {
     )
     expect(badge).toMatch(/GREEN/)
     expect(badge).toMatch(/RED/)
+    expect(badge).toMatch(/REVIEW/)
     expect(badge).toMatch(/variant="destructive"/)
+    expect(badge).toMatch(/variant="warning"/)
   })
 
   it("keeps missing-key and deploy Blocked banners monochrome", () => {
