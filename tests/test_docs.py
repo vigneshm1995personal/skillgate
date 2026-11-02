@@ -89,8 +89,8 @@ def test_package_and_docs_pin_078() -> None:
     readme = README.read_text(encoding="utf-8")
     quickstart = QUICKSTART.read_text(encoding="utf-8")
     judge = (ROOT / "docs" / "judge.md").read_text(encoding="utf-8")
-    assert 'version = "0.7.12"' in pyproject
-    assert '__version__ = "0.7.12"' in init
+    assert 'version = "0.7.15"' in pyproject
+    assert '__version__ = "0.7.15"' in init
     assert "pip install skillgate-ai" in readme
     assert "0.7.12" in readme
     assert "Until 0.7.12 is published" in quickstart
