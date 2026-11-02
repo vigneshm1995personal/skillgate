@@ -49,10 +49,6 @@ class JevBackend:
         del images
         include_path = _path_is_recorded(state.get("path"))
         resolved = spec if spec is not None else builtin_spec()
-        questions = attach_adherence_context(
-            spec_decisions_questions(resolved, include_path=include_path),
-            state,
-        )
         result = post_openai_json(
             _score_url(self.base_url),
             api_key=self.api_key,
@@ -60,7 +56,10 @@ class JevBackend:
                 self.base_url,
                 model=self.model,
                 text=_state_text(state),
-                questions=questions,
+                questions=attach_adherence_context(
+                    spec_decisions_questions(resolved, include_path=include_path),
+                    state,
+                ),
             ),
             timeout_sec=timeout_sec,
             model=self.model,

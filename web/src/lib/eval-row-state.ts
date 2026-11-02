@@ -1,4 +1,3 @@
-import { GUARD_REFUSED_RETRY_NOTE } from "@/lib/check-results"
 import type { Check, Report, RunRecord, TaskResult } from "@/lib/types"
 
 /** Dataset checks as queued Gate rows — pending until that task actually finishes. */
@@ -59,8 +58,7 @@ export function taskState(task: TaskResult): "queued" | "running" | "done" {
     task.status === "done" ||
     task.status === "unsure" ||
     task.status === "pass" ||
-    task.status === "fail" ||
-    task.status === "warning"
+    task.status === "fail"
   ) {
     return "done"
   }
@@ -73,7 +71,7 @@ export function taskState(task: TaskResult): "queued" | "running" | "done" {
 /** Pass/Fail only after the task is actually done. Running/queued never inherit a prior verdict. */
 export function taskChip(
   task: TaskResult
-): "queued" | "running" | "pass" | "fail" | "skipped" | "review" | "warning" {
+): "queued" | "running" | "pass" | "fail" | "skipped" | "review" {
   const state = taskState(task)
   if (state === "running") {
     return "running"
@@ -89,19 +87,6 @@ export function taskChip(
     return "review"
   }
   if (state === "done" && task.passed === true) {
-    if (task.status === "warning") {
-      return "warning"
-    }
-    const warnings = task.judge?.warnings
-    if (
-      Array.isArray(warnings) &&
-      warnings.some(
-        (item) =>
-          String(item).trim() === GUARD_REFUSED_RETRY_NOTE
-      )
-    ) {
-      return "warning"
-    }
     return "pass"
   }
   if (state === "done" && task.passed === false) {
@@ -121,7 +106,7 @@ export function suiteStampReady(
 
 /** Suite result shell. Checking until the run is actually done; Pass if checks passed. */
 export function suiteResultKind(
-  record: Pick<RunRecord, "status" | "gate" | "report" | "id"> | null | undefined,
+  record: Pick<RunRecord, "status" | "gate" | "report"> | null | undefined,
   reportPassed: boolean | null | undefined,
   evaluating: boolean,
   hasTasks = false
@@ -132,7 +117,7 @@ export function suiteResultKind(
   if (record?.status === "error") {
     return hasTasks ? "fail" : "error"
   }
-  if (record && (record.status === "done" || hasTasks || record.id)) {
+  if (record?.status === "done") {
     const gate = record.gate || record.report?.gate
     if (gate === "needs review") {
       return "review"

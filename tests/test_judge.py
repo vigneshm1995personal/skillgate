@@ -318,7 +318,7 @@ def test_live_verdict_low_confidence_keeps_pass() -> None:
     assert passed is True
     assert failures == []
     assert stamped is not None
-    assert LOW_CONFIDENCE_WARNING not in (stamped.get("warnings") or [])
+    assert stamped["warnings"] == [LOW_CONFIDENCE_WARNING]
 
 
 def test_live_verdict_mismatch_still_fails() -> None:

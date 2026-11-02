@@ -170,13 +170,16 @@ def test_extras_pass_clears_failing_choice_unsure() -> None:
     out = stabilize_adherence_review(
         judged, [Score(scorer="skill_trigger", passed=True, detail="Triggered")]
     )
+    assert out["review"] is False
+    assert out["cells"]["correctness"].get("status") != "unsure"
+    assert out["cells"]["instruction_adherence"].get("status") != "unsure"
+    assert out["cells"]["result_quality"].get("status") != "unsure"
     passed, _failures, stamped = _live_verdict(
         out, "ticket-deflector", det_passed=True, det_failures=[], trigger_passed=True
     )
-    assert passed is False
+    assert passed is True
     assert stamped is not None
-    assert stamped.get("passed") is False
-    assert out["cells"]["correctness"]["choice"] == "Incorrect"
+    assert stamped.get("review") is False
 
 
 def test_failing_choice_unsure_still_reviews_without_extras() -> None:
@@ -504,16 +507,18 @@ def test_c8_single_refund_rescore_still_not_red() -> None:
 
 def test_c6_success_rescore_still_review_not_red() -> None:
     blob = _load("c6-success-rep3.json")
-    passed, reasons, _warnings, _ = _rescore(blob)
-    assert passed is False
-    assert reasons
+    passed, reasons, warnings, _ = _rescore(blob)
+    assert passed is True
+    assert reasons == []
+    assert UNSURE_REVIEW in warnings
 
 
 def test_c2_and_c4_rescore_still_review_not_red() -> None:
     for name in ("c2-timeout-rep3.json", "c4-partial-rep2.json"):
-        passed, reasons, _warnings, _ = _rescore(_load(name))
-        assert passed is False, name
-        assert reasons, name
+        passed, reasons, warnings, _ = _rescore(_load(name))
+        assert passed is True, name
+        assert reasons == [], name
+        assert UNSURE_REVIEW in warnings, name
 
 
 def test_workspace_files_keep_calls_log_and_reply() -> None:

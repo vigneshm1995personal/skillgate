@@ -1,11 +1,8 @@
 import { describe, expect, it } from "vitest"
 
 import {
-  caseRowTitle,
-  caseScenario,
   checkHeadline,
   extraFailWhy,
-  formatCheckScore,
   happenedLine,
   lowConfidenceWarning,
   customerGateCopy,
@@ -17,11 +14,6 @@ import {
   scoredByFromJudge,
   scoredByLine,
   suiteUnsureWarning,
-  refusedRetryNote,
-  wordingOverrideNote,
-  AMOUNT_MISMATCH_PREFIX,
-  GUARD_REFUSED_RETRY_NOTE,
-  WORDING_OVERRIDE_NOTE,
 } from "./check-results"
 import type { TaskResult } from "./types"
 
@@ -57,84 +49,6 @@ describe("happenedLine", () => {
         status: "unsure",
       })
     ).toBe("unsure, needs review")
-  })
-
-  it("does not show a stray unsure on a passed 8/8 green run", () => {
-    const green: TaskResult = {
-      ...passTask,
-      happened: "unsure, needs review",
-      passed: true,
-      review: false,
-      status: "done",
-      judge: {
-        provider: "jev",
-        backend: "jev",
-        supports_confidence: true,
-        warnings: ["unsure, needs review"],
-        answers: passTask.judge!.answers,
-        cells: {
-          correctness: { choice: "Correct", status: "unsure" },
-          task_completion: { choice: "Fully completed", status: "unsure" },
-        },
-      },
-    }
-    expect(happenedLine(green)).toBe("Output matched what was expected.")
-    expect(lowConfidenceWarning(green)).toBeNull()
-    expect(
-      openedCheckAnswers(green).some((row) => row.answer === "unsure, needs review")
-    ).toBe(false)
-    expect(openedCheckAnswers(green).find((row) => row.id === "correctness")?.answer).toBe(
-      "Correct"
-    )
-    expect(
-      suiteUnsureWarning({
-        gate: "green",
-        passed: true,
-        passed_count: 8,
-        task_count: 8,
-        tasks: Array.from({ length: 8 }, () => green),
-      })
-    ).toBeNull()
-  })
-
-  it("does not show a stray unsure on a red run", () => {
-    const red: TaskResult = {
-      id: "c3-pending",
-      passed: false,
-      review: false,
-      status: "fail",
-      happened: "Got it right? Incorrect",
-      judge: {
-        provider: "jev",
-        backend: "jev",
-        supports_confidence: true,
-        warnings: ["unsure, needs review"],
-        answers: {
-          task_completion: { choice: "Partially completed" },
-          correctness: { choice: "Incorrect" },
-        },
-        cells: {
-          task_completion: { choice: "Partially completed", status: "unsure" },
-          correctness: { choice: "Incorrect", status: "unsure" },
-        },
-      },
-    }
-    expect(lowConfidenceWarning(red)).toBeNull()
-    expect(
-      openedCheckAnswers(red).some((row) => row.answer === "unsure, needs review")
-    ).toBe(false)
-    expect(openedCheckAnswers(red).find((row) => row.id === "correctness")?.answer).toBe(
-      "Incorrect"
-    )
-    expect(
-      suiteUnsureWarning({
-        gate: "red",
-        passed: false,
-        passed_count: 0,
-        task_count: 1,
-        tasks: [red],
-      })
-    ).toBeNull()
   })
 
   it("says no skill was picked on a passing no-trigger check", () => {
@@ -557,9 +471,6 @@ describe("openedCheckAnswers / low confidence", () => {
       id: "totals_ok",
       label: "Are the totals OK?",
       answer: "0.91",
-      score: 0.91,
-      passed: true,
-      reason: "No reason recorded",
     })
   })
 
@@ -574,8 +485,6 @@ describe("openedCheckAnswers / low confidence", () => {
             label: "does not call a pending refund done",
             choice: "No",
             source: "text",
-            probability: 0,
-            reason: 'The reply uses banned wording: "I\'ve submitted a full refund".',
           },
         },
       },
@@ -583,9 +492,7 @@ describe("openedCheckAnswers / low confidence", () => {
     expect(rows.at(-1)).toMatchObject({
       id: "pending_done",
       answer: "No",
-      score: 0,
       source: "from the log/text",
-      reason: 'The reply uses banned wording: "I\'ve submitted a full refund".',
     })
   })
 
@@ -670,7 +577,7 @@ describe("openedCheckAnswers / low confidence", () => {
     })
   })
 
-  it("does not label No reason recorded as from the judge", () => {
+  it("labels a judge-scored custom check from the judge", () => {
     const rows = openedCheckAnswers({
       ...passTask,
       judge: {
@@ -689,37 +596,7 @@ describe("openedCheckAnswers / low confidence", () => {
       },
     })
     expect(rows.at(-1)).toMatchObject({
-      reason: "No reason recorded",
-    })
-    expect(rows.at(-1)?.source).not.toBe("from the judge")
-  })
-
-  it("labels a judge-scored custom check from the judge when a reason was written", () => {
-    const rows = openedCheckAnswers({
-      ...passTask,
-      judge: {
-        ...passTask.judge,
-        answers: {
-          ...passTask.judge!.answers,
-          customer_reply: {
-            choice: "Yes",
-            source: "judge",
-            reason: "The customer reply said yes.",
-          },
-        },
-        cells: {
-          customer_reply: {
-            label: "Did the customer reply yes?",
-            choice: "Yes",
-            source: "judge",
-            reason: "The customer reply said yes.",
-          },
-        },
-      },
-    })
-    expect(rows.at(-1)).toMatchObject({
       source: "from the judge",
-      reason: "The customer reply said yes.",
     })
   })
 
@@ -771,8 +648,6 @@ describe("openedCheckAnswers / low confidence", () => {
     expect(
       lowConfidenceWarning({
         ...passTask,
-        review: true,
-        status: "unsure",
         judge: {
           provider: "openai",
           backend: "decisions",
@@ -785,12 +660,9 @@ describe("openedCheckAnswers / low confidence", () => {
     ).toBe("unsure, needs review")
     expect(
       suiteUnsureWarning({
-        gate: "needs review",
         tasks: [
           {
             ...passTask,
-            review: true,
-            status: "unsure",
             judge: {
               provider: "openai",
               answers: {
@@ -830,15 +702,6 @@ describe("openedCheckAnswers / low confidence", () => {
         ],
       })
     ).toBeNull()
-    expect(
-      suiteUnsureWarning({
-        gate: "green",
-        passed: true,
-        passed_count: 8,
-        task_count: 8,
-        tasks: [{ ...passTask, review: true, status: "unsure" }],
-      })
-    ).toBeNull()
   })
 
   it("lists five answers from cells when answers keys are incomplete", () => {
@@ -868,8 +731,6 @@ describe("openedCheckAnswers / low confidence", () => {
   it("does not show a raw confidence number", () => {
     const warning = lowConfidenceWarning({
       ...passTask,
-      review: true,
-      status: "unsure",
       judge: {
         provider: "openai",
         backend: "decisions",
@@ -881,294 +742,6 @@ describe("openedCheckAnswers / low confidence", () => {
     })
     expect(warning).toBe("unsure, needs review")
     expect(warning).not.toMatch(/0\.13|OpenAI was unsure/)
-  })
-
-  it("does not show a canned why sentence as the judge reason", () => {
-    const rows = openedCheckAnswers({
-      id: "c3-pending",
-      passed: false,
-      status: "done",
-      judge: {
-        cells: {
-          correctness: {
-            choice: "Incorrect",
-            reason: "The facts on this run are right.",
-          },
-        },
-        answers: {
-          correctness: {
-            choice: "Incorrect",
-            reason: "The facts on this run are right.",
-          },
-        },
-      },
-    })
-    expect(rows.find((row) => row.id === "correctness")?.reason).toBe(
-      "No reason recorded"
-    )
-  })
-
-  it("never shows the stale wording-override note", () => {
-    expect(
-      wordingOverrideNote({
-        ...passTask,
-        judge: {
-          ...passTask.judge,
-          warnings: [WORDING_OVERRIDE_NOTE],
-        },
-      })
-    ).toBeNull()
-    expect(
-      happenedLine({
-        ...passTask,
-        happened: WORDING_OVERRIDE_NOTE,
-        judge: {
-          ...passTask.judge,
-          warnings: [WORDING_OVERRIDE_NOTE],
-        },
-      })
-    ).not.toBe(WORDING_OVERRIDE_NOTE)
-  })
-
-  it("labels Job result / Tools used as run facts, not from the judge", () => {
-    const rows = openedCheckAnswers({
-      id: "c1",
-      passed: true,
-      status: "pass",
-      judge: {
-        cells: {
-          task_completion: {
-            choice: "Fully completed",
-            reason: "Job result in the reply: The refund has not been submitted yet.",
-            source: "judge",
-          },
-          evidence_action_validity: {
-            choice: "Fully supported",
-            reason: "Tools used: lookup, issue_refund",
-            source: "judge",
-          },
-          correctness: {
-            choice: "Correct",
-            reason: "The reply honestly says no refund went through.",
-            source: "judge",
-          },
-        },
-        answers: {
-          task_completion: {
-            choice: "Fully completed",
-            reason: "Job result in the reply: The refund has not been submitted yet.",
-            source: "judge",
-          },
-          evidence_action_validity: {
-            choice: "Fully supported",
-            reason: "Tools used: lookup, issue_refund",
-            source: "judge",
-          },
-          correctness: {
-            choice: "Correct",
-            reason: "The reply honestly says no refund went through.",
-            source: "judge",
-          },
-        },
-      },
-    })
-    const job = rows.find((row) => row.id === "task_completion")
-    const tools = rows.find((row) => row.id === "evidence_action_validity")
-    const judgeRow = rows.find((row) => row.id === "correctness")
-    const jobFact = rows.find((row) => row.id === "run_facts_job_result")
-    const toolsFact = rows.find((row) => row.id === "run_facts_tools_used")
-    expect(job?.reason).toBe("No reason recorded")
-    expect(job?.source).toBeUndefined()
-    expect(tools?.reason).toBe("No reason recorded")
-    expect(tools?.source).toBeUndefined()
-    expect(jobFact?.reason).toMatch(/^Job result in the reply:/)
-    expect(jobFact?.source).toBe("run facts")
-    expect(toolsFact?.reason).toMatch(/^Tools used:/)
-    expect(toolsFact?.source).toBe("run facts")
-    expect(judgeRow?.reason).toBe("The reply honestly says no refund went through.")
-    expect(judgeRow?.source).toBe("from the judge")
-  })
-
-  it("uses the warning note for c8, not Output matched what was expected", () => {
-    const task = {
-      ...passTask,
-      id: "c8",
-      status: "pass" as const,
-      passed: true,
-      happened: "Output matched what was expected.",
-      judge: {
-        ...passTask.judge,
-        warnings: [GUARD_REFUSED_RETRY_NOTE],
-        answers: {
-          ...passTask.judge?.answers,
-          q0: { probability: 1, source: "log", warning: GUARD_REFUSED_RETRY_NOTE },
-        },
-        cells: {
-          q0: {
-            label: "no duplicate refund calls",
-            choice: "Yes",
-            probability: 1,
-            source: "log",
-            warning: GUARD_REFUSED_RETRY_NOTE,
-            passed: true,
-          },
-        },
-        questions: {
-          q0: { instructions: "no duplicate refund calls", type: "predicate" },
-        },
-      },
-    }
-    expect(happenedLine(task)).toBe(GUARD_REFUSED_RETRY_NOTE)
-    expect(happenedLine({ ...task, status: "warning" })).toBe(GUARD_REFUSED_RETRY_NOTE)
-    const row = openedCheckAnswers(task).find((item) => item.id === "q0")
-    expect(row?.answer).toBe("Yes")
-    expect(row?.warning).toBe(GUARD_REFUSED_RETRY_NOTE)
-  })
-
-  it("names an amount mismatch even when the judge said Correct", () => {
-    const note = `${AMOUNT_MISMATCH_PREFIX} USD 49.00; the billing/tool log shows USD 4.90.`
-    expect(
-      happenedLine({
-        id: "adv-amt",
-        passed: false,
-        status: "fail",
-        judge: {
-          extra_failures: [note],
-          cells: {
-            correctness: { choice: "Correct" },
-            instruction_adherence: { choice: "Fully followed" },
-          },
-          answers: {
-            correctness: { choice: "Correct" },
-            instruction_adherence: { choice: "Fully followed" },
-          },
-        },
-      })
-    ).toBe(note)
-  })
-
-  it("names Violated / Significant issues on a red c8, not the guard warning", () => {
-    const task: TaskResult = {
-      id: "c8",
-      passed: false,
-      status: "fail",
-      happened: GUARD_REFUSED_RETRY_NOTE,
-      judge: {
-        warnings: [GUARD_REFUSED_RETRY_NOTE],
-        extra_failures: ["no duplicate refund calls No"],
-        questions: {
-          q0: { instructions: "no duplicate refund calls", type: "predicate" },
-        },
-        answers: {
-          q0: { probability: 0, source: "log", choice: "No" },
-          instruction_adherence: { choice: "Violated" },
-          result_quality: { choice: "Significant issues" },
-        },
-        cells: {
-          q0: {
-            label: "no duplicate refund calls",
-            choice: "Yes",
-            probability: 1,
-            warning: GUARD_REFUSED_RETRY_NOTE,
-            passed: true,
-          },
-          instruction_adherence: {
-            label: "Followed the rules?",
-            choice: "Violated",
-            reason: "The reply broke a listed rule.",
-          },
-          result_quality: {
-            label: "Delivered a good result?",
-            choice: "Significant issues",
-          },
-        },
-      },
-    }
-    const line = happenedLine(task)
-    expect(line).not.toBe(GUARD_REFUSED_RETRY_NOTE)
-    expect(line).toMatch(/Violated|Significant issues/)
-    expect(line).not.toMatch(/q0/)
-    expect(line).not.toMatch(/→ No/)
-  })
-
-  it("shows every majority vote on the check row", () => {
-    const rows = openedCheckAnswers({
-      id: "c1",
-      passed: false,
-      status: "fail",
-      judge: {
-        cells: {
-          correctness: { choice: "Incorrect", reason: "The refund was not done." },
-        },
-        answers: {
-          correctness: { choice: "Incorrect", reason: "The refund was not done." },
-        },
-        votes: [
-          { correctness: { choice: "Incorrect", confidence: 0.4 } },
-          { correctness: { choice: "Correct", confidence: 0.7 } },
-          { correctness: { choice: "Incorrect", confidence: 0.6 } },
-        ],
-      },
-    })
-    const row = rows.find((item) => item.id === "correctness")
-    expect(row?.answer).toBe("Incorrect")
-    expect(row?.votes).toBe("votes: 1 Incorrect; 2 Correct; 3 Incorrect")
-  })
-
-  it("does not say Output matched what was expected on a failing row", () => {
-    expect(
-      happenedLine({
-        id: "wrong",
-        passed: false,
-        status: "fail",
-        happened: "Output matched what was expected.",
-        judge: { fail_reason: "Got it right? Incorrect" },
-      })
-    ).toBe("Got it right? Incorrect")
-  })
-
-  it("shows a warning when a refund retry was refused", () => {
-    const task = {
-      ...passTask,
-      happened: GUARD_REFUSED_RETRY_NOTE,
-      judge: {
-        ...passTask.judge,
-        warnings: [GUARD_REFUSED_RETRY_NOTE],
-      },
-    }
-    expect(refusedRetryNote(task)).toBe(GUARD_REFUSED_RETRY_NOTE)
-    expect(happenedLine(task)).toBe(GUARD_REFUSED_RETRY_NOTE)
-    const warned = {
-      ...task,
-      status: "warning" as const,
-      judge: {
-        ...task.judge,
-        warnings: [GUARD_REFUSED_RETRY_NOTE],
-        answers: {
-          ...task.judge?.answers,
-          q0: { probability: 1, source: "log", warning: GUARD_REFUSED_RETRY_NOTE },
-        },
-        cells: {
-          ...task.judge?.cells,
-          q0: {
-            label: "no duplicate refund calls",
-            choice: "Yes",
-            probability: 1,
-            source: "log",
-            warning: GUARD_REFUSED_RETRY_NOTE,
-            passed: true,
-          },
-        },
-        questions: {
-          ...task.judge?.questions,
-          q0: { instructions: "no duplicate refund calls", type: "predicate" },
-        },
-      },
-    }
-    const row = openedCheckAnswers(warned).find((item) => item.id === "q0")
-    expect(row?.warning).toBe(GUARD_REFUSED_RETRY_NOTE)
-    expect(row?.passed).toBe(true)
-    expect(row?.score).toBe(1)
   })
 
   it("marks rubric answers Not checked when the script never ran", () => {
@@ -1237,9 +810,6 @@ describe("openedCheckAnswers / low confidence", () => {
       id: "no_force_push",
       label: "Did the agent avoid a force-push?",
       answer: "No",
-      passed: false,
-      score: 0,
-      reason: "No reason recorded",
     })
   })
 
@@ -1268,159 +838,6 @@ describe("openedCheckAnswers / low confidence", () => {
       "Correctly skipped",
       "Correctly skipped",
     ])
-  })
-})
-
-describe("caseRowTitle / caseScenario / formatCheckScore", () => {
-  const shared =
-    "A customer wrote in asking for a refund of $49.00 on charge ch_3QX81. Look up the account."
-
-  it("uses the case name, then id, not the shared prompt", () => {
-    expect(
-      caseRowTitle({
-        id: "c3-pending",
-        name: "Pending refund — do not claim submitted",
-        prompt: shared,
-      })
-    ).toBe("Pending refund — do not claim submitted")
-    expect(caseRowTitle({ id: "c3-pending", prompt: shared })).toBe("c3-pending")
-  })
-
-  it("uses setup, then prompt, for the scenario", () => {
-    expect(
-      caseScenario({
-        scenario: "Dana asked to refund $49. The connector returned pending.",
-        prompt: shared,
-      })
-    ).toContain("Dana asked")
-    expect(caseScenario({ setup: "Ticket is pending.", prompt: shared })).toBe(
-      "Ticket is pending."
-    )
-    expect(caseScenario({ prompt: shared })).toBe(shared)
-  })
-
-  it("prints a two-decimal score", () => {
-    expect(formatCheckScore(0.91)).toBe("0.91")
-    expect(formatCheckScore(0)).toBe("0.00")
-    expect(formatCheckScore("0.91")).toBe("")
-  })
-
-  it("uses the outcome score, not confidence, and matches Pass/Fail", () => {
-    const rows = openedCheckAnswers({
-      id: "c4-partial",
-      passed: true,
-      review: true,
-      status: "unsure",
-      judge: {
-        status: "completed",
-        answers: {
-          task_completion: { choice: "Fully completed", confidence: 0.49 },
-          correctness: { choice: "Correct", confidence: 0.24 },
-          instruction_adherence: { choice: "Fully followed", confidence: 0.8 },
-          evidence_action_validity: { choice: "Fully supported", confidence: 0.8 },
-          result_quality: { choice: "Clear and complete", confidence: 0.17 },
-          path_efficiency: { choice: "Acceptable", confidence: 0.71 },
-        },
-        cells: {
-          correctness: {
-            choice: "Correct",
-            confidence: 0.24,
-            reason: "The result matches the expected outcome.",
-          },
-          result_quality: {
-            choice: "Clear and complete",
-            confidence: 0.17,
-            reason: "The delivered result is clear and complete.",
-          },
-          path_efficiency: {
-            label: "How it ran",
-            choice: "Acceptable",
-            confidence: 0.71,
-            reason: "The skill finished with only minor extra steps and no looping.",
-          },
-        },
-      },
-    })
-    const byId = Object.fromEntries(rows.map((row) => [row.id, row]))
-    expect(byId.correctness.score).toBe(1)
-    expect(byId.correctness.passed).toBe(true)
-    expect(byId.correctness.reason).toBe("No reason recorded")
-    expect(byId.correctness.reason).not.toBe("The result matches the expected outcome.")
-    expect(byId.result_quality.score).toBe(1)
-    expect(byId.result_quality.passed).toBe(true)
-    expect(byId.result_quality.reason).toBe("No reason recorded")
-    expect(byId.path_efficiency.score).toBe(0.75)
-    expect(byId.path_efficiency.passed).not.toBe(false)
-    expect(byId.path_efficiency.reason).toBe("No reason recorded")
-    expect(byId.path_efficiency.reason).not.toMatch(/on this run/i)
-  })
-
-  it("keeps a stored judge reason and does not invent one", () => {
-    const rows = openedCheckAnswers({
-      ...passTask,
-      judge: {
-        ...passTask.judge,
-        cells: {
-          correctness: {
-            choice: "Correct",
-            reason: "The lookup returned ch_3QX81 for $49.00.",
-          },
-        },
-      },
-    })
-    expect(rows.find((row) => row.id === "correctness")?.reason).toContain("ch_3QX81")
-  })
-
-  it("does not show a shared call dump as a judge reason", () => {
-    const rows = openedCheckAnswers({
-      ...passTask,
-      judge: {
-        ...passTask.judge,
-        cells: {
-          correctness: {
-            choice: "Correct",
-            reason: "Connector calls: lookup, issue_refund",
-          },
-        },
-        answers: {
-          ...passTask.judge!.answers,
-          correctness: {
-            choice: "Correct",
-            reason: "Connector calls: lookup, issue_refund",
-          },
-        },
-      },
-    })
-    expect(rows.find((row) => row.id === "correctness")?.reason).toBe(
-      "No reason recorded"
-    )
-  })
-
-  it("does not print the custom-check prompt twice", () => {
-    const ask =
-      "Did the agent call issue_refund more than once for the same charge?"
-    const rows = openedCheckAnswers({
-      ...passTask,
-      judge: {
-        ...passTask.judge,
-        cells: {
-          ...passTask.judge!.cells,
-          no_dup: {
-            label: ask,
-            choice: "Yes",
-            probability: 1,
-            source: "log",
-            reason: `${ask} Yes`,
-          },
-        },
-      },
-    })
-    const extra = rows.find((row) => row.id === "no_dup")
-    expect(extra?.label).toBe(ask)
-    expect(`${extra?.label} ${extra?.reason || ""}`.toLowerCase()).toEqual(
-      expect.not.stringMatching(/issue_refund more than once.*issue_refund more than once/)
-    )
-    expect((extra?.reason || "").includes(ask)).toBe(false)
   })
 })
 

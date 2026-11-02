@@ -91,8 +91,6 @@ class CaseGolden(BaseModel):
 class PackCase(BaseModel):
     id: str
     status: Literal["pinned", "draft"] = "draft"
-    name: str = ""
-    setup: str = ""
     prompt: str
     should_trigger: bool = True
     input: CaseInput = Field(default_factory=CaseInput)
@@ -423,8 +421,6 @@ def checks_from_pack(pack: CasePack, *, include_drafts: bool = False) -> list[di
         contains = case.contains[0] if case.contains else None
         check: dict[str, Any] = {
             "id": case.id,
-            "name": case.name or case.id,
-            "setup": case.setup or case.prompt,
             "prompt": case.prompt,
             "should_trigger": case.should_trigger,
             "files": [{"src": item.src, "dest": item.dest} for item in case.input.files],
@@ -497,8 +493,6 @@ def dataset_view(skill_path: str | Path) -> dict[str, Any] | None:
         cases.append(
             {
                 "id": case.id,
-                "name": case.name or case.id,
-                "setup": case.setup or case.prompt,
                 "status": case.status,
                 "prompt": case.prompt,
                 "should_trigger": case.should_trigger,
@@ -832,14 +826,6 @@ def _dump_pack(pack: CasePack) -> str:
             item.pop("trigger_mode", None)
         if not case.output_optional:
             item.pop("output_optional", None)
-        if not str(case.name or "").strip():
-            item.pop("name", None)
-        else:
-            item["name"] = str(case.name).strip()
-        if not str(case.setup or "").strip():
-            item.pop("setup", None)
-        else:
-            item["setup"] = str(case.setup).strip()
     return yaml.safe_dump(payload, sort_keys=False, allow_unicode=True)
 
 
@@ -957,8 +943,6 @@ def _case_from_check(root: Path, raw: dict[str, Any], skill_name: str) -> PackCa
     return PackCase(
         id=case_id,
         status="pinned",
-        name=str(raw.get("name") or "").strip(),
-        setup=str(raw.get("setup") or raw.get("scenario") or "").strip(),
         prompt=str(raw.get("prompt") or "").strip(),
         should_trigger=should,
         input=CaseInput(files=files, needs_upload=needs_upload),

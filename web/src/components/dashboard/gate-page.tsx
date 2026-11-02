@@ -20,10 +20,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Spinner } from "@/components/ui/spinner"
 import { toast } from "@/components/ui/toast"
 import { PageHeader } from "@/components/dashboard/chrome"
-import {
-  EvalResultShell,
-  type EvalResultTarget,
-} from "@/components/dashboard/eval-result-shell"
+import { EvalResultShell } from "@/components/dashboard/eval-result-shell"
 import {
   EvalCheckingPanel,
   EvalErrorPanel,
@@ -49,13 +46,12 @@ import {
   plainAdviceCopy,
   stripRepeatedHeadline,
   scoredByLine,
-  refusedRetryNote,
   suiteUnsureWarning,
-  wordingOverrideNote,
 } from "@/lib/check-results"
 import {
   failedHudCount,
   queuedTasksFromChecks,
+  runBelongsToSkill,
   suiteResultKind,
   suiteStampReady,
 } from "@/lib/eval-row-state"
@@ -112,8 +108,14 @@ export function GatePage({ embedded = false }: { embedded?: boolean }) {
   const [stallPeek, setStallPeek] = useState(false)
   const [controlBusy, setControlBusy] = useState<"skip" | "kill" | null>(null)
   const [resultVisible, setResultVisible] = useState(false)
+  const skillScoped =
+    viewingPinnedHistory ||
+    runBelongsToSkill(
+      lastResult,
+      skill?.slug || skill?.id || skill?.name
+    )
   const scopedResult =
-    lastResult && !isTryoutRun(lastResult) ? lastResult : null
+    skillScoped && !isTryoutRun(lastResult) ? lastResult : null
   const report = scopedResult?.report
   const live = scopedResult?.live ?? null
   const viewingHistorical = viewingPinnedHistory
@@ -134,7 +136,6 @@ export function GatePage({ embedded = false }: { embedded?: boolean }) {
     evaluating,
     Boolean(report?.tasks?.length)
   )
-  const stampTarget: EvalResultTarget = kind === "idle" ? "fail" : kind
   const rawHarness =
     report?.harness ||
     scopedResult?.harness ||
@@ -158,26 +159,15 @@ export function GatePage({ embedded = false }: { embedded?: boolean }) {
     scopedResult?.timeout_sec
   const configDiff = scopedResult?.config_diff ?? []
   const passWarnings = (() => {
-    const green = report?.gate === "green" || report?.passed === true
-    const red = report?.gate === "red" || report?.passed === false
     const base = (scopedResult?.gate_warnings ?? [])
       .map(customerGateCopy)
       .filter(Boolean)
       .filter((item) => !hidePassFileWarning(item, report))
-      .filter((item) => !((green || red) && item.includes("unsure")))
     const unsure = suiteUnsureWarning(report)
-    const override = (report?.tasks ?? [])
-      .map((task) => wordingOverrideNote(task))
-      .find((item): item is string => Boolean(item))
-    const retry = (report?.tasks ?? [])
-      .map((task) => refusedRetryNote(task))
-      .find((item): item is string => Boolean(item))
-    const extra = [
-      ...(unsure && !base.some((item) => item.includes("unsure")) ? [unsure] : []),
-      ...(override && !base.includes(override) ? [override] : []),
-      ...(retry && !base.includes(retry) ? [retry] : []),
-    ]
-    return extra.length ? [...base, ...extra] : base
+    if (unsure && !base.some((item) => item.includes("unsure"))) {
+      return [...base, unsure]
+    }
+    return base
   })()
   const scoredBy = scoredByLine(report)
   const stampMetrics =
@@ -193,8 +183,7 @@ export function GatePage({ embedded = false }: { embedded?: boolean }) {
     (evaluating ||
       scopedResult?.status === "done" ||
       scopedResult?.status === "error" ||
-      Boolean(report?.tasks?.length) ||
-      Boolean(scopedResult?.id))
+      Boolean(report?.tasks?.length))
   const displayTasks = report?.tasks?.length
     ? report.tasks
     : evaluating && checks.length
@@ -312,12 +301,12 @@ export function GatePage({ embedded = false }: { embedded?: boolean }) {
                   </AlertDescription>
                 </Alert>
               ) : null}
-              {kind === "idle" && !scopedResult?.id && !report?.tasks?.length ? (
+              {kind === "idle" ? (
                 <RunChecksEmpty />
               ) : (
                 <EvalResultShell
                   key={scopedResult?.id ?? "gate-run"}
-                  target={stampTarget}
+                  target={kind}
                   hold={!viewingHistorical}
                   onResultVisible={setResultVisible}
                   checking={
@@ -348,9 +337,9 @@ export function GatePage({ embedded = false }: { embedded?: boolean }) {
                         hint={customerGateCopy(scopedResult?.error?.hint || "")}
                         stampLine={stampLine}
                       />
-                    ) : stampTarget === "pass" || stampTarget === "fail" || stampTarget === "review" ? (
+                    ) : kind === "pass" || kind === "fail" || kind === "review" ? (
                       <EvalPassFailPanel
-                        kind={stampTarget}
+                        kind={kind}
                         mode={mode}
                         deployAllowed={deployAllowed}
                         passed={passed}

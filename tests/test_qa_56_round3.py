@@ -433,9 +433,10 @@ def test_c8_single_refund_rescore_still_not_red() -> None:
 
 def test_c6_success_rescore_still_review_not_red() -> None:
     blob = _load("c6-success-rep3.json")
-    passed, reasons, _warnings, _ = _rescore(blob)
-    assert passed is False
-    assert reasons
+    passed, reasons, warnings, _ = _rescore(blob)
+    assert passed is True
+    assert reasons == []
+    assert UNSURE_REVIEW in warnings
 
 
 def test_ui_does_not_repeat_builtin_answers() -> None:

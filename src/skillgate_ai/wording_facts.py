@@ -52,14 +52,6 @@ _DONE_WORDS = frozenset(
     }
 )
 _DONE_PHRASES = ("on its way", "on the way")
-_HONEST_NEGATION = re.compile(
-    r"(?i)(?:not[ \t]+(?:been[ \t]+)?submitted[ \t]+yet|"
-    r"not[ \t]+yet[ \t]+submitted|"
-    r"\bnot[ \t]+yet\b|"
-    r"\bnot[ \t]+done\b|"
-    r"has[ \t]+not[ \t]+gone[ \t]+through|"
-    r"not[ \t]+been[ \t]+issued)"
-)
 _STOP = frozenset(
     {
         "the",
@@ -164,27 +156,10 @@ def resolve_wording_facts(
     _ = hedge
     violated = _violations(rules, texts, succeeded=succeeded)
     yes = not violated
-    if yes:
-        reason = "The reply follows the skill's wording."
-    else:
-        phrases = ", ".join(f'"{rule.phrase}"' for rule in violated)
-        reason = (
-            f"The reply uses banned wording: {phrases} (the agent's wording)."
-            if phrases
-            else "The reply uses banned wording (the agent's wording)."
-        )
-    facts: dict[str, Any] = {
-        question.id: {
-            "probability": 1.0 if yes else 0.0,
-            "source": "text",
-            "reason": reason,
-        }
+    return {
+        question.id: {"probability": 1.0 if yes else 0.0, "source": "text"}
         for question in covering
     }
-    if yes and _HONEST_NEGATION.search(reply or ""):
-        for fact in facts.values():
-            fact["honest_negation"] = True
-    return facts
 
 
 def _skill_body(text: str | None) -> str:

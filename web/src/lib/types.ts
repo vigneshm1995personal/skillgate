@@ -61,8 +61,6 @@ export type CaseBudgets = {
 
 export type Check = {
   id?: string
-  name?: string | null
-  setup?: string | null
   prompt: string
   should_trigger?: boolean
   output_path?: string | null
@@ -246,7 +244,6 @@ export type JudgeAnswer = {
   reason?: string
   confidence?: number | null
   source?: string
-  warning?: string
 }
 
 export type JudgeUsage = {
@@ -286,9 +283,7 @@ export type JudgeResult = {
   require_artifacts?: boolean
   skipped_questions?: string[]
   extra_failures?: string[]
-  warnings?: string[]
   review?: boolean
-  votes?: Array<Record<string, { choice?: string; confidence?: number }>>
   cells?: Record<
     string,
     {
@@ -395,20 +390,11 @@ export type SkillUpdatesPayload = {
 
 export type TaskResult = {
   id: string
-  name?: string | null
-  scenario?: string | null
-  setup?: string | null
   passed?: boolean | null
   review?: boolean
-  status?: "queued" | "running" | "done" | "unsure" | "pass" | "fail" | "warning"
+  status?: "queued" | "running" | "done" | "unsure" | "pass" | "fail"
   skipped?: boolean
   prompt?: string
-  reply?: string | null
-  tool_calls?: Array<{
-    name?: string
-    arguments?: unknown
-    response?: unknown
-  }> | null
   happened?: string
   expect_skill?: string | null
   selected_skill?: string | null
@@ -427,12 +413,8 @@ export type TaskResult = {
     id?: string
     label?: string
     answer?: string
-    score?: number
-    reason?: string
     source?: string
     source_label?: string
-    passed?: boolean
-    warning?: string
   }>
 }
 

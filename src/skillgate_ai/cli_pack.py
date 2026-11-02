@@ -238,14 +238,6 @@ def register_pack_commands(app: typer.Typer, case_app: typer.Typer, judge_app: t
         run_id: str = typer.Argument(..., help="Run id"),
         pack: Path | None = typer.Option(None, "--pack", help="Skill pack"),
         json_out: bool = typer.Option(False, "--json"),
-        case_id: str | None = typer.Option(
-            None, "--case", help="Show this case only (name or id)"
-        ),
-        detail: bool = typer.Option(
-            False,
-            "--detail",
-            help="Print scores, reasons, the agent reply, and connector calls",
-        ),
     ) -> None:
         """Show one saved run."""
         from skillgate_ai.catalog import catalog_entries
@@ -286,35 +278,63 @@ def register_pack_commands(app: typer.Typer, case_app: typer.Typer, judge_app: t
         if json_out:
             from skillgate_ai.api_payloads import history_row_to_run
             from skillgate_ai.cli import _emit_json
-            from skillgate_ai.run_details import hydrate_report, redact_run_value
 
-            payload = history_row_to_run(row, skill_path or Path("."))
-            report = payload.get("report") if isinstance(payload.get("report"), dict) else None
-            if isinstance(report, dict):
-                payload["report"] = hydrate_report(report)
-                if case_id:
-                    tasks = [
-                        item
-                        for item in (payload["report"].get("tasks") or [])
-                        if isinstance(item, dict)
-                        and (
-                            str(item.get("id") or "") == case_id
-                            or str(item.get("name") or "") == case_id
-                        )
-                    ]
-                    if not tasks:
-                        console.print(f"No case named {case_id}.")
-                        raise typer.Exit(2)
-                    payload["report"]["tasks"] = tasks
-            _emit_json(redact_run_value(payload))
+            _emit_json(history_row_to_run(row, skill_path or Path(".")))
             return
-        from skillgate_ai.run_details import format_run_show
-
-        try:
-            console.print(format_run_show(row, case_id=case_id, detail=detail))
-        except SkillGateError as exc:
-            console.print(exc.render())
-            raise typer.Exit(exc.exit_code) from None
+        report = row.get("report") if isinstance(row.get("report"), dict) else {}
+        passed_flag = row.get("passed")
+        err = row.get("error") if isinstance(row.get("error"), dict) else {}
+        cannot_run = "cannot run" in str((err or {}).get("message") or "").lower()
+        if passed_flag is True and str(report.get("gate") or "") == "needs review":
+            gate = "review"
+        elif passed_flag is True:
+            gate = "pass"
+        elif passed_flag is False:
+            gate = "fail"
+        elif cannot_run:
+            gate = "cannot-run"
+        elif report.get("tasks") or str(report.get("gate") or "") == "not scored":
+            gate = "not scored"
+        else:
+            gate = "not run"
+        passed = report.get("passed_count")
+        total = report.get("task_count")
+        counts = f"  {passed}/{total}" if passed is not None and total is not None else ""
+        console.print(f"{row.get('run_id')}  {gate}{counts}")
+        err = row.get("error")
+        if isinstance(err, dict):
+            message = str(err.get("message") or "").strip()
+            hint = str(err.get("hint") or "").strip()
+            if message:
+                console.print(f"  {message}")
+            if hint:
+                console.print(f"  {hint}")
+        tasks = report.get("tasks") if isinstance(report.get("tasks"), list) else []
+        for task in tasks:
+            if not isinstance(task, dict):
+                continue
+            tid = str(task.get("id") or task.get("task_id") or "")
+            ok = task.get("passed")
+            if ok is True and (task.get("review") or task.get("status") == "unsure"):
+                mark = "review"
+            elif ok is True:
+                mark = "pass"
+            elif ok is False:
+                mark = "fail"
+            else:
+                mark = "not scored"
+            reason = ""
+            if mark == "review":
+                reason = "  unsure, needs review"
+            elif ok is False:
+                happened = str(task.get("happened") or "").strip()
+                if happened:
+                    reason = f"  {happened}"
+                else:
+                    failures = task.get("failures")
+                    if isinstance(failures, list) and failures:
+                        reason = f"  {failures[0]}"
+            console.print(f"  {tid}  {mark}{reason}")
 
     @case_app.command("list")
     def case_list(pack: Path | None = typer.Argument(None, help="Skill pack")) -> None:

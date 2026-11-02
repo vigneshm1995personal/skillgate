@@ -24,15 +24,9 @@ export function matchesSkill(
   if (!skill || !needle) {
     return false
   }
-  const candidates = [skill.slug, skill.id, skill.absolute]
-  if (candidates.some((value) => (value || "").trim() === needle)) {
-    return true
-  }
-  const base = needle.replace(/\\/g, "/").split("/").filter(Boolean).pop() || ""
-  if (!base || base === needle) {
-    return false
-  }
-  return [skill.slug, skill.id].some((value) => (value || "").trim() === base)
+  return [skill.slug, skill.id, skill.absolute].some(
+    (value) => (value || "").trim() === needle
+  )
 }
 
 export function isSameSkill(

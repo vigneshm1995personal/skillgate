@@ -118,25 +118,6 @@ function scoredByLine(report) {
   return "";
 }
 
-function caseRowTitle(task) {
-  const name = String((task && task.name) || "").trim();
-  if (name) return name;
-  const id = String((task && (task.id || task.task_id)) || "").trim();
-  if (id) return id;
-  return checkHeadline(task);
-}
-
-function caseScenario(task) {
-  const scenario = String((task && (task.scenario || task.setup)) || "").trim();
-  if (scenario) return scenario;
-  return String((task && task.prompt) || "").trim();
-}
-
-function formatCheckScore(value) {
-  if (typeof value !== "number" || Number.isNaN(value)) return "";
-  return value.toFixed(2);
-}
-
 function checkHeadline(task) {
   const id = String((task && task.id) || "");
   if (id.includes("no-trigger")) return "The skill should stay off for an unrelated request.";
@@ -562,7 +543,7 @@ function checksFromPack(pack) {
 }
 
 function checksTable(tasks) {
-  const rows = tasks.map((t) => `<tr><td>${esc(caseRowTitle(t))}</td></tr>`).join("");
+  const rows = tasks.map((t) => `<tr><td>${esc(checkHeadline(t))}</td></tr>`).join("");
   if (!rows) return `<p class="muted">No checks yet.</p>`;
   return `<table><thead><tr><th>Check</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
@@ -614,69 +595,40 @@ function sourceLabel(value) {
   return "";
 }
 
-function prettyJson(value) {
-  if (value == null || value === "") return "";
-  if (typeof value === "string") return value;
-  try { return JSON.stringify(value, null, 2); } catch { return String(value); }
-}
-
-function evidenceHtml(task) {
-  const reply = String((task && task.reply) || "").trim();
-  const calls = Array.isArray(task && task.tool_calls) ? task.tool_calls : [];
-  const parts = [];
-  if (reply) {
-    parts.push(`<details class="agent-reply"><summary>Agent reply</summary><pre>${esc(reply)}</pre></details>`);
-  }
-  if (calls.length) {
-    const items = calls.map((call) => {
-      const name = String((call && call.name) || "tool");
-      const args = prettyJson(call && call.arguments);
-      const resp = prettyJson(call && call.response);
-      return `<li class="tool-call"><strong>${esc(name)}</strong>${args ? `<pre>${esc(args)}</pre>` : ""}${resp ? `<pre>${esc(resp)}</pre>` : ""}</li>`;
-    }).join("");
-    parts.push(`<details class="tool-calls"><summary>Connector calls (${calls.length})</summary><ul>${items}</ul></details>`);
-  }
-  return parts.join("");
-}
-
 function detailInnerHtml(task) {
   const judge = (task && task.judge) || {};
   const answers = Array.isArray(task && task.check_answers) ? task.check_answers : [];
   const rows = answers.filter((item) => item && typeof item === "object");
   const parts = [];
-  const setup = caseScenario(task);
-  if (setup) parts.push(`<p class="case-setup muted">${esc(setup)}</p>`);
-  if (rows.length) {
-    if (task && task.check_kind !== "openai") {
-      parts.push("<p class=\"muted\">What the checks recorded</p>");
+  if (task && task.check_kind === "openai") {
+    if (rows.length) {
+      parts.push("<dl class=\"check-answers\">");
+      rows.forEach((item) => {
+        const label = String(item.label || "").trim() || "Check";
+        const answer = String(item.answer || "").trim() || "Not available";
+        const source = sourceLabel(item.source);
+        parts.push(
+          `<div><dt>${esc(label)}</dt><dd>${esc(answer)}${source ? ` (${esc(source)})` : ""}</dd></div>`
+        );
+      });
+      parts.push("</dl>");
     }
-    parts.push("<dl class=\"check-answers\">");
-    rows.forEach((item) => {
-      const label = String(item.label || "").trim() || "Check";
-      const answer = String(item.answer || "").trim() || "Not available";
-      const source = sourceLabel(item.source_label || item.source);
-      const score = formatCheckScore(item.score);
-      let reason = String(item.reason || "").trim();
-      if (
-        reason === label ||
-        (answer && reason === `${label} ${answer}`.trim()) ||
-        (answer && reason.toLowerCase() === answer.toLowerCase())
-      ) {
-        reason = "";
-      }
-      if (!reason) reason = "No reason recorded";
-      const mark =
-        item.passed === true ? " PASS" : item.passed === false ? " FAIL" : "";
-      parts.push(
-        `<div><dt>${esc(label)}</dt><dd>${esc(answer)}${mark ? `<span class="${item.passed ? "pass" : "fail"}">${esc(mark)}</span>` : ""}${score ? ` <span class="check-score">${esc(score)}</span>` : ""}${source ? ` (${esc(source)})` : ""}${reason ? `<span class="check-reason">${esc(reason)}</span>` : ""}</dd></div>`
-      );
-    });
-    parts.push("</dl>");
-  } else if (task && task.check_kind !== "openai") {
+  } else {
     parts.push("<p class=\"muted\">What the checks recorded</p>");
-    parts.push("<p class=\"muted\">No extra detail for this check.</p>");
+    if (rows.length) {
+      parts.push("<ul class=\"check-answers\">");
+      rows.forEach((item) => {
+        const label = String(item.label || "").trim() || "Check";
+        const answer = String(item.answer || "").trim();
+        const source = sourceLabel(item.source);
+        const extra = [answer, source ? `(${source})` : ""].filter(Boolean).join(" ");
+        parts.push(`<li>${esc(label)}${extra ? `: ${esc(extra)}` : ""}</li>`);
+      });
+      parts.push("</ul>");
+    } else {
+      parts.push("<p class=\"muted\">No extra detail for this check.</p>");
+    }
   }
-  parts.push(evidenceHtml(task));
   const warnings = Array.isArray(judge.warnings) ? judge.warnings : [];
   warnings.forEach((item) => {
     const text = String(item || "").trim();
@@ -941,7 +893,7 @@ async function paintResult(snap, path, opts) {
     const hid = `check-detail-${i}`;
     return `<tr class="check-row" tabindex="0" aria-expanded="false" aria-controls="${hid}">
       <td class="${cls}"><button type="button" class="check-toggle" tabindex="-1" aria-expanded="false" aria-controls="${hid}" aria-label="Show details">${mark}</button></td>
-      <td class="case-name">${esc(caseRowTitle(t))}${extra}</td>
+      <td>${esc(checkHeadline(t))}${extra}</td>
       <td>${esc(happenedLine(t))}</td>
     </tr>
     <tr id="${hid}" class="check-detail" hidden>

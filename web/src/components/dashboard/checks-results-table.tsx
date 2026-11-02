@@ -7,18 +7,13 @@ import { Button } from "@/components/ui/button"
 import { RunTimeline } from "@/components/dashboard/run-timeline"
 import {
   CHECK_QUESTION_ORDER,
-  caseRowTitle,
-  caseScenario,
   checkHeadline,
   extraFailWhy,
-  formatCheckScore,
   happenedLine,
   lowConfidenceWarning,
   missingJudgeAnswersLine,
   openedCheckAnswers,
   pathOpenedLine,
-  refusedRetryNote,
-  wordingOverrideNote,
 } from "@/lib/check-results"
 import {
   taskChip,
@@ -87,8 +82,6 @@ export function ChecksResultsTable({
                 ? "PASS"
                 : chip === "fail"
                   ? "FAIL"
-                  : chip === "warning"
-                    ? "WARNING"
                   : chip === "review"
                     ? "REVIEW"
                   : chip === "running"
@@ -202,7 +195,7 @@ function CheckPair({
             "w-[5.5rem] py-2 pr-3 align-top font-semibold whitespace-nowrap",
             chip === "pass" && "text-success",
             chip === "fail" && "text-destructive",
-            (chip === "review" || chip === "warning") && "text-warning",
+            chip === "review" && "text-warning",
             (chip === "queued" || chip === "running" || chip === "skipped") &&
               "text-muted-foreground font-medium"
           )}
@@ -241,9 +234,7 @@ function CheckPair({
             </Badge>
           ) : null}
         </td>
-        <td className="py-2 pr-3 align-top">
-          <span className="case-name font-medium">{caseRowTitle(task)}</span>
-        </td>
+        <td className="py-2 pr-3 align-top">{checkHeadline(task)}</td>
         <td className="py-2 align-top">{happened}</td>
       </tr>
       <tr id={hid} className="check-detail" hidden={!isOpen}>
@@ -291,8 +282,6 @@ function OpenedDetails({
   const noAnswers = missingJudgeAnswersLine(task)
   const path = pathOpenedLine(task)
   const warning = lowConfidenceWarning(task)
-  const overrideNote = wordingOverrideNote(task)
-  const retryNote = refusedRetryNote(task)
   const extraWhy = extraFailWhy(task)
   const failReason =
     !skipped && task.passed === false && !noAnswers
@@ -309,12 +298,6 @@ function OpenedDetails({
   const budgetReason = task.metrics?.reasons?.[0]
   return (
     <div className="flex max-w-full min-w-0 flex-col gap-3 overflow-hidden">
-      {caseScenario(task) ? (
-        <div className="case-setup">
-          <p className="font-medium">Setup</p>
-          <p className="text-muted-foreground">{caseScenario(task)}</p>
-        </div>
-      ) : null}
       {answers.length ? (
         <dl className="check-answers m-0">
           {answers.map((item) => (
@@ -322,30 +305,11 @@ function OpenedDetails({
               <dt className="font-medium">{item.label}</dt>
               <dd className="text-muted-foreground m-0">
                 {item.answer}
-                {item.warning ? (
-                  <span className="text-warning"> WARNING</span>
-                ) : item.passed === true ? (
-                  <span className="text-success"> PASS</span>
-                ) : item.passed === false ? (
-                  <span className="text-destructive"> FAIL</span>
-                ) : null}
-                {formatCheckScore(item.score) ? (
-                  <span className="check-score text-foreground">
-                    {" "}
-                    {formatCheckScore(item.score)}
-                  </span>
-                ) : null}
                 {item.source ? (
                   <span className="check-source text-foreground/80">
                     {" "}
                     ({item.source})
                   </span>
-                ) : null}
-                {item.reason ? (
-                  <span className="check-reason mt-1 block">{item.reason}</span>
-                ) : null}
-                {item.votes ? (
-                  <span className="check-votes mt-1 block">{item.votes}</span>
                 ) : null}
               </dd>
             </div>
@@ -354,7 +318,7 @@ function OpenedDetails({
       ) : noAnswers ? (
         <p className="text-muted-foreground">{noAnswers}</p>
       ) : null}
-      {path && !answers.some((item) => item.id === "path_efficiency") ? (
+      {path ? (
         <div>
           <p className="font-medium">How it ran</p>
           <p className="text-muted-foreground">{path}</p>
@@ -369,23 +333,12 @@ function OpenedDetails({
           Down vs baseline
         </p>
       ))}
-      {overrideNote ? (
-        <p className="text-muted-foreground" id={`check-wording-override-${index}`}>
-          {overrideNote}
-        </p>
-      ) : null}
-      {retryNote ? (
-        <p className="text-muted-foreground" id={`check-refused-retry-${index}`}>
-          {retryNote}
-        </p>
-      ) : null}
       {warning ? (
         <p className="text-muted-foreground" id={`check-unsure-${index}`}>
           {warning}
         </p>
       ) : null}
       {failReason ? <p className="fail-why">{failReason}</p> : null}
-      <CaseEvidence task={task} />
       {task.transcript || (task.spans?.length ?? 0) > 0 ? (
         <RunTimeline
           transcript={task.transcript}
@@ -442,64 +395,6 @@ function OpenedDetails({
         </Button>
       ) : null}
       </div>
-    </div>
-  )
-}
-
-function prettyJson(value: unknown): string {
-  if (value == null || value === "") {
-    return ""
-  }
-  if (typeof value === "string") {
-    return value
-  }
-  try {
-    return JSON.stringify(value, null, 2)
-  } catch {
-    return String(value)
-  }
-}
-
-function CaseEvidence({ task }: { task: TaskResult }) {
-  const reply = String(task.reply || "").trim()
-  const calls = Array.isArray(task.tool_calls) ? task.tool_calls : []
-  if (!reply && !calls.length) {
-    return null
-  }
-  return (
-    <div className="flex flex-col gap-2">
-      {reply ? (
-        <details className="agent-reply border-t pt-2">
-          <summary className="cursor-pointer font-medium">Agent reply</summary>
-          <pre className="mt-2 max-h-48 overflow-auto font-mono text-xs whitespace-pre-wrap">
-            {reply}
-          </pre>
-        </details>
-      ) : null}
-      {calls.length ? (
-        <details className="tool-calls border-t pt-2">
-          <summary className="cursor-pointer font-medium">
-            Connector calls ({calls.length})
-          </summary>
-          <ul className="mt-2 flex flex-col gap-2">
-            {calls.map((call, index) => (
-              <li key={`${call.name || "tool"}-${index}`} className="tool-call">
-                <p className="font-medium">{call.name || "tool"}</p>
-                {prettyJson(call.arguments) ? (
-                  <pre className="text-muted-foreground max-h-32 overflow-auto font-mono text-xs whitespace-pre-wrap">
-                    {prettyJson(call.arguments)}
-                  </pre>
-                ) : null}
-                {prettyJson(call.response) ? (
-                  <pre className="max-h-32 overflow-auto font-mono text-xs whitespace-pre-wrap">
-                    {prettyJson(call.response)}
-                  </pre>
-                ) : null}
-              </li>
-            ))}
-          </ul>
-        </details>
-      ) : null}
     </div>
   )
 }
