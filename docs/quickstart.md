@@ -9,11 +9,11 @@ Requires **Python 3.11+**.
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate   # Windows: .venv\Scripts\activate
-pip install skillgate-ai
+pip install skillgate-ai==0.7.15
 skillgate version
 ```
 
-(`pip install skillgate` is a different product.) Until 0.7.12 is published, install from source instead: clone this repo and `pip install -e .`.
+(`pip install skillgate` is a different product.) Latest on PyPI is `skillgate-ai==0.7.15` (same behavior as 0.7.12; do not use 0.7.13 or 0.7.14 — they regressed). To hack on this repo, clone it and `pip install -e .`.
 
 Skill scripts run with that same Python — install the skill’s own packages there too (the pdf example needs `pypdf`).
 
@@ -169,9 +169,10 @@ jobs:
       - uses: vigneshm1995personal/skillgate@v1
         with:
           path: skills/pdf
+          version: "0.7.15"
           judge: jev
         env:
           SKILLGATE_JEV_API_KEY: ${{ secrets.SKILLGATE_JEV_API_KEY }}
 ```
 
-Leave `version` unset for the latest release. Until 0.7.12 is published, install from source (`pip install -e .`) instead of pinning that version. Pass keys as `SKILLGATE_*` variables. Or set `SKILLGATE_OPENAI_API_KEY` instead of `--key-env`. The `SKILLGATE_*` key names are the documented CI/Docker path and are always read.
+Pin `version: "0.7.15"` on the action (same behavior as 0.7.12; do not use 0.7.13 or 0.7.14). Leave `version` unset only if you accept whatever PyPI lists as latest. Pass keys as `SKILLGATE_*` variables. Or set `SKILLGATE_OPENAI_API_KEY` instead of `--key-env`. The `SKILLGATE_*` key names are the documented CI/Docker path and are always read.

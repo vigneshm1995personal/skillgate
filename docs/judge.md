@@ -131,25 +131,26 @@ A red names the failing check and includes the judge's reason. Example: `Got the
 - uses: vigneshm1995personal/skillgate@v1
   with:
     path: skills/pdf
+    version: "0.7.15"
     judge: jev
   env:
     SKILLGATE_JEV_API_KEY: ${{ secrets.SKILLGATE_JEV_API_KEY }}
 ```
 
-Leave `version` unset for the latest release. Until 0.7.12 is published, install from source (`pip install -e .`) instead of pinning that version. The action reads `SKILLGATE_*` variables and does not print them. It does not switch to another decision model. Do not add a required scoring secret to merge CI.
+Pin `version: "0.7.15"` (same behavior as 0.7.12; do not use 0.7.13 or 0.7.14). Unset `version` only if you accept whatever PyPI lists as latest. The action reads `SKILLGATE_*` variables and does not print them. It does not switch to another decision model. Do not add a required scoring secret to merge CI.
 
 A manual install still works:
 
 ```yaml
 - uses: actions/setup-python@v5
   with: { python-version: "3.12" }
-- run: pip install skillgate-ai
+- run: pip install skillgate-ai==0.7.15
 - run: skillgate check . --key-env DECISION_MODEL_API_KEY
   env:
     DECISION_MODEL_API_KEY: ${{ secrets.DECISION_MODEL_API_KEY }}
 ```
 
-Until 0.7.12 is published, replace that install with `pip install -e .` from a clone of this repo.
+Do not pin 0.7.13 or 0.7.14. To test unreleased changes, use `pip install -e .` from a clone of this repo instead.
 
 ## Live smoke (not CI)
 
