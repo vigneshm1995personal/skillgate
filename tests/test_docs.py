@@ -92,13 +92,14 @@ def test_package_and_docs_pin_078() -> None:
     assert 'version = "0.7.15"' in pyproject
     assert '__version__ = "0.7.15"' in init
     assert "pip install skillgate-ai" in readme
+    assert "0.7.15" in readme
     assert "0.7.12" in readme
-    assert "Until 0.7.12 is published" in quickstart
-    assert "Until 0.7.12 is published" in judge
-    assert "skillgate-ai==0.7.12" not in quickstart
-    assert "skillgate-ai==0.7.12" not in judge
-    assert "version: 0.7.12" not in quickstart
-    assert "version: 0.7.12" not in judge
+    assert "Until 0.7.12 is published" not in quickstart
+    assert "Until 0.7.12 is published" not in judge
+    assert "skillgate-ai==0.7.15" in quickstart
+    assert "skillgate-ai==0.7.15" in judge
+    assert 'version: "0.7.15"' in quickstart or "version: 0.7.15" in quickstart
+    assert 'version: "0.7.15"' in judge
     assert "# 10-minute" in quickstart
 
 
