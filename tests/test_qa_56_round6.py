@@ -75,14 +75,16 @@ def _quality_red(*, extra_source: str, extra_ok: bool, extra_label: str = "Hones
 def test_honest_hedge_extras_override_judge_quality_red() -> None:
     judged = _quality_red(extra_source="log", extra_ok=True)
     out = stabilize_adherence_review(judged, _scores())
-    assert out["passed"] is not True
-    assert any("Delivered a good result" in str(item) for item in (out.get("reasons") or []))
+    assert out["passed"] is True
+    assert out.get("extra_failures") == []
+    assert not any("Delivered a good result" in str(item) for item in (out.get("reasons") or []))
     passed, failures, stamped = _live_verdict(
         out, "ticket-deflector", det_passed=True, det_failures=[], trigger_passed=True
     )
-    assert passed is False
+    assert passed is True
     assert stamped is not None
-    assert any("Delivered a good result" in item for item in failures)
+    assert stamped.get("review") is False
+    assert not any("Delivered a good result" in item for item in failures)
 
 
 def test_c3_issued_while_pending_stays_red() -> None:
@@ -128,7 +130,7 @@ def test_c3_honest_pending_hedge_is_not_red() -> None:
     passed, _failures, _stamped = _live_verdict(
         out, "ticket-deflector", det_passed=True, det_failures=[], trigger_passed=True
     )
-    assert passed is False
+    assert passed is True
 
 
 def test_c8_two_refunds_stays_red() -> None:
@@ -188,9 +190,9 @@ def test_c2_timeout_honest_hedge_from_log_is_not_red() -> None:
     passed, failures, stamped = _live_verdict(
         out, "ticket-deflector", det_passed=True, det_failures=[], trigger_passed=True
     )
-    assert passed is False
-    assert stamped.get("passed") is not True
-    assert any("Significant issues" in item for item in failures)
+    assert passed is True
+    assert stamped.get("passed") is True
+    assert not any("Significant issues" in item for item in failures)
 
 
 def test_judge_only_extras_do_not_override_quality_red() -> None:

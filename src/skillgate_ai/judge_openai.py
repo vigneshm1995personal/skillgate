@@ -12,30 +12,23 @@ from skillgate_ai.judge_bank import (
     CHECK_CELL_ORDER,
     DEFAULT_MIN_CONFIDENCE,
     LOW_CONFIDENCE_MAX_ASKS,
-    PASS_LOCK,
     PATH_NOT_AVAILABLE,
     SOFT_CELL_LABELS,
     SOFT_CELL_ORDER,
     UNUSABLE_ANSWER,
-    WHY_SUFFIX,
     all_questions,
     answers_have_low_confidence,
     canonical_choice,
+    criteria_text,
     extract_choice,
     extract_confidence,
     extract_probabilities,
     extract_reason,
-    is_built_reason,
-    is_rubric_reason,
-    is_run_fact_reason,
     majority_vote_answers,
     unusable_answers,
     vote_round_summaries,
 )
-from skillgate_ai.judge_context import (
-    attach_adherence_context,
-    workspace_files_for_judge,
-)
+from skillgate_ai.judge_context import attach_adherence_context, workspace_files_for_judge
 from skillgate_ai.judge_images import IMAGE_MAX_BYTES, IMAGE_MAX_COUNT, collect_images
 from skillgate_ai.judge_providers.decision import DecisionModel, require_decision_model
 from skillgate_ai.judge_spec import (
@@ -153,21 +146,11 @@ def _tail(text: str, limit: int = TRANSCRIPT_TAIL_CHARS) -> str:
 
 def _cell_entry(key: str, answer: Any, labels: Mapping[str, str]) -> dict[str, Any]:
     choice = extract_choice(answer)
-    reason = extract_reason(answer)
-    source = None
-    if reason and is_rubric_reason(key, choice, reason):
-        reason = None
-    elif reason and is_run_fact_reason(reason):
-        source = "run"
-    elif reason and is_built_reason(reason):
-        reason = None
     cell: dict[str, Any] = {
         "label": labels[key],
         "choice": choice,
-        "reason": reason,
+        "reason": extract_reason(answer) or criteria_text(key, choice),
     }
-    if source:
-        cell["source"] = source
     confidence = extract_confidence(answer)
     if confidence is not None:
         cell["confidence"] = confidence
@@ -341,18 +324,11 @@ def _normalize_answers(
                 answers[question.id] = coerce_extra_answer(
                     raw.get(question.id), kind=question.type
                 )
-    for key, value in raw.items():
-        name = str(key)
-        if not name.endswith(WHY_SUFFIX) or name in answers:
-            continue
-        answers[name] = dict(value) if isinstance(value, Mapping) else {"choice": value}
     return answers
 
 
 def _answers_from_decisions_list(payload: Mapping[str, Any]) -> dict[str, Any]:
     rows = payload.get("answers")
-    if rows in (None, {}, []):
-        rows = payload.get("decisions")
     mapped: dict[str, Any] = {}
     if isinstance(rows, list):
         for item in rows:
@@ -443,16 +419,15 @@ class DecisionsBackend(_OpenAIPosted):
             payload_input = text
         include_path = _path_is_recorded(state.get("path"))
         resolved = spec or builtin_spec()
-        questions = attach_adherence_context(
-            spec_decisions_questions(resolved, include_path=include_path),
-            state,
-        )
         result = self.post_json(
             self.decisions_path,
             {
                 "model": self.model,
                 "input": payload_input,
-                "questions": questions,
+                "questions": attach_adherence_context(
+                    spec_decisions_questions(resolved, include_path=include_path),
+                    state,
+                ),
             },
             timeout_sec=timeout_sec,
         )
@@ -463,13 +438,12 @@ class DecisionsBackend(_OpenAIPosted):
 
         model_name = str(data.get("model") or self.model)
         usage = normalize_judge_api_usage(data, model=model_name)
-        answers = _normalize_answers(
-            _answers_from_decisions_list(data),
-            include_path=include_path,
-            spec=resolved,
-        )
         finished = _finished_answers(
-            answers,
+            _normalize_answers(
+                _answers_from_decisions_list(data),
+                include_path=include_path,
+                spec=resolved,
+            ),
             model=model_name,
             usage=usage,
         )
@@ -806,13 +780,7 @@ class OutcomeJudge:
             if confidence:
                 conf = extract_confidence(pass_answers.get(key))
                 if conf is not None and conf < self.min_confidence:
-                    canonical = canonical_choice(key, extract_choice(pass_answers.get(key)))
-                    allowed = PASS_LOCK.get(key) or frozenset()
-                    if (
-                        canonical is not None
-                        and canonical.strip().lower() in allowed
-                    ):
-                        cells[key]["status"] = "unsure"
+                    cells[key]["status"] = "unsure"
         for key in SOFT_CELL_ORDER:
             if include_path:
                 cells[key] = _cell_entry(key, soft_answers.get(key), SOFT_CELL_LABELS)
@@ -847,23 +815,9 @@ class OutcomeJudge:
             if isinstance(raw, Mapping) and raw.get("source"):
                 source = str(raw.get("source"))
             cell["source"] = source
-            reason = extract_reason(raw) if raw is not None else None
-            if not reason and isinstance(raw, Mapping):
-                reason = str(raw.get("reason") or "").strip() or None
-            ask = str(question.ask or "").strip()
-            choice_text = str(cell.get("choice") or "").strip()
-            if reason and ask and reason.strip() in {
-                ask,
-                f"{ask} {choice_text}".strip(),
-                f"{ask} {choice_text}".strip().rstrip("."),
-            }:
-                reason = None
-            if reason:
-                cell["reason"] = reason
-            if isinstance(raw, Mapping):
-                note = str(raw.get("warning") or "").strip()
-                if note:
-                    cell["warning"] = note
+            if cell.get("choice"):
+                named = str(raw.get("reason") or "").strip() if isinstance(raw, Mapping) else ""
+                cell["reason"] = named or f"{question.ask} {cell['choice']}"
             cells[question.id] = cell
             if isinstance(raw, Mapping):
                 cleaned = dict(raw)
@@ -872,12 +826,7 @@ class OutcomeJudge:
                     cleaned["type"] = "predicate"
                 cleaned.setdefault("source", source)
                 extra_answers[question.id] = cleaned
-        why_answers = {
-            str(key): value
-            for key, value in answers.items()
-            if str(key).endswith(WHY_SUFFIX)
-        }
-        merged_answers = {**pass_answers, **extra_answers, **why_answers}
+        merged_answers = {**pass_answers, **extra_answers}
         extra_questions = {q.id: {"instructions": q.ask, "type": q.type} for q in resolved.extras}
         extra_failures = extra_block_failures(resolved, answers, skipped=skipped)
         payload = self._finish_payload(
@@ -893,10 +842,7 @@ class OutcomeJudge:
                 citations=citations,
                 usage=evaluated.get("usage"),
                 warnings=warnings,
-                questions={
-                    **{k: all_questions()[k] for k in CHECK_CELL_ORDER},
-                    **extra_questions,
-                },
+                questions={**{k: all_questions()[k] for k in CHECK_CELL_ORDER}, **extra_questions},
                 soft_questions=soft_questions,
                 scoring_endpoint=_scoring_endpoint(evaluated),
             ),

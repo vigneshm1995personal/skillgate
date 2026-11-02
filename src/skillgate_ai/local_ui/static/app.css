@@ -268,13 +268,6 @@ tr.check-detail td {
 .check-answers li { list-style: disc inside; margin: 0.25rem 0; }
 p.warn { color: var(--muted); }
 p.fail-why { margin-top: 0.5rem; }
-p.case-setup { margin: 0 0 0.75rem; }
-.check-score { font-variant-numeric: tabular-nums; }
-.check-reason { display: block; margin-top: 0.2rem; }
-details.agent-reply, details.tool-calls { margin: 0.5rem 0; }
-details.agent-reply summary, details.tool-calls summary { cursor: pointer; font-weight: 600; }
-.tool-call { margin: 0.5rem 0; }
-.tool-call pre { margin: 0.35rem 0 0; }
 
 details.keys { margin-top: 1rem; }
 details.keys summary { cursor: pointer; color: var(--muted); font-weight: 600; }

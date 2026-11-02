@@ -160,32 +160,31 @@ def test_happened_no_trigger_pass_is_plain() -> None:
 
 
 def test_happened_uses_warning_on_pass() -> None:
-    review = _task(passed=True, judge={"warnings": ["unsure, needs review"]})
-    review.review = True
-    payload = report_to_dict(_report(harness="cursor-agent", tasks=[review]))
+    payload = report_to_dict(
+        _report(
+            harness="cursor-agent",
+            tasks=[
+                _task(
+                    passed=True,
+                    judge={"warnings": ["unsure, needs review"]},
+                )
+            ],
+        )
+    )
     assert payload["tasks"][0]["happened"] == "unsure, needs review"
-    text = format_github(_report(harness="cursor-agent", tasks=[review]))
+    text = format_github(
+        _report(
+            harness="cursor-agent",
+            tasks=[
+                _task(
+                    passed=True,
+                    judge={"warnings": ["unsure, needs review"]},
+                )
+            ],
+        )
+    )
     assert "Output matched what was expected." not in text
     assert "unsure, needs review" in text
-
-
-def test_passed_green_run_does_not_show_stray_unsure() -> None:
-    tasks = [
-        _task(
-            passed=True,
-            task_id=f"c{i}",
-            judge={"warnings": ["unsure, needs review"], "passed": True},
-        )
-        for i in range(8)
-    ]
-    payload = report_to_dict(_report(harness="cursor-agent", tasks=tasks))
-    assert payload["passed_count"] == 8
-    assert payload["gate"] == "green"
-    for row in payload["tasks"]:
-        assert row["happened"] == "Output matched what was expected."
-        assert row["happened"] != "unsure, needs review"
-    text = format_github(_report(harness="cursor-agent", tasks=tasks))
-    assert "unsure, needs review" not in text
 
 
 def test_happened_and_cli_lead_with_behavior_not_description() -> None:

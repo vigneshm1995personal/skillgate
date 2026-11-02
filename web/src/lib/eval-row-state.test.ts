@@ -93,9 +93,6 @@ describe("taskChip / taskState", () => {
     expect(taskChip({ id: "wrong", status: "done", passed: false })).toBe(
       "fail"
     )
-    expect(
-      taskChip({ id: "c8", status: "warning", passed: true })
-    ).toBe("warning")
   })
 
   it("treats historical rows without status as done only when passed is a boolean", () => {
@@ -238,14 +235,6 @@ describe("suiteResultKind", () => {
   it("is fail when the suite is done and checks did not pass", () => {
     expect(suiteResultKind({ status: "done" }, false, false)).toBe("fail")
     expect(suiteResultKind({ status: "done" }, null, false)).toBe("fail")
-    expect(
-      suiteResultKind(
-        { status: "done", id: "full-red" },
-        false,
-        false,
-        true
-      )
-    ).toBe("fail")
   })
 
   it("is error on a worker error", () => {

@@ -1,6 +1,6 @@
 import { isJudgeScorerCopy, isLegacyRunCopy, JUDGE_SCORED, OLDER_RUN_LABEL } from "@/lib/eval-config"
 import { pathOpenedCaption } from "@/lib/metrics-label"
-import type { JudgeAnswer, JudgeQuestion, JudgeResult, Report, TaskResult } from "@/lib/types"
+import type { JudgeAnswer, JudgeResult, Report, TaskResult } from "@/lib/types"
 
 export const CHECK_QUESTION_ORDER = [
   "task_completion",
@@ -21,105 +21,14 @@ export const CHECK_QUESTION_LABELS: Record<string, string> = {
 
 const PASS_LOCK: Record<string, string[]> = {
   task_completion: ["fully completed"],
-  correctness: ["correct", "mostly correct"],
-  instruction_adherence: ["fully followed", "minor deviation"],
-  evidence_action_validity: ["fully supported", "partially supported", "n/a"],
+  correctness: ["correct"],
+  instruction_adherence: ["fully followed"],
+  evidence_action_validity: ["fully supported", "n/a"],
   result_quality: ["clear and complete", "mostly good"],
 }
 
-const CHOICE_SCORES: Record<string, Record<string, number>> = {
-  task_completion: {
-    "fully completed": 1,
-    "partially completed": 0.5,
-    "not completed": 0,
-  },
-  correctness: {
-    correct: 1,
-    "mostly correct": 0.75,
-    "insufficient evidence": 0.5,
-    incorrect: 0,
-  },
-  instruction_adherence: {
-    "fully followed": 1,
-    "minor deviation": 0.75,
-    "major deviation": 0.25,
-    violated: 0,
-  },
-  evidence_action_validity: {
-    "fully supported": 1,
-    "partially supported": 0.75,
-    "n/a": 1,
-    unsupported: 0,
-  },
-  result_quality: {
-    "clear and complete": 1,
-    "mostly good": 0.75,
-    "significant issues": 0.25,
-    poor: 0,
-  },
-  path_efficiency: {
-    efficient: 1,
-    acceptable: 0.75,
-    looping: 0.25,
-    wasteful: 0,
-  },
-}
-
-const PREDICATE_PASS = 0.8
-const RUBRIC_TEXTS = new Set(
-  [
-    "The test's expected outcome is fully met.",
-    "Some of the requested work is done but incomplete.",
-    "The requested work was not done.",
-    "The result matches the expected outcome.",
-    "Core claims are right with minor errors.",
-    "The result is wrong.",
-    "The delivered result is clear and complete.",
-    "Mostly good with minor quality gaps (still Pass).",
-    "Significant quality issues (Fail).",
-    "Poor quality result (Fail).",
-    "The skill took a direct path: no repeated tool calls, no loops, no wasted steps.",
-    "The skill finished with only minor extra steps and no looping.",
-    "The skill repeated the same or near-same tool calls without making progress.",
-    "The skill spent many tool calls off-task or thrashing.",
-  ].map((item) => item.toLowerCase())
-)
-
 export const CONFIDENCE_WARN = 0.5
 export const UNSURE_REVIEW = "unsure, needs review"
-export const NO_REASON_RECORDED = "No reason recorded"
-export const RUN_FACTS_LABEL = "run facts"
-export const RUN_FACTS_JOB_ID = "run_facts_job_result"
-export const RUN_FACTS_TOOLS_ID = "run_facts_tools_used"
-export const WORDING_OVERRIDE_NOTE =
-  "Wording check passed, so those Fail rows did not turn the gate red."
-export const GUARD_REFUSED_RETRY_NOTE =
-  "A second refund attempt was refused. Only one refund went through."
-export const EXPECTED_REFUND_PREFIX = "The case asked for"
-export const AMOUNT_MISMATCH_PREFIX = "The reply or draft stated"
-export const MATCHED_OUTPUT_LINE = "Output matched what was expected."
-
-const CANNED_WHY_REASONS = new Set(
-  [
-    "This run finished the customer request.",
-    "This run left the customer request unfinished.",
-    "This run did not attempt the customer request.",
-    "The facts on this run are right.",
-    "The facts on this run are wrong.",
-    "The facts on this run only partly match.",
-    "This run followed the skill's rules.",
-    "This run broke a skill rule.",
-    "No skill rule applied on this run.",
-    "This run's tool use is allowed.",
-    "This run's tool use is not allowed.",
-    "This run needed no extra tool use.",
-    "The customer reply on this run is clear.",
-    "The customer reply on this run is not clear.",
-    "This run's path was efficient.",
-    "This run's path wasted steps.",
-    "No short evidence line from this run.",
-  ].map((item) => item.toLowerCase())
-)
 
 const CHECKS_DUMP = /^Checks:\s+/i
 const GENERIC_FAIL = "This check did not pass."
@@ -140,12 +49,7 @@ export type OpenedAnswer = {
   id: string
   label: string
   answer: string
-  score?: number
-  reason?: string
   source?: string
-  passed?: boolean | null
-  warning?: string
-  votes?: string
 }
 
 function trimText(value: unknown): string {
@@ -159,9 +63,6 @@ export function checkSource(value: unknown): string | undefined {
   }
   if (raw === "log" || raw === "from the log") {
     return "from the log"
-  }
-  if (raw === "run" || raw === "run facts" || raw === "from the run") {
-    return "run facts"
   }
   if (raw === "judge" || raw === "from the judge") {
     return "from the judge"
@@ -182,11 +83,7 @@ function mentionsPdf(hint: string): boolean {
 }
 
 function reservedQuestionId(id: string): boolean {
-  return (
-    (CHECK_QUESTION_ORDER as readonly string[]).includes(id) ||
-    id === "path_efficiency" ||
-    id.endsWith("_why")
-  )
+  return (CHECK_QUESTION_ORDER as readonly string[]).includes(id) || id === "path_efficiency"
 }
 
 function extraFailureTexts(task: TaskResult): string[] {
@@ -209,14 +106,6 @@ export function behaviorQuestionIds(task: TaskResult): string[] {
     }
   }
   for (const text of extras) {
-    if (
-      text.startsWith(EXPECTED_REFUND_PREFIX) ||
-      text.startsWith(AMOUNT_MISMATCH_PREFIX) ||
-      /successful refund/i.test(text) ||
-      /billing\/tool log/i.test(text)
-    ) {
-      continue
-    }
     let matched = false
     for (const [id, cell] of Object.entries(cells)) {
       if (trimText(cell?.reason) === text) {
@@ -348,37 +237,6 @@ export function plainFailReason(raw: string, hint = ""): string | null {
   return rest ? scorerCodeToPlain(rest, hint) : null
 }
 
-export function caseRowTitle(task: {
-  id?: string | null
-  name?: string | null
-  prompt?: string | null
-}): string {
-  const name = trimText(task.name)
-  if (name) {
-    return name
-  }
-  const id = trimText(task.id)
-  if (id) {
-    return id
-  }
-  return checkHeadline(task)
-}
-
-export function caseScenario(task: {
-  scenario?: string | null
-  setup?: string | null
-  prompt?: string | null
-}): string {
-  return trimText(task.scenario) || trimText(task.setup) || trimText(task.prompt)
-}
-
-export function formatCheckScore(value: unknown): string {
-  if (typeof value !== "number" || Number.isNaN(value)) {
-    return ""
-  }
-  return value.toFixed(2)
-}
-
 export function checkHeadline(task: {
   id?: string | null
   prompt?: string | null
@@ -404,68 +262,6 @@ export function checkHeadline(task: {
   return `${words.charAt(0).toUpperCase()}${words.slice(1)}.`
 }
 
-export function namedBuiltinFail(task: TaskResult): string | null {
-  const cells = task.judge?.cells ?? {}
-  const answers = task.judge?.answers ?? {}
-  for (const id of CHECK_QUESTION_ORDER) {
-    const cell = cells[id]
-    const answer = answers[id]
-    const choice = trimText(cell?.choice) || trimText(answer?.choice)
-    if (!choice) continue
-    const allowed = PASS_LOCK[id] || []
-    if (allowed.includes(choice.toLowerCase())) continue
-    const label = CHECK_QUESTION_LABELS[id] || id
-    const reason = trimText(cell?.reason) || trimText(answer?.reason)
-    let line = `${label} ${choice}`
-    if (
-      reason &&
-      !line.includes(reason) &&
-      !isBuiltReason(reason) &&
-      !isRunFactReason(reason)
-    ) {
-      line = `${line} — ${reason}`
-    }
-    return line
-  }
-  return null
-}
-
-export function expectedRefundFail(task: TaskResult): string | null {
-  const extras = [
-    ...(task.judge?.extra_failures ?? []),
-    ...(task.judge?.reasons ?? []),
-    ...(task.failures ?? []),
-  ]
-  for (const item of extras) {
-    const text = trimText(item)
-    if (
-      text.startsWith(EXPECTED_REFUND_PREFIX) ||
-      /successful refund/i.test(text)
-    ) {
-      return text
-    }
-  }
-  return null
-}
-
-export function amountMismatchFail(task: TaskResult): string | null {
-  const extras = [
-    ...(task.judge?.extra_failures ?? []),
-    ...(task.judge?.reasons ?? []),
-    ...(task.failures ?? []),
-  ]
-  for (const item of extras) {
-    const text = trimText(item)
-    if (
-      text.startsWith(AMOUNT_MISMATCH_PREFIX) ||
-      /billing\/tool log/i.test(text)
-    ) {
-      return text
-    }
-  }
-  return null
-}
-
 export function happenedLine(task: TaskResult): string {
   const hint = `${task.prompt || ""} ${task.id || ""}`
   if (task.status === "queued") {
@@ -473,58 +269,6 @@ export function happenedLine(task: TaskResult): string {
   }
   if (task.status === "running") {
     return "In progress"
-  }
-  if (task.passed === false) {
-    const counted = expectedRefundFail(task)
-    if (counted) {
-      return counted
-    }
-    const amount = amountMismatchFail(task)
-    if (amount) {
-      return amount
-    }
-    const named = namedBuiltinFail(task)
-    if (named) {
-      return named
-    }
-  }
-  const retry = refusedRetryNote(task)
-  if (retry && task.passed !== false) {
-    return retry
-  }
-  if (task.status === "warning" && task.passed !== false) {
-    const stampedWarning = trimText(task.happened)
-    if (
-      stampedWarning &&
-      stampedWarning !== MATCHED_OUTPUT_LINE &&
-      stampedWarning !== UNSURE_REVIEW &&
-      stampedWarning !== WORDING_OVERRIDE_NOTE
-    ) {
-      return scorerCodeToPlain(stampedWarning, hint)
-    }
-    return GUARD_REFUSED_RETRY_NOTE
-  }
-  const passedClean =
-    task.passed === true &&
-    task.review !== true &&
-    task.status !== "unsure" &&
-    task.status !== "warning"
-  if (passedClean) {
-    const stampedPass = trimText(task.happened)
-    if (
-      stampedPass &&
-      stampedPass !== UNSURE_REVIEW &&
-      stampedPass !== WORDING_OVERRIDE_NOTE &&
-      stampedPass !== MATCHED_OUTPUT_LINE &&
-      !isGenericFail(stampedPass) &&
-      !isChecksDump(stampedPass)
-    ) {
-      return scorerCodeToPlain(stampedPass, hint)
-    }
-    if (task.expect_skill === null && !task.selected_skill) {
-      return "No skill was picked, as expected."
-    }
-    return MATCHED_OUTPUT_LINE
   }
   if (
     (task.review === true || task.status === "unsure") &&
@@ -548,19 +292,22 @@ export function happenedLine(task: TaskResult): string {
     }
     return "Skipped"
   }
+  if (task.passed) {
+    const stampedPass = trimText(task.happened)
+    if (stampedPass && !isGenericFail(stampedPass) && !isChecksDump(stampedPass)) {
+      return scorerCodeToPlain(stampedPass, hint)
+    }
+    if (task.expect_skill === null && !task.selected_skill) {
+      return "No skill was picked, as expected."
+    }
+    return "Output matched what was expected."
+  }
   const behavior = behaviorQuestionIds(task)
   if (behavior.length) {
     return behaviorFailLine(behavior[0])
   }
   const stamped = trimText(task.happened)
-  if (
-    stamped &&
-    stamped !== MATCHED_OUTPUT_LINE &&
-    stamped !== WORDING_OVERRIDE_NOTE &&
-    !(task.passed === false && stamped === GUARD_REFUSED_RETRY_NOTE) &&
-    !isGenericFail(stamped) &&
-    !isChecksDump(stamped)
-  ) {
+  if (stamped && !isGenericFail(stamped) && !isChecksDump(stamped)) {
     return scorerCodeToPlain(stamped, hint)
   }
   const failReason =
@@ -717,208 +464,8 @@ export function scoredByLine(
   return ""
 }
 
-function clampScore(value: number): number {
-  if (value < 0) return 0
-  if (value > 1) return value <= 10 ? value / 10 : 1
-  return value
-}
-
-function choiceOutcomeScore(id: string, choice: string): number | undefined {
-  const mapped = CHOICE_SCORES[id]?.[choice.trim().toLowerCase()]
-  return typeof mapped === "number" ? mapped : undefined
-}
-
-function answerScore(
-  id: string,
-  choice: string,
-  answer?: JudgeAnswer | null,
-  cell?: { probability?: number; confidence?: number; score?: number } | null,
-  listed?: { score?: number } | null
-): number | undefined {
-  for (const value of [answer?.probability, cell?.probability, answer?.score, cell?.score]) {
-    if (typeof value === "number" && !Number.isNaN(value)) {
-      return clampScore(value)
-    }
-  }
-  const mapped = choiceOutcomeScore(id, choice)
-  if (mapped != null) return mapped
-  const guessed = cellWouldPass(id, choice)
-  if (guessed != null) return guessed ? 1 : 0
-  if (typeof listed?.score === "number" && !Number.isNaN(listed.score)) {
-    return clampScore(listed.score)
-  }
-  return undefined
-}
-
-function cellWouldPass(id: string, choice: string): boolean | null {
-  const text = choice.trim().toLowerCase()
-  if (!text) return null
-  if (PASS_LOCK[id]) {
-    return PASS_LOCK[id].includes(text)
-  }
-  if (id === "path_efficiency") {
-    if (text === "efficient" || text === "acceptable") return true
-    if (text in (CHOICE_SCORES.path_efficiency || {})) return false
-    return null
-  }
-  if (["yes", "pass", "true", "1"].includes(text)) return true
-  if (["no", "fail", "false", "0"].includes(text)) return false
-  return null
-}
-
-function reasonRepeatsPrompt(label: string, choice: string, reason: string): boolean {
-  const compact = reason.trim().replace(/\s+/g, " ")
-  const ask = label.trim().replace(/\s+/g, " ")
-  if (!compact) return true
-  if (ask && compact === ask) return true
-  if (choice && compact.toLowerCase() === choice.trim().toLowerCase()) return true
-  if (ask && choice && compact === `${ask} ${choice}`.trim()) return true
-  if (
-    ask &&
-    compact.toLowerCase().startsWith(ask.toLowerCase()) &&
-    (!choice || compact.toLowerCase().endsWith(choice.trim().toLowerCase()))
-  ) {
-    return true
-  }
-  return false
-}
-
-function isRunFactReason(reason: string): boolean {
-  const text = reason.trim()
-  return (
-    text.startsWith("Job result in the reply:") ||
-    text.startsWith("Job expected:") ||
-    text.startsWith("Facts in the reply:") ||
-    text.startsWith("Facts expected:") ||
-    text.startsWith("Listed skill rule:") ||
-    text.startsWith("Reply checked against the rules:") ||
-    text.startsWith("Tools used:") ||
-    text.startsWith("Evidence in the reply:") ||
-    text.startsWith("Customer-facing reply:") ||
-    text.startsWith("Run path:")
-  )
-}
-
-function isBuiltReason(reason: string): boolean {
-  const text = reason.trim()
-  if (!text) return false
-  const compact = text.toLowerCase().replace(/\.+$/, "")
-  if (CANNED_WHY_REASONS.has(text.toLowerCase()) || CANNED_WHY_REASONS.has(`${compact}.`)) {
-    return true
-  }
-  if (isRunFactReason(text)) return true
-  if (
-    text.startsWith("Connector calls:") ||
-    text.startsWith("The agent replied:") ||
-    text.startsWith("Expected outcome:") ||
-    text.startsWith("No short evidence")
-  ) {
-    return true
-  }
-  return (
-    text.includes(" on this run. Connector") || text.includes(" on this run. Reply:")
-  )
-}
-
-function isCleanPass(task: TaskResult): boolean {
-  return (
-    task.passed === true &&
-    task.review !== true &&
-    task.status !== "unsure" &&
-    task.judge?.review !== true
-  )
-}
-
-function isHardFail(task: TaskResult): boolean {
-  return task.passed === false
-}
-
-export function wordingOverrideNote(_task: TaskResult): string | null {
-  return null
-}
-
-export function refusedRetryNote(task: TaskResult): string | null {
-  const warnings = task.judge?.warnings
-  if (!Array.isArray(warnings)) {
-    return null
-  }
-  return warnings.some((item) => String(item).trim() === GUARD_REFUSED_RETRY_NOTE)
-    ? GUARD_REFUSED_RETRY_NOTE
-    : null
-}
-
-function isRubricReason(
-  reason: string,
-  question?: JudgeQuestion | null
-): boolean {
-  const text = reason.trim()
-  if (!text) return false
-  if (RUBRIC_TEXTS.has(text.toLowerCase())) return true
-  const criteria = question?.criteria
-  if (criteria && typeof criteria === "object" && !Array.isArray(criteria)) {
-    return Object.values(criteria).some(
-      (value) => typeof value === "string" && value.trim() === text
-    )
-  }
-  return false
-}
-
-function openedReason(
-  _task: TaskResult,
-  _id: string,
-  choice: string,
-  label: string,
-  answer?: JudgeAnswer | null,
-  cell?: { reason?: string | null } | null,
-  listed?: { reason?: string } | null,
-  question?: JudgeQuestion | null
-): string {
-  const texts = [
-    trimText(answer?.reason),
-    trimText(cell?.reason),
-    trimText(listed?.reason),
-  ].filter(Boolean)
-  for (const text of texts) {
-    if (isRubricReason(text, question)) continue
-    if (isRunFactReason(text)) continue
-    if (isBuiltReason(text)) continue
-    if (reasonRepeatsPrompt(label, choice, text)) continue
-    return text
-  }
-  return NO_REASON_RECORDED
-}
-
-export function votesLine(votes: unknown, key: string): string | undefined {
-  if (!Array.isArray(votes) || votes.length === 0) {
-    return undefined
-  }
-  const bits: string[] = []
-  votes.forEach((blob, index) => {
-    if (!blob || typeof blob !== "object") {
-      return
-    }
-    const row = (blob as Record<string, { choice?: string } | undefined>)[key]
-    const choice = trimText(row?.choice)
-    if (choice) {
-      bits.push(`${index + 1} ${choice}`)
-    }
-  })
-  return bits.length ? `votes: ${bits.join("; ")}` : undefined
-}
-
-function openedPassed(
-  id: string,
-  choice: string,
-  score: number | undefined,
-  cell?: { passed?: boolean; status?: string } | null,
-  listed?: { passed?: boolean } | null
-): boolean | null {
-  if (typeof cell?.passed === "boolean") return cell.passed
-  if (typeof listed?.passed === "boolean") return listed.passed
-  const guessed = cellWouldPass(id, choice)
-  if (guessed != null) return guessed
-  if (score != null) return score >= PREDICATE_PASS
-  return null
+function cellWouldPass(id: string, choice: string): boolean {
+  return PASS_LOCK[id]?.includes(choice.trim().toLowerCase()) ?? false
 }
 
 function hasConfidenceChannel(judge: JudgeResult | null | undefined): boolean {
@@ -940,7 +487,7 @@ function hasConfidenceChannel(judge: JudgeResult | null | undefined): boolean {
 }
 
 export function lowConfidenceWarning(task: TaskResult): string | null {
-  if (isCleanPass(task) || isHardFail(task) || workDidNotHappen(task)) {
+  if (workDidNotHappen(task)) {
     return null
   }
   const judge = task.judge
@@ -978,18 +525,10 @@ export function lowConfidenceWarning(task: TaskResult): string | null {
 }
 
 export function suiteUnsureWarning(
-  report?: Pick<Report, "tasks" | "gate" | "passed"> | null
+  report?: Pick<Report, "tasks" | "gate"> | null
 ): string | null {
   if (report?.gate === "needs review") {
     return UNSURE_REVIEW
-  }
-  if (
-    report?.gate === "green" ||
-    report?.gate === "red" ||
-    report?.passed === true ||
-    report?.passed === false
-  ) {
-    return null
   }
   for (const task of report?.tasks ?? []) {
     if (lowConfidenceWarning(task)) {
@@ -1019,63 +558,12 @@ export function openedCheckAnswers(task: TaskResult): OpenedAnswer[] {
   }
   const unchecked = workDidNotHappen(task)
   const failedBehavior = new Set(behaviorQuestionIds(task))
-  const stampOpened = (
-    id: string,
-    row: OpenedAnswer,
-    choice: string,
-    answer?: JudgeAnswer | null,
-    cell?: {
-      probability?: number
-      confidence?: number
-      score?: number
-      reason?: string | null
-      passed?: boolean
-      status?: string
-      warning?: string
-    } | null,
-    listedRow?: { score?: number; reason?: string; passed?: boolean; warning?: string } | null,
-    question?: JudgeQuestion | null
-  ): OpenedAnswer => {
-    const score = answerScore(id, choice, answer, cell, listedRow)
-    if (score != null) row.score = score
-    const reason = openedReason(
-      task,
-      id,
-      choice,
-      row.label,
-      answer,
-      cell,
-      listedRow,
-      question
-    )
-    if (reason) row.reason = reason
-    if (reason && isRunFactReason(reason) && !reservedQuestionId(id)) {
-      row.source = RUN_FACTS_LABEL
-    } else if (reason === NO_REASON_RECORDED && row.source === "from the judge") {
-      row.source = undefined
-    }
-    const votes = votesLine(task.judge?.votes, id)
-    if (votes) row.votes = votes
-    const passed = openedPassed(id, choice, score, cell, listedRow)
-    if (passed != null) row.passed = passed
-    const warning = trimText(cell?.warning) || trimText(answer?.warning) || trimText(listedRow?.warning)
-    if (warning === GUARD_REFUSED_RETRY_NOTE) {
-      row.warning = warning
-      row.passed = true
-      row.score = 1
-    }
-    return row
-  }
   const builtins = CHECK_QUESTION_ORDER.map((id) => {
     const question = task.judge?.questions?.[id]
     const choice =
       trimText(answers?.[id]?.choice) || trimText(cells?.[id]?.choice)
-    const unsure =
-      !isCleanPass(task) && !isHardFail(task) && cells?.[id]?.status === "unsure"
-    const listedRow = listed.find(
-      (row) => trimText(row?.id) === id || trimText(row?.label) === (CHECK_QUESTION_LABELS[id] || "")
-    )
-    const row: OpenedAnswer = {
+    const unsure = cells?.[id]?.status === "unsure"
+    return {
       id,
       label: trimText(question?.instructions) || CHECK_QUESTION_LABELS[id] || id,
       answer: unchecked
@@ -1083,65 +571,18 @@ export function openedCheckAnswers(task: TaskResult): OpenedAnswer[] {
         : unsure
           ? UNSURE_REVIEW
           : choice || "—",
-      source: checkSource(
-        answers?.[id]?.source ||
-          cells?.[id]?.source ||
-          listedRow?.source_label ||
-          listedRow?.source ||
-          "judge"
-      ),
     }
-    return stampOpened(id, row, choice, answers?.[id], cells?.[id], listedRow, question)
   })
   const seen = new Set<string>(CHECK_QUESTION_ORDER)
+  seen.add("path_efficiency")
   const extras: OpenedAnswer[] = []
-  const pathChoice =
-    trimText(answers?.path_efficiency?.choice) ||
-    trimText(cells?.path_efficiency?.choice) ||
-    trimText(task.judge?.soft_answers?.path_efficiency?.choice)
-  if (
-    !unchecked &&
-    (pathChoice || cells?.path_efficiency || answers?.path_efficiency)
-  ) {
-    seen.add("path_efficiency")
-    const listedRow = listed.find(
-      (row) =>
-        trimText(row?.id) === "path_efficiency" ||
-        trimText(row?.label) === "How it ran"
-    )
-    const pathCell = cells?.path_efficiency
-    extras.push(
-      stampOpened(
-        "path_efficiency",
-        {
-          id: "path_efficiency",
-          label: "How it ran",
-          answer: unchecked ? "Not checked" : pathChoice || "—",
-          source: checkSource(
-            answers?.path_efficiency?.source ||
-              pathCell?.source ||
-              listedRow?.source_label ||
-              listedRow?.source ||
-              "judge"
-          ),
-        },
-        pathChoice,
-        answers?.path_efficiency || task.judge?.soft_answers?.path_efficiency,
-        pathCell,
-        listedRow,
-        task.judge?.questions?.path_efficiency || task.judge?.soft_questions?.path_efficiency
-      )
-    )
-  } else {
-    seen.add("path_efficiency")
-  }
   const extraIds = [
     ...Object.keys(answers ?? {}),
     ...Object.keys(cells ?? {}),
     ...Object.keys(task.judge?.questions ?? {}),
   ]
   for (const id of extraIds) {
-    if (seen.has(id) || reservedQuestionId(id)) {
+    if (seen.has(id)) {
       continue
     }
     seen.add(id)
@@ -1179,9 +620,7 @@ export function openedCheckAnswers(task: TaskResult): OpenedAnswer[] {
     if (source) {
       extra.source = source
     }
-    extras.push(
-      stampOpened(id, extra, choice, answers?.[id], cell, listedRow, question)
-    )
+    extras.push(extra)
   }
   const builtinLabels = new Set(Object.values(CHECK_QUESTION_LABELS))
   for (const [index, row] of listed.entries()) {
@@ -1190,54 +629,20 @@ export function openedCheckAnswers(task: TaskResult): OpenedAnswer[] {
       !label ||
       extras.some((item) => item.label === label) ||
       builtinLabels.has(label) ||
-      reservedQuestionId(trimText(row?.id))
+      reservedQuestionId(trimText(row?.id)) ||
+      label === "How it ran"
     ) {
       continue
     }
     const source = checkSource(row?.source_label || row?.source)
-    const listedChoice = trimText(row?.answer)
-    extras.push(
-      stampOpened(
-        trimText(row?.id) || `listed-${index}`,
-        {
-          id: trimText(row?.id) || `listed-${index}`,
-          label,
-          answer: listedChoice || "—",
-          ...(source ? { source } : {}),
-        },
-        listedChoice,
-        null,
-        null,
-        row,
-        null
-      )
-    )
-  }
-  const seenIds = new Set([...builtins, ...extras].map((row) => row.id))
-  const facts: OpenedAnswer[] = []
-  const addFact = (id: string, label: string, reason: string) => {
-    if (!reason || seenIds.has(id)) {
-      return
-    }
-    seenIds.add(id)
-    facts.push({
-      id,
+    extras.push({
+      id: trimText(row?.id) || `listed-${index}`,
       label,
-      answer: reason,
-      reason,
-      source: RUN_FACTS_LABEL,
-      passed: true,
+      answer: trimText(row?.answer) || "—",
+      ...(source ? { source } : {}),
     })
   }
-  for (const id of CHECK_QUESTION_ORDER) {
-    const reason = trimText(answers?.[id]?.reason) || trimText(cells?.[id]?.reason)
-    if (reason.startsWith("Job result in the reply:")) {
-      addFact(RUN_FACTS_JOB_ID, "Job result", reason)
-    } else if (reason.startsWith("Tools used:")) {
-      addFact(RUN_FACTS_TOOLS_ID, "Tools used", reason)
-    }
-  }
-  return [...builtins, ...extras, ...facts]
+  return [...builtins, ...extras]
 }
 
 function looksLikeDidntStart(text: string): boolean {

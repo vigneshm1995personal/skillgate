@@ -155,7 +155,6 @@ def test_ui_copy_has_no_internal_jargon(project_root: Path) -> None:
         assert "function keyPayloadFrom" in js
         assert "<code>${esc(t.id)}</code>" not in js
         assert "function checkHeadline" in js
-        assert "function caseRowTitle" in js
         assert "The skill should run for a matching request." in js
         assert "The skill should stay off for an unrelated request." in js
         assert "Paste an OpenAI key to run live checks and score them" in js
@@ -299,7 +298,6 @@ def test_ui_wizard_is_setup_only_then_skill_page(project_root: Path) -> None:
     assert "live: true" in js
     assert "function checksFromPack" in js
     assert "function checkHeadline" in js
-    assert "function caseRowTitle" in js
     pack = js.split("async function renderPack")[1].split("async function startCheck")[0]
     assert "params.get(\"run\")" not in pack
     assert "params.get(\"live\")" not in pack
@@ -631,11 +629,9 @@ def test_ui_new_pack_no_key_is_409(project_root: Path, tmp_path: Path) -> None:
 def test_app_js_check_detail_helpers_run_in_node(project_root: Path, tmp_path: Path) -> None:
     js = (project_root / "src/skillgate_ai/local_ui/static/app.js").read_text(encoding="utf-8")
     esc = js[js.index("function esc(") : js.index("function packHref")]
-    titles = js[js.index("function caseRowTitle") : js.index("function validateName")]
     helpers = js[js.index("function happenedLine") : js.index("function setRunButtonsDisabled")]
     script = (
         esc
-        + titles
         + helpers
         + """
 const pass = happenedLine({passed: true, happened: "Output matched what was expected."});
@@ -707,29 +703,6 @@ if (detailInnerHtml({
 }).includes("should not show")) {
   process.exit(15);
 }
-if (caseRowTitle({id: "c3-pending", name: "Pending refund — do not claim submitted", prompt: "A customer wrote in asking for a refund."}) !== "Pending refund — do not claim submitted") process.exit(20);
-if (caseRowTitle({id: "c3-pending", prompt: "A customer wrote in asking for a refund."}) !== "c3-pending") process.exit(21);
-const refundHtml = detailInnerHtml({
-  name: "Pending refund — do not claim submitted",
-  scenario: "Dana asked to refund $49. The payments connector returned pending.",
-  check_kind: "openai",
-  check_answers: [{
-    label: "The reply follows the skill's wording.",
-    answer: "No",
-    score: 0,
-    reason: "The reply uses banned wording.",
-    source_label: "from the log/text"
-  }],
-  reply: "I've submitted a full refund of USD 49.00.",
-  tool_calls: [{name: "issue_refund", arguments: {charge: "ch_3QX81"}, response: {status: "pending"}}]
-});
-if (!refundHtml.includes("Dana asked")) process.exit(22);
-if (!refundHtml.includes("0.00")) process.exit(23);
-if (!refundHtml.includes("from the log/text")) process.exit(24);
-if (!refundHtml.includes("banned wording")) process.exit(25);
-if (!refundHtml.includes("Agent reply")) process.exit(26);
-if (!refundHtml.includes("issue_refund")) process.exit(27);
-if (!refundHtml.includes("pending")) process.exit(28);
 process.stdout.write("ok");
 """
     )
