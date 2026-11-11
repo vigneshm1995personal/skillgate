@@ -33,3 +33,12 @@ Docker: `docker build -t skillgate:test --target runtime .` then `docker run --r
 ## Agent skills
 
 Always apply the skills in `.cursor/skills`: plan-mode, clean-coder, test-driven-vibe, frontend-design (UI), error-driven-debugger (bugs). Run tests locally and push only when green.
+
+## Token budget
+
+- Read only the files you need; do not reread unchanged ones.
+- Prefer search (`rg`) over whole-file reads.
+- Run the tests once at the end, not repeatedly.
+- Summarize logs instead of pasting them.
+- Stop when the acceptance criteria are met.
+- Wrap noisy commands (tests, git, builds) with `rtk` when available (https://github.com/rtk-ai/rtk).

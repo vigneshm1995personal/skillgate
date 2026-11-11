@@ -1,0 +1,37 @@
+# Dependencies / virtualenvs
+node_modules/
+.venv/
+venv/
+
+# Build output
+dist/
+build/
+*.egg-info/
+web/*.tsbuildinfo
+src/skillgate_ai/web_static/
+
+# Caches / coverage
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.skillgate/
+.next/
+coverage/
+htmlcov/
+.coverage
+
+# Runtime data and logs
+uploads/
+*.log
+evals/history/
+
+# Heavy docs assets
+docs/screenshots/
+
+# Lockfiles
+web/pnpm-lock.yaml
+
+# OS
+.DS_Store
