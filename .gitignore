@@ -30,3 +30,7 @@ evals/history/*.jsonl
 !.env.example
 uv.lock
 skillgate.db
+
+# QA harness output
+qa-results.json
+qa-results-logs/
