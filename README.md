@@ -1,42 +1,55 @@
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="web/public/sg-mark-dark.svg">
-    <img alt="skillgate" src="web/public/sg-mark-light.svg" width="96" height="96">
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/vigneshm1995personal/skillgate/main/web/public/sg-mark-dark.svg">
+    <img alt="Skill Gate" src="https://raw.githubusercontent.com/vigneshm1995personal/skillgate/main/web/public/sg-mark-light.svg" width="96" height="96">
   </picture>
 </p>
 
-<h1 align="center">skillgate</h1>
+# Skill Gate
 
-<p align="center">A local gate for agent skills.</p>
+Evaluate agent skills before you ship them. Local LLM evals that catch regressions, compare models on cost vs quality, and deploy to Claude Code, Cursor, and Codex.
 
 <p align="center">
-  <a href="https://pypi.org/project/skillgate-ai/"><img alt="PyPI" src="https://img.shields.io/pypi/v/skillgate-ai"></a>
-  <a href="https://pypi.org/project/skillgate-ai/"><img alt="Python 3.11+" src="https://img.shields.io/badge/python-3.11%2B-blue"></a>
+  <a href="https://pypi.org/project/skillgate-ai/"><img alt="PyPI version" src="https://img.shields.io/pypi/v/skillgate-ai"></a>
+  <a href="https://pypi.org/project/skillgate-ai/"><img alt="Python versions" src="https://img.shields.io/pypi/pyversions/skillgate-ai"></a>
   <a href="https://github.com/vigneshm1995personal/skillgate/actions/workflows/gate.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/vigneshm1995personal/skillgate/gate.yml?branch=main&label=CI"></a>
-  <a href="LICENSE"><img alt="License" src="https://img.shields.io/github/license/vigneshm1995personal/skillgate"></a>
+  <a href="https://github.com/vigneshm1995personal/skillgate/blob/main/LICENSE"><img alt="License" src="https://img.shields.io/github/license/vigneshm1995personal/skillgate"></a>
 </p>
+
+```bash
+pip install skillgate-ai
+```
+
+Site: [skill-gate-ai.app](https://www.skill-gate-ai.app/) · Docs: [Documentation](https://www.skill-gate-ai.app/docs) · Source: [GitHub](https://github.com/vigneshm1995personal/skillgate)
 
 skillgate checks an agent skill that lives in a folder on your machine. A pack is `SKILL.md` plus `evals/`. `skillgate check` exits 0 when the run passes, 1 when it fails, and 2 when it cannot run. Live checks are scored only by a decision model you select. Requires Python 3.11+. The package name is `skillgate-ai` (`pip install skillgate` is a different project).
 
 <p align="center">
-  <img alt="Local UI on the pdf example, before a live check" src="docs/screenshots/readme-hero-light.png" width="880">
+  <img alt="Local UI on the pdf example, before a live check" src="https://raw.githubusercontent.com/vigneshm1995personal/skillgate/main/docs/screenshots/readme-hero-light.png" width="880">
 </p>
+
+## Why Skill Gate
+
+- **Evaluate agent skills locally.** One pack on disk, checked with `skillgate check`. No Skill Gate account.
+- **Catch regressions.** Pin cases in `evals/`, run them in CI, and compare two versions of the same dataset.
+- **Pick a model on cost vs quality.** `skillgate compare models` runs the same pack on more than one agent arm and records spend.
+- **Deploy to Claude Code, Cursor, and Codex.** After a passing check, `skillgate deploy` copies skill files into the matching agent folder.
 
 ## Quickstart
 
-Python 3.11+. On Debian, Ubuntu, and Homebrew Python, `pip install` needs a virtualenv or pipx (PEP 668). Longer walkthrough: [10-minute quickstart](docs/quickstart.md).
+Python 3.11+. On Debian, Ubuntu, and Homebrew Python, `pip install` needs a virtualenv or pipx (PEP 668). Longer walkthrough: [10-minute quickstart](https://github.com/vigneshm1995personal/skillgate/blob/main/docs/quickstart.md).
 
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate   # Windows: .venv\Scripts\activate
-pip install skillgate-ai==0.7.15
-# or: pipx install skillgate-ai==0.7.15
+pip install skillgate-ai==0.7.16
+# or: pipx install skillgate-ai==0.7.16
 skillgate examples install
 skillgate check skills/json-response
 skillgate check skills/json-response-sabotaged
 ```
 
-`skillgate examples install` writes six skills under `skills/`. Files already in that folder stay as they are. `skills/json-response` exits 0 when the live run is green. `skills/json-response-sabotaged` exits 1: the JSON checks fail, and the unrelated check can pass. Both checks exit 2 until an agent is available and a decision model is selected. Use `skillgate login` or `skillgate keys set` for the agent ([Sign in an agent](#sign-in-an-agent)), and `skillgate judge provider set` for the decision model. This repo tracks 0.7.15. PyPI latest is `skillgate-ai==0.7.15` (same behavior as 0.7.12; do not use 0.7.13 or 0.7.14). Clone and `pip install -e .` when hacking on the tool itself. A check that never starts is saved as not scored. `skillgate import` of a skill already in this project stops and leaves the files alone. A decision-model key is not an agent login.
+`skillgate examples install` writes six skills under `skills/`. Files already in that folder stay as they are. `skills/json-response` exits 0 when the live run is green. `skills/json-response-sabotaged` exits 1: the JSON checks fail, and the unrelated check can pass. Both checks exit 2 until an agent is available and a decision model is selected. Use `skillgate login` or `skillgate keys set` for the agent ([Sign in an agent](#sign-in-an-agent)), and `skillgate judge provider set` for the decision model. This repo tracks 0.7.16. PyPI latest is `skillgate-ai==0.7.16` (same behavior as 0.7.12; do not use 0.7.13 or 0.7.14). Clone and `pip install -e .` when hacking on the tool itself. A check that never starts is saved as not scored. `skillgate import` of a skill already in this project stops and leaves the files alone. A decision-model key is not an agent login.
 
 The same steps in the local UI:
 
@@ -193,7 +206,7 @@ skillgate new notes-helper
 
 A dataset is `evals/cases.yaml` plus small files in `evals/fixtures/` and expected files in `evals/goldens/`. The folder name, the `name` in `SKILL.md`, and `skill` in `cases.yaml` are the same string. Start with 3 to 6 pinned cases: one behavior, one edge, and one unrelated prompt (`should_trigger: false`). Keep the expected sentence out of the prompt. If the right answer is an escalation or refusal, put that in the golden: built-in checks grade against that expected outcome, so doing it is Fully completed. The examples do this: `json-response` flattens an API body, `readme-writer` turns a brief into a README, `log-summarizer` counts errors, `sql-writer` writes a query from a schema (and refuses a missing column), and `receipt-extractor` reads a fictional receipt. `json-response-sabotaged` uses the same JSON cases and fails them.
 
-A red names the failing check and includes the judge's reason (`Got the job done? …`). When a blocking answer's confidence is below 0.5, the judge is re-asked up to 3 times and the majority wins. Blocking checks are **Got the job done?**, **Got it right?**, **Followed the rules?**, **Used the right evidence/actions?**, and **Delivered a good result?** (`How it ran` is warn-only). Individual votes are in `tasks[].judge.votes` (`skillgate check --json` or `skillgate history show RUN --json`). `--no-judge` still needs a signed-in agent. List run ids with `skillgate history --pack skills/json-response`, then `skillgate history show RUN --pack skills/json-response` reprints a saved named red offline. Details: [Bring your own judge](docs/judge.md).
+A red names the failing check and includes the judge's reason (`Got the job done? …`). When a blocking answer's confidence is below 0.5, the judge is re-asked up to 3 times and the majority wins. Blocking checks are **Got the job done?**, **Got it right?**, **Followed the rules?**, **Used the right evidence/actions?**, and **Delivered a good result?** (`How it ran` is warn-only). Individual votes are in `tasks[].judge.votes` (`skillgate check --json` or `skillgate history show RUN --json`). `--no-judge` still needs a signed-in agent. List run ids with `skillgate history --pack skills/json-response`, then `skillgate history show RUN --pack skills/json-response` reprints a saved named red offline. Details: [Bring your own judge](https://github.com/vigneshm1995personal/skillgate/blob/main/docs/judge.md).
 
 Check a dataset on disk, then run it:
 
@@ -205,7 +218,7 @@ skillgate check skills/json-response
 
 In the UI, open the skill from Skill Repository and click **Evaluate this skill**, then **Run**.
 
-The full guide, with a copy-paste pack and the mistakes that reject a dataset, is [Writing a dataset](docs/writing-a-dataset.md). The same page is on the docs site: [Writing a dataset](https://www.skill-gate-ai.app/docs/writing-a-dataset).
+The full guide, with a copy-paste pack and the mistakes that reject a dataset, is [Writing a dataset](https://github.com/vigneshm1995personal/skillgate/blob/main/docs/writing-a-dataset.md). The same page is on the docs site: [Writing a dataset](https://www.skill-gate-ai.app/docs/writing-a-dataset).
 
 ## Docker
 
@@ -237,7 +250,7 @@ jobs:
           SKILLGATE_JEV_API_KEY: ${{ secrets.SKILLGATE_JEV_API_KEY }}
 ```
 
-`path` is a skill pack or a suite file. The default is `skills`. `version` is the `skillgate-ai` release to install. Pin `version: "0.7.15"` (same behavior as 0.7.12; do not use 0.7.13 or 0.7.14). Leave `version` unset only if you accept whatever PyPI lists as latest. `judge` is the decision model id. `model`, `base-url`, and `account-id` are optional. `harness` is optional. `args` holds extra flags, such as `--no-judge` or `--expect-fail`. `--no-judge` skips scoring and still needs a signed-in agent.
+`path` is a skill pack or a suite file. The default is `skills`. `version` is the `skillgate-ai` release to install. Pin `version: "0.7.16"` (same behavior as 0.7.12; do not use 0.7.13 or 0.7.14). Leave `version` unset only if you accept whatever PyPI lists as latest. `judge` is the decision model id. `model`, `base-url`, and `account-id` are optional. `harness` is optional. `args` holds extra flags, such as `--no-judge` or `--expect-fail`. `--no-judge` skips scoring and still needs a signed-in agent.
 
 Pass keys as `SKILLGATE_*` environment variables from the caller secrets. The action does not print those values. It does not switch to another decision model when `judge` is set.
 
@@ -253,4 +266,4 @@ Issues and pull requests are welcome.
 
 ## License
 
-Apache License 2.0. See [LICENSE](LICENSE).
+Apache License 2.0. See [LICENSE](https://github.com/vigneshm1995personal/skillgate/blob/main/LICENSE).

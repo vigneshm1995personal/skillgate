@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 0.7.16
+
+- PyPI metadata: project URLs, classifiers, expanded keywords, and a keyword-rich description.
+- README SEO: install-first pitch, Why Skill Gate, and absolute links so the long description renders on PyPI.
+
 ## 0.7.15
 
 - Revert to 0.7.12 behavior; 0.7.13/0.7.14 regressed.
