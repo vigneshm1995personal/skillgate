@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+import tomllib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -46,10 +48,17 @@ def _strip_heading_section(text: str, heading: str) -> str:
 
 
 def _readme_outside_decision_setup(text: str) -> str:
-    """Vendor names belong in the agent-key and decision-model setup sections."""
+    """Vendor names belong in the pitch, Why Skill Gate, and agent/judge setup."""
     out = text
-    for heading in ("## Sign in an agent", "## Set up a decision model"):
+    for heading in (
+        "## Why Skill Gate",
+        "## Sign in an agent",
+        "## Set up a decision model",
+    ):
         out = _strip_heading_section(out, heading)
+    first = out.find("\n## ")
+    if first >= 0:
+        out = out[first:]
     return out
 
 
@@ -89,17 +98,17 @@ def test_package_and_docs_pin_078() -> None:
     readme = README.read_text(encoding="utf-8")
     quickstart = QUICKSTART.read_text(encoding="utf-8")
     judge = (ROOT / "docs" / "judge.md").read_text(encoding="utf-8")
-    assert 'version = "0.7.15"' in pyproject
-    assert '__version__ = "0.7.15"' in init
+    assert 'version = "0.7.16"' in pyproject
+    assert '__version__ = "0.7.16"' in init
     assert "pip install skillgate-ai" in readme
-    assert "0.7.15" in readme
+    assert "0.7.16" in readme
     assert "0.7.12" in readme
     assert "Until 0.7.12 is published" not in quickstart
     assert "Until 0.7.12 is published" not in judge
-    assert "skillgate-ai==0.7.15" in quickstart
-    assert "skillgate-ai==0.7.15" in judge
-    assert 'version: "0.7.15"' in quickstart or "version: 0.7.15" in quickstart
-    assert 'version: "0.7.15"' in judge
+    assert "skillgate-ai==0.7.16" in quickstart
+    assert "skillgate-ai==0.7.16" in judge
+    assert 'version: "0.7.16"' in quickstart or "version: 0.7.16" in quickstart
+    assert 'version: "0.7.16"' in judge
     assert "# 10-minute" in quickstart
 
 
@@ -329,3 +338,86 @@ def test_oct_extract_plans_are_marked_historical() -> None:
         text = (ROOT / "docs" / "plans" / name).read_text(encoding="utf-8")
         head = "\n".join(text.splitlines()[:8]).lower()
         assert "historical" in head, name
+
+
+def test_pyproject_pypi_metadata() -> None:
+    project = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))["project"]
+    description = project["description"].lower()
+    assert "evaluate agent skills" in description
+    assert "cursor" in description and "claude" in description and "codex" in description
+    keywords = set(project["keywords"])
+    for word in (
+        "agent-skills",
+        "ai-agents",
+        "llm-evaluation",
+        "evals",
+        "claude-code",
+        "cursor",
+        "codex",
+        "cli",
+        "ci",
+    ):
+        assert word in keywords, word
+    classifiers = set(project["classifiers"])
+    for item in (
+        "Development Status :: 4 - Beta",
+        "Intended Audience :: Developers",
+        "License :: OSI Approved :: Apache Software License",
+        "Programming Language :: Python :: 3.11",
+        "Programming Language :: Python :: 3.12",
+        "Topic :: Software Development :: Testing",
+    ):
+        assert item in classifiers, item
+    urls = project["urls"]
+    assert urls["Homepage"] == "https://www.skill-gate-ai.app/"
+    assert urls["Documentation"] == "https://www.skill-gate-ai.app/docs"
+    assert urls["Source"] == "https://github.com/vigneshm1995personal/skillgate"
+    assert urls["Issues"] == "https://github.com/vigneshm1995personal/skillgate/issues"
+    assert urls["Changelog"] == (
+        "https://github.com/vigneshm1995personal/skillgate/blob/main/CHANGELOG.md"
+    )
+
+
+def test_readme_seo_lead_and_why() -> None:
+    text = README.read_text(encoding="utf-8")
+    lead = text.split("## Quickstart")[0]
+    assert re.search(r"^# Skill Gate", text, re.MULTILINE)
+    lowered = lead.lower()
+    assert "evaluate agent skills" in lowered
+    assert "llm eval" in lowered
+    assert "claude code" in lowered
+    assert "cursor" in lowered
+    assert "codex" in lowered
+    assert "pip install skillgate-ai" in lead
+    assert "https://www.skill-gate-ai.app/" in lead
+    assert "https://www.skill-gate-ai.app/docs" in lead
+    assert "pypi/v/skillgate-ai" in lead
+    assert "pypi/pyversions/skillgate-ai" in lead
+    assert "gate.yml" in lead and "label=CI" in lead
+    assert "github/license/vigneshm1995personal/skillgate" in lead
+    assert "## Why Skill Gate" in text
+    why_start = text.find("## Why Skill Gate")
+    why = text[why_start : text.find("\n## ", why_start + 1)]
+    why_lower = why.lower()
+    assert "regress" in why_lower
+    assert "compare" in why_lower
+    assert "deploy" in why_lower
+
+
+def test_readme_links_are_absolute() -> None:
+    text = README.read_text(encoding="utf-8")
+
+    def _ok(url: str) -> bool:
+        target = url.strip()
+        if target.startswith(("#", "mailto:")):
+            return True
+        return target.startswith(("https://", "http://"))
+
+    for match in re.finditer(r"\[[^\]]+\]\(([^)]+)\)", text):
+        assert _ok(match.group(1)), match.group(1)
+    for match in re.finditer(r'(?:href|src)="([^"]+)"', text):
+        assert _ok(match.group(1)), match.group(1)
+    for match in re.finditer(r'srcset="([^"]+)"', text):
+        for part in match.group(1).split(","):
+            url = part.strip().split()[0]
+            assert _ok(url), url
