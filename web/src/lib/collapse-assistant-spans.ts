@@ -104,7 +104,7 @@ export function leftoverOfCompleted(fragment: string, completed: string): boolea
 
 function isToolSpan(span: OtlpSpan): boolean {
   const name = span.name || ""
-  return name.startsWith("tool.") || name === "skill.select"
+  return name.startsWith("tool.") || name === "skill.select" || name === "skill.load"
 }
 
 function wrapsNgram(fragment: string, intact: string): boolean {

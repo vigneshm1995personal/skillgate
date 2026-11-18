@@ -338,7 +338,7 @@ function pathMechanicalExtras(
   }
 
   extra.push(
-    "Path steps count skill.select and tool.* spans, not assistant turns."
+    "Path steps count skill.select, skill.load, and tool.* spans, not assistant turns."
   )
   const n = path.steps as number
   extra.push(

@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.7.17
+
+- Claude Code harness: allow the native **Skill** tool, stage skills under `.claude/skills/` in the run workdir (Skill Gate does not modify `~/.claude/skills`), and count a Skill tool invocation as opening the skill for trigger evidence and the run timeline. Opt out native staging with `SKILLGATE_CLAUDE_NATIVE_SKILLS=0`. Harness runs keep the host `HOME` / `CLAUDE_CONFIG_DIR` so claude.ai subscription login and API keys work; opt into an isolated config dir with `SKILLGATE_CLAUDE_ISOLATE_CONFIG=1`.
+
 ## 0.7.16
 
 - PyPI metadata: project URLs, classifiers, expanded keywords, and a keyword-rich description.

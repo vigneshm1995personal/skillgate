@@ -123,7 +123,8 @@ export function RunTimeline({
   )
   const commandCount = useMemo(() => {
     const fromSpans = (spans ?? []).filter(
-      (span) => span.name.startsWith("tool.") || span.name === "skill.select"
+      (span) =>
+        span.name.startsWith("tool.") || span.name === "skill.select" || span.name === "skill.load"
     ).length
     return fromSpans || countHarnessCommands(transcript)
   }, [spans, transcript])

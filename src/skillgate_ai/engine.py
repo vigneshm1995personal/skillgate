@@ -914,7 +914,15 @@ def _run_task(
                     )
                 copies.append((src, item.dest))
             staged = skills if task.expect_skill is not None else []
-            prepare_workspace(sandbox.workspace, staged, copies)
+            from skillgate_ai.harness import claude_native_skills_enabled
+
+            prepare_workspace(
+                sandbox.workspace,
+                staged,
+                copies,
+                stage_claude_native=harness.name == "claude"
+                and claude_native_skills_enabled(),
+            )
             if task.trigger_mode:
                 mode = sandbox.workspace / ".skillgate" / "mode"
                 mode.parent.mkdir(parents=True, exist_ok=True)

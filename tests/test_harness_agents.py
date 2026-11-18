@@ -83,6 +83,7 @@ def test_claude_harness_skips_permissions_headless() -> None:
     assert "Bash" in tools
     assert "Edit" in tools
     assert "Write" in tools
+    assert "Skill" in tools
 
 
 def test_codex_harness_approves_headless() -> None:

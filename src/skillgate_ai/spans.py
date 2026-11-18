@@ -115,6 +115,8 @@ def _cursor_tool_span(
             span_name = "tool.write"
         elif tool in {"glob", "grep", "rg", "search"}:
             span_name = "tool.search"
+        elif tool == "skill":
+            span_name = "skill.load"
         else:
             span_name = f"tool.{tool}"
         return make_span(
@@ -290,6 +292,8 @@ def _claude_tool_spans(
             span_name = "tool.write"
         elif tool in {"glob", "grep", "rg", "search"}:
             span_name = "tool.search"
+        elif tool == "skill":
+            span_name = "skill.load"
         else:
             span_name = f"tool.{tool}"
         if tool not in {"bash", "shell", "run"} and summary:

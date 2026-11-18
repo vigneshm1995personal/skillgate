@@ -691,7 +691,7 @@ function skillPathRan(task: TaskResult): boolean {
   }
   for (const span of task.spans ?? []) {
     const name = span.name || ""
-    if (name.startsWith("tool.") || name === "skill.select") {
+    if (name.startsWith("tool.") || name === "skill.select" || name === "skill.load") {
       return true
     }
   }

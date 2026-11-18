@@ -48,14 +48,22 @@ def prepare_workspace(
     workspace: Path,
     skills: list[Skill],
     files: list[tuple[Path, str]],
+    *,
+    stage_claude_native: bool = False,
 ) -> PreparedWorkspace:
     """Copy skills + task fixtures into an isolated workspace."""
     skill_root = workspace / ".skillgate" / "skills"
     skill_root.mkdir(parents=True, exist_ok=True)
+    claude_root: Path | None = None
+    if stage_claude_native:
+        claude_root = workspace / ".claude" / "skills"
+        claude_root.mkdir(parents=True, exist_ok=True)
     catalog_lines = ["# Available skills (name + description only)", ""]
     for skill in skills:
         dest = skill_root / skill.name
         copy_skill_pack(skill.path, dest)
+        if claude_root is not None:
+            copy_skill_pack(skill.path, claude_root / skill.name)
         catalog_lines.append(f"## {skill.name}")
         catalog_lines.append(skill.description)
         catalog_lines.append("")
