@@ -366,7 +366,7 @@ def _normalize_skill(value: str | None) -> str | None:
 
 def _skill_from_path(path: str) -> str | None:
     normalized = path.replace("\\", "/")
-    match = re.search(r"(?:^|/)(?:\.skillgate/)?skills/([^/]+)/", normalized)
+    match = re.search(r"(?:^|/)(?:\.skillgate/|\.claude/)?skills/([^/]+)/", normalized)
     if match:
         return match.group(1)
     parts = Path(normalized).parts

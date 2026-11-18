@@ -390,7 +390,7 @@ _CLAUDE_SYSTEM_PREAMBLE = (
 
 
 # Claude Code 2.1.302: --allowedTools is comma- or space-separated.
-_CLAUDE_WORKSPACE_TOOLS = "Bash,Read,Edit,Write,Glob,Grep"
+_CLAUDE_WORKSPACE_TOOLS = "Bash,Read,Edit,Write,Glob,Grep,Skill"
 
 
 def _claude_code_exec_command(
@@ -722,7 +722,9 @@ class ClaudeCodeHarness:
                     "or set CLAUDE_BIN, then run `skillgate login claude`."
                 ),
             )
-        agent_prompt = _agent_prompt(sandbox.workspace, prompt, skills)
+        agent_prompt = _agent_prompt(
+            sandbox.workspace, prompt, skills, native_claude=True
+        )
         command = _claude_code_exec_command(
             binary,
             _CLAUDE_PREAMBLE + agent_prompt,
@@ -731,6 +733,7 @@ class ClaudeCodeHarness:
         env: dict[str, str] = {"SKILLGATE_TASK": prompt}
         if self.cfg.anthropic_api_key:
             env["ANTHROPIC_API_KEY"] = self.cfg.anthropic_api_key
+        env = _claude_sandbox_env(sandbox.workspace, env)
         proc = _sandbox_run(sandbox, command, env=env, timeout=timeout_sec)
         _raise_if_cannot_run(proc.stdout or "", proc.stderr or "")
         requested = (self.cfg.anthropic_model or "").strip() or None
@@ -742,10 +745,15 @@ class ClaudeCodeHarness:
             )
         model = _claude_used_model(proc.stdout or "")
         transcript = _cursor_transcript(proc.stdout or "", proc.stderr or "")
-        selected = _parse_selected(sandbox.workspace, transcript, skills)
-        read_paths = _collect_read_paths(transcript, _jsonl_spans(proc.stdout or ""))
-        if selected is None:
-            selected = _infer_from_reads(read_paths, skills)
+        stdout = proc.stdout or ""
+        spans = _jsonl_spans(stdout)
+        selected, read_paths = _resolve_trigger_evidence(
+            sandbox.workspace,
+            transcript,
+            skills,
+            stdout=stdout,
+            spans=spans,
+        )
         _write_selection(sandbox.workspace, selected)
         return HarnessResult(
             trigger=TriggerEvidence(
@@ -756,9 +764,9 @@ class ClaudeCodeHarness:
             stdout=proc.stdout,
             stderr=proc.stderr,
             transcript=transcript,
-            spans=_jsonl_spans(proc.stdout or ""),
+            spans=spans,
             returncode=proc.returncode,
-            usage=harness_usage(proc.stdout or ""),
+            usage=harness_usage(stdout),
             auth_mode=AUTH_API_KEY if (self.cfg.anthropic_api_key or "").strip() else AUTH_CLI_LOGIN,
             model=model,
         )
@@ -1043,7 +1051,7 @@ _MODEL_UNAVAILABLE_RE = re.compile(
     re.IGNORECASE,
 )
 _SKILL_FILE_RE = re.compile(
-    r"[^\s'\"`]+/(?:\.skillgate/)?skills/[^/\s'\"`]+/[^\s'\"`]+"
+    r"[^\s'\"`]+/(?:\.skillgate/|\.claude/)?skills/[^/\s'\"`]+/[^\s'\"`]+"
 )
 
 
@@ -1572,12 +1580,120 @@ def _trigger_mode_prompt(task: str) -> str:
     )
 
 
-def _agent_prompt(workspace: Path, task: str, skills: list[Skill]) -> str:
+def _claude_trigger_mode_prompt(task: str) -> str:
+    """Trigger checks for Claude Code: native project skills only."""
+    return (
+        "You are running inside Skill Gate.\n"
+        "Skills are installed under `.claude/skills/` in this workspace. "
+        "Use Claude Code's Skill tool when one fits the task. "
+        "Do not assume a skill was pre-selected.\n"
+        f"Task:\n{task}"
+    )
+
+
+def _claude_discover_prompt(task: str, skills: list[Skill]) -> str:
+    """No-trigger / unpinned for Claude Code."""
+    catalog = "\n".join(f"- {s.name}: {s.description}" for s in skills)
+    return (
+        "You are running inside Skill Gate.\n"
+        "No skill is pre-selected. Skills live under `.claude/skills/`. "
+        "Read `.skillgate/catalog.md` if it exists for descriptions, "
+        "then use the Skill tool to load at most one skill for the task. "
+        "If none fits, complete the task without a skill and write "
+        '{\"skill\": null} to `.skillgate/selected.json`.\n'
+        "If you load a skill with the Skill tool, also write "
+        '{\"skill\": \"<name>\"} to `.skillgate/selected.json`.\n\n'
+        f"Skills:\n{catalog}\n\nTask:\n{task}"
+    )
+
+
+def _claude_skill_paths(skill_name: str) -> tuple[str, str]:
+    skill_md = f".claude/skills/{skill_name}/SKILL.md"
+    entry = f".claude/skills/{skill_name}/scripts/agent_entry.py"
+    return skill_md, entry
+
+
+def _claude_prompt(
+    task: str,
+    skills: list[Skill],
+    *,
+    pinned_skill: str | None = None,
+) -> str:
+    """Claude Code prompt when Gate pinned a skill (or explicit null pin)."""
+    if pinned_skill:
+        skill_md, entry = _claude_skill_paths(pinned_skill)
+        parts = [
+            "You are running inside Skill Gate.",
+            f"The skill `{pinned_skill}` is already selected "
+            "and written to `.skillgate/selected.json` for scorers. "
+            "Do **not** read `.skillgate/catalog.md` or `.skillgate/selected.json`, "
+            "open other skills, or rewrite the selection.",
+            "Load and follow that skill using Claude Code's **Skill** tool "
+            f"(project skills under `.claude/skills/`). You may read `{skill_md}` "
+            "if you need the file on disk, but prefer the Skill tool when available.",
+        ]
+        if _pinned_has_agent_entry(skills, pinned_skill):
+            parts.append(
+                f"After loading the skill, before writing output files, run exactly:\n"
+                f"  python3 {entry}\n"
+                "Do **not** hand-write output files that script is meant to create."
+            )
+        else:
+            parts.append(
+                "After loading the skill, follow its SKILL.md and use bundled scripts when they exist."
+            )
+        parts.append("Put user-requested output files where the task says.")
+        parts.append(f"Task:\n{task}")
+        return "\n".join(parts)
+    return (
+        "You are running inside Skill Gate.\n"
+        "No skill is selected for this check "
+        '(.skillgate/selected.json has {"skill": null}). '
+        "Do **not** use the Skill tool, browse `.skillgate/catalog.md`, "
+        "or open anything under `.claude/skills/` or `.skillgate/skills/`. "
+        "Complete the task without using skills.\n"
+        f"Task:\n{task}"
+    )
+
+
+def claude_native_skills_enabled() -> bool:
+    """Default on for Claude harness; opt out with SKILLGATE_CLAUDE_NATIVE_SKILLS=0."""
+    raw = os.environ.get("SKILLGATE_CLAUDE_NATIVE_SKILLS", "").strip().lower()
+    return raw not in {"0", "false", "no", "off"}
+
+
+def _claude_sandbox_env(workspace: Path, base: dict[str, str]) -> dict[str, str]:
+    """Keep Claude Code inside the run workdir (no host ``~/.claude/skills``)."""
+    home = workspace / ".skillgate" / "claude-home"
+    home.mkdir(parents=True, exist_ok=True)
+    env = dict(base)
+    env["HOME"] = str(home)
+    env["USERPROFILE"] = str(home)
+    config = home / ".claude"
+    config.mkdir(parents=True, exist_ok=True)
+    env["CLAUDE_CONFIG_DIR"] = str(config)
+    env["CLAUDE_CODE_DISABLE_BUNDLED_SKILLS"] = "1"
+    return env
+
+
+def _agent_prompt(
+    workspace: Path,
+    task: str,
+    skills: list[Skill],
+    *,
+    native_claude: bool = False,
+) -> str:
     if _workspace_trigger_mode(workspace):
+        if native_claude:
+            return _claude_trigger_mode_prompt(task)
         return _trigger_mode_prompt(task)
     pinned = _read_selection(workspace)
     if pinned is _MISSING:
+        if native_claude:
+            return _claude_discover_prompt(task, skills)
         return _cursor_discover_prompt(task, skills)
+    if native_claude:
+        return _claude_prompt(task, skills, pinned_skill=pinned)  # type: ignore[arg-type]
     return _cursor_prompt(task, skills, pinned_skill=pinned)  # type: ignore[arg-type]
 
 
@@ -1694,6 +1810,115 @@ def _parse_selected(workspace: Path, transcript: str, skills: list[Skill]) -> st
     return _parse_skill_json(transcript, skills)
 
 
+def _skill_tool_name_from_args(args: dict[str, Any]) -> str | None:
+    for key in ("skill", "name", "skill_name", "skillName", "command"):
+        raw = args.get(key)
+        if isinstance(raw, str) and raw.strip():
+            return raw.strip()
+    return None
+
+
+def _infer_from_skill_tool(blob: str, skills: list[Skill]) -> str | None:
+    """Skill names from Claude/Cursor ``skillToolCall`` or ``tool_use`` Skill invocations."""
+    known = {skill.name for skill in skills}
+    found: list[str] = []
+    for raw in blob.splitlines():
+        line = raw.strip()
+        if not line.startswith("{"):
+            if "skillToolCall" in line or '"Skill"' in line:
+                match = re.search(
+                    r'"skill"\s*:\s*"([^"]+)"|"name"\s*:\s*"([^"]+)"',
+                    line,
+                )
+                if match:
+                    name = (match.group(1) or match.group(2) or "").strip()
+                    resolved = canonical_skill_name(name, skills) or name
+                    if resolved in known:
+                        found.append(resolved)
+            continue
+        try:
+            obj = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(obj, dict):
+            continue
+        if obj.get("type") == "tool_call" and obj.get("subtype") == "completed":
+            continue
+        chunks: list[dict[str, Any]] = []
+        call = obj.get("tool_call")
+        if isinstance(call, dict):
+            for key, payload in call.items():
+                if key.endswith("ToolCall") and isinstance(payload, dict):
+                    tool = key[: -len("ToolCall")].lower()
+                    args = payload.get("args")
+                    chunks.append(
+                        {"tool": tool, "args": args if isinstance(args, dict) else {}}
+                    )
+        message = obj.get("message")
+        content = message.get("content") if isinstance(message, dict) else None
+        if isinstance(content, list):
+            for part in content:
+                if isinstance(part, dict) and part.get("type") == "tool_use":
+                    args = part.get("input")
+                    chunks.append(
+                        {
+                            "tool": str(part.get("name") or "tool").strip().lower(),
+                            "args": args if isinstance(args, dict) else {},
+                        }
+                    )
+        if obj.get("type") == "tool_use":
+            args = obj.get("input")
+            chunks.append(
+                {
+                    "tool": str(obj.get("name") or "tool").strip().lower(),
+                    "args": args if isinstance(args, dict) else {},
+                }
+            )
+        for item in chunks:
+            if item.get("tool") != "skill":
+                continue
+            args = item.get("args") if isinstance(item.get("args"), dict) else {}
+            name = _skill_tool_name_from_args(args)
+            if not name:
+                continue
+            resolved = canonical_skill_name(name, skills) or name
+            if resolved in known:
+                found.append(resolved)
+    unique = list(dict.fromkeys(found))
+    if len(unique) == 1:
+        return unique[0]
+    return None
+
+
+def _skill_load_path(skill_name: str, workspace: Path) -> str:
+    claude = workspace / ".claude" / "skills" / skill_name / "SKILL.md"
+    if claude.is_file():
+        return f".claude/skills/{skill_name}/SKILL.md"
+    return f".skillgate/skills/{skill_name}/SKILL.md"
+
+
+def _resolve_trigger_evidence(
+    workspace: Path,
+    transcript: str,
+    skills: list[Skill],
+    *,
+    stdout: str = "",
+    spans: list[dict] | None = None,
+) -> tuple[str | None, list[str]]:
+    """Selected skill + read paths for trigger scoring and the UI timeline."""
+    selected = _parse_selected(workspace, transcript, skills)
+    read_paths = _collect_read_paths(transcript, spans)
+    skill_tool = _infer_from_skill_tool(f"{stdout}\n{transcript}", skills)
+    if skill_tool is not None:
+        selected = skill_tool
+        marker = _skill_load_path(skill_tool, workspace)
+        if marker not in read_paths:
+            read_paths = [*read_paths, marker]
+    elif selected is None:
+        selected = _infer_from_reads(read_paths, skills)
+    return selected, read_paths
+
+
 def _parse_skill_json(text: str, skills: list[Skill]) -> str | None:
     match = re.search(r"\{[^{}]*\"skill\"[^{}]*\}", text, re.DOTALL)
     if not match:
@@ -1790,7 +2015,7 @@ def _infer_from_reads(paths: list[str], skills: list[Skill]) -> str | None:
 
 def _skill_name_from_path(path: str) -> str | None:
     normalized = path.replace("\\", "/")
-    match = re.search(r"(?:^|/)(?:\.skillgate/)?skills/([^/]+)/", normalized)
+    match = re.search(r"(?:^|/)(?:\.skillgate/|\.claude/)?skills/([^/]+)/", normalized)
     if match:
         return match.group(1)
     return None

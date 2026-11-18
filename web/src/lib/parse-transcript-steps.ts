@@ -322,7 +322,10 @@ export function countHarnessCommands(transcript: string | null | undefined): num
   const text = (transcript ?? "").trim()
   if (!text) return 0
   if (transcriptHasAgentJson(text)) {
-    return jsonlToSpans(text).filter((span) => span.name.startsWith("tool.") || span.name === "skill.select").length
+    return jsonlToSpans(text).filter(
+      (span) =>
+        span.name.startsWith("tool.") || span.name === "skill.select" || span.name === "skill.load"
+    ).length
   }
   return text.split("\n").filter((line) => {
     const t = line.trim()
@@ -527,6 +530,7 @@ function toolSpanName(tool: string, path: string): string {
   if (["write", "edit", "multiedit", "searchreplace", "applypatch", "str_replace"].includes(t))
     return "tool.write"
   if (["glob", "grep", "rg", "search", "ls"].includes(t)) return "tool.search"
+  if (t === "skill") return "skill.load"
   return `tool.${t}`
 }
 

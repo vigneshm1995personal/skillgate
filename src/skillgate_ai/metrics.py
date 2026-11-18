@@ -2,7 +2,7 @@
 
 Token counts stay on the existing harness ``Usage`` shape — this module never
 estimates dollars or tokens. Path compactness is step count from OTLP spans
-(``tool.*`` / ``skill.select``) with a ``$ `` / ``changed `` transcript fallback.
+(``tool.*`` / ``skill.select`` / ``skill.load``) with a ``$ `` / ``changed `` transcript fallback.
 
 Budgets are optional. Unset keys are informational. A pinned positive integer
 that is exceeded (or fail-closed when the run cannot prove it stayed under)
@@ -100,7 +100,7 @@ def count_path_steps(
 ) -> tuple[int, int, bool]:
     """Return ``(steps, errors, had_path)``.
 
-    Steps count ``skill.select`` and ``tool.*`` spans (not ``eval.check``).
+    Steps count ``skill.select``, ``skill.load``, and ``tool.*`` spans (not ``eval.check``).
     When none of those exist, fall back to ``$ `` / ``changed `` / ``ran … exit=`` lines.
     """
     records = list(spans) if spans else []
@@ -286,7 +286,7 @@ def _tokens_total(usage: dict[str, Any] | None) -> int | None:
 
 def _is_path_span(span: dict[str, Any]) -> bool:
     name = str(span.get("name") or "")
-    return name == "skill.select" or name.startswith("tool.")
+    return name in {"skill.select", "skill.load"} or name.startswith("tool.")
 
 
 def _is_error_span(span: dict[str, Any]) -> bool:
