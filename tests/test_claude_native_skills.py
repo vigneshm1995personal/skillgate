@@ -12,6 +12,7 @@ from skillgate_ai.harness import (
     ClaudeCodeHarness,
     _infer_from_skill_tool,
     _resolve_trigger_evidence,
+    claude_config_isolation_enabled,
     claude_native_skills_enabled,
 )
 from skillgate_ai.ingest import Skill
@@ -73,7 +74,9 @@ def test_skill_tool_call_detected_as_load(tmp_path: Path) -> None:
     assert any("pdf" in path for path in paths)
 
 
-def test_claude_harness_sets_isolated_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_claude_harness_preserves_host_config_by_default(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     seen: dict[str, object] = {}
 
     class _Sandbox:
@@ -85,10 +88,11 @@ def test_claude_harness_sets_isolated_home(tmp_path: Path, monkeypatch: pytest.M
             seen["command"] = list(command)
             return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
 
+    monkeypatch.delenv("SKILLGATE_CLAUDE_ISOLATE_CONFIG", raising=False)
+    assert claude_config_isolation_enabled() is False
     monkeypatch.setattr("skillgate_ai.harness._claude_ready", lambda _c: True)
     monkeypatch.setattr("skillgate_ai.harness._resolve_claude_bin", lambda _p: "/bin/claude")
-    monkeypatch.setattr("skillgate_ai.harness._parse_selected", lambda *a: None)
-    monkeypatch.setattr("skillgate_ai.harness._collect_read_paths", lambda *a: [])
+    monkeypatch.setattr("skillgate_ai.harness._resolve_trigger_evidence", lambda *a, **k: (None, []))
     monkeypatch.setattr("skillgate_ai.harness._write_selection", lambda *a: None)
     workspace = tmp_path / "ws"
     workspace.mkdir()
@@ -100,10 +104,40 @@ def test_claude_harness_sets_isolated_home(tmp_path: Path, monkeypatch: pytest.M
     )
     env = seen["env"]
     assert isinstance(env, dict)
-    home = Path(str(env["HOME"]))
-    assert str(home).startswith(str(workspace))
+    assert "HOME" not in env
+    assert "CLAUDE_CONFIG_DIR" not in env
     assert env.get("CLAUDE_CODE_DISABLE_BUNDLED_SKILLS") == "1"
     command = seen["command"]
     assert isinstance(command, list)
     tools = command[command.index("--allowedTools") + 1]
     assert "Skill" in tools
+
+
+def test_claude_config_isolation_opt_in(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    seen: dict[str, object] = {}
+
+    class _Sandbox:
+        def __init__(self, workspace: Path) -> None:
+            self.workspace = workspace
+
+        def run(self, command, *, env=None, timeout=0, cwd=None):
+            seen["env"] = dict(env or {})
+            return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+
+    monkeypatch.setenv("SKILLGATE_CLAUDE_ISOLATE_CONFIG", "1")
+    assert claude_config_isolation_enabled() is True
+    monkeypatch.setattr("skillgate_ai.harness._claude_ready", lambda _c: True)
+    monkeypatch.setattr("skillgate_ai.harness._resolve_claude_bin", lambda _p: "/bin/claude")
+    monkeypatch.setattr("skillgate_ai.harness._resolve_trigger_evidence", lambda *a, **k: (None, []))
+    monkeypatch.setattr("skillgate_ai.harness._write_selection", lambda *a: None)
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    ClaudeCodeHarness(_cfg()).run(
+        _Sandbox(workspace),  # type: ignore[arg-type]
+        "task",
+        [],
+        timeout_sec=5,
+    )
+    env = seen["env"]
+    assert str(tmp_path) in str(env.get("HOME"))
+    assert str(tmp_path) in str(env.get("CLAUDE_CONFIG_DIR"))

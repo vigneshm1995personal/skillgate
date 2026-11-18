@@ -1662,17 +1662,31 @@ def claude_native_skills_enabled() -> bool:
     return raw not in {"0", "false", "no", "off"}
 
 
+def claude_config_isolation_enabled() -> bool:
+    """Opt-in: isolated HOME/CLAUDE_CONFIG_DIR (breaks host CLI login unless you copy creds)."""
+    raw = os.environ.get("SKILLGATE_CLAUDE_ISOLATE_CONFIG", "").strip().lower()
+    return raw in {"1", "true", "yes", "on"}
+
+
 def _claude_sandbox_env(workspace: Path, base: dict[str, str]) -> dict[str, str]:
-    """Keep Claude Code inside the run workdir (no host ``~/.claude/skills``)."""
+    """Claude subprocess env.
+
+    Default: keep the host ``HOME`` / ``CLAUDE_CONFIG_DIR`` so subscription
+    CLI login and API keys work. Eval skills load from the workdir
+    ``.claude/skills/`` (project scope); Skill Gate never writes ``~/.claude/skills``.
+    Set ``SKILLGATE_CLAUDE_ISOLATE_CONFIG=1`` to redirect config into the workdir.
+    """
+    env = dict(base)
+    env["CLAUDE_CODE_DISABLE_BUNDLED_SKILLS"] = "1"
+    if not claude_config_isolation_enabled():
+        return env
     home = workspace / ".skillgate" / "claude-home"
     home.mkdir(parents=True, exist_ok=True)
-    env = dict(base)
     env["HOME"] = str(home)
     env["USERPROFILE"] = str(home)
     config = home / ".claude"
     config.mkdir(parents=True, exist_ok=True)
     env["CLAUDE_CONFIG_DIR"] = str(config)
-    env["CLAUDE_CODE_DISABLE_BUNDLED_SKILLS"] = "1"
     return env
 
 

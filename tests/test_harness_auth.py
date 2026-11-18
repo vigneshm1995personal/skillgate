@@ -255,8 +255,8 @@ def test_claude_run_omits_empty_key_when_cli_login(
         sandbox, "task", [], timeout_sec=5
     )
     assert "ANTHROPIC_API_KEY" not in sandbox.env
-    home = sandbox.env.get("HOME") or ""
-    assert str(tmp_path) in home
+    assert "HOME" not in sandbox.env
+    assert "CLAUDE_CONFIG_DIR" not in sandbox.env
     assert sandbox.env.get("CLAUDE_CODE_DISABLE_BUNDLED_SKILLS") == "1"
     assert result.auth_mode == AUTH_CLI_LOGIN
 
