@@ -157,8 +157,7 @@ def resolve_wording_facts(
     violated = _violations(rules, texts, succeeded=succeeded)
     yes = not violated
     return {
-        question.id: {"probability": 1.0 if yes else 0.0, "source": "text"}
-        for question in covering
+        question.id: {"probability": 1.0 if yes else 0.0, "source": "text"} for question in covering
     }
 
 
@@ -311,7 +310,7 @@ def _hits(text: str, phrase: str) -> list[tuple[int, int]]:
 
 
 def _quoted(text: str, start: int, end: int) -> bool:
-    for left, right in _quote_spans(text):
+    for left, right in _quote_spans(text):  # noqa: SIM110
         if left < start and end <= right:
             return True
     return False
@@ -320,8 +319,8 @@ def _quoted(text: str, start: int, end: int) -> bool:
 def _quote_spans(text: str) -> list[tuple[int, int]]:
     spans: list[tuple[int, int]] = []
     i = 0
-    opens = "\"“"
-    closes = "\"”"
+    opens = '"“'
+    closes = '"”'
     while i < len(text):
         if text[i] in opens:
             j = i + 1

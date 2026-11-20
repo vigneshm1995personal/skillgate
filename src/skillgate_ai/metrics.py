@@ -204,9 +204,7 @@ def budget_gate_reason(report: dict[str, Any] | None) -> str:
     if tokenish and pathish:
         if len(reasons) == 1:
             return reasons[0]
-        closed_only = all(
-            item in {REASON_TOKEN_CLOSED, REASON_PATH_CLOSED} for item in reasons
-        )
+        closed_only = all(item in {REASON_TOKEN_CLOSED, REASON_PATH_CLOSED} for item in reasons)
         if closed_only and len(reasons) == 1:
             return reasons[0]
         if REASON_BOTH_OVER in reasons:
@@ -221,9 +219,7 @@ def budget_gate_reason(report: dict[str, Any] | None) -> str:
 
 def suite_metrics_summary(tasks: list[dict[str, Any]]) -> dict[str, Any]:
     fails = [
-        str(task.get("id") or task.get("task_id") or "")
-        for task in tasks
-        if _task_blocking(task)
+        str(task.get("id") or task.get("task_id") or "") for task in tasks if _task_blocking(task)
     ]
     fails = [item for item in fails if item]
     if fails:
@@ -248,7 +244,9 @@ def suite_metrics_summary(tasks: list[dict[str, Any]]) -> dict[str, Any]:
             steps += int(raw_steps)
         if isinstance(raw_errors, (int, float)):
             errors += int(raw_errors)
-        if path.get("had_path") is True or (isinstance(raw_steps, (int, float)) and int(raw_steps) > 0):
+        if path.get("had_path") is True or (
+            isinstance(raw_steps, (int, float)) and int(raw_steps) > 0
+        ):
             had_path = True
     summary: dict[str, Any] = {"budget_fails": fails, "status": status}
     if saw_path:
@@ -303,9 +301,12 @@ def _command_line_count(transcript: str) -> int:
     count = 0
     for line in transcript.replace("\r\n", "\n").split("\n"):
         text = line.strip()
-        if text.startswith("$ ") or _CHANGED_LINE.match(text):
-            count += 1
-        elif text.lower().startswith("ran ") and "exit=" in text:
+        if (
+            text.startswith("$ ")
+            or _CHANGED_LINE.match(text)
+            or text.lower().startswith("ran ")
+            and "exit=" in text
+        ):
             count += 1
     return count
 

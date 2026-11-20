@@ -223,8 +223,7 @@ def _is_chat_model(model: str) -> bool:
     if leaf.startswith(("gpt-3.5", "gpt-4", "gpt-5")) or "claude" in leaf:
         return True
     return any(
-        leaf == token or leaf.startswith((f"{token}-", f"{token}."))
-        for token in ("o1", "o3", "o4")
+        leaf == token or leaf.startswith((f"{token}-", f"{token}.")) for token in ("o1", "o3", "o4")
     )
 
 
@@ -336,8 +335,7 @@ def _selection_base_url(provider: str, settings: Any, model: str) -> str:
         account = str(getattr(settings, "account_id", "") or "").strip()
         slug = model or "clef"
         return (
-            "https://api.cloudflare.com/client/v4/accounts/"
-            f"{account}/ai/run/@cf/cloudflare/{slug}"
+            f"https://api.cloudflare.com/client/v4/accounts/{account}/ai/run/@cf/cloudflare/{slug}"
         )
     return resolve_base_url(provider, stored or None)
 
@@ -354,10 +352,6 @@ def classify_test_result(ok: bool, message: str) -> str:
         or "for a different endpoint" in lower
     ):
         return WRONG_ENDPOINT
-    if (
-        "did not accept" in lower
-        or "was not accepted" in lower
-        or "not allowed to score" in lower
-    ):
+    if "did not accept" in lower or "was not accepted" in lower or "not allowed to score" in lower:
         return KEY_REJECTED
     return message or "The judge did not answer."

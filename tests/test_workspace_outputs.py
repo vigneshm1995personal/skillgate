@@ -14,9 +14,7 @@ def test_harness_final_answer_from_codex_agent_message() -> None:
 
 
 def test_persist_codex_answer_writes_answer_txt(tmp_path: Path) -> None:
-    stdout = (
-        '{"type":"item.completed","item":{"type":"agent_message","text":"saved answer"}}\n'
-    )
+    stdout = '{"type":"item.completed","item":{"type":"agent_message","text":"saved answer"}}\n'
     dest = persist_harness_answer(tmp_path, stdout)
     assert dest == tmp_path / "output" / "answer.txt"
     assert dest.read_text(encoding="utf-8") == "saved answer"
@@ -40,9 +38,7 @@ def test_harness_final_answer_strips_cursor_narration() -> None:
 
 
 def test_persist_cursor_answer_omits_narration(tmp_path: Path) -> None:
-    stdout = (
-        '{"type":"result","result":"I\'ll read the skill first…\\n\\nDone: 42"}\n'
-    )
+    stdout = '{"type":"result","result":"I\'ll read the skill first…\\n\\nDone: 42"}\n'
     dest = persist_harness_answer(tmp_path, stdout)
     assert dest is not None
     assert dest.read_text(encoding="utf-8") == "Done: 42"
@@ -52,5 +48,10 @@ def test_persist_does_not_overwrite_existing_output(tmp_path: Path) -> None:
     existing = tmp_path / "output" / "extracted.txt"
     existing.parent.mkdir(parents=True)
     existing.write_text("already here", encoding="utf-8")
-    assert persist_harness_answer(tmp_path, '{"type":"item.completed","item":{"type":"agent_message","text":"nope"}}\n') is None
+    assert (
+        persist_harness_answer(
+            tmp_path, '{"type":"item.completed","item":{"type":"agent_message","text":"nope"}}\n'
+        )
+        is None
+    )
     assert existing.read_text(encoding="utf-8") == "already here"

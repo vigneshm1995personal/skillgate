@@ -11,7 +11,12 @@ from skillgate_ai.cli import app
 from skillgate_ai.gate import prepare_pack_fixtures
 from skillgate_ai.harness import select_skill_from_descriptions
 from skillgate_ai.ingest import ingest_skill
-from skillgate_ai.scorers import RunArtifacts, TriggerEvidence, score_answer_contains, score_skill_trigger
+from skillgate_ai.scorers import (
+    RunArtifacts,
+    TriggerEvidence,
+    score_answer_contains,
+    score_skill_trigger,
+)
 from skillgate_ai.suite import TaskSpec
 from skillgate_ai.usage import parse_usage_line
 from skillgate_ai.workspace_outputs import collect_workspace_outputs
@@ -108,9 +113,7 @@ def test_parse_claude_result_total_cost_usd() -> None:
 
 
 def test_answer_contains_matches_result_json(tmp_path: Path) -> None:
-    transcript = (
-        '{"type":"result","subtype":"success","result":"The total is 40.00 USD."}\n'
-    )
+    transcript = '{"type":"result","subtype":"success","result":"The total is 40.00 USD."}\n'
     artifacts = RunArtifacts(
         workspace=tmp_path,
         trigger=TriggerEvidence(selected_skill="x", transcript=transcript),

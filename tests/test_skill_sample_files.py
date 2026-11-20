@@ -21,11 +21,7 @@ PDF_DEMO = ("alpha.pdf", "beta.pdf", "hello.pdf", "invoice.pdf", "notes.pdf")
 
 
 def _skill_md(name: str, description: str) -> str:
-    return (
-        f"---\nname: {name}\n"
-        f"description: {description}\n"
-        "---\n\n# Steps\n1. Read the file.\n"
-    )
+    return f"---\nname: {name}\ndescription: {description}\n---\n\n# Steps\n1. Read the file.\n"
 
 
 def _workspace(tmp_path: Path) -> Path:
@@ -62,7 +58,9 @@ def test_prepare_pack_fixtures_does_not_seed_pdf_demo_into_other_skills(tmp_path
 def test_csv_cleaner_sample_files_omit_pdf_demo(tmp_path: Path, monkeypatch) -> None:
     root = _workspace(tmp_path)
     monkeypatch.setenv("SKILLGATE_MODE", "local")
-    names = {Path(item["src"]).name for item in relevant_eval_fixtures(root / "skills" / "csv-cleaner")}
+    names = {
+        Path(item["src"]).name for item in relevant_eval_fixtures(root / "skills" / "csv-cleaner")
+    }
     assert names == {"orders.csv"}
 
     client = TestClient(create_app(root=root), base_url="http://127.0.0.1:8765")

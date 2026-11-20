@@ -60,7 +60,7 @@ class project_run_lock:
         if handle is None:
             return
         if fcntl is not None:
-            try:
+            try:  # noqa: SIM105
                 fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
             except OSError:
                 pass

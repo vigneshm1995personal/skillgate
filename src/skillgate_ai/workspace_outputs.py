@@ -148,9 +148,7 @@ def iter_workspace_files(workspace: Path):
     if not workspace.is_dir():
         return
     for dirpath, dirnames, filenames in os.walk(workspace, followlinks=False):
-        dirnames[:] = [
-            name for name in dirnames if not _skip_dir(Path(dirpath) / name, name)
-        ]
+        dirnames[:] = [name for name in dirnames if not _skip_dir(Path(dirpath) / name, name)]
         for name in filenames:
             yield Path(dirpath) / name
 

@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""Route SKILLGATE_TASK to bundled PDF scripts. Used by the demo harness and as a Cursor Agent hint."""
+"""Route SKILLGATE_TASK to bundled PDF scripts.
+
+Used by the demo harness and as a Cursor Agent hint.
+"""
 
 from __future__ import annotations
 
@@ -58,7 +61,9 @@ def main() -> int:
         dest = _out(prompt, "output/status.pdf")
         title = "Untitled"
         body = ""
-        titled = re.search(r"titled\s+([^\"']+?)(?:\s+that|\s+containing|\s+with|\s*$)", prompt, re.I)
+        titled = re.search(
+            r"titled\s+([^\"']+?)(?:\s+that|\s+containing|\s+with|\s*$)", prompt, re.I
+        )
         if titled:
             title = titled.group(1).strip(" .")
         quoted = re.findall(r'"([^"]+)"', prompt)

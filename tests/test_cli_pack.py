@@ -5,9 +5,9 @@ from __future__ import annotations
 import shutil
 from pathlib import Path
 
+from conftest import plain_text
 from typer.testing import CliRunner
 
-from conftest import plain_text
 from skillgate_ai.case_pack import load_case_pack
 from skillgate_ai.cli import app
 from skillgate_ai.history import append_eval
@@ -160,7 +160,9 @@ def test_judge_set_and_remove_question(tmp_path: Path, monkeypatch) -> None:
     )
     assert updated.exit_code == 0, updated.stdout
     pack = load_case_pack(dest)
-    extra = next(q for q in (pack.judge.extra_questions if pack and pack.judge else []) if q.id == "stamps")
+    extra = next(
+        q for q in (pack.judge.extra_questions if pack and pack.judge else []) if q.id == "stamps"
+    )
     assert extra.on_fail == "warn"
     removed = runner.invoke(app, ["judge", "remove-question", str(dest), "--id", "stamps"])
     assert removed.exit_code == 0, removed.stdout

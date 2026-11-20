@@ -19,7 +19,8 @@ BEHAVIOR_FAIL_LEAD = (
     "The agent's behavior failed this check: {question} → No. Review the run log below."
 )
 TRIGGER_SECONDARY_NOTE = (
-    "Note: this skill wasn't opened during this run. If it should have been, you can review the description."
+    "Note: this skill wasn't opened during this run. If it should have been, "
+    "you can review the description."
 )
 
 _MEAL_NOISE = {
@@ -68,9 +69,7 @@ def advise_task(
     completion = next((s for s in failed if s.scorer == "task_completion"), None)
     rubric = next((s for s in failed if s.scorer == "rubric"), None)
     prompts = list(sibling_prompts or [task.prompt])
-    trigger_unopened = bool(
-        trigger and task.expect_skill and (trigger.actual or "none") == "none"
-    )
+    trigger_unopened = bool(trigger and task.expect_skill and (trigger.actual or "none") == "none")
     behavior = behavior_question_ids(judge)
     if trigger_unopened and behavior:
         return _behavior_fix(behavior[0], skill_unopened=True)
@@ -88,7 +87,8 @@ def advise_task(
                 f"“{task.prompt}”."
             ),
             change=(
-                "Tighten `description:` so it lists when to use the skill — and implicitly excludes everything else."
+                "Tighten `description:` so it lists when to use the skill — and "
+                "implicitly excludes everything else."
             ),
             paste=_frontmatter(skill.name, description),
             target="description",
@@ -100,7 +100,10 @@ def advise_task(
         return FixAdvice(
             headline=f"Wrong skill triggered ({trigger.actual})",
             why=f"Expected `{task.expect_skill}` but the agent picked `{trigger.actual}`.",
-            change="Make this skill’s description more specific, using keywords from the failed requests.",
+            change=(
+                "Make this skill’s description more specific, using keywords from "
+                "the failed requests."
+            ),
             paste=_frontmatter(skill.name, description),
             target="description",
             description=description,
@@ -186,9 +189,7 @@ def behavior_question_ids(judge: dict | None) -> list[str]:
         return []
     reserved = set(CHECK_CELL_ORDER) | set(SOFT_CELL_ORDER)
     extras = [
-        str(item).strip()
-        for item in (judge.get("extra_failures") or [])
-        if str(item).strip()
+        str(item).strip() for item in (judge.get("extra_failures") or []) if str(item).strip()
     ]
     cells = judge.get("cells") if isinstance(judge.get("cells"), dict) else {}
     questions = judge.get("questions") if isinstance(judge.get("questions"), dict) else {}
@@ -326,7 +327,8 @@ _VAGUE_HINT = (
 )
 _WHEN_HINT = (
     "Add a “Use when …” clause so the agent knows when to trigger the skill. Example:\n\n"
-    "description: Extract text and merge PDFs. Use when the user mentions a .pdf file, invoices, or combining documents."
+    "description: Extract text and merge PDFs. Use when the user mentions a .pdf file, "
+    "invoices, or combining documents."
 )
 _PADDED_TOKEN = re.compile(r"^(.)\1{3,}$")
 _WHEN_SPLIT = re.compile(
@@ -346,7 +348,8 @@ def description_is_usable(description: str, *, require_when: bool = True) -> tup
     if len(tokens) < 8:
         return (
             False,
-            "Add more concrete words to the description — what it does, and the phrases a user would type.",
+            "Add more concrete words to the description — what it does, and the phrases "
+            "a user would type.",
         )
     content = _content_tokens(text)
     if len(content) < 4:
@@ -499,7 +502,7 @@ def _description_from_prompts(name: str, prompts: list[str]) -> str:
         for token in sorted(tokenize(prompt)):
             if token in _MEAL_NOISE:
                 continue
-            if token.endswith("pdf") or token in {
+            if token.endswith("pdf") or token in {  # noqa: SIM102
                 "pdf",
                 "invoice",
                 "invoices",
@@ -570,7 +573,7 @@ def _is_script_failure(returncode: int | None, stderr: str) -> bool:
     if returncode in (None, 0):
         return False
     text = (stderr or "").lstrip()
-    if text.startswith("{") or text.startswith("["):
+    if text.startswith("{") or text.startswith("["):  # noqa: SIM103
         return False
     return True
 

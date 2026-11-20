@@ -176,9 +176,7 @@ def public_key_name(name: str) -> str:
 
 def public_key_presence(root: str | Path) -> dict[str, dict[str, bool]]:
     return {
-        name: meta
-        for name, meta in key_presence(root).items()
-        if name in CUSTOMER_SETTINGS_KEYS
+        name: meta for name, meta in key_presence(root).items() if name in CUSTOMER_SETTINGS_KEYS
     }
 
 

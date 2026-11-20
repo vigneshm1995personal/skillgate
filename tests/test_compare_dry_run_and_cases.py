@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 import pytest
@@ -150,7 +149,9 @@ def test_compare_models_dry_run_rejects_negative_spend(tmp_path: Path, monkeypat
     assert result.exit_code == 1
 
 
-def test_compare_models_cases_limits_run_check(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_compare_models_cases_limits_run_check(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     pack = _pack(tmp_path)
     monkeypatch.setenv("SKILLGATE_ROOT", str(tmp_path))
     case_ids = ["extract-hello", "merge-alpha-beta", "rotate-hello"]

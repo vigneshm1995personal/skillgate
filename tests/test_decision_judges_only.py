@@ -9,7 +9,7 @@ import pytest
 
 from skillgate_ai.config import LLMConfig
 from skillgate_ai.errors import MissingLLMKeyError, SkillGateError
-from skillgate_ai.judge import SkipJudge, resolve_judge
+from skillgate_ai.judge import resolve_judge
 from skillgate_ai.judge_openai import OutcomeJudge, make_openai_judge
 from skillgate_ai.judge_settings import load_judge_settings, save_judge_settings
 from skillgate_ai.openai_http import post_openai_json
@@ -87,7 +87,9 @@ def test_auto_does_not_select_a_judge_when_keys_exist() -> None:
     assert recorder.urls == []
 
 
-def test_unconfigured_live_check_fails_and_names_no_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_unconfigured_live_check_fails_and_names_no_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """A live check with no decision model fails. It does not skip or call a chat model."""
     recorder = _Recorder()
     monkeypatch.setattr("skillgate_ai.openai_http.httpx.post", recorder)

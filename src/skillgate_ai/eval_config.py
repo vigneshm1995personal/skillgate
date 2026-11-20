@@ -11,12 +11,11 @@ from typing import Any
 from skillgate_ai.config import (
     CODEX_REASONING_EFFORTS,
     DEFAULT_CODEX_REASONING_EFFORT,
-    DEFAULT_OPENAI_BASE_URL,
     LLMConfig,
     normalize_codex_reasoning_effort,
 )
-from skillgate_ai.harness import CODEX_CHATGPT_DEFAULT
 from skillgate_ai.errors import SkillGateError
+from skillgate_ai.harness import CODEX_CHATGPT_DEFAULT
 
 SCHEMA = 1
 CODEX_DEFAULT_MODEL_LABEL = "codex-default"
@@ -315,7 +314,9 @@ def friendly_model_name(model: str | None) -> str:
     if not raw:
         return ""
     slug = raw.rsplit("/", 1)[-1]
-    if re.match(r"^(claude|cursor|codex|openai|anthropic|gemini)([-_]|$)", slug, flags=re.IGNORECASE):
+    if re.match(
+        r"^(claude|cursor|codex|openai|anthropic|gemini)([-_]|$)", slug, flags=re.IGNORECASE
+    ):
         return slug
     match = re.match(r"^gpt-(.+)$", slug, flags=re.IGNORECASE)
     if match:

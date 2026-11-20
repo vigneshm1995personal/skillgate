@@ -16,14 +16,12 @@ from skillgate_ai.case_pack import (
     task_missing_golden,
 )
 from skillgate_ai.engine import SuiteReport, _run_task, _seed_skill_selection, _why_expected_output
-from skillgate_ai.harness import HarnessResult, _read_selection, _MISSING
+from skillgate_ai.harness import _MISSING, HarnessResult, _read_selection
 from skillgate_ai.ingest import ingest_skill
 from skillgate_ai.report import report_to_dict
 from skillgate_ai.sandbox import LocalSandbox
 from skillgate_ai.scorers import RunArtifacts, TriggerEvidence, score_task
 from skillgate_ai.suite import FileExpect, ScorerSpec, TaskSpec
-from skillgate_ai.usage import Usage
-from test_judge import _cfg
 
 PDF_PACK = Path(__file__).resolve().parents[1] / "skills" / "pdf"
 
@@ -264,9 +262,7 @@ def test_no_trigger_leftover_output_warns_in_plain_words() -> None:
         skill="pdf",
         cases=[_older_imported_no_trigger_with_notes_output()],
     )
-    row = next(
-        item for item in checks_from_pack(pack) if item["id"] == "no-trigger-unrelated"
-    )
+    row = next(item for item in checks_from_pack(pack) if item["id"] == "no-trigger-unrelated")
     warning = str(row.get("warning") or "")
     assert warning
     assert "no-trigger" in warning.lower() or "not trigger" in warning.lower()

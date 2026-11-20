@@ -19,9 +19,7 @@ from skillgate_ai.engine import SuiteReport, TaskReport
 from skillgate_ai.judge_bank import OUTCOME_QUESTIONS, OUTCOME_SCORING_NOTES
 from skillgate_ai.report import format_cli, format_github, report_to_dict
 
-ESCALATION_OUTCOME = (
-    "Refund is impossible. Tell the customer honestly and write an owner report."
-)
+ESCALATION_OUTCOME = "Refund is impossible. Tell the customer honestly and write an owner report."
 
 
 @pytest.fixture(autouse=True)
@@ -59,9 +57,7 @@ def test_general_checks_treat_expected_escalation_as_done() -> None:
     state = json.loads(text)
     assert ESCALATION_OUTCOME in str(state.get("expected_outcome") or "")
     task_q = next(item for item in payload["questions"] if item["name"] == "task_completion")
-    fully_choice = next(
-        row for row in task_q["choices"] if row["value"] == "Fully completed"
-    )
+    fully_choice = next(row for row in task_q["choices"] if row["value"] == "Fully completed")
     description = str(fully_choice.get("description") or "").lower()
     assert "expected outcome" in description
     assert "escalat" in description or "refus" in description
@@ -350,6 +346,7 @@ def test_scoring_error_exits_2_not_a_quality_red(
     import shutil
 
     from conftest import enable_cursor_agent
+
     from skillgate_ai.gate import run_check
     from skillgate_ai.scorers import Score
 
@@ -519,9 +516,7 @@ def test_jev_official_200_scores_the_real_openrouter_request_shape() -> None:
         if "connection_test" in questions and set(questions) == {"connection_test"}:
             return FakeResponse(
                 200,
-                _official_openrouter_200(
-                    {"connection_test": {"type": "noul", "noul": 0.99}}
-                ),
+                _official_openrouter_200({"connection_test": {"type": "noul", "noul": 0.99}}),
             )
         return FakeResponse(200, _official_openrouter_200(_official_choice_answers()))
 
@@ -627,7 +622,9 @@ def test_jev_verbose_shows_sanitized_upstream_reason(
             400,
             {
                 "error": {
-                    "message": "OpenRouter rejected questions.task_completion criteria sk-or-v1-secret"
+                    "message": (
+                        "OpenRouter rejected questions.task_completion criteria sk-or-v1-secret"
+                    )
                 }
             },
         )

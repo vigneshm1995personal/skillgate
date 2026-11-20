@@ -55,6 +55,7 @@ def _login_timeout_sec() -> float:
             return value
     return float(LOGIN_TIMEOUT_SEC)
 
+
 _AGENT_INSTALL = {
     "cursor": "curl https://cursor.com/install -fsS | bash",
     "codex": "npm install -g @openai/codex",
@@ -722,9 +723,7 @@ class ClaudeCodeHarness:
                     "or set CLAUDE_BIN, then run `skillgate login claude`."
                 ),
             )
-        agent_prompt = _agent_prompt(
-            sandbox.workspace, prompt, skills, native_claude=True
-        )
+        agent_prompt = _agent_prompt(sandbox.workspace, prompt, skills, native_claude=True)
         command = _claude_code_exec_command(
             binary,
             _CLAUDE_PREAMBLE + agent_prompt,
@@ -767,7 +766,9 @@ class ClaudeCodeHarness:
             spans=spans,
             returncode=proc.returncode,
             usage=harness_usage(stdout),
-            auth_mode=AUTH_API_KEY if (self.cfg.anthropic_api_key or "").strip() else AUTH_CLI_LOGIN,
+            auth_mode=AUTH_API_KEY
+            if (self.cfg.anthropic_api_key or "").strip()
+            else AUTH_CLI_LOGIN,
             model=model,
         )
 
@@ -897,7 +898,7 @@ def _toml_basic_string(value: str) -> str:
 def _codex_user_skill_roots() -> list[Path]:
     """Directories Codex scans for user skills. Does not open auth.json."""
     codex_home = os.environ.get("CODEX_HOME", "").strip()
-    if codex_home:
+    if codex_home:  # noqa: SIM108
         roots = [Path(codex_home) / "skills"]
     else:
         roots = [Path.home() / ".codex" / "skills"]
@@ -931,9 +932,7 @@ def _skill_markdown_files(root: Path) -> list[Path]:
             continue
         seen_dirs.add(marker)
         dirnames[:] = [
-            name
-            for name in dirnames
-            if not name.startswith(".") and name not in _SKILL_WALK_SKIP
+            name for name in dirnames if not name.startswith(".") and name not in _SKILL_WALK_SKIP
         ]
         if depth >= _SKILL_WALK_MAX_DEPTH:
             dirnames.clear()
@@ -966,9 +965,7 @@ def _codex_user_skill_config_override() -> str | None:
             paths.append(text)
     if not paths:
         return None
-    entries = ",".join(
-        f"{{path={_toml_basic_string(path)},enabled=false}}" for path in paths
-    )
+    entries = ",".join(f"{{path={_toml_basic_string(path)},enabled=false}}" for path in paths)
     return f"skills.config=[{entries}]"
 
 
@@ -976,7 +973,10 @@ _CODEX_LOGIN_STATUS_TIMEOUT_SEC = 5
 
 
 def _codex_ready(cfg: LLMConfig) -> bool:
-    """Explicit Codex may use an env key or a ChatGPT CLI session. Auto must not call this for has_any_key."""
+    """Explicit Codex may use an env key or a ChatGPT CLI session.
+
+    Auto must not call this for has_any_key.
+    """
     return bool(_codex_auth_key(cfg) or _codex_session_ok(cfg))
 
 
@@ -1050,9 +1050,7 @@ _MODEL_UNAVAILABLE_RE = re.compile(
     r"cannot use this model(?:\s*:\s*\S+)?",
     re.IGNORECASE,
 )
-_SKILL_FILE_RE = re.compile(
-    r"[^\s'\"`]+/(?:\.skillgate/|\.claude/)?skills/[^/\s'\"`]+/[^\s'\"`]+"
-)
+_SKILL_FILE_RE = re.compile(r"[^\s'\"`]+/(?:\.skillgate/|\.claude/)?skills/[^/\s'\"`]+/[^\s'\"`]+")
 
 
 def usage_limit_message(stdout: str, stderr: str = "", transcript: str = "") -> str | None:
@@ -1374,18 +1372,18 @@ def _terminate_process_group(proc: subprocess.Popen[str]) -> None:
     try:
         os.killpg(proc.pid, signal.SIGTERM)
     except (ProcessLookupError, PermissionError, OSError):
-        try:
+        try:  # noqa: SIM105
             os.kill(proc.pid, signal.SIGTERM)
         except (ProcessLookupError, PermissionError, OSError):
             pass
     try:
         proc.wait(timeout=5)
     except subprocess.TimeoutExpired:
-        try:
+        try:  # noqa: SIM105
             os.killpg(proc.pid, signal.SIGKILL)
         except (ProcessLookupError, PermissionError, OSError):
             pass
-        try:
+        try:  # noqa: SIM105
             proc.wait(timeout=5)
         except subprocess.TimeoutExpired:
             pass
@@ -1600,9 +1598,9 @@ def _claude_discover_prompt(task: str, skills: list[Skill]) -> str:
         "Read `.skillgate/catalog.md` if it exists for descriptions, "
         "then use the Skill tool to load at most one skill for the task. "
         "If none fits, complete the task without a skill and write "
-        '{\"skill\": null} to `.skillgate/selected.json`.\n'
+        '{"skill": null} to `.skillgate/selected.json`.\n'
         "If you load a skill with the Skill tool, also write "
-        '{\"skill\": \"<name>\"} to `.skillgate/selected.json`.\n\n'
+        '{"skill": "<name>"} to `.skillgate/selected.json`.\n\n'
         f"Skills:\n{catalog}\n\nTask:\n{task}"
     )
 
@@ -1640,7 +1638,8 @@ def _claude_prompt(
             )
         else:
             parts.append(
-                "After loading the skill, follow its SKILL.md and use bundled scripts when they exist."
+                "After loading the skill, follow its SKILL.md and use bundled scripts "
+                "when they exist."
             )
         parts.append("Put user-requested output files where the task says.")
         parts.append(f"Task:\n{task}")
@@ -1719,8 +1718,8 @@ def _cursor_discover_prompt(task: str, skills: list[Skill]) -> str:
         "No skill is pre-selected. Read `.skillgate/catalog.md` if it exists, "
         "or use the skill names and descriptions below, and pick at most one "
         "skill for the user task. If none fits, complete the task without using "
-        "a skill and write {\"skill\": null} to `.skillgate/selected.json`.\n"
-        "If you pick a skill, write {\"skill\": \"<name>\"} to "
+        'a skill and write {"skill": null} to `.skillgate/selected.json`.\n'
+        'If you pick a skill, write {"skill": "<name>"} to '
         "`.skillgate/selected.json`, then read that skill's SKILL.md and follow it.\n\n"
         f"Skills:\n{catalog}\n\nTask:\n{task}"
     )
@@ -1865,9 +1864,7 @@ def _infer_from_skill_tool(blob: str, skills: list[Skill]) -> str | None:
                 if key.endswith("ToolCall") and isinstance(payload, dict):
                     tool = key[: -len("ToolCall")].lower()
                     args = payload.get("args")
-                    chunks.append(
-                        {"tool": tool, "args": args if isinstance(args, dict) else {}}
-                    )
+                    chunks.append({"tool": tool, "args": args if isinstance(args, dict) else {}})
         message = obj.get("message")
         content = message.get("content") if isinstance(message, dict) else None
         if isinstance(content, list):
@@ -2033,5 +2030,3 @@ def _skill_name_from_path(path: str) -> str | None:
     if match:
         return match.group(1)
     return None
-
-

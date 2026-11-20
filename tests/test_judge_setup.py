@@ -52,7 +52,9 @@ def test_catalog_names_the_key_and_only_its_fields() -> None:
         assert banned not in blob
 
 
-def test_set_jev_with_a_key_fills_openrouter_defaults(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_set_jev_with_a_key_fills_openrouter_defaults(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     _home(tmp_path, monkeypatch)
     saved = runner.invoke(app, ["judge", "provider", "set", "jev"])
     out = plain_text(saved.stdout + saved.stderr)
@@ -64,7 +66,9 @@ def test_set_jev_with_a_key_fills_openrouter_defaults(tmp_path: Path, monkeypatc
     assert settings.account_id is None
 
 
-def test_set_rejects_flags_the_option_ignores(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_set_rejects_flags_the_option_ignores(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     _home(tmp_path, monkeypatch)
     openai = runner.invoke(
         app,
@@ -80,16 +84,23 @@ def test_set_rejects_flags_the_option_ignores(tmp_path: Path, monkeypatch: pytes
     assert model.exit_code == 2
     assert "does not use a model" in plain_text(model.stdout + model.stderr)
 
-    account = runner.invoke(
-        app, ["judge", "provider", "set", "jev", "--account-id", "abc123"]
-    )
+    account = runner.invoke(app, ["judge", "provider", "set", "jev", "--account-id", "abc123"])
     account_out = plain_text(account.stdout + account.stderr)
     assert account.exit_code == 2, account_out
     assert "does not use an account id" in account_out
 
     url = runner.invoke(
         app,
-        ["judge", "provider", "set", "clef", "--base-url", "https://example.com/v1", "--account-id", "abc"],
+        [
+            "judge",
+            "provider",
+            "set",
+            "clef",
+            "--base-url",
+            "https://example.com/v1",
+            "--account-id",
+            "abc",
+        ],
     )
     assert url.exit_code == 2
     assert "does not use a base URL" in plain_text(url.stdout + url.stderr)

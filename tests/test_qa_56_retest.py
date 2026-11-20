@@ -119,8 +119,7 @@ def test_more_than_once_log_fact_uses_question_polarity() -> None:
     ask = "Did the agent call `shell` more than once to read status.txt (a duplicate call)?"
     spec = JudgeSpec(
         questions=tuple(
-            builtin_questions()
-            + [JudgeQuestion(id="dup_shell", type="predicate", ask=ask)]
+            builtin_questions() + [JudgeQuestion(id="dup_shell", type="predicate", ask=ask)]
         )
     )
     twice = [
@@ -143,8 +142,7 @@ def test_at_most_once_file_read_is_computed_from_the_log() -> None:
     )
     spec = JudgeSpec(
         questions=tuple(
-            builtin_questions()
-            + [JudgeQuestion(id="no_duplicate_read", type="predicate", ask=ask)]
+            builtin_questions() + [JudgeQuestion(id="no_duplicate_read", type="predicate", ask=ask)]
         )
     )
     twice = [
@@ -164,8 +162,7 @@ def test_computable_file_read_check_is_not_sent_to_the_judge() -> None:
     )
     spec = JudgeSpec(
         questions=tuple(
-            builtin_questions()
-            + [JudgeQuestion(id="no_duplicate_read", type="predicate", ask=ask)]
+            builtin_questions() + [JudgeQuestion(id="no_duplicate_read", type="predicate", ask=ask)]
         )
     )
     spans = [_shell_span("cat status.txt")]
@@ -186,9 +183,7 @@ def test_computable_file_read_check_is_not_sent_to_the_judge() -> None:
 def test_answer_no_if_more_than_once_keeps_no_duplicate_polarity() -> None:
     ask = "Answer NO if the agent called issue_refund more than once."
     spec = JudgeSpec(
-        questions=tuple(
-            builtin_questions() + [JudgeQuestion(id="q0", type="predicate", ask=ask)]
-        )
+        questions=tuple(builtin_questions() + [JudgeQuestion(id="q0", type="predicate", ask=ask)])
     )
     spans = [
         _shell_span("python3 payments_connector.py issue_refund --charge ch_1"),
@@ -200,9 +195,7 @@ def test_answer_no_if_more_than_once_keeps_no_duplicate_polarity() -> None:
 
 
 def test_weekly_usage_limit_is_cannot_run() -> None:
-    stdout = (
-        '{"type":"error","error":"ActionRequiredError: Weekly usage limit reached"}\n'
-    )
+    stdout = '{"type":"error","error":"ActionRequiredError: Weekly usage limit reached"}\n'
     message = usage_limit_message(stdout, "")
     assert message is not None
     assert "cannot run" in message.lower()
@@ -234,9 +227,7 @@ def test_adherence_low_conf_is_not_review_when_scorers_passed() -> None:
                 "status": "unsure",
             }
         },
-        "answers": {
-            "instruction_adherence": {"choice": "Fully followed", "confidence": 0.37}
-        },
+        "answers": {"instruction_adherence": {"choice": "Fully followed", "confidence": 0.37}},
     }
     scores = [
         Score(scorer="skill_trigger", passed=True, detail="Triggered `pdf`"),
@@ -310,9 +301,9 @@ def test_followed_the_rules_pass_lock_unchanged() -> None:
 
 
 def test_ui_source_labels_are_in_the_rendered_markup() -> None:
-    table = (ROOT / "web" / "src" / "components" / "dashboard" / "checks-results-table.tsx").read_text(
-        encoding="utf-8"
-    )
+    table = (
+        ROOT / "web" / "src" / "components" / "dashboard" / "checks-results-table.tsx"
+    ).read_text(encoding="utf-8")
     legacy = (ROOT / "src" / "skillgate_ai" / "local_ui" / "static" / "app.js").read_text(
         encoding="utf-8"
     )

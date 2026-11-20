@@ -120,18 +120,14 @@ def test_remove_question_refuses_builtin(tmp_path: Path, monkeypatch) -> None:
     dest = _pdf(tmp_path)
     monkeypatch.setenv("SKILLGATE_ROOT", str(tmp_path))
     monkeypatch.chdir(tmp_path)
-    result = runner.invoke(
-        app, ["judge", "remove-question", str(dest), "--id", "correctness"]
-    )
+    result = runner.invoke(app, ["judge", "remove-question", str(dest), "--id", "correctness"])
     out = plain_text(result.stdout + result.stderr)
     assert result.exit_code != 0, out
     assert "removed" not in out.lower()
     assert "stay" in out.lower() or "built" in out.lower()
 
 
-def test_remove_question_unknown_does_not_claim_removed(
-    tmp_path: Path, monkeypatch
-) -> None:
+def test_remove_question_unknown_does_not_claim_removed(tmp_path: Path, monkeypatch) -> None:
     dest = _pdf(tmp_path)
     monkeypatch.setenv("SKILLGATE_ROOT", str(tmp_path))
     monkeypatch.chdir(tmp_path)
@@ -147,7 +143,9 @@ def test_tryout_suite_is_only_the_named_check(tmp_path: Path) -> None:
 
     pack = load_case_pack(dest)
     assert pack is not None
-    rows = [row for row in checks_from_pack(pack, include_drafts=True) if row["id"] == "extract-hello"]
+    rows = [
+        row for row in checks_from_pack(pack, include_drafts=True) if row["id"] == "extract-hello"
+    ]
     spec = suite_from_checks(dest, rows, tryout=True)
     assert [task.id for task in spec.tasks] == ["extract-hello"]
 
@@ -167,7 +165,9 @@ def test_pin_refused_seed_edit_does_not_rewrite_fixtures(tmp_path: Path) -> None
                     "id": "extract-hello",
                     "prompt": "HACKED via API",
                     "should_trigger": True,
-                    "files": [{"src": "evals/fixtures/hello.pdf", "content": "OVERWRITTEN FIXTURE"}],
+                    "files": [
+                        {"src": "evals/fixtures/hello.pdf", "content": "OVERWRITTEN FIXTURE"}
+                    ],
                 }
             ],
         )
@@ -333,9 +333,7 @@ def test_import_only_selects_one_skill(tmp_path: Path, monkeypatch) -> None:
             f"---\nname: {name}\ndescription: Take notes from a meeting.\n---\n\n# {name}\n",
             encoding="utf-8",
         )
-    result = runner.invoke(
-        app, ["import", "--source", "cursor", "--only", "alpha-notes"]
-    )
+    result = runner.invoke(app, ["import", "--source", "cursor", "--only", "alpha-notes"])
     out = plain_text(result.stdout + result.stderr)
     assert result.exit_code == 0, out
     assert (tmp_path / "skills" / "alpha-notes" / "SKILL.md").is_file()
@@ -439,25 +437,19 @@ def test_case_add_empty_prompt_is_refused(tmp_path: Path, monkeypatch) -> None:
     assert "prompt" in out.lower()
 
 
-def test_skill_write_generate_does_not_write_fixture_skill_md(
-    tmp_path: Path, monkeypatch
-) -> None:
+def test_skill_write_generate_does_not_write_fixture_skill_md(tmp_path: Path, monkeypatch) -> None:
     dest = _pdf(tmp_path)
     monkeypatch.setenv("SKILLGATE_ROOT", str(tmp_path))
     monkeypatch.chdir(tmp_path)
     original = (dest / "SKILL.md").read_text(encoding="utf-8")
-    result = runner.invoke(
-        app, ["skill", "write", str(dest), "--path", "SKILL.md", "--generate"]
-    )
+    result = runner.invoke(app, ["skill", "write", str(dest), "--path", "SKILL.md", "--generate"])
     out = plain_text(result.stdout + result.stderr)
     assert result.exit_code != 0, out
     assert not (dest / "evals" / "fixtures" / "SKILL.md").exists()
     assert (dest / "SKILL.md").read_text(encoding="utf-8") == original
 
 
-def test_keys_clear_unset_does_not_claim_cleared(
-    tmp_path: Path, monkeypatch
-) -> None:
+def test_keys_clear_unset_does_not_claim_cleared(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("SKILLGATE_ROOT", str(tmp_path))
     monkeypatch.chdir(tmp_path)
     result = runner.invoke(app, ["keys", "clear", "OPENAI_API_KEY"])

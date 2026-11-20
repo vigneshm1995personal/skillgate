@@ -64,7 +64,11 @@ def format_compare_cli(payload: dict[str, Any]) -> str:
                 row.append(_fmt_duration(dur) if dur is not None else "—")
         lines.append(_row_to_line(row, arm_col_width=arm_width))
     lines.append("")
-    lines.append(_row_to_line(["Case", *[_arm_column_title(a, status=status) for a in arms]], arm_col_width=arm_width))
+    lines.append(
+        _row_to_line(
+            ["Case", *[_arm_column_title(a, status=status) for a in arms]], arm_col_width=arm_width
+        )
+    )
     for case in cases:
         case_id = str(case.get("case_id") or "")
         row = [case_id]

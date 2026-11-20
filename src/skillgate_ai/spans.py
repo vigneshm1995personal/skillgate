@@ -130,9 +130,7 @@ def _cursor_tool_span(
     return None
 
 
-def _codex_item_span(
-    item: Any, *, trace_id: str, parent: str, t_ns: int
-) -> dict[str, Any] | None:
+def _codex_item_span(item: Any, *, trace_id: str, parent: str, t_ns: int) -> dict[str, Any] | None:
     if not isinstance(item, dict):
         return None
     itype = item.get("type")
@@ -158,7 +156,11 @@ def _codex_item_span(
             if isinstance(change, dict) and change.get("path")
         ]
         path = paths[0] if paths else ""
-        name = "skill.select" if path.endswith("selected.json") or "catalog.md" in path else "tool.write"
+        name = (
+            "skill.select"
+            if path.endswith("selected.json") or "catalog.md" in path
+            else "tool.write"
+        )
         attrs: dict[str, Any] = {
             "gen_ai.operation.name": "execute_tool",
             "gen_ai.tool.name": "write",
@@ -194,7 +196,6 @@ def _codex_item_span(
     return None
 
 
-
 ASSISTANT_MSG_MAX = 2000
 
 
@@ -224,10 +225,9 @@ def _is_cursor_assistant_dup_flush(obj: dict[str, Any], *, had_partial: bool) ->
     if "model_call_id" in obj:
         return True
     # Final flush at end of a streamed message (no timestamp_ms).
-    if had_partial and "timestamp_ms" not in obj:
+    if had_partial and "timestamp_ms" not in obj:  # noqa: SIM103
         return True
     return False
-
 
 
 def _glue_assistant_delta(prev: str, delta: str) -> str:
@@ -244,6 +244,7 @@ def _glue_assistant_delta(prev: str, delta: str) -> str:
     if prev[-1] in "([{/`*_":
         return prev + delta
     return prev + " " + delta
+
 
 def _set_string_attr(span: dict[str, Any], key: str, value: str) -> None:
     attrs = span.setdefault("attributes", [])
@@ -387,15 +388,17 @@ def spans_from_jsonl(stdout: str, *, trace_id: str | None = None) -> list[dict[s
             # Coalesce consecutive partial deltas into one growing gen_ai.assistant
             # span; open a new Assistant step only after a tool (or other) step.
             joined = _assistant_text(obj)
-            if not joined:
-                span = None
-            elif _is_cursor_assistant_dup_flush(obj, had_partial=open_assistant_idx is not None):
+            if not joined or _is_cursor_assistant_dup_flush(
+                obj, had_partial=open_assistant_idx is not None
+            ):
                 span = None
             elif _is_cursor_partial_assistant(obj) and open_assistant_idx is not None:
                 prev = spans[open_assistant_idx]
                 prev_msg = str(attr_map(prev).get("gen_ai.assistant.message") or "")
                 _set_string_attr(
-                    prev, "gen_ai.assistant.message", _glue_assistant_delta(prev_msg, joined)[:ASSISTANT_MSG_MAX]
+                    prev,
+                    "gen_ai.assistant.message",
+                    _glue_assistant_delta(prev_msg, joined)[:ASSISTANT_MSG_MAX],
                 )
                 prev["endTimeUnixNano"] = str(tick)
                 span = None

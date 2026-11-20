@@ -124,7 +124,7 @@ def test_ui_copy_has_no_internal_jargon(project_root: Path) -> None:
             assert "scaffold: false" not in lower, name
         js = bodies["/static/app.js"]
         html = bodies["/static/index.html"]
-        css = bodies["/static/app.css"]
+        assert bodies["/static/app.css"]
         assert "Name your skill" in js
         assert "What should it do?" in js
         assert "Create skill" in js
@@ -142,7 +142,7 @@ def test_ui_copy_has_no_internal_jargon(project_root: Path) -> None:
         assert "report.scored_by" in js
         assert "Create and run check" not in js
         assert "Checking…" not in js
-        assert "<p class=\"gate\">Checking</p>" in js
+        assert '<p class="gate">Checking</p>' in js
         assert "Evaluating" not in js
         assert "New skill" in html
         assert "Setup wizard" not in html
@@ -242,15 +242,15 @@ def test_ui_skill_page_run_motion_is_wired(project_root: Path) -> None:
     assert "startCheck(path, { live: true })" in pack
     assert "demo: true" not in pack
     create = js.split("async function createSkill")[1].split("function checksFromPack")[0]
-    assert "<p class=\"gate\">Checking</p>" not in create
+    assert '<p class="gate">Checking</p>' not in create
     assert "/api/check" not in create
     keys = js.split('if (step === "keys")')[1].split('if (step === "firstSkill")')[0]
-    assert "<p class=\"gate\">Checking</p>" not in keys
+    assert '<p class="gate">Checking</p>' not in keys
     assert "/api/check" not in keys
     setup = js.split("async function renderSetup")[1].split("async function renderNew")[0]
-    assert "<p class=\"gate\">Checking</p>" not in setup
+    assert '<p class="gate">Checking</p>' not in setup
     assert "/api/check" not in setup
-    assert "<p class=\"gate\">Checking</p>" in js
+    assert '<p class="gate">Checking</p>' in js
     show = js.split("async function showChecking")[1].split("function resultMarkHtml")[0]
     assert "is-covered" in show
     assert 'extra.innerHTML = ""' in show
@@ -284,9 +284,9 @@ def test_ui_wizard_is_setup_only_then_skill_page(project_root: Path) -> None:
     assert "<label>OPENAI_API_KEY" not in js
     assert "<label>CURSOR_API_KEY" not in js
     assert "Your API key (optional)" not in js
-    assert "<span class=\"label\">Local</span>" in js
-    assert "<span class=\"label\">Key</span>" in js
-    assert "data-node=\"3\"" not in js
+    assert '<span class="label">Local</span>' in js
+    assert '<span class="label">Key</span>' in js
+    assert 'data-node="3"' not in js
     assert 'wizard.step = "checking"' not in js
     assert "Create and run check" not in js
     setup = js.split("async function renderSetup")[1].split("async function renderNew")[0]
@@ -299,8 +299,8 @@ def test_ui_wizard_is_setup_only_then_skill_page(project_root: Path) -> None:
     assert "function checksFromPack" in js
     assert "function checkHeadline" in js
     pack = js.split("async function renderPack")[1].split("async function startCheck")[0]
-    assert "params.get(\"run\")" not in pack
-    assert "params.get(\"live\")" not in pack
+    assert 'params.get("run")' not in pack
+    assert 'params.get("live")' not in pack
     assert "checksTable(checksFromPack(pack))" in pack
     assert 'id="live"' in pack
     assert ">Run</button>" in pack
@@ -382,9 +382,9 @@ def test_ui_wizard_first_run_opens_skill_page_without_check(
         cases = (created.get("dataset") or {}).get("cases") or []
         assert cases, created
         assert all("id" in row and "prompt" in row for row in cases)
-        js = (
-            project_root / "src" / "skillgate_ai" / "local_ui" / "static" / "app.js"
-        ).read_text(encoding="utf-8")
+        js = (project_root / "src" / "skillgate_ai" / "local_ui" / "static" / "app.js").read_text(
+            encoding="utf-8"
+        )
         create = js.split("async function createSkill")[1].split("function checksFromPack")[0]
         assert "/api/check" not in create
     finally:
@@ -481,9 +481,7 @@ def test_ui_check_without_key_is_409(project_root: Path, tmp_path: Path) -> None
         server.server_close()
 
 
-def test_ui_apply_advice_does_not_run_without_key(
-    project_root: Path, tmp_path: Path
-) -> None:
+def test_ui_apply_advice_does_not_run_without_key(project_root: Path, tmp_path: Path) -> None:
     dest = tmp_path / "pdf-sabotaged"
     shutil.copytree(project_root / "skills" / "pdf-sabotaged", dest)
     ensure_demo_pdfs(dest / "evals" / "fixtures")
@@ -543,9 +541,7 @@ def test_ui_live_with_key_does_not_use_builtin(
 
             raise HarnessError("live stub")
 
-    monkeypatch.setattr(
-        "skillgate_ai.gate.live_harness_or_error", lambda *a, **k: LiveStub()
-    )
+    monkeypatch.setattr("skillgate_ai.gate.live_harness_or_error", lambda *a, **k: LiveStub())
     server, base, _state = start_background(root=project_root, host="127.0.0.1", port=0)
     try:
         status, started = _request(
@@ -586,9 +582,7 @@ def test_ui_demo_flag_still_runs_live(
 
             raise HarnessError("live stub")
 
-    monkeypatch.setattr(
-        "skillgate_ai.gate.live_harness_or_error", lambda *a, **k: LiveStub()
-    )
+    monkeypatch.setattr("skillgate_ai.gate.live_harness_or_error", lambda *a, **k: LiveStub())
     server, base, _state = start_background(root=project_root, host="127.0.0.1", port=0)
     try:
         status, started = _request(

@@ -125,7 +125,9 @@ def test_compare_versions_git_defaults_harness_from_history(tmp_path: Path) -> N
     assert seen == ["codex", "codex"]
 
 
-def test_compare_versions_cli_accepts_harness(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_compare_versions_cli_accepts_harness(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     pack = tmp_path / "reviewer"
     pack.mkdir()
     (pack / "SKILL.md").write_text("---\nname: reviewer\ndescription: d\n---\n", encoding="utf-8")
@@ -244,7 +246,9 @@ def test_trigger_mode_installs_skill_without_naming_it(tmp_path: Path) -> None:
                 encoding="utf-8"
             )
             return HarnessResult(
-                trigger=TriggerEvidence(selected_skill=None, read_paths=[], transcript="did nothing"),
+                trigger=TriggerEvidence(
+                    selected_skill=None, read_paths=[], transcript="did nothing"
+                ),
                 transcript="did nothing",
             )
 
@@ -291,9 +295,12 @@ def test_trigger_mode_installs_skill_without_naming_it(tmp_path: Path) -> None:
     assert loaded.selected_skill == "reviewer"
 
 
-def test_trigger_mode_prompt_does_not_name_the_skill(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    from skillgate_ai.harness import CursorAgentHarness
+def test_trigger_mode_prompt_does_not_name_the_skill(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     from test_judge import _cfg
+
+    from skillgate_ai.harness import CursorAgentHarness
 
     workspace = tmp_path / "ws"
     workspace.mkdir()
@@ -335,8 +342,9 @@ def test_codex_login_disables_user_skills_without_api_key(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Subscription login stays put. User skills are disabled by session config."""
-    from skillgate_ai.harness import AUTH_CLI_LOGIN, CodexCliHarness
     from test_judge import _cfg
+
+    from skillgate_ai.harness import AUTH_CLI_LOGIN, CodexCliHarness
 
     user_home = tmp_path / "home"
     foreign = user_home / ".codex" / "skills" / "other-skill"
@@ -419,8 +427,9 @@ def test_codex_login_disables_user_skills_without_api_key(
 def test_codex_custom_home_disables_that_skills_dir(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from skillgate_ai.harness import CodexCliHarness
     from test_judge import _cfg
+
+    from skillgate_ai.harness import CodexCliHarness
 
     user_home = tmp_path / "home"
     user_home.mkdir()
@@ -515,9 +524,7 @@ def test_round3_custom_answer_and_rate_limit_repros(tmp_path: Path) -> None:
     answers = {item["label"]: item["answer"] for item in payload["tasks"][0]["check_answers"]}
     assert answers["avoids useEffect fetch"] == "Yes"
 
-    rate = json.dumps(
-        {"type": "rate_limit_event", "rate_limit_info": {"utilization": 0.38}}
-    )
+    rate = json.dumps({"type": "rate_limit_event", "rate_limit_info": {"utilization": 0.38}})
     tool = json.dumps(
         {
             "type": "assistant",

@@ -74,7 +74,9 @@ def register_eval_routes(app: FastAPI) -> None:
                 skill_path,
                 checks=checks if isinstance(checks, list) else None,
                 case_ids=case_ids if isinstance(case_ids, list) else None,
-                pack_judge=body.get("pack_judge") if isinstance(body.get("pack_judge"), dict) else None,
+                pack_judge=body.get("pack_judge")
+                if isinstance(body.get("pack_judge"), dict)
+                else None,
                 has_pack_judge="pack_judge" in body,
             )
         except ValueError as exc:

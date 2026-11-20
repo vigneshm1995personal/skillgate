@@ -5,7 +5,8 @@ from __future__ import annotations
 import logging
 import re
 import time
-from typing import Any, Callable, Mapping
+from collections.abc import Callable, Mapping
+from typing import Any
 
 import httpx
 
@@ -133,7 +134,11 @@ def user_message_for_status(
     if status in {402, 429} and error_code in _QUOTA_CODES:
         if who == "OpenAI":
             return OUT_OF_CREDITS
-        return OUT_OF_CREDITS if label == "The judge" else f"{label} is out of credits. Add credits, then try again."
+        return (
+            OUT_OF_CREDITS
+            if label == "The judge"
+            else f"{label} is out of credits. Add credits, then try again."
+        )
     if status == 402:
         return f"{label} is out of credits. Add credits, then try again."
     if status == 429:

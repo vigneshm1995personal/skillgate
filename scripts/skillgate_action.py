@@ -22,8 +22,7 @@ _CHAT = frozenset({"chat", "completions", "responses", "structured"})
 _REMOVED = frozenset({"other", "compatible", "aws", "unknown"})
 _NOT_DECISION = frozenset({"auto", "skip"})
 _CHAT_MSG = (
-    "A decision model scores checks directly. "
-    "Chat and Responses completion models are not judges."
+    "A decision model scores checks directly. Chat and Responses completion models are not judges."
 )
 _REMOVED_MSG = "That scoring setup was removed. Pick a decision model."
 _NOT_MSG = "That is not a decision model. Pick a registered decision model."
@@ -197,11 +196,7 @@ def redact(text: str) -> str:
 
 
 def _secret_values() -> list[tuple[str, str]]:
-    return [
-        (name, value)
-        for name, value in os.environ.items()
-        if value and _is_secret_name(name)
-    ]
+    return [(name, value) for name, value in os.environ.items() if value and _is_secret_name(name)]
 
 
 def _is_secret_name(name: str) -> bool:

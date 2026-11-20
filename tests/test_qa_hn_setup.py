@@ -13,9 +13,7 @@ from skillgate_ai.cli import app
 runner = CliRunner()
 
 
-def test_compare_versions_dry_run_without_refs_prints_hint(
-    tmp_path: Path, monkeypatch
-) -> None:
+def test_compare_versions_dry_run_without_refs_prints_hint(tmp_path: Path, monkeypatch) -> None:
     pack = tmp_path / "skills" / "pdf"
     shutil.copytree(ROOT / "skills" / "pdf", pack)
     monkeypatch.setenv("SKILLGATE_ROOT", str(tmp_path))
@@ -29,9 +27,7 @@ def test_compare_versions_dry_run_without_refs_prints_hint(
     assert "Checks" not in out
 
 
-def test_judge_provider_show_without_model_exits_nonzero(
-    tmp_path: Path, monkeypatch
-) -> None:
+def test_judge_provider_show_without_model_exits_nonzero(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("SKILLGATE_ROOT", str(tmp_path))
     monkeypatch.chdir(tmp_path)
     result = runner.invoke(app, ["judge", "provider", "show"])

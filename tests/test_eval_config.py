@@ -65,7 +65,13 @@ def test_fingerprint_ignores_harness_pref() -> None:
 
 
 def test_fingerprint_changes_on_knobs() -> None:
-    base = EvalRunConfig(harness="codex", model=None, timeout_effective=300, temperature=0.0, reasoning_effort="medium")
+    base = EvalRunConfig(
+        harness="codex",
+        model=None,
+        timeout_effective=300,
+        temperature=0.0,
+        reasoning_effort="medium",
+    )
     fp = config_fingerprint(base)
     assert config_fingerprint(replace(base, harness="cursor-agent")) != fp
     assert config_fingerprint(replace(base, model="faster")) != fp
@@ -76,7 +82,9 @@ def test_fingerprint_changes_on_knobs() -> None:
 
 def test_fingerprint_ignores_effort_on_non_codex() -> None:
     cursor = EvalRunConfig(harness="cursor-agent", reasoning_effort="ultra", timeout_effective=300)
-    cursor_none = EvalRunConfig(harness="cursor-agent", reasoning_effort=None, timeout_effective=300)
+    cursor_none = EvalRunConfig(
+        harness="cursor-agent", reasoning_effort=None, timeout_effective=300
+    )
     assert config_fingerprint(cursor) == config_fingerprint(cursor_none)
 
 
@@ -228,7 +236,13 @@ def test_roundtrip_dict() -> None:
         temperature=0.2,
         reasoning_effort="low",
         source="ui",
-        applied={"harness": True, "model": True, "timeout": True, "temperature": False, "reasoning": True},
+        applied={
+            "harness": True,
+            "model": True,
+            "timeout": True,
+            "temperature": False,
+            "reasoning": True,
+        },
     )
     restored = EvalRunConfig.from_dict(original.to_dict())
     assert restored is not None
@@ -238,7 +252,9 @@ def test_roundtrip_dict() -> None:
 
 
 def test_config_label_includes_harness_and_timeout() -> None:
-    run = EvalRunConfig(harness="codex", model="gpt-test", timeout_effective=300, reasoning_effort="medium")
+    run = EvalRunConfig(
+        harness="codex", model="gpt-test", timeout_effective=300, reasoning_effort="medium"
+    )
     label = config_label(run)
     assert "Terminal agent" in label
     assert "GPT-test" in label

@@ -10,9 +10,9 @@ from test_qa_0711_fixes import _load, _spec_from_fixture
 from test_qa_56_round4 import C4_HEDGE, _call, _outputs
 
 from skillgate_ai.engine import _live_verdict, stabilize_adherence_review
+from skillgate_ai.judge_spec import spec_verdict
 from skillgate_ai.scorers import Score
 from skillgate_ai.span_facts import apply_log_facts, resolve_log_facts
-from skillgate_ai.judge_spec import spec_verdict
 
 ROOT = Path(__file__).resolve().parents[1]
 C4_FIXTURES = (
@@ -147,7 +147,9 @@ def test_c4_two_real_refunds_still_fail_stop_extra() -> None:
     )
     facts = resolve_log_facts(spec, blob.get("spans") or [], outputs=outputs)
     assert facts["q1"]["probability"] == 0.0
-    merged = apply_log_facts(spec, blob.get("answers") or {}, blob.get("spans") or [], outputs=outputs)
+    merged = apply_log_facts(
+        spec, blob.get("answers") or {}, blob.get("spans") or [], outputs=outputs
+    )
     passed, reasons, _ = spec_verdict(spec, merged, supports_confidence=True)
     assert passed is False
     assert any("more than once" in item.lower() for item in reasons)

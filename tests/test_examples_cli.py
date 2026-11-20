@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from conftest import plain_text
 from typer.testing import CliRunner
 
-from conftest import plain_text
 from skillgate_ai.cli import app
 from skillgate_ai.examples import bundled_example, copy_example
 

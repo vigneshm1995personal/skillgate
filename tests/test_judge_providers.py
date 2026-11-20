@@ -7,7 +7,7 @@ import pytest
 
 from skillgate_ai.config import LLMConfig, get_llm_config
 from skillgate_ai.errors import MissingLLMKeyError, SkillGateError
-from skillgate_ai.judge import SkipJudge, resolve_judge
+from skillgate_ai.judge import resolve_judge
 from skillgate_ai.judge_openai import DecisionsBackend, OutcomeJudge, make_openai_judge
 from skillgate_ai.judge_providers.jev import JevBackend
 from skillgate_ai.judge_settings import save_judge_settings
@@ -78,9 +78,7 @@ def test_aws_without_region_exits_2() -> None:
     assert "removed" in caught.value.message.lower()
 
 
-def test_aws_ignores_ambient_credentials(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_aws_ignores_ambient_credentials(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("SKILLGATE_ROOT", str(tmp_path))
     monkeypatch.setenv("AWS_ACCESS_KEY_ID", "AKIAAAMBIENT")
     monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "ambient-secret")

@@ -469,7 +469,11 @@ def test_judge_provider_test_accepts_key_env(
 
     def fake_ping(cfg, **_kwargs):
         seen["key"] = cfg.openai_api_key or ""
-        return {"ok": True, "message": "Connected via the Decisions API.", "scoring_endpoint": "decisions"}
+        return {
+            "ok": True,
+            "message": "Connected via the Decisions API.",
+            "scoring_endpoint": "decisions",
+        }
 
     monkeypatch.setattr("skillgate_ai.judge.ping_judge", fake_ping)
     result = runner.invoke(app, ["judge", "provider", "test", "--key-env", "OPENAI_API_KEY"])
@@ -510,9 +514,8 @@ def test_judge_provider_set_stores_key_env_name_not_value(
     assert secret not in raw
 
     from skillgate_ai.config import get_llm_config
-    from skillgate_ai.judge import resolve_judge
-
     from skillgate_ai.errors import MissingLLMKeyError
+    from skillgate_ai.judge import resolve_judge
 
     cfg = get_llm_config(tmp_path)
     with pytest.raises(MissingLLMKeyError) as caught:
@@ -581,12 +584,8 @@ def test_scoring_endpoint_recorded_for_decisions() -> None:
 
 
 def test_cursor_unable_to_fetch_user_details_is_signed_out() -> None:
-    assert not _cursor_login_status_authenticated(
-        0, "Unable to fetch user details\n", ""
-    )
-    assert not _cursor_login_status_authenticated(
-        0, "", "Error: unable to fetch user details"
-    )
+    assert not _cursor_login_status_authenticated(0, "Unable to fetch user details\n", "")
+    assert not _cursor_login_status_authenticated(0, "", "Error: unable to fetch user details")
     assert _cursor_login_status_authenticated(0, "Authenticated\nAccount: you\n", "")
 
 
@@ -599,9 +598,7 @@ def test_auth_error_fails_fast(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) 
 
         def run(self, command, *, env=None, timeout=0, cwd=None):
             del command, env, timeout, cwd
-            stdout = json.dumps(
-                {"type": "error", "message": "unable to fetch user details"}
-            )
+            stdout = json.dumps({"type": "error", "message": "unable to fetch user details"})
             return subprocess.CompletedProcess(["agent"], 1, stdout=stdout, stderr="")
 
     monkeypatch.setattr("skillgate_ai.harness._cursor_ready", lambda _c: True)

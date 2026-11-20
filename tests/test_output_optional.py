@@ -134,12 +134,11 @@ def test_optional_present_file_is_checked_and_expected_is_not_a_substring(
     assert pack is not None
     case = pack.cases[0].model_copy(
         update={
-            "golden": pack.cases[0].golden.model_copy(
-                update={"output_path": "output/result.txt"}
-            )
+            "golden": pack.cases[0].golden.model_copy(update={"output_path": "output/result.txt"})
         }
     )
-    from skillgate_ai.case_pack import CasePack, suite_from_pack as build
+    from skillgate_ai.case_pack import CasePack
+    from skillgate_ai.case_pack import suite_from_pack as build
 
     suite = build(CasePack(schema_version=1, skill="demo-skill", cases=[case]), str(root))
     (binary / "output").mkdir()

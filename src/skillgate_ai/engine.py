@@ -50,12 +50,7 @@ def _extras_all_passed(judged: Mapping[str, Any]) -> bool:
     cells = judged.get("cells") if isinstance(judged.get("cells"), Mapping) else {}
     answers = judged.get("answers") if isinstance(judged.get("answers"), Mapping) else {}
     questions = judged.get("questions") if isinstance(judged.get("questions"), Mapping) else {}
-    extra_ids = {
-        key
-        for blob in (cells, answers, questions)
-        for key in blob
-        if key not in reserved
-    }
+    extra_ids = {key for blob in (cells, answers, questions) for key in blob if key not in reserved}
     return bool(extra_ids)
 
 
@@ -159,9 +154,7 @@ def stabilize_adherence_review(
             choice = raw.get("choice")
         canonical = canonical_choice(key, choice)
         allowed = PASS_LOCK.get(key) or frozenset()
-        if not extras_ok and (
-            canonical is None or canonical.strip().lower() not in allowed
-        ):
+        if not extras_ok and (canonical is None or canonical.strip().lower() not in allowed):
             continue
         cleaned = dict(cell)
         cleaned.pop("status", None)
@@ -173,8 +166,7 @@ def stabilize_adherence_review(
     if changed:
         out["cells"] = next_cells
         review = any(
-            isinstance(row, dict) and row.get("status") == "unsure"
-            for row in next_cells.values()
+            isinstance(row, dict) and row.get("status") == "unsure" for row in next_cells.values()
         )
         out["review"] = review
         warnings = [
@@ -194,8 +186,7 @@ def stabilize_adherence_review(
         ]
         if not changed:
             out["review"] = any(
-                isinstance(row, dict) and row.get("status") == "unsure"
-                for row in cells.values()
+                isinstance(row, dict) and row.get("status") == "unsure" for row in cells.values()
             )
     elif extras_text:
         kept = [
@@ -329,11 +320,7 @@ class SuiteReport:
             "judge_cost_usd": total("judge_cost_usd", as_float=True),
         }
         totals = {key: value for key, value in totals.items() if value is not None}
-        labels = {
-            row.get("agent_cost_label")
-            for row in rows
-            if row.get("agent_cost_label")
-        }
+        labels = {row.get("agent_cost_label") for row in rows if row.get("agent_cost_label")}
         if len(labels) == 1:
             totals["agent_cost_label"] = next(iter(labels))
         if totals.get("tokens_total") and totals.get("cost_usd") is None:
@@ -454,11 +441,7 @@ def run_eval(
             pack_fingerprint=stamp_fp,
             pack_case_ids=stamp_ids,
         )
-        if (
-            max_tasks is not None
-            and tasks_this_slice >= max_tasks
-            and index + 1 < len(spec.tasks)
-        ):
+        if max_tasks is not None and tasks_this_slice >= max_tasks and index + 1 < len(spec.tasks):
             sliced = True
             next_task_index = index + 1
             break
@@ -490,7 +473,9 @@ def run_eval(
         )
     passed = _suite_passed(reports)
     primary_skill = skills[0] if skills else None
-    suite_advice = advise_suite(primary_skill, reports, reference=reference) if primary_skill else None
+    suite_advice = (
+        advise_suite(primary_skill, reports, reference=reference) if primary_skill else None
+    )
     set_eval_passed(passed)
     report = SuiteReport(
         suite=spec.suite,
@@ -632,16 +617,12 @@ def _run_outcome_judge(
             )
             output_path = case.golden.output_path if case.golden is not None else None
             actual_payload = (
-                actual_output_state(output_path, artifacts.workspace)
-                if output_path
-                else None
+                actual_output_state(output_path, artifacts.workspace) if output_path else None
             )
     from skillgate_ai.judge_context import build_agent_trajectory, skill_instructions_text
     from skillgate_ai.workspace_outputs import collect_workspace_outputs
 
-    outputs = collect_workspace_outputs(
-        task, artifacts.workspace, baseline=file_baseline
-    )
+    outputs = collect_workspace_outputs(task, artifacts.workspace, baseline=file_baseline)
     if not outputs:
         outputs = _outcome_judge_outputs(task, artifacts)
     trajectory = build_agent_trajectory(
@@ -707,9 +688,7 @@ def _no_trigger_skipped_judge(judge: Judge | None) -> dict[str, Any]:
         "choice": CORRECTLY_SKIPPED,
     }
     answers = {key: {"choice": CORRECTLY_SKIPPED} for key in CHECK_CELL_ORDER}
-    questions = {
-        key: {"instructions": CHECK_CELL_LABELS[key]} for key in CHECK_CELL_ORDER
-    }
+    questions = {key: {"instructions": CHECK_CELL_LABELS[key]} for key in CHECK_CELL_ORDER}
     return {
         **stamp,
         "status": "skip",
@@ -746,15 +725,9 @@ def _live_verdict(
         return False, reasons, stamped
     if not isinstance(judge, dict):
         return det_passed, det_failures, judge
-    warnings = [
-        str(item) for item in (judge.get("warnings") or []) if str(item).strip()
-    ]
+    warnings = [str(item) for item in (judge.get("warnings") or []) if str(item).strip()]
     stamped = {**judge, "warnings": warnings}
-    extra = [
-        str(item).strip()
-        for item in (judge.get("extra_failures") or [])
-        if str(item).strip()
-    ]
+    extra = [str(item).strip() for item in (judge.get("extra_failures") or []) if str(item).strip()]
     if expect_skill is None:
         if judge.get("score_no_trigger") and extra:
             return False, extra, stamped
@@ -920,8 +893,7 @@ def _run_task(
                 sandbox.workspace,
                 staged,
                 copies,
-                stage_claude_native=harness.name == "claude"
-                and claude_native_skills_enabled(),
+                stage_claude_native=harness.name == "claude" and claude_native_skills_enabled(),
             )
             if task.trigger_mode:
                 mode = sandbox.workspace / ".skillgate" / "mode"
@@ -996,16 +968,10 @@ def _run_task(
             steps, errors, had_path = count_path_steps(spans, result.transcript)
             det_passed = all(s.passed for s in scores)
             det_failures = [s.headline or s.detail for s in scores if not s.passed]
-            trigger_passed = all(
-                s.passed for s in scores if s.scorer == "skill_trigger"
-            )
+            trigger_passed = all(s.passed for s in scores if s.scorer == "skill_trigger")
             review = False
             if task.expect_skill is None:
-                judged = (
-                    _no_trigger_skipped_judge(judge)
-                    if is_live_harness(harness.name)
-                    else None
-                )
+                judged = _no_trigger_skipped_judge(judge) if is_live_harness(harness.name) else None
                 passed, failures = det_passed, det_failures
             elif is_live_harness(harness.name):
                 judged, mismatch, golden_payload, actual_payload = _run_outcome_judge(
@@ -1031,9 +997,7 @@ def _run_task(
                     mismatch=mismatch,
                     trigger_passed=trigger_passed,
                 )
-                review = bool(passed) and bool(
-                    isinstance(judged, dict) and judged.get("review")
-                )
+                review = bool(passed) and bool(isinstance(judged, dict) and judged.get("review"))
                 judged = _maybe_explain_fail(
                     judge,
                     passed,
@@ -1115,9 +1079,7 @@ def _run_task(
                 stderr=result.stderr,
                 returncode=result.returncode,
                 files=[{"src": item.src, "dest": item.dest} for item in task.files],
-                outputs=collect_workspace_outputs(
-                    task, sandbox.workspace, baseline=file_baseline
-                ),
+                outputs=collect_workspace_outputs(task, sandbox.workspace, baseline=file_baseline),
                 advice=advice,
                 usage=task_usage,
                 judge=judged,
@@ -1276,9 +1238,8 @@ def _eval_progress(
                 )
             )
             continue
-        is_running = (
-            (force_running_id is not None and task.id == force_running_id)
-            or (force_running_id is None and index == completed_count)
+        is_running = (force_running_id is not None and task.id == force_running_id) or (
+            force_running_id is None and index == completed_count
         )
         if is_running:
             current_task_id = task.id

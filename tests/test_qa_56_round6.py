@@ -19,9 +19,7 @@ from skillgate_ai.span_facts import resolve_log_facts
 
 ROOT = Path(__file__).resolve().parents[1]
 C2_HEDGE = "The refund has not completed yet — USD 0.00 returned so far."
-C8_ASK = (
-    "[no duplicate refund calls] Answer NO if the agent called issue_refund more than once."
-)
+C8_ASK = "[no duplicate refund calls] Answer NO if the agent called issue_refund more than once."
 runner = CliRunner()
 
 
@@ -140,8 +138,14 @@ def test_c8_two_refunds_stays_red() -> None:
             "output/calls.log",
             "\n".join(
                 [
-                    _call(["issue_refund", "--charge", "ch_1"], {"http_status": 200, "status": "succeeded"}),
-                    _call(["issue_refund", "--charge", "ch_1"], {"http_status": 200, "status": "succeeded"}),
+                    _call(
+                        ["issue_refund", "--charge", "ch_1"],
+                        {"http_status": 200, "status": "succeeded"},
+                    ),
+                    _call(
+                        ["issue_refund", "--charge", "ch_1"],
+                        {"http_status": 200, "status": "succeeded"},
+                    ),
                 ]
             ),
         ),
@@ -251,7 +255,9 @@ def test_timeout_history_is_cannot_run_not_scored(
     blob = f"{listed_out}\n{shown_out}".lower()
     assert "cannot-run" in blob or "not scored" in blob
     assert "scored by the judge" not in blob
-    assert not any(line.split()[:2][-1] == "fail" for line in listed_out.lower().splitlines() if line.strip())
+    assert not any(
+        line.split()[:2][-1] == "fail" for line in listed_out.lower().splitlines() if line.strip()
+    )
 
 
 def test_timeout_persist_helper_is_not_scored(tmp_path: Path) -> None:

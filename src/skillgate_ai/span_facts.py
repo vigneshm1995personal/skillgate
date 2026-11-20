@@ -205,9 +205,7 @@ def resolve_log_facts(
         return {}
     facts: dict[str, Any] = {}
     for question in spec.extras:
-        computed = _compute_question(
-            question, spans, trajectory=trajectory, outputs=outputs
-        )
+        computed = _compute_question(question, spans, trajectory=trajectory, outputs=outputs)
         if computed is not None:
             facts[question.id] = computed
     return _merge_wording_facts(
@@ -286,9 +284,7 @@ def _compute_question(
         if has_calls and re.search(r"issue_refund", ask, re.IGNORECASE):
             count = logged
         elif file_name:
-            count = count_file_reads(
-                spans, file_name, trajectory=trajectory, tool=tool
-            )
+            count = count_file_reads(spans, file_name, trajectory=trajectory, tool=tool)
         elif tool:
             count = count_tool_calls(spans, tool, trajectory=trajectory)
         else:
@@ -320,7 +316,9 @@ def _compute_question(
         present = any(token in blob for token in wanted)
         if re.search(r"\bnot\s+" + re.escape(wanted[0]), ask, re.IGNORECASE):
             present = not present if "not" in ask.lower() else present
-        if _ANSWER_NO_IF.search(ask) and re.search(r"\bnot\b.{0,40}" + re.escape(wanted[0]), ask, re.IGNORECASE):
+        if _ANSWER_NO_IF.search(ask) and re.search(
+            r"\bnot\b.{0,40}" + re.escape(wanted[0]), ask, re.IGNORECASE
+        ):
             return _predicate(any(token in blob for token in wanted), source="log")
         return _predicate(present, source="log")
     return _compute_reply_fact(ask, spans, trajectory=trajectory, outputs=outputs)
@@ -349,9 +347,7 @@ def _primary_tool(
     if not candidates:
         return None
     present = [
-        name
-        for name in candidates
-        if count_tool_calls(spans, name, trajectory=trajectory) > 0
+        name for name in candidates if count_tool_calls(spans, name, trajectory=trajectory) > 0
     ]
     if present:
         return present[0]
@@ -388,7 +384,9 @@ def _fact_kind(ask: str) -> str | None:
         return None
     if _RETURN.search(ask):
         return "return"
-    if _TOOL_CALLED.search(ask) or re.search(r"\b(?:was|were)\s+.{0,20}called\b", ask, re.IGNORECASE):
+    if _TOOL_CALLED.search(ask) or re.search(
+        r"\b(?:was|were)\s+.{0,20}called\b", ask, re.IGNORECASE
+    ):
         return "called"
     return None
 
@@ -403,7 +401,9 @@ def _primary_file(ask: str) -> str | None:
 def _count_is_yes(ask: str, count: int) -> bool:
     """Yes/No polarity for a count fact. Never rewrite the ask."""
     text = ask or ""
-    no_if_more = bool(_ANSWER_NO_IF.search(text) and re.search(r"more than once", text, re.IGNORECASE))
+    no_if_more = bool(
+        _ANSWER_NO_IF.search(text) and re.search(r"more than once", text, re.IGNORECASE)
+    )
     if no_if_more or _AT_MOST_ONCE.search(text) or _NO_DUPLICATE.search(text):
         return count <= 1
     if re.search(r"more than once", text, re.IGNORECASE):
@@ -462,12 +462,7 @@ def _output_file(outputs: Sequence[Mapping[str, Any]] | str | None, name: str) -
             continue
         path = str(item.get("path") or "").replace("\\", "/").lower()
         if path.endswith((needle, "/" + needle)):
-            return str(
-                item.get("content")
-                or item.get("body")
-                or item.get("extracted_text")
-                or ""
-            )
+            return str(item.get("content") or item.get("body") or item.get("extracted_text") or "")
     return ""
 
 
@@ -530,9 +525,7 @@ def _refund_status(row: Mapping[str, Any]) -> str:
     return status or "unknown"
 
 
-def _count_from_calls_log(
-    ask: str, outputs: Sequence[Mapping[str, Any]] | str | None
-) -> int:
+def _count_from_calls_log(ask: str, outputs: Sequence[Mapping[str, Any]] | str | None) -> int:
     if not re.search(
         r"issue_refund|duplicate refund|second (?:call|refund)",
         ask,
@@ -582,7 +575,10 @@ def _lookup_shows_refund(calls: Sequence[Mapping[str, Any]]) -> bool:
             except (TypeError, ValueError):
                 pass
             for refund in charge.get("refunds") or []:
-                if isinstance(refund, Mapping) and str(refund.get("status") or "").lower() == "succeeded":
+                if (
+                    isinstance(refund, Mapping)
+                    and str(refund.get("status") or "").lower() == "succeeded"
+                ):
                     return True
     return False
 

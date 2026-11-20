@@ -34,9 +34,7 @@ def _never_touch_real_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> N
 
 def _extra_spec(ask: str, qid: str = "q0") -> JudgeSpec:
     return JudgeSpec(
-        questions=tuple(
-            builtin_questions() + [JudgeQuestion(id=qid, type="predicate", ask=ask)]
-        )
+        questions=tuple(builtin_questions() + [JudgeQuestion(id=qid, type="predicate", ask=ask)])
     )
 
 

@@ -139,9 +139,7 @@ def test_latest_version_installs_that_exact_release(monkeypatch, tmp_path) -> No
     monkeypatch.setattr(mod, "run_command", run)
     assert mod.main() == 2
     assert installed == ["0.7.9"]
-    assert commands == [
-        ["skillgate", "check", "skills/pdf", "--no-judge", "--summary", "github"]
-    ]
+    assert commands == [["skillgate", "check", "skills/pdf", "--no-judge", "--summary", "github"]]
     summary = (tmp_path / "summary.md").read_text(encoding="utf-8")
     assert "Cannot run" in summary
     assert "exit 2" in summary
@@ -310,9 +308,7 @@ def test_secrets_are_masked_and_never_printed(monkeypatch, tmp_path, capsys) -> 
     monkeypatch.setattr(mod, "run_command", run)
     assert mod.main() == 2
     visible = [
-        line
-        for line in capsys.readouterr().out.splitlines()
-        if not line.startswith("::add-mask::")
+        line for line in capsys.readouterr().out.splitlines() if not line.startswith("::add-mask::")
     ]
     assert secret not in "\n".join(visible)
     assert "::add-mask::" not in (tmp_path / "summary.md").read_text(encoding="utf-8")

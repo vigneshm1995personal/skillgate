@@ -3,13 +3,12 @@ from __future__ import annotations
 import shutil
 from pathlib import Path
 
+from conftest import plain_text
 from typer.testing import CliRunner
 
-from conftest import plain_text
 from skillgate_ai.cli import app
 from skillgate_ai.gate import run_check
 from skillgate_ai.harness import resolve_harness
-from skillgate_ai.keys import set_vault_key
 
 runner = CliRunner()
 ROOT = Path(__file__).resolve().parents[1]
@@ -89,6 +88,7 @@ def test_harness_demo_is_removed(tmp_path: Path, monkeypatch) -> None:
 
 def test_resolve_harness_auto_is_not_demo(tmp_path: Path, monkeypatch) -> None:
     from conftest import enable_cursor_agent
+
     from skillgate_ai.config import get_llm_config
 
     enable_cursor_agent(monkeypatch, tmp_path)
@@ -115,7 +115,10 @@ def test_customer_copy_denylist() -> None:
         for path in paths:
             if not path.is_file():
                 continue
-            if path.suffix not in {".py", ".ts", ".tsx", ".md", ".example", ""} and path.name != ".env.example":
+            if (
+                path.suffix not in {".py", ".ts", ".tsx", ".md", ".example", ""}
+                and path.name != ".env.example"
+            ):
                 continue
             if "plans" in path.parts or ".test." in path.name:
                 continue
@@ -140,7 +143,7 @@ def test_all_run_buttons_disable_without_key() -> None:
     gate = (ROOT / "web" / "src" / "components" / "dashboard" / "gate-page.tsx").read_text(
         encoding="utf-8"
     )
-    assert "id=\"btn-run\"" in eval_page
+    assert 'id="btn-run"' in eval_page
     assert eval_page.count("!status?.has_key") >= 2
     assert "Run this check" in check_list
     assert "has_key" in check_list

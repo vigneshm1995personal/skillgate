@@ -13,6 +13,7 @@ def plain_text(text: str) -> str:
     """Strip ANSI so help-text asserts work under GITHUB_ACTIONS/FORCE_COLOR."""
     return _ANSI_RE.sub("", text or "")
 
+
 ROOT = Path(__file__).resolve().parents[1]
 
 os.environ["AI_GATEWAY_API_KEY"] = ""
@@ -77,7 +78,9 @@ def _no_live_keys(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.fixture(autouse=True)
-def _isolate_codex_home(tmp_path_factory: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch) -> None:
+def _isolate_codex_home(
+    tmp_path_factory: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Never let pytest inherit or write the developer's ~/.codex/config.toml."""
     isolated = tmp_path_factory.mktemp("codex-home")
     monkeypatch.setenv("CODEX_HOME", str(isolated))

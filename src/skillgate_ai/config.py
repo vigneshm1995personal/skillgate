@@ -69,9 +69,10 @@ def _opt(name: str) -> str | None:
 
 
 def _base_url(keys: dict[str, str] | None = None) -> str:
-    explicit = os.environ.get("AI_GATEWAY_BASE_URL", "").strip() or os.environ.get(
-        "SKILLGATE_AI_GATEWAY_BASE_URL", ""
-    ).strip()
+    explicit = (
+        os.environ.get("AI_GATEWAY_BASE_URL", "").strip()
+        or os.environ.get("SKILLGATE_AI_GATEWAY_BASE_URL", "").strip()
+    )
     if explicit:
         return explicit.rstrip("/")
     if keys and keys.get("AI_GATEWAY_API_KEY"):
@@ -134,9 +135,7 @@ class LLMConfig:
             found.append("cursor-agent")
         if self.codex_api_key:
             found.append("codex")
-        if self.gateway_api_key:
-            found.append("compatible")
-        elif self.openai_api_key:
+        if self.gateway_api_key or self.openai_api_key:
             found.append("compatible")
         if self.anthropic_api_key:
             found.append("anthropic")

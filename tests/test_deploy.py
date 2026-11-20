@@ -4,9 +4,9 @@ import shutil
 from pathlib import Path
 
 import pytest
+from conftest import enable_cursor_agent, plain_text
 from typer.testing import CliRunner
 
-from conftest import enable_cursor_agent, plain_text
 from skillgate_ai.cli import app
 from skillgate_ai.deploy import CursorAdapter, DeployError, latest_check_passed
 from skillgate_ai.errors import friendly_os_error
@@ -269,9 +269,7 @@ def test_deploy_help_labels_force() -> None:
     )
 
 
-def test_deploy_invalid_target_before_gate(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_deploy_invalid_target_before_gate(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     pack = _pdf_pack(tmp_path / "pack")
     skills_root = tmp_path / "cursor-skills"
     monkeypatch.setenv("SKILLGATE_CURSOR_SKILLS", str(skills_root))

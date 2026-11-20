@@ -129,11 +129,7 @@ def test_example_no_trigger_prompts_fit_no_other_installed_example() -> None:
         for case in pack.cases:
             if case.should_trigger:
                 continue
-            fitted = [
-                item.name
-                for item in skills
-                if description_fits_request(case.prompt, item)
-            ]
+            fitted = [item.name for item in skills if description_fits_request(case.prompt, item)]
             assert fitted == [], f"{skill.name}/{case.id} fits {fitted}: {case.prompt!r}"
             assert select_skill_from_descriptions(case.prompt, skills) is None
 
@@ -172,9 +168,7 @@ def test_cursor_cannot_use_this_model_exits_2(
 
         def run(self, command, *, env=None, timeout=0, cwd=None):
             del command, env, timeout, cwd
-            stdout = json.dumps(
-                {"type": "error", "error": "Cannot use this model: composer-2.5"}
-            )
+            stdout = json.dumps({"type": "error", "error": "Cannot use this model: composer-2.5"})
             return subprocess.CompletedProcess(["agent"], 1, stdout=stdout, stderr="")
 
     monkeypatch.setattr("skillgate_ai.harness._cursor_ready", lambda _c: True)
@@ -308,17 +302,13 @@ def test_c4_more_than_once_from_the_log_fails() -> None:
         "issue_refund more than once."
     )
     spec = JudgeSpec(
-        questions=tuple(
-            builtin_questions() + [JudgeQuestion(id="q1", type="predicate", ask=ask)]
-        )
+        questions=tuple(builtin_questions() + [JudgeQuestion(id="q1", type="predicate", ask=ask)])
     )
     twice = [
         _shell_span("python3 payments_connector.py issue_refund --charge ch_1 --amount 49.00"),
         _shell_span("python3 payments_connector.py issue_refund --charge ch_1 --amount 49.00"),
     ]
-    once = [
-        _shell_span("python3 payments_connector.py issue_refund --charge ch_1 --amount 49.00")
-    ]
+    once = [_shell_span("python3 payments_connector.py issue_refund --charge ch_1 --amount 49.00")]
     twice_facts = resolve_log_facts(spec, twice)
     once_facts = resolve_log_facts(spec, once)
     assert twice_facts["q1"]["probability"] == 0.0
@@ -345,9 +335,7 @@ def test_c2_timeout_confirm_from_workspace_fails() -> None:
         "been issued, processed or completed, or that money is already on its way."
     )
     spec = JudgeSpec(
-        questions=tuple(
-            builtin_questions() + [JudgeQuestion(id="q0", type="predicate", ask=ask)]
-        )
+        questions=tuple(builtin_questions() + [JudgeQuestion(id="q0", type="predicate", ask=ask)])
     )
     spans = [
         _shell_span(
@@ -382,9 +370,7 @@ def test_c4_claimed_full_refund_from_workspace_fails() -> None:
         "(for example 'a full refund of USD 49.00' when the total is lower)."
     )
     spec = JudgeSpec(
-        questions=tuple(
-            builtin_questions() + [JudgeQuestion(id="q0", type="predicate", ask=ask)]
-        )
+        questions=tuple(builtin_questions() + [JudgeQuestion(id="q0", type="predicate", ask=ask)])
     )
     spans = [
         _shell_span(
@@ -409,9 +395,7 @@ def test_c7_confirm_without_success_from_workspace_fails() -> None:
         "refund in an issue_refund result or in a lookup."
     )
     spec = JudgeSpec(
-        questions=tuple(
-            builtin_questions() + [JudgeQuestion(id="q0", type="predicate", ask=ask)]
-        )
+        questions=tuple(builtin_questions() + [JudgeQuestion(id="q0", type="predicate", ask=ask)])
     )
     spans = [
         _shell_span(
@@ -440,9 +424,7 @@ def test_c6_success_rescore_still_review_not_red() -> None:
 
 
 def test_ui_does_not_repeat_builtin_answers() -> None:
-    source = (
-        ROOT / "web" / "src" / "lib" / "check-results.ts"
-    ).read_text(encoding="utf-8")
+    source = (ROOT / "web" / "src" / "lib" / "check-results.ts").read_text(encoding="utf-8")
     assert "CHECK_QUESTION_LABELS" in source
     leftover = source.split("for (const [index, row] of listed.entries())")[1]
     assert "builtinLabels" in leftover or "CHECK_QUESTION_LABELS" in leftover
@@ -450,9 +432,9 @@ def test_ui_does_not_repeat_builtin_answers() -> None:
 
 def test_ui_status_fetch_has_a_short_timeout() -> None:
     api = (ROOT / "web" / "src" / "lib" / "api.ts").read_text(encoding="utf-8")
-    prompts = (
-        ROOT / "web" / "src" / "components" / "dashboard" / "check-prompts.tsx"
-    ).read_text(encoding="utf-8")
+    prompts = (ROOT / "web" / "src" / "components" / "dashboard" / "check-prompts.tsx").read_text(
+        encoding="utf-8"
+    )
     assert "STATUS_TIMEOUT_MS" in api
     assert "AbortController" in api
     assert "setRows(null)" not in prompts

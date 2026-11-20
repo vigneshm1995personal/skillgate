@@ -211,9 +211,9 @@ def _pass_warnings(
     from skillgate_ai.metrics import budget_gate_reason, metrics_blocking
 
     warnings: list[str] = []
-    if coverage_required(skill_path, checks=checks, report=report) and not authentic_completion_passed(
-        skill_path, report
-    ):
+    if coverage_required(
+        skill_path, checks=checks, report=report
+    ) and not authentic_completion_passed(skill_path, report):
         warnings.append("Completion coverage is required.")
     trust = trust_suite_for_skill(skill_path) if skill_path else None
     if trust is None:
@@ -229,23 +229,15 @@ def _pass_warnings(
     return tuple(warnings)
 
 
-def _report_covers_pinned_ids(
-    report: dict[str, Any] | None, case_ids: tuple[str, ...]
-) -> bool:
+def _report_covers_pinned_ids(report: dict[str, Any] | None, case_ids: tuple[str, ...]) -> bool:
     if not case_ids:
         return False
     tasks = (report or {}).get("tasks") or []
-    seen = {
-        str(task.get("id") or "")
-        for task in tasks
-        if isinstance(task, dict)
-    }
+    seen = {str(task.get("id") or "") for task in tasks if isinstance(task, dict)}
     return all(case_id in seen for case_id in case_ids)
 
 
-def _template_check(
-    checks: list[dict[str, Any]], description: str
-) -> dict[str, Any]:
+def _template_check(checks: list[dict[str, Any]], description: str) -> dict[str, Any]:
     for item in checks:
         if is_completion_check(item):
             return dict(item)

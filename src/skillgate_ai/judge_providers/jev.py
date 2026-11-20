@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Any, Mapping
+from collections.abc import Mapping
+from typing import Any
 from urllib.parse import urlparse
 
 from skillgate_ai.judge_context import attach_adherence_context
@@ -233,5 +234,3 @@ def _public_failure(result: Mapping[str, Any]) -> str:
     if isinstance(status, int):
         return "The judge couldn't score this check."
     return "Could not connect."
-
-

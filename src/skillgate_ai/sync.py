@@ -168,11 +168,7 @@ def sync_once(
         prefix = path_prefix or "skills"
         for name in names:
             _reject_symlinks(work / prefix / name)
-        skipped = [
-            name
-            for name in names
-            if latest_check_passed(work / prefix / name) is False
-        ]
+        skipped = [name for name in names if latest_check_passed(work / prefix / name) is False]
         skipped_set = set(skipped)
         roots = target_roots()
         per_target = {
@@ -235,7 +231,7 @@ def install_launchd_plist(
     }
     launch_dir = launch_agents_dir()
     launch_dir.mkdir(parents=True, exist_ok=True)
-    try:
+    try:  # noqa: SIM105
         os.chmod(launch_dir, 0o755)
     except OSError:
         pass

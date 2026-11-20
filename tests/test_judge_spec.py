@@ -239,7 +239,9 @@ def test_score_extra_decisions_payload_includes_levels() -> None:
     assert extra["type"] == "score"
     assert isinstance(extra.get("levels"), list)
     assert len(extra["levels"]) >= 2
-    assert all(isinstance(item, dict) and str(item.get("label") or "").strip() for item in extra["levels"])
+    assert all(
+        isinstance(item, dict) and str(item.get("label") or "").strip() for item in extra["levels"]
+    )
 
 
 def test_numeric_score_extra_passes_after_coerce() -> None:
@@ -270,11 +272,7 @@ def test_numeric_score_extra_passes_after_coerce() -> None:
 def test_unknown_type_is_plain() -> None:
     with pytest.raises(SuiteError) as caught:
         resolve_judge_spec(
-            pack={
-                "extra_questions": [
-                    {"id": "ranked", "type": "ranking", "ask": "Rank these"}
-                ]
-            }
+            pack={"extra_questions": [{"id": "ranked", "type": "ranking", "ask": "Rank these"}]}
         )
     assert "Yes/No, pick one, or score" in caught.value.message
 
@@ -315,7 +313,9 @@ def test_dump_seed_pack_omits_empty_judge(tmp_path: Path) -> None:
 
     dest = tmp_path / "notes"
     dest.mkdir()
-    (dest / "SKILL.md").write_text("---\nname: notes\ndescription: d\n---\n# notes\n", encoding="utf-8")
+    (dest / "SKILL.md").write_text(
+        "---\nname: notes\ndescription: d\n---\n# notes\n", encoding="utf-8"
+    )
     pack = CasePack(
         schema_version=1,
         skill="notes",

@@ -12,6 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from skillgate_ai import __version__
+from skillgate_ai.api_compare import register_compare_routes
 from skillgate_ai.api_evals import register_eval_routes
 from skillgate_ai.api_payloads import (
     SETTINGS_KEYS,
@@ -20,7 +21,6 @@ from skillgate_ai.api_payloads import (
     keys_payload,
     state_of,
 )
-from skillgate_ai.api_compare import register_compare_routes
 from skillgate_ai.api_runs import register_run_routes
 from skillgate_ai.api_shims import register_hosted_shims
 from skillgate_ai.api_skills import register_skill_routes
@@ -32,10 +32,10 @@ from skillgate_ai.config import (
     load_env,
     missing_key_error,
 )
-from skillgate_ai.keys import clear_vault_key, set_vault_key
-from skillgate_ai.local_guard import LocalUIGuard
 from skillgate_ai.deploy import deploy_status
 from skillgate_ai.errors import MissingLLMKeyError, SkillGateError
+from skillgate_ai.keys import clear_vault_key, set_vault_key
+from skillgate_ai.local_guard import LocalUIGuard
 from skillgate_ai.mode import current_mode, slots_for
 from skillgate_ai.paths import project_root
 

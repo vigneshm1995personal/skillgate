@@ -68,7 +68,6 @@ def _decisions_model(model: str) -> str:
     return DEFAULT_MODEL
 
 
-
 class JudgeBackend(Protocol):
     """HTTP client for one decisions endpoint. A judge implements DecisionModel."""
 
@@ -253,7 +252,6 @@ def _path_is_recorded(path: Any) -> bool:
     return int(steps) > 0
 
 
-
 def _path_not_available_cell() -> dict[str, Any]:
     return {
         "label": SOFT_CELL_LABELS["path_efficiency"],
@@ -321,9 +319,7 @@ def _normalize_answers(
     if spec is not None:
         for question in spec.extras:
             if question.id in raw:
-                answers[question.id] = coerce_extra_answer(
-                    raw.get(question.id), kind=question.type
-                )
+                answers[question.id] = coerce_extra_answer(raw.get(question.id), kind=question.type)
     return answers
 
 
@@ -359,8 +355,6 @@ def _lift_decision_answer(item: Any) -> Any:
     return data
 
 
-
-
 def _annotate_payload_too_large(
     result: Mapping[str, Any], state: Mapping[str, Any]
 ) -> dict[str, Any]:
@@ -376,7 +370,6 @@ def _annotate_payload_too_large(
         return dict(result)
     joined = f"{reason} {size}".strip() if reason else size
     return {**result, "reason": joined}
-
 
 
 class DecisionsBackend(_OpenAIPosted):
@@ -413,7 +406,7 @@ class DecisionsBackend(_OpenAIPosted):
         text = _state_text(state)
         content = _user_content(text, images)
         payload_input: str | list[dict[str, Any]]
-        if images:
+        if images:  # noqa: SIM108
             payload_input = [{"role": "user", "content": content}]
         else:
             payload_input = text
@@ -564,9 +557,7 @@ class OutcomeJudge:
             derived = _expected_outcome_text(state)
             if derived:
                 state["expected_outcome"] = derived
-        files = workspace_files_for_judge(
-            artifacts if isinstance(artifacts, list) else None
-        )
+        files = workspace_files_for_judge(artifacts if isinstance(artifacts, list) else None)
         state["workspace_files"] = files
         trajectory = (
             kwargs.get("agent_trajectory")
@@ -577,7 +568,9 @@ class OutcomeJudge:
         from skillgate_ai.wording_facts import attach_wording_questions
 
         skill_text = state.get("skill_instructions") if isinstance(state, Mapping) else None
-        resolved = attach_wording_questions(resolved, skill_text if isinstance(skill_text, str) else None)
+        resolved = attach_wording_questions(
+            resolved, skill_text if isinstance(skill_text, str) else None
+        )
         facts = resolve_log_facts(
             resolved,
             spans,
@@ -602,9 +595,7 @@ class OutcomeJudge:
         )
         if facts and evaluated.get("status") == "completed":
             answers = (
-                dict(evaluated.get("answers"))
-                if isinstance(evaluated.get("answers"), dict)
-                else {}
+                dict(evaluated.get("answers")) if isinstance(evaluated.get("answers"), dict) else {}
             )
             answers.update(facts)
             evaluated = dict(evaluated)
@@ -645,20 +636,12 @@ class OutcomeJudge:
             if again.get("status") != "completed":
                 break
             rounds.append(again)
-        blobs = [
-            row.get("answers")
-            for row in rounds
-            if isinstance(row.get("answers"), dict)
-        ]
-        merged = majority_vote_answers(
-            [blob for blob in blobs if isinstance(blob, dict)]
-        )
+        blobs = [row.get("answers") for row in rounds if isinstance(row.get("answers"), dict)]
+        merged = majority_vote_answers([blob for blob in blobs if isinstance(blob, dict)])
         last = dict(rounds[-1])
         last["answers"] = merged
         if len(rounds) > 1:
-            last["votes"] = vote_round_summaries(
-                [blob for blob in blobs if isinstance(blob, dict)]
-            )
+            last["votes"] = vote_round_summaries([blob for blob in blobs if isinstance(blob, dict)])
         usage = _sum_judge_usage(rounds)
         if usage is not None:
             last["usage"] = usage
@@ -724,9 +707,7 @@ class OutcomeJudge:
         citations = {"artifacts": list(artifacts), "omitted_images": omitted}
         soft_questions = {k: all_questions()[k] for k in SOFT_CELL_ORDER}
         extra_warnings = [
-            str(item)
-            for item in (evaluated.get("warnings") or [])
-            if str(item).strip()
+            str(item) for item in (evaluated.get("warnings") or []) if str(item).strip()
         ]
         if evaluated.get("status") != "completed":
             reason = str(evaluated.get("reason") or "The judge couldn't score this check.")
@@ -759,9 +740,7 @@ class OutcomeJudge:
         answers = evaluated.get("answers") if isinstance(evaluated.get("answers"), dict) else {}
         if not include_path:
             answers = {key: value for key, value in answers.items() if key not in SOFT_CELL_ORDER}
-        confidence = bool(
-            getattr(self.backend, "supports_confidence", self.supports_confidence)
-        )
+        confidence = bool(getattr(self.backend, "supports_confidence", self.supports_confidence))
         skipped = [str(i) for i in (evaluated.get("skipped") or []) if str(i).strip()]
         passed, reasons, warnings = spec_verdict(
             resolved,
@@ -851,8 +830,7 @@ class OutcomeJudge:
             extra_failures=extra_failures,
         )
         payload["review"] = bool(passed) and any(
-            isinstance(cell, dict) and cell.get("status") == "unsure"
-            for cell in cells.values()
+            isinstance(cell, dict) and cell.get("status") == "unsure" for cell in cells.values()
         )
         votes = evaluated.get("votes")
         if isinstance(votes, list) and votes:
@@ -930,7 +908,9 @@ def _as_path(value: Any) -> Path | None:
     return None
 
 
-def ping_openai_backend(backend: JudgeBackend, *, display_name: str = DISPLAY_NAME) -> dict[str, Any]:
+def ping_openai_backend(
+    backend: JudgeBackend, *, display_name: str = DISPLAY_NAME
+) -> dict[str, Any]:
     del display_name
     result = backend.post_json(
         "/decisions",

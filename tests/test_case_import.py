@@ -52,17 +52,10 @@ def test_plan_reports_row_errors_without_writing(tmp_path: Path) -> None:
 
 def test_conflict_fail_blocks_write(tmp_path: Path) -> None:
     pack = _copy_pdf(tmp_path)
-    before = (pack / "evals" / "cases.yaml").read_text(encoding="utf-8")
-    seed = (
-        b"id,prompt,input\n"
-        b"first-custom,One,evals/fixtures/hello.pdf\n"
-    )
+    seed = b"id,prompt,input\nfirst-custom,One,evals/fixtures/hello.pdf\n"
     apply_case_import(pack, seed, filename="seed.csv")
     after_seed = (pack / "evals" / "cases.yaml").read_text(encoding="utf-8")
-    content = (
-        b"id,prompt,input\n"
-        b"first-custom,Duplicate row,evals/fixtures/hello.pdf\n"
-    )
+    content = b"id,prompt,input\nfirst-custom,Duplicate row,evals/fixtures/hello.pdf\n"
     with pytest.raises(CaseImportError, match="already exists"):
         apply_case_import(pack, content, filename="rows.csv", on_conflict="fail")
     assert (pack / "evals" / "cases.yaml").read_text(encoding="utf-8") == after_seed

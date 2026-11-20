@@ -16,11 +16,11 @@ from skillgate_ai.compare import (
     scrub_compare_payload,
     scrub_customer_compare_payload,
 )
+from skillgate_ai.errors import SkillGateError
 from skillgate_ai.eval_config import EvalRunConfig, with_model
+from skillgate_ai.judge import resolve_judge
 from skillgate_ai.judge_context import parse_command_runs
 from skillgate_ai.judge_openai import _state_text
-from skillgate_ai.errors import SkillGateError
-from skillgate_ai.judge import resolve_judge
 from skillgate_ai.pack_files import GOLDEN_TAIL_CHARS, read_capped_text
 from skillgate_ai.sandbox import _sandbox_env
 from skillgate_ai.suite import TaskSpec
@@ -84,9 +84,7 @@ def test_parse_command_runs_from_claude_stream_json() -> None:
                             {
                                 "type": "tool_result",
                                 "tool_use_id": "toolu_read",
-                                "content": [
-                                    {"type": "text", "text": "def slugify(text): ..."}
-                                ],
+                                "content": [{"type": "text", "text": "def slugify(text): ..."}],
                             }
                         ],
                     },
@@ -199,9 +197,7 @@ def test_live_judge_uses_raw_stdout_when_transcript_drops_tool_json(tmp_path: Pa
     trajectory = captured["trajectory"]
     assert isinstance(trajectory, dict)
     bash = next(
-        run
-        for run in trajectory["command_runs"]
-        if "pytest" in str(run.get("command") or "")
+        run for run in trajectory["command_runs"] if "pytest" in str(run.get("command") or "")
     )
     assert "passed" in (bash.get("output") or "").lower()
 
@@ -341,9 +337,7 @@ def test_run_check_stores_resolved_model_over_alias(
     monkeypatch.setattr("skillgate_ai.gate.live_harness_or_error", lambda *a, **k: _Harness())
     monkeypatch.setattr("skillgate_ai.gate.resolve_judge", lambda *a, **k: SkipJudge())
     monkeypatch.setattr("skillgate_ai.gate.run_eval", fake_run_eval)
-    result = run_check(
-        dest, harness="claude", model="sonnet", source="test", root=tmp_path
-    )
+    result = run_check(dest, harness="claude", model="sonnet", source="test", root=tmp_path)
     assert result.report is not None
     assert result.report.config is not None
     assert result.report.config["model"] == "claude-sonnet-5-5"
@@ -482,12 +476,11 @@ def test_compatible_404_fallback_does_not_warn_http_404(
         return FakeResponse(404, {"error": {"message": "missing"}})
 
     monkeypatch.setattr("skillgate_ai.openai_http.httpx.post", post)
-    with caplog.at_level(logging.WARNING):
-        with pytest.raises(SkillGateError):
-            resolve_judge(
-                _cfg(judge_provider="other", judge_chosen=True, openai_api_key="sk-test"),
-                harness_name="cursor-agent",
-            )
+    with caplog.at_level(logging.WARNING), pytest.raises(SkillGateError):
+        resolve_judge(
+            _cfg(judge_provider="other", judge_chosen=True, openai_api_key="sk-test"),
+            harness_name="cursor-agent",
+        )
     assert "scoring HTTP 404" not in caplog.text
 
 

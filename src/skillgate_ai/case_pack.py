@@ -29,17 +29,18 @@ from skillgate_ai.pack import (
 )
 from skillgate_ai.pack_files import (
     GOLDEN_TAIL_CHARS as GOLDEN_TAIL_CHARS,
+)
+from skillgate_ai.pack_files import (
     golden_kind,
     read_capped_text,
     resolve_golden_src,
     sniff_output_bytes,
 )
 from skillgate_ai.pack_schema import (
-    ExtraQuestion as ExtraQuestion,
-    JudgeBlock,
     SEED_CASE_IDS,
     SEED_LOCK_HINT,
     SEED_LOCK_MESSAGE,
+    JudgeBlock,
     case_id_slug,
     case_is_locked,
     keep_locked_case,
@@ -48,15 +49,16 @@ from skillgate_ai.pack_schema import (
     parse_judge_patch,
     reject_missing_seed_cases,
 )
+from skillgate_ai.pack_schema import (
+    ExtraQuestion as ExtraQuestion,
+)
 from skillgate_ai.suite import DEFAULT_TASK_TIMEOUT_SEC, SuiteSpec, _normalize_suite
 
 CASES_REL = "evals/cases.yaml"
 PIN_NEEDS_EXPECTED = "Add expected output for this check, then save."
 PIN_NEEDS_EXPECTED_HINT = "Open Dataset and fill Expected output."
 NO_TRIGGER_OUTPUT_WARNING = "Expected output on a no-trigger check is ignored."
-EXPECTED_WITHOUT_TARGET = (
-    "This check has expected text, but no output file to compare it with."
-)
+EXPECTED_WITHOUT_TARGET = "This check has expected text, but no output file to compare it with."
 PACK_FINGERPRINT_FIELDS = ("id", "prompt", "should_trigger", "input", "golden", "budgets", "judge")
 _CASE_ID_RE = re.compile(r"^[a-z0-9-]+$")
 _JSONISH_RE = re.compile(r"^\s*[\{\[]")
@@ -432,9 +434,7 @@ def checks_from_pack(pack: CasePack, *, include_drafts: bool = False) -> list[di
             "golden_kind": case.golden.kind if case.golden else None,
             "output_optional": case.output_optional,
             "bank_status": case.status,
-            "locked": case_is_locked(
-                pack.skill, case.id, pack_case_ids=[c.id for c in pack.cases]
-            ),
+            "locked": case_is_locked(pack.skill, case.id, pack_case_ids=[c.id for c in pack.cases]),
         }
         if case.judge is not None and not case.judge.is_empty():
             check["judge"] = case.judge.to_sparse_dict()
@@ -566,9 +566,7 @@ def pin_case_ids(skill_path: str | Path, case_ids: list[str]) -> CasePack:
                 attached = _disk_golden(root, case.id, None)
                 if attached is None:
                     raise ValueError(PIN_NEEDS_EXPECTED)
-                updated.append(
-                    case.model_copy(update={"status": "pinned", "golden": attached})
-                )
+                updated.append(case.model_copy(update={"status": "pinned", "golden": attached}))
                 continue
             updated.append(case.model_copy(update={"status": "pinned"}))
         else:
@@ -636,8 +634,7 @@ def suite_from_checks(
         cases.extend(
             c
             for c in existing.cases
-            if case_is_locked(existing.skill, c.id, pack_case_ids=all_ids)
-            and c.id not in present
+            if case_is_locked(existing.skill, c.id, pack_case_ids=all_ids) and c.id not in present
         )
     pack = CasePack(
         schema_version=1,
@@ -811,7 +808,7 @@ def _dump_pack(pack: CasePack) -> str:
     else:
         payload["judge"] = pack.judge.to_sparse_dict()
     dumped_cases = payload.get("cases") or []
-    for item, case in zip(dumped_cases, pack.cases):
+    for item, case in zip(dumped_cases, pack.cases):  # noqa: B905
         if not isinstance(item, dict):
             continue
         if case.budgets is None or case.budgets.is_empty():
@@ -1005,9 +1002,7 @@ def _persist_input_files(root: Path, files: object, *, case_id: str) -> list[Cas
     return out
 
 
-def _disk_golden(
-    root: Path, case_id: str, output_path: str | None
-) -> CaseGolden | None:
+def _disk_golden(root: Path, case_id: str, output_path: str | None) -> CaseGolden | None:
     found = resolve_golden_src(root, case_id, None)
     if found is None:
         return None
@@ -1039,15 +1034,11 @@ def _persist_golden(
             found = None
         else:
             if rel.startswith(f"{GOLDEN_DIR}/"):
-                return CaseGolden(
-                    output_path=dest_output, path=rel, kind=golden_kind(found)
-                )
+                return CaseGolden(output_path=dest_output, path=rel, kind=golden_kind(found))
             suffix = found.suffix or ".txt"
             rel = f"{GOLDEN_DIR}/{case_id}{suffix}"
             write_pack_file(root, rel=rel, content=found.read_bytes())
-            return CaseGolden(
-                output_path=dest_output, path=rel, kind=golden_kind(found)
-            )
+            return CaseGolden(output_path=dest_output, path=rel, kind=golden_kind(found))
     if not contains_list:
         raise ValueError(PIN_NEEDS_EXPECTED)
     body = contains_list[0]

@@ -76,10 +76,12 @@ def test_models_compare_writes_run_and_compare_rows(
     calls: list[dict[str, Any]] = []
 
     def fake_run_check(target, **kwargs):
-        from skillgate_ai.gate import CheckResult
         from skillgate_ai.engine import SuiteReport, TaskReport
+        from skillgate_ai.gate import CheckResult
 
-        calls.append({"target": target, "harness": kwargs.get("harness"), "run_id": kwargs.get("run_id")})
+        calls.append(
+            {"target": target, "harness": kwargs.get("harness"), "run_id": kwargs.get("run_id")}
+        )
         tasks = [
             TaskReport(
                 task_id="extract-hello",
@@ -105,7 +107,9 @@ def test_models_compare_writes_run_and_compare_rows(
             pack_case_ids=("extract-hello",),
             config={"harness": kwargs.get("harness"), "label": "Arm"},
         )
-        return CheckResult(report=report, exit_code=0 if report.passed else 1, run_id=kwargs.get("run_id") or "r1")
+        return CheckResult(
+            report=report, exit_code=0 if report.passed else 1, run_id=kwargs.get("run_id") or "r1"
+        )
 
     monkeypatch.setattr("skillgate_ai.compare.run_check", fake_run_check)
     monkeypatch.setenv("SKILLGATE_ROOT", str(tmp_path))
@@ -136,8 +140,8 @@ def test_models_compare_fingerprint_mismatch_exits_1(
     pack = _mini_pack(tmp_path)
 
     def fake_run_check(target, **kwargs):
-        from skillgate_ai.gate import CheckResult
         from skillgate_ai.engine import SuiteReport, TaskReport
+        from skillgate_ai.gate import CheckResult
 
         fp = "fp-one" if kwargs.get("harness") == "cursor-agent" else "fp-two"
         report = SuiteReport(
@@ -183,7 +187,9 @@ def test_models_compare_fingerprint_mismatch_exits_1(
 def test_scrub_compare_payload_removes_judge_and_model() -> None:
     raw = {
         "compare_id": "c1",
-        "arms": [{"label": "Arm A", "config": {"model": "secret", "judge": {"provider": "openai"}}}],
+        "arms": [
+            {"label": "Arm A", "config": {"model": "secret", "judge": {"provider": "openai"}}}
+        ],
         "cases": [],
     }
     scrubbed = scrub_compare_payload(raw)
@@ -262,14 +268,12 @@ def test_append_compare_scrubs_leaks_on_disk(tmp_path: Path) -> None:
     assert loaded["arms"][0]["label"] == "Arm A"
 
 
-def test_spend_cap_stops_without_exit_1(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_spend_cap_stops_without_exit_1(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     pack = _mini_pack(tmp_path)
 
     def fake_run_check(target, **kwargs):
-        from skillgate_ai.gate import CheckResult
         from skillgate_ai.engine import SuiteReport, TaskReport
+        from skillgate_ai.gate import CheckResult
 
         report = SuiteReport(
             suite="pdf",

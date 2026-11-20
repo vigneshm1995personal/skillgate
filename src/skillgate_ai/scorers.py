@@ -154,9 +154,7 @@ def score_skill_trigger(
             return Score(
                 scorer="skill_trigger",
                 passed=False,
-                detail=(
-                    f"Did not trigger `{expected}` (description does not match this request)"
-                ),
+                detail=(f"Did not trigger `{expected}` (description does not match this request)"),
                 expected=expected,
                 actual="none",
             )
@@ -244,9 +242,7 @@ def score_answer_contains(needles: list[str], artifacts: RunArtifacts) -> Score:
         )
     haystack = _answer_haystack(artifacts)
     failures = [
-        f"answer does not contain {needle!r}"
-        for needle in cleaned
-        if needle not in haystack
+        f"answer does not contain {needle!r}" for needle in cleaned if needle not in haystack
     ]
     passed = not failures
     detail = "Expected text found in final answer" if passed else "; ".join(failures)

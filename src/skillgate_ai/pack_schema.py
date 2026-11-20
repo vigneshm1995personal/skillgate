@@ -38,17 +38,11 @@ SEED_CASE_IDS = {
         }
     ),
     "json-response": frozenset({"flatten-orders", "edge-empty", "no-trigger-unrelated"}),
-    "json-response-sabotaged": frozenset(
-        {"flatten-orders", "edge-empty", "no-trigger-unrelated"}
-    ),
+    "json-response-sabotaged": frozenset({"flatten-orders", "edge-empty", "no-trigger-unrelated"}),
     "readme-writer": frozenset({"write-readme", "edge-no-license", "no-trigger-unrelated"}),
-    "log-summarizer": frozenset(
-        {"summarize-errors", "edge-no-errors", "no-trigger-unrelated"}
-    ),
+    "log-summarizer": frozenset({"summarize-errors", "edge-no-errors", "no-trigger-unrelated"}),
     "sql-writer": frozenset({"open-orders", "edge-unknown-column", "no-trigger-unrelated"}),
-    "receipt-extractor": frozenset(
-        {"extract-total", "edge-missing-total", "no-trigger-unrelated"}
-    ),
+    "receipt-extractor": frozenset({"extract-total", "edge-missing-total", "no-trigger-unrelated"}),
 }
 
 CASES_RELS = frozenset({"evals/cases.yaml", "evals/cases.yml"})
@@ -190,10 +184,7 @@ def refuse_locked_prompt_change(
     *,
     pack_case_ids: Iterable[str],
 ) -> None:
-    if (
-        case_is_locked(skill, case_id, pack_case_ids=pack_case_ids)
-        and old_prompt != new_prompt
-    ):
+    if case_is_locked(skill, case_id, pack_case_ids=pack_case_ids) and old_prompt != new_prompt:
         raise SuiteError(SEED_EDIT_MESSAGE, hint=SEED_EDIT_HINT)
 
 

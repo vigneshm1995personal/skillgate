@@ -31,7 +31,9 @@ def test_name_mismatch_on_write(tmp_path: Path) -> None:
         write_skill_md(
             folder,
             name="my-skill",
-            description="Produce notes and extracts for this skill. Use when the user asks for notes.",
+            description=(
+                "Produce notes and extracts for this skill. Use when the user asks for notes."
+            ),
         )
 
 
@@ -42,7 +44,9 @@ def test_trigger_only_pack_needs_a_key(tmp_path: Path, project_root: Path) -> No
     assert result.exit_code == 2
     assert result.report is None
     assert result.error is not None
-    assert "skillgate keys set" in ((result.error.get("hint") or "") + (result.error.get("message") or ""))
+    assert "skillgate keys set" in (
+        (result.error.get("hint") or "") + (result.error.get("message") or "")
+    )
 
 
 def test_scaffold_accepts_display_name_frontmatter(tmp_path: Path) -> None:
@@ -82,7 +86,9 @@ def test_run_uses_inline_checks_when_skill_has_no_dataset(
     assert result.exit_code == 2
     assert result.report is None
     assert result.error is not None
-    assert "skillgate keys set" in ((result.error.get("hint") or "") + (result.error.get("message") or ""))
+    assert "skillgate keys set" in (
+        (result.error.get("hint") or "") + (result.error.get("message") or "")
+    )
 
 
 def test_cases_yaml_missing_field_exits_2_and_names_it(tmp_path: Path) -> None:

@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
 import pytest
+from conftest import plain_text
 from typer.testing import CliRunner
 
-from conftest import plain_text
 from skillgate_ai.cli import app
 from skillgate_ai.config import get_llm_config
 from skillgate_ai.keys import (
@@ -73,9 +72,7 @@ def test_skillgate_prefix_overrides_ambient(
     assert presence["from_env"] is True
 
 
-def test_key_env_binding_reads_ambient(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_key_env_binding_reads_ambient(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("SKILLGATE_ROOT", str(tmp_path))
     monkeypatch.setenv("OPENAI_API_KEY", "sk-via-flag")
     reset_key_env_bindings()

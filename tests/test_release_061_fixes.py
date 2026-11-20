@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import shutil
 from pathlib import Path
 
@@ -278,7 +277,9 @@ def test_import_targets_nearest_nested_workspace(tmp_path: Path, monkeypatch) ->
 def test_judge_provider_cli_uses_neutral_copy(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("SKILLGATE_ROOT", str(tmp_path))
     monkeypatch.chdir(tmp_path)
-    saved = runner.invoke(app, ["judge", "provider", "set", "jev", "--base-url", "https://jev.example"])
+    saved = runner.invoke(
+        app, ["judge", "provider", "set", "jev", "--base-url", "https://jev.example"]
+    )
     out = plain_text(saved.stdout + saved.stderr)
     assert saved.exit_code == 0, out
     assert "Jev" not in out

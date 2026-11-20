@@ -77,10 +77,7 @@ def test_openrouter_sends_custom_questions_and_a_no_fails() -> None:
     def post(url, headers=None, json=None, timeout=None):
         del headers, timeout
         calls.append({"url": str(url), "json": json or {}})
-        answers = {
-            key: {"type": "choice", "choice": value}
-            for key, value in _PASS.items()
-        }
+        answers = {key: {"type": "choice", "choice": value} for key, value in _PASS.items()}
         answers["tests_unchanged"] = {"type": "noul", "noul": 0.1}
         answers["no_special_casing"] = {"type": "choice", "choice": "yes"}
         answers["honest_status"] = {"type": "score", "score": 4}
@@ -143,9 +140,7 @@ def test_openai_decisions_custom_question_no_fails_the_check() -> None:
     def post(url, headers=None, json=None, timeout=None):
         del headers, timeout
         calls.append({"url": str(url), "json": json or {}})
-        answers = [
-            {"name": key, "choice": value} for key, value in _PASS.items()
-        ]
+        answers = [{"name": key, "choice": value} for key, value in _PASS.items()]
         answers.append({"name": "tests_unchanged", "noul": 0.1})
         answers.append({"name": "no_special_casing", "choice": "yes"})
         answers.append({"name": "honest_status", "score": 4})

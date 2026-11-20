@@ -106,7 +106,9 @@ def _require_secure_url(base: str) -> None:
         return
     if parsed.scheme == "http" and parsed.hostname in {"127.0.0.1", "localhost", "::1"}:
         return
-    raise SkillGateError("Use an https:// URL for the hosted Skill Gate (the device token is secret).")
+    raise SkillGateError(
+        "Use an https:// URL for the hosted Skill Gate (the device token is secret)."
+    )
 
 
 def connect(url: str, code: str, name: str | None = None) -> dict:
@@ -159,9 +161,7 @@ def _auth_headers(config: dict) -> dict:
 def _friendly_reason(exc: BaseException) -> str:
     if isinstance(exc, SkillGateError):
         return customer_job_error(exc.message)
-    if isinstance(
-        exc, (urllib.error.URLError, TimeoutError, OSError, http.client.HTTPException)
-    ):
+    if isinstance(exc, (urllib.error.URLError, TimeoutError, OSError, http.client.HTTPException)):
         return _UNREACHABLE
     message = str(exc).strip() or exc.__class__.__name__
     return customer_job_error(message[:200]) or _INSTALL_FAILED
@@ -171,9 +171,7 @@ def _failed_result(targets: list, error: str) -> dict:
     return {
         "status": "failed",
         "error": error,
-        "targets": [
-            {"target": t, "status": "failed", "error": error} for t in targets
-        ],
+        "targets": [{"target": t, "status": "failed", "error": error} for t in targets],
     }
 
 
@@ -201,9 +199,7 @@ def _extract_bundle(bundle: bytes, work: Path) -> Path:
                 try:
                     (work / info.filename).resolve().relative_to(work.resolve())
                 except ValueError as exc:
-                    raise SkillGateError(
-                        "The skill bundle contains an unsafe path."
-                    ) from exc
+                    raise SkillGateError("The skill bundle contains an unsafe path.") from exc
             if total > _MAX_BUNDLE_BYTES:
                 raise SkillGateError("The skill bundle expands to too much data.")
             zf.extractall(work)
@@ -244,9 +240,7 @@ def process_job(url: str, config: dict, job: dict) -> dict:
         failed = False
         for target in targets:
             try:
-                get_adapter(target).install(
-                    skill=loaded, source=skill_dir, remote_gated=True
-                )
+                get_adapter(target).install(skill=loaded, source=skill_dir, remote_gated=True)
                 results.append({"target": target, "status": "installed"})
             except SkillGateError as exc:
                 failed = True
@@ -275,10 +269,8 @@ def run_helper(config: dict, *, once: bool = False, sleep_sec: int = 5) -> None:
             try:
                 result = process_job(url, config, job)
             except Exception as exc:  # noqa: BLE001 — claimed jobs must report failed
-                result = _failed_result(
-                    job.get("targets") or [], _friendly_reason(exc)
-                )
-            try:
+                result = _failed_result(job.get("targets") or [], _friendly_reason(exc))
+            try:  # noqa: SIM105
                 _http_post(f"{url}/api/helper/results/{job['id']}", result, headers=headers)
             except SkillGateError:
                 pass
@@ -300,7 +292,7 @@ def install_launchd_plist() -> Path:
     }
     launch_dir = Path.home() / "Library" / "LaunchAgents"
     launch_dir.mkdir(parents=True, exist_ok=True)
-    try:
+    try:  # noqa: SIM105
         os.chmod(launch_dir, 0o755)
     except OSError:
         pass
