@@ -8,6 +8,7 @@ import pytest
 
 from skillgate_ai.config import DEFAULT_GATEWAY_MODEL
 from skillgate_ai.engine import _live_verdict, _maybe_explain_fail
+from skillgate_ai.http_retry import DEFAULT_ATTEMPTS
 from skillgate_ai.judge_bank import (
     CHECK_CELL_ORDER,
     LOW_CONFIDENCE_WARNING,
@@ -310,7 +311,7 @@ def test_http_errors_fail_and_never_log_key(caplog: pytest.LogCaptureFixture) ->
         429: "The judge rate-limited this request. Wait and retry, or check billing.",
     }
     for status, message in cases.items():
-        copies = 3 if status == 429 else 1
+        copies = DEFAULT_ATTEMPTS if status == 429 else 1
         post = FakePost(
             [
                 FakeResponse(
@@ -396,21 +397,31 @@ def test_credit_balance_exhausted_429_is_not_retried() -> None:
     assert len(post.calls) == 1
 
 
-def test_timeout_fails_closed() -> None:
-    post = FakePost(
-        [
-            httpx.TimeoutException("slow"),
-            FakeResponse(200, decisions_payload()),
-        ]
-    )
+def test_timeout_fails_closed_after_retries() -> None:
+    from skillgate_ai.http_retry import DEFAULT_ATTEMPTS
+
+    post = FakePost([httpx.TimeoutException("slow")] * DEFAULT_ATTEMPTS)
     passed, failures, judged = _gated(_judge(post))
     assert passed is None
     assert judged["status"] == "error"
     assert judged.get("quality_unscored") is True
     assert SECRET not in json.dumps(judged)
     assert judged["why"] is None
-    assert len(post.calls) == 1
+    assert len(post.calls) == DEFAULT_ATTEMPTS
     assert all(not str(item["url"]).endswith("/v1/responses") for item in post.calls)
+
+
+def test_timeout_is_retried_then_succeeds() -> None:
+    post = FakePost(
+        [
+            httpx.TimeoutException("slow"),
+            FakeResponse(200, decisions_payload()),
+        ]
+    )
+    judged = _score(_judge(post))
+    assert judged["status"] == "completed"
+    assert judged["passed"] is True
+    assert len(post.calls) == 2
 
 
 def test_fail_does_not_post_a_why_call() -> None:
@@ -734,8 +745,7 @@ def test_http_error_with_missing_output_names_both() -> None:
     assert len(post.calls) == 1
 
 
-def test_http_500_is_retried(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("skillgate_ai.openai_http.time.sleep", lambda _s: None)
+def test_http_500_is_retried() -> None:
     post = FakePost(
         [
             FakeResponse(500, {"error": "nope"}),

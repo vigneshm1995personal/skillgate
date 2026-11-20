@@ -255,12 +255,9 @@ def _jev_judge(post: FakePost):
     )
 
 
-def test_jev_500_is_retried_and_then_scores(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_jev_500_is_retried_and_then_scores() -> None:
     from skillgate_ai.judge_spec import resolve_judge_spec
 
-    monkeypatch.setattr("skillgate_ai.openai_http.time.sleep", lambda _s: None)
     post = FakePost(
         [
             FakeResponse(500, {"error": {"message": "upstream"}}),
@@ -283,17 +280,17 @@ def test_jev_500_is_retried_and_then_scores(
     assert "Jev" not in blob
 
 
-def test_jev_scoring_failure_names_a_retryable_cause_not_scoring_failed(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_jev_scoring_failure_names_a_retryable_cause_not_scoring_failed() -> None:
+    from skillgate_ai.http_retry import DEFAULT_ATTEMPTS
     from skillgate_ai.judge_providers.jev import _public_failure
     from skillgate_ai.judge_spec import resolve_judge_spec
 
-    monkeypatch.setattr("skillgate_ai.openai_http.time.sleep", lambda _s: None)
     post = FakePost(
         [
             FakeResponse(500, {"error": {"message": "upstream"}}),
             FakeResponse(502, {"error": {"message": "bad gateway"}}),
+            FakeResponse(503, {"error": {"message": "unavailable"}}),
+            FakeResponse(503, {"error": {"message": "unavailable"}}),
             FakeResponse(503, {"error": {"message": "unavailable"}}),
         ]
     )
@@ -314,16 +311,15 @@ def test_jev_scoring_failure_names_a_retryable_cause_not_scoring_failed(
     assert "HTTP" not in blob
     assert "OpenRouter" not in blob
     assert "Jev" not in blob
-    assert len(post.calls) == 3
+    assert len(post.calls) == DEFAULT_ATTEMPTS
     public = _public_failure({"http_status": 500, "reason": "The judge couldn't score this check."})
     assert public != "Scoring failed."
     assert "500" not in public
 
 
-def test_jev_ping_does_not_retry_transient_500(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_jev_ping_does_not_retry_transient_500() -> None:
     from skillgate_ai.judge_providers.jev import JevBackend
 
-    monkeypatch.setattr("skillgate_ai.openai_http.time.sleep", lambda _s: None)
     post = FakePost(
         [
             FakeResponse(500, {"error": {"message": "upstream"}}),

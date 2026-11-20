@@ -4,22 +4,24 @@ from __future__ import annotations
 
 import logging
 import re
-import time
 from collections.abc import Callable, Mapping
 from typing import Any
 
 import httpx
 
 from skillgate_ai.errors import OFFLINE_MESSAGE, SkillGateError
+from skillgate_ai.http_retry import (
+    RetryableStatus,
+    call_with_retry,
+    is_retryable_status,
+    retry_after_from_response,
+)
 from skillgate_ai.judge_bank import UNUSABLE_ANSWER
 
 _LOG = logging.getLogger(__name__)
 
 DEFAULT_BASE_URL = "https://api.openai.com/v1"
-_TRANSIENT = frozenset({429, 500, 502, 503, 504})
 _QUOTA_CODES = frozenset({"insufficient_quota", "credit_balance_exhausted"})
-_RETRY_BACKOFF_SEC = (0.5, 1.0, 2.0)
-_MAX_ATTEMPTS = 3
 _SK_TOKEN = re.compile(r"sk-[A-Za-z0-9_*\-]{2,}")
 _PROVIDER_NOISE = re.compile(
     r"\b(openrouter(?:\.ai)?|typesafe(?:-ai)?|jev(?:ex)?|openai|cloudflare|"
@@ -185,40 +187,24 @@ def post_openai(
     retries: bool = True,
 ) -> httpx.Response:
     sender = post or httpx.post
-    attempts = _MAX_ATTEMPTS if retries else 1
-    last_exc: BaseException | None = None
-    for attempt in range(attempts):
-        try:
-            response = sender(url, headers=headers, json=payload, timeout=timeout_sec)
-        except httpx.TimeoutException:
-            raise
-        except httpx.HTTPError as exc:
-            last_exc = exc
-            if attempt >= attempts - 1:
-                raise
-            _LOG.warning(
-                "scoring transport error (attempt %s/%s): %s",
-                attempt + 1,
-                attempts,
-                type(exc).__name__,
+
+    def _once() -> httpx.Response:
+        response = sender(url, headers=headers, json=payload, timeout=timeout_sec)
+        quota = is_quota_exhausted(response)
+        if is_retryable_status(response.status_code, quota_exhausted=quota):
+            raise RetryableStatus(
+                response.status_code,
+                retry_after=retry_after_from_response(response),
+                response=response,
             )
-            time.sleep(_RETRY_BACKOFF_SEC[min(attempt, len(_RETRY_BACKOFF_SEC) - 1)])
-            continue
-        if (
-            response.status_code in _TRANSIENT
-            and attempt < attempts - 1
-            and not is_quota_exhausted(response)
-        ):
-            _LOG.warning(
-                "scoring request failed (attempt %s/%s)",
-                attempt + 1,
-                attempts,
-            )
-            time.sleep(_RETRY_BACKOFF_SEC[min(attempt, len(_RETRY_BACKOFF_SEC) - 1)])
-            continue
         return response
-    assert last_exc is not None
-    raise last_exc
+
+    try:
+        return call_with_retry(_once, retries=retries)
+    except RetryableStatus as exc:
+        if exc.response is not None:
+            return exc.response  # type: ignore[return-value]
+        raise
 
 
 _CHAT_JUDGE_URLS = ("/responses", "/chat/completions", "/v1/chat")

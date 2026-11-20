@@ -184,7 +184,7 @@ def test_combine_task_usage_estimates_when_api_omits_dollars() -> None:
     assert merged.get("tokens_out") == 25
 
 
-def test_openai_retries_transient_429(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_openai_retries_transient_429() -> None:
     calls = 0
 
     class Resp:
@@ -201,7 +201,6 @@ def test_openai_retries_transient_429(monkeypatch: pytest.MonkeyPatch) -> None:
             return Resp(429)
         return Resp(200)
 
-    monkeypatch.setattr("skillgate_ai.openai_http.time.sleep", lambda _s: None)
     response = post_openai(
         "https://api.openai.com/v1/decisions",
         headers={},

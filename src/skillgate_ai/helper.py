@@ -24,6 +24,12 @@ from pathlib import Path
 
 from skillgate_ai.deploy import get_adapter
 from skillgate_ai.errors import SKILL_CHANGED_MESSAGE, SkillGateError, customer_job_error
+from skillgate_ai.http_retry import (
+    RetryableStatus,
+    call_with_retry,
+    is_retryable_status,
+    retry_after_from_response,
+)
 from skillgate_ai.ingest import ingest_skill
 from skillgate_ai.pack import skill_pack_hash
 
@@ -53,11 +59,27 @@ def _request_error(exc: BaseException) -> SkillGateError:
     return SkillGateError(_UNREACHABLE)
 
 
-def _http_get(url: str, *, headers: dict | None = None) -> bytes:
-    req = urllib.request.Request(url, method="GET", headers=headers or {})
+def _urlopen_bytes(req: urllib.request.Request, *, timeout: int) -> bytes:
+    def _once() -> bytes:
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                return resp.read()
+        except urllib.error.HTTPError as exc:
+            if is_retryable_status(exc.code):
+                raise RetryableStatus(
+                    exc.code,
+                    retry_after=retry_after_from_response(exc),
+                    response=exc,
+                ) from exc
+            raise _request_error(exc) from exc
+
     try:
-        with urllib.request.urlopen(req, timeout=120) as resp:
-            return resp.read()
+        return call_with_retry(_once)
+    except RetryableStatus as exc:
+        source = exc.response
+        if isinstance(source, BaseException):
+            raise _request_error(source) from exc
+        raise SkillGateError(_UNREACHABLE) from exc
     except (
         urllib.error.URLError,
         TimeoutError,
@@ -65,19 +87,15 @@ def _http_get(url: str, *, headers: dict | None = None) -> bytes:
         http.client.HTTPException,
     ) as exc:
         raise _request_error(exc) from exc
+
+
+def _http_get(url: str, *, headers: dict | None = None) -> bytes:
+    req = urllib.request.Request(url, method="GET", headers=headers or {})
+    return _urlopen_bytes(req, timeout=120)
 
 
 def _read_json(req: urllib.request.Request, *, timeout: int) -> dict:
-    try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            body = resp.read()
-    except (
-        urllib.error.URLError,
-        TimeoutError,
-        OSError,
-        http.client.HTTPException,
-    ) as exc:
-        raise _request_error(exc) from exc
+    body = _urlopen_bytes(req, timeout=timeout)
     if not body:
         return {}
     try:
