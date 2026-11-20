@@ -41,6 +41,11 @@ os.environ["AWS_SESSION_TOKEN"] = ""
 
 
 @pytest.fixture(autouse=True)
+def _no_http_retry_sleep(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("skillgate_ai.http_retry.sleep", lambda _seconds: None)
+
+
+@pytest.fixture(autouse=True)
 def _no_live_keys(monkeypatch: pytest.MonkeyPatch) -> None:
     from skillgate_ai.keys import reset_key_env_bindings
 
