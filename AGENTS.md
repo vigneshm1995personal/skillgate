@@ -22,11 +22,16 @@ Local Apache-2.0 gate for Agent Skills. One pack on disk + `skillgate check` (ex
 ```bash
 python3 -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
+pre-commit install
 pytest -q
 skillgate check skills/pdf
 skillgate check skills/pdf-sabotaged --expect-fail
-ruff check .    # optional; ruff is a dev dep
+ruff check
+ruff format --check
+mypy src
 ```
+
+Lint is mandatory. CI runs `ruff check`, `ruff format --check`, and `mypy src`. Install git hooks with `pre-commit install` (see CONTRIBUTING.md).
 
 Docker: `docker build -t skillgate:test --target runtime .` then `docker run --rm -v "$PWD/skills/pdf:/pack" skillgate:test`.
 

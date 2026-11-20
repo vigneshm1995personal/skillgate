@@ -9,8 +9,10 @@ from skillgate_ai.history import load_history
 
 
 def row_is_tryout(row: dict[str, Any], report: dict[str, Any] | None = None) -> bool:
-    rep = report if report is not None else (
-        row.get("report") if isinstance(row.get("report"), dict) else None
+    rep = (
+        report
+        if report is not None
+        else (row.get("report") if isinstance(row.get("report"), dict) else None)
     )
     return bool(row.get("tryout") or (rep or {}).get("tryout"))
 
@@ -26,7 +28,7 @@ def infer_gate_moved(
         return bool(explicit)
     if tryout:
         return False
-    if error is not None and passed is None:
+    if error is not None and passed is None:  # noqa: SIM103
         return False
     return True
 

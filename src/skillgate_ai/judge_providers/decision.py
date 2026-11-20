@@ -11,15 +11,15 @@ Responses ids are rejected.
 
 from __future__ import annotations
 
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from typing import Any, Callable, Mapping, Protocol
+from typing import Any, Protocol
 
 from skillgate_ai.config import LLMConfig
 from skillgate_ai.errors import SkillGateError
 
 CHAT_NOT_A_JUDGE = (
-    "A decision model scores checks directly. "
-    "Chat and Responses completion models are not judges."
+    "A decision model scores checks directly. Chat and Responses completion models are not judges."
 )
 REMOVED_SETUP = "That scoring setup was removed. Pick a decision model."
 NOT_A_DECISION_MODEL = "That is not a decision model. Pick a registered decision model."

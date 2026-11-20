@@ -251,9 +251,7 @@ def register_compare_commands(app: typer.Typer, *, key_env_help: str) -> None:
         else:
             for row in raw_rows:
                 base = strip_compare_list_meta(row)
-                payload = (
-                    scrub_compare_payload(base) if row.get("list_source") == "disk" else base
-                )
+                payload = scrub_compare_payload(base) if row.get("list_source") == "disk" else base
                 console.print(
                     f"{payload.get('compare_id')}  {payload.get('mode')}  "
                     f"{payload.get('status')}  {payload.get('skill')}"

@@ -419,9 +419,7 @@ def _evidence_excerpt(state: Mapping[str, Any]) -> str:
     files = state.get("workspace_files") or state.get("artifacts")
     if isinstance(files, list):
         names = [
-            str(row.get("path"))
-            for row in files
-            if isinstance(row, Mapping) and row.get("path")
+            str(row.get("path")) for row in files if isinstance(row, Mapping) and row.get("path")
         ]
         if names:
             bits.append("workspace files: " + ", ".join(names[:12]))

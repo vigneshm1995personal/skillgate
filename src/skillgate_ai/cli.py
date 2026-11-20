@@ -91,18 +91,18 @@ def _login_targets(agent: str | None) -> list[str]:
             raise typer.BadParameter("Use cursor, claude, or codex.")
         return [kind]
     rows = harness_auth_status(get_llm_config(_boot()))
-    missing = [
-        str(row["agent"])
-        for row in rows
-        if row["installed"] and row["auth"] == "none"
-    ]
+    missing = [str(row["agent"]) for row in rows if row["installed"] and row["auth"] == "none"]
     if missing:
         if _stdin_is_tty() and len(missing) > 1:
             names = ", ".join(missing)
-            picked = typer.prompt(
-                f"Sign in ({names}, or all)",
-                default="all",
-            ).strip().lower()
+            picked = (
+                typer.prompt(
+                    f"Sign in ({names}, or all)",
+                    default="all",
+                )
+                .strip()
+                .lower()
+            )
             if picked in {"all", "*", "missing"}:
                 return missing
             kind = normalize_login_agent(picked)
@@ -531,7 +531,10 @@ def deploy(
     force: bool = typer.Option(
         False,
         "--force",
-        help="Install even if the latest check did not pass. Does not skip a skill that has never been checked.",
+        help=(
+            "Install even if the latest check did not pass. Does not skip a skill "
+            "that has never been checked."
+        ),
     ),
 ) -> None:
     """Copy a skill pack into a local agent skills directory.
@@ -587,9 +590,7 @@ def sync(
     selected = _parse_targets(target, targets, default="cursor,codex,claude")
     try:
         if install_launchd:
-            path = install_launchd_plist(
-                repo_url=repo, targets=selected, interval=interval
-            )
+            path = install_launchd_plist(repo_url=repo, targets=selected, interval=interval)
             console.print(f"Installed sync LaunchAgent at {path}")
             raise typer.Exit(0)
         if interval and interval > 0:
@@ -793,11 +794,10 @@ def new_cmd(
     name: str = typer.Argument(..., help="Skill folder name (lowercase, hyphens)"),
 ) -> None:
     """Create `skills/NAME` with SKILL.md and starter checks (same as the UI)."""
-    from skillgate_ai.workspace import new_skill
-
     from pathlib import Path as _Path
 
     from skillgate_ai.paths import config_root_for
+    from skillgate_ai.workspace import new_skill
 
     root = config_root_for(_Path.cwd())
     try:
@@ -849,15 +849,13 @@ def examples_install_cmd(
     name: str | None = typer.Argument(
         None, help="One example. Omit to install every dataset example."
     ),
-    dest: Path | None = typer.Option(
-        None, "--dest", help="Skills folder (default: ./skills)"
-    ),
+    dest: Path | None = typer.Option(None, "--dest", help="Skills folder (default: ./skills)"),
 ) -> None:
     """Copy example skills into the skills folder. Existing files stay as they are."""
     from skillgate_ai.examples import install_examples
     from skillgate_ai.paths import config_root_for
 
-    root = _boot()
+    _boot()
     target = (dest or (config_root_for(Path.cwd()) / "skills")).expanduser().resolve()
     try:
         result = install_examples(target, [name] if name else None)
@@ -942,7 +940,9 @@ def checks_show_cmd(
 
 @judge_app.command("show")
 def judge_show(
-    pack: Path | None = typer.Argument(None, help="Skill pack (default: this folder or skills/pdf)"),
+    pack: Path | None = typer.Argument(
+        None, help="Skill pack (default: this folder or skills/pdf)"
+    ),
     case_id: str | None = typer.Option(None, "--case", help="Case id"),
     json_out: bool = typer.Option(False, "--json", help="Resolved spec JSON"),
 ) -> None:
@@ -974,9 +974,17 @@ def judge_show(
             pack=pack_judge_dict(loaded),
             case=case_block,
         )
-        from skillgate_ai.wording_facts import attach_wording_questions, compile_wording_rules, wording_ask
+        from skillgate_ai.wording_facts import (
+            attach_wording_questions,
+            compile_wording_rules,
+            wording_ask,
+        )
 
-        skill_text = (dest / "SKILL.md").read_text(encoding="utf-8") if (dest / "SKILL.md").is_file() else None
+        skill_text = (
+            (dest / "SKILL.md").read_text(encoding="utf-8")
+            if (dest / "SKILL.md").is_file()
+            else None
+        )
         spec = attach_wording_questions(spec, skill_text)
         wording_rules = compile_wording_rules(skill_text)
         wording_label = wording_ask(wording_rules) if wording_rules else None
@@ -1082,7 +1090,9 @@ def case_add_cmd(
     inputs: list[Path] | None = typer.Option(
         None, "--input", "--fixture", help="Input/fixture file to copy into this skill"
     ),
-    no_trigger: bool = typer.Option(False, "--no-trigger", help="This check should not run the skill"),
+    no_trigger: bool = typer.Option(
+        False, "--no-trigger", help="This check should not run the skill"
+    ),
     force: bool = typer.Option(False, "--force", help="Replace a check that already uses this id"),
     output_optional: bool = typer.Option(
         False,
@@ -1114,8 +1124,10 @@ def case_add_cmd(
         raise typer.Exit(1) from None
     from skillgate_ai.pack_schema import case_id_slug
 
-    added = case_id_slug(case_id) if str(case_id or "").strip() else (
-        pack_out.cases[-1].id if pack_out.cases else prompt
+    added = (
+        case_id_slug(case_id)
+        if str(case_id or "").strip()
+        else (pack_out.cases[-1].id if pack_out.cases else prompt)
     )
     console.print(f"Added check {added}.")
     if warning:
@@ -1251,8 +1263,8 @@ def ui_cmd(
         raise typer.Exit(1) from exc
 
 
-from skillgate_ai.cli_compare import register_compare_commands
-from skillgate_ai.cli_pack import register_pack_commands
+from skillgate_ai.cli_compare import register_compare_commands  # noqa: E402
+from skillgate_ai.cli_pack import register_pack_commands  # noqa: E402
 
 register_pack_commands(app, case_app, judge_app)
 register_compare_commands(app, key_env_help=_KEY_ENV_HELP)

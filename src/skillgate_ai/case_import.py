@@ -22,10 +22,14 @@ from skillgate_ai.case_pack import (
     load_case_pack,
     pin_checks,
 )
-from skillgate_ai.pack_schema import parse_judge_block
 from skillgate_ai.errors import SuiteError
-from skillgate_ai.pack_edit import validate_pin_judge, _short_case_id
-from skillgate_ai.pack_schema import case_id_slug, case_is_locked, keep_locked_case
+from skillgate_ai.pack_edit import _short_case_id, validate_pin_judge
+from skillgate_ai.pack_schema import (
+    case_id_slug,
+    case_is_locked,
+    keep_locked_case,
+    parse_judge_block,
+)
 
 OnConflict = Literal["skip", "replace", "fail"]
 _FORMAT_BY_SUFFIX = {
@@ -148,9 +152,7 @@ def plan_case_import(
         action: Literal["add", "replace", "skip"] = "add"
         err: str | None = None
         if existing and case_id in taken:
-            if case_is_locked(
-                skill_name, case_id, pack_case_ids=taken, pack_root=root
-            ):
+            if case_is_locked(skill_name, case_id, pack_case_ids=taken, pack_root=root):
                 action = "skip"
             elif on_conflict == "fail":
                 action = "skip"
@@ -287,7 +289,9 @@ def _dict_from_flat_row(row: dict[str, Any]) -> dict[str, Any]:
             try:
                 parsed = json.loads(text)
             except json.JSONDecodeError:
-                out["files"] = [{"src": piece.strip()} for piece in text.split(";") if piece.strip()]
+                out["files"] = [
+                    {"src": piece.strip()} for piece in text.split(";") if piece.strip()
+                ]
             else:
                 out["files"] = parsed
         elif norm in {"no_trigger", "notrigger"}:
@@ -342,10 +346,7 @@ def _validate_check_dict(
     held: dict[str, Any],
 ) -> str | None:
     pack_ids = list(held.keys())
-    if (
-        keep_locked_case(skill_name, held, raw, pack_case_ids=pack_ids)
-        is not None
-    ):
+    if keep_locked_case(skill_name, held, raw, pack_case_ids=pack_ids) is not None:
         raise ValueError("This pack's original checks stay.")
     case_id = str(raw.get("id") or "").strip()
     should = bool(raw.get("should_trigger", True))

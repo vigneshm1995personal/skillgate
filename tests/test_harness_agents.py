@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import pytest
+from test_judge import _cfg
 
-from skillgate_ai.config import LLMConfig, missing_key_error, no_agent_available_error
+from skillgate_ai.config import no_agent_available_error
+from skillgate_ai.errors import HarnessError, MissingLLMKeyError
 from skillgate_ai.harness import (
     ClaudeCodeHarness,
     CodexCliHarness,
@@ -13,8 +15,6 @@ from skillgate_ai.harness import (
     _codex_exec_command,
     live_harness_or_error,
 )
-from skillgate_ai.errors import HarnessError, MissingLLMKeyError
-from test_judge import _cfg
 
 
 def test_auto_prefers_cursor_when_available(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -95,7 +95,7 @@ def test_codex_harness_approves_headless() -> None:
 
 
 def test_user_pdf_skill_name_does_not_require_seed_cases(tmp_path) -> None:
-    from skillgate_ai.case_pack import CasePack, PackCase, save_case_pack
+    from skillgate_ai.case_pack import CasePack, save_case_pack
     from skillgate_ai.pack_schema import reject_missing_seed_cases
 
     dest = tmp_path / "pdf"

@@ -3,9 +3,9 @@ from __future__ import annotations
 import shutil
 from pathlib import Path
 
+from conftest import plain_text
 from typer.testing import CliRunner
 
-from conftest import plain_text
 from skillgate_ai.case_pack import load_case_pack
 from skillgate_ai.errors import SuiteError
 

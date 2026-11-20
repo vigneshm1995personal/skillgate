@@ -251,9 +251,7 @@ def test_claude_run_omits_empty_key_when_cli_login(
     _stub_run(monkeypatch)
     monkeypatch.setattr("skillgate_ai.harness._claude_ready", lambda _c: True)
     monkeypatch.setattr("skillgate_ai.harness._resolve_claude_bin", lambda _p: "/bin/claude")
-    result = ClaudeCodeHarness(_cfg(anthropic_api_key=None)).run(
-        sandbox, "task", [], timeout_sec=5
-    )
+    result = ClaudeCodeHarness(_cfg(anthropic_api_key=None)).run(sandbox, "task", [], timeout_sec=5)
     assert "ANTHROPIC_API_KEY" not in sandbox.env
     assert "HOME" not in sandbox.env
     assert "CLAUDE_CONFIG_DIR" not in sandbox.env
@@ -261,9 +259,7 @@ def test_claude_run_omits_empty_key_when_cli_login(
     assert result.auth_mode == AUTH_CLI_LOGIN
 
 
-def test_claude_run_injects_key_when_set(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
+def test_claude_run_injects_key_when_set(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     sandbox = _FakeSandbox(tmp_path)
     _stub_run(monkeypatch)
     monkeypatch.setattr("skillgate_ai.harness._resolve_claude_bin", lambda _p: "/bin/claude")
@@ -345,9 +341,7 @@ def test_claude_run_resolves_alias_to_model_usage(
     assert result.model == "claude-sonnet-5-5"
 
 
-def test_claude_run_parses_model_from_result_model_usage(
-    monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_claude_run_parses_model_from_result_model_usage(monkeypatch: pytest.MonkeyPatch) -> None:
     sandbox = _claude_sandbox_run(
         _claude_jsonl(
             [
@@ -370,9 +364,7 @@ def test_claude_run_parses_model_from_result_model_usage(
     assert result.model == "claude-opus-5-5"
 
 
-def test_claude_run_parses_model_from_system_init_fallback(
-    monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_claude_run_parses_model_from_system_init_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
     sandbox = _claude_sandbox_run(
         _claude_jsonl(
             [
@@ -390,9 +382,7 @@ def test_claude_run_parses_model_from_system_init_fallback(
     assert result.model == "claude-sonnet-5-5"
 
 
-def test_claude_run_raises_model_access_error(
-    monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_claude_run_raises_model_access_error(monkeypatch: pytest.MonkeyPatch) -> None:
     sandbox = _FakeSandbox(Path("/tmp/ws"))
 
     def run(command, *, env=None, timeout=0, cwd=None):
@@ -416,7 +406,7 @@ def test_claude_run_raises_model_access_error(
 
 
 def test_claude_run_model_access_error_names_requested_model(
-    monkeypatch: pytest.MonkeyPatch
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     sandbox = _FakeSandbox(Path("/tmp/ws"))
 
@@ -503,9 +493,7 @@ def test_cursor_run_omits_empty_key_when_cli_login(
     _stub_run(monkeypatch)
     monkeypatch.setattr("skillgate_ai.harness._cursor_ready", lambda _c: True)
     monkeypatch.setattr("skillgate_ai.harness._resolve_agent_bin", lambda _p: "/bin/agent")
-    result = CursorAgentHarness(_cfg(cursor_api_key=None)).run(
-        sandbox, "task", [], timeout_sec=5
-    )
+    result = CursorAgentHarness(_cfg(cursor_api_key=None)).run(sandbox, "task", [], timeout_sec=5)
     assert "CURSOR_API_KEY" not in sandbox.env
     assert result.auth_mode == AUTH_CLI_LOGIN
 
@@ -628,9 +616,7 @@ def test_login_missing_cli_returns_install(monkeypatch: pytest.MonkeyPatch) -> N
     assert "npm install -g @anthropic-ai/claude-code" in out
 
 
-def test_login_claude_short_circuits_when_signed_in(
-    monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_login_claude_short_circuits_when_signed_in(monkeypatch: pytest.MonkeyPatch) -> None:
     called: list[str] = []
 
     def fake_login(agent: str, cfg) -> dict:
@@ -670,9 +656,7 @@ def test_login_claude_force_runs_login(monkeypatch: pytest.MonkeyPatch) -> None:
 
     monkeypatch.setattr("skillgate_ai.harness.claude_auth_kind", lambda _c: AUTH_CLI_LOGIN)
     monkeypatch.setattr("skillgate_ai.harness.run_official_login", fake_login)
-    monkeypatch.setattr(
-        "skillgate_ai.harness._resolve_claude_bin", lambda _p: "/bin/claude"
-    )
+    monkeypatch.setattr("skillgate_ai.harness._resolve_claude_bin", lambda _p: "/bin/claude")
     monkeypatch.setattr("skillgate_ai.harness._probe_claude_login_status", lambda _b: True)
     monkeypatch.setattr("skillgate_ai.harness.harness_auth_status", lambda _c: [])
     runner = CliRunner()
@@ -774,7 +758,9 @@ def test_cursor_status_accepts_authenticated_without_logged_in_word() -> None:
     assert not _cursor_login_status_authenticated(1, "", "error")
 
 
-def test_resolve_agent_bin_finds_user_local(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_resolve_agent_bin_finds_user_local(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     home = tmp_path / "home"
     dest = home / ".local" / "bin"
     dest.mkdir(parents=True)
@@ -997,10 +983,7 @@ def test_codex_rejected_hint_names_config_and_excludes_rejected() -> None:
 
 
 def test_codex_rejected_live_error_without_supported_list() -> None:
-    blob = (
-        "The 'gpt-5.6-sol' model is not supported when using Codex "
-        "with a ChatGPT account."
-    )
+    blob = "The 'gpt-5.6-sol' model is not supported when using Codex with a ChatGPT account."
     rejected, accepted = _codex_rejected_model("", blob)
     assert rejected == "gpt-5.6-sol"
     assert accepted == []
@@ -1057,8 +1040,7 @@ def test_codex_run_names_rejected_model_from_error(
             1,
             stdout="",
             stderr=(
-                "The 'gpt-5.6-sol' model is not supported when using Codex "
-                "with a ChatGPT account."
+                "The 'gpt-5.6-sol' model is not supported when using Codex with a ChatGPT account."
             ),
         )
 
@@ -1088,8 +1070,7 @@ def test_codex_exec_skillgate_argv(monkeypatch: pytest.MonkeyPatch, tmp_path: Pa
     config.write_bytes(original)
     fake_bin = tmp_path / "codex"
     fake_bin.write_text(
-        "#!/usr/bin/env python3\n"
-        "print('{\"type\":\"turn.completed\"}')\n",
+        '#!/usr/bin/env python3\nprint(\'{"type":"turn.completed"}\')\n',
         encoding="utf-8",
     )
     fake_bin.chmod(0o755)
@@ -1183,9 +1164,7 @@ def test_check_no_judge_uses_cursor_cli_login(
     assert result.report is not None
 
 
-def test_run_official_login_times_out_returns_message(
-    monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_run_official_login_times_out_returns_message(monkeypatch: pytest.MonkeyPatch) -> None:
     seen: dict[str, object] = {}
     monkeypatch.setattr("skillgate_ai.harness._resolve_claude_bin", lambda _p: "/bin/claude")
 
@@ -1210,9 +1189,7 @@ def test_run_official_login_times_out_returns_message(
     assert seen["timeout"] == 600
 
 
-def test_run_official_login_timeout_env_is_honored(
-    monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_run_official_login_timeout_env_is_honored(monkeypatch: pytest.MonkeyPatch) -> None:
     seen: dict[str, object] = {}
     monkeypatch.setattr("skillgate_ai.harness._resolve_claude_bin", lambda _p: "/bin/claude")
     monkeypatch.setenv("SKILLGATE_LOGIN_TIMEOUT", "45")
@@ -1244,7 +1221,7 @@ def test_check_model_access_stops_after_first_task(
         "#!/usr/bin/env python3\n"
         "import pathlib, sys\n"
         f"pathlib.Path({str(invocations)!r}).open('a').write('x')\n"
-        "sys.stderr.write(\"There's an issue with the selected model.\\n\")\n"
+        'sys.stderr.write("There\'s an issue with the selected model.\\n")\n'
         "sys.exit(1)\n",
         encoding="utf-8",
     )

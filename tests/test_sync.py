@@ -6,9 +6,9 @@ import subprocess
 from pathlib import Path
 
 import pytest
+from conftest import plain_text
 from typer.testing import CliRunner
 
-from conftest import plain_text
 from skillgate_ai.cli import app
 from skillgate_ai.sync import install_launchd_plist, sync_once
 
@@ -48,9 +48,7 @@ def _init_repo(path: Path, skills: list[str]) -> Path:
     return path
 
 
-def test_sync_copies_skills_into_targets(
-    project_root: Path, tmp_path: Path
-) -> None:
+def test_sync_copies_skills_into_targets(project_root: Path, tmp_path: Path) -> None:
     repo = _init_repo(tmp_path / "repo", ["notes", "pdf-tools"])
     result = sync_once(str(repo), targets=["cursor", "codex", "claude"])
     assert set(result["skills"]) == {"notes", "pdf-tools"}
@@ -60,9 +58,7 @@ def test_sync_copies_skills_into_targets(
         assert (root / "pdf-tools" / "SKILL.md").is_file()
 
 
-def test_sync_skips_skill_whose_latest_check_failed(
-    project_root: Path, tmp_path: Path
-) -> None:
+def test_sync_skips_skill_whose_latest_check_failed(project_root: Path, tmp_path: Path) -> None:
     from skillgate_ai.history import append_eval
 
     repo = _init_repo(tmp_path / "repo", ["ok-skill", "red-skill"])
@@ -89,9 +85,7 @@ def test_sync_skips_skill_whose_latest_check_failed(
     assert not (cursor_root / "red-skill").exists()
 
 
-def test_sync_cli_reports_skipped_not_synced(
-    project_root: Path, tmp_path: Path
-) -> None:
+def test_sync_cli_reports_skipped_not_synced(project_root: Path, tmp_path: Path) -> None:
     from skillgate_ai.history import append_eval
 
     repo = _init_repo(tmp_path / "repo", ["ok-skill", "red-skill"])
@@ -112,9 +106,7 @@ def test_sync_cli_reports_skipped_not_synced(
         check=True,
         capture_output=True,
     )
-    result = runner.invoke(
-        app, ["sync", "--repo", str(repo), "--targets", "cursor"]
-    )
+    result = runner.invoke(app, ["sync", "--repo", str(repo), "--targets", "cursor"])
     out = plain_text(result.stdout + result.stderr)
     assert result.exit_code == 0, out
     assert "skipped red-skill: latest check did not pass" in out
@@ -147,7 +139,9 @@ def test_sync_never_deletes_unmanaged(project_root: Path, tmp_path: Path) -> Non
     cursor_root.mkdir(parents=True, exist_ok=True)
     # Unrelated folder must survive every sync.
     (cursor_root / "other" / "SKILL.md").parent.mkdir(parents=True, exist_ok=True)
-    (cursor_root / "other" / "SKILL.md").write_text("---\nname: other\ndescription: keep\n---\n\n# other\n")
+    (cursor_root / "other" / "SKILL.md").write_text(
+        "---\nname: other\ndescription: keep\n---\n\n# other\n"
+    )
 
     repo_one = _init_repo(tmp_path / "repo-one", ["keep", "drop"])
     sync_once(str(repo_one), targets=["cursor"])

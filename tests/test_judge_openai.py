@@ -6,8 +6,8 @@ from pathlib import Path
 import httpx
 import pytest
 
+from skillgate_ai.config import DEFAULT_GATEWAY_MODEL
 from skillgate_ai.engine import _live_verdict, _maybe_explain_fail
-from skillgate_ai.output_match import REASON_MISSING_OUTPUT, expected_output_mismatch_reason
 from skillgate_ai.judge_bank import (
     CHECK_CELL_ORDER,
     LOW_CONFIDENCE_WARNING,
@@ -15,7 +15,6 @@ from skillgate_ai.judge_bank import (
     UNUSABLE_ANSWER,
     decisions_questions,
 )
-from skillgate_ai.config import DEFAULT_GATEWAY_MODEL
 from skillgate_ai.judge_openai import (
     DEFAULT_MODEL,
     DISPLAY_NAME,
@@ -26,6 +25,7 @@ from skillgate_ai.judge_openai import (
     make_openai_judge,
     redact_secrets,
 )
+from skillgate_ai.output_match import REASON_MISSING_OUTPUT, expected_output_mismatch_reason
 
 SECRET = "sk-test-secret-do-not-log"
 

@@ -167,7 +167,10 @@ def discover_skills(skills_root: str | Path) -> list[Skill]:
             raise IngestError("No valid skills in skills/", hint="\n".join(errors))
         raise IngestError(
             "No SKILL.md folders in skills/",
-            hint="Bundled seeds should live at $SKILLGATE_ROOT/skills, or pass a pack to `skillgate check`.",
+            hint=(
+                "Bundled seeds should live at $SKILLGATE_ROOT/skills, or pass a pack "
+                "to `skillgate check`."
+            ),
         )
     return found
 
@@ -298,7 +301,9 @@ def _frontmatter_extras(
         metadata = {}
     if not isinstance(metadata, dict):
         if strict:
-            raise IngestError(f"{folder.name}: metadata must be a map of string keys to string values")
+            raise IngestError(
+                f"{folder.name}: metadata must be a map of string keys to string values"
+            )
         metadata = {}
     clean_meta: dict[str, str] = {}
     for key, value in metadata.items():
@@ -309,7 +314,7 @@ def _frontmatter_extras(
         clean_meta[str(key)] = str(value)
     extra = {k: v for k, v in parsed.items() if k not in KNOWN_FIELDS}
     compatibility = parsed.get("compatibility")
-    if compatibility is not None:
+    if compatibility is not None:  # noqa: SIM102
         if not isinstance(compatibility, str) or not (1 <= len(compatibility) <= 500):
             if strict:
                 raise IngestError(f"{folder.name}: compatibility must be 1–500 characters if set")
@@ -326,7 +331,10 @@ def _require_name(value: Any, folder: Path) -> str:
     if not NAME_RE.match(name):
         raise IngestError(
             f"{folder.name}: name {name!r} is invalid",
-            hint="Use lowercase letters, numbers, and single hyphens; no leading/trailing/double hyphens.",
+            hint=(
+                "Use lowercase letters, numbers, and single hyphens; "
+                "no leading/trailing/double hyphens."
+            ),
         )
     if not folder_matches_skill(folder.name, name):
         raise IngestError(
@@ -344,11 +352,11 @@ def _require_description(value: Any, folder: Path) -> str:
     else:
         raise IngestError(f"{folder.name}: description must be a string")
     if not description:
-        raise IngestError(f"{folder.name}/SKILL.md is missing required frontmatter field `description`")
-    if len(description) > 1024:
         raise IngestError(
-            f"{folder.name}: description is {len(description)} characters (max 1024)"
+            f"{folder.name}/SKILL.md is missing required frontmatter field `description`"
         )
+    if len(description) > 1024:
+        raise IngestError(f"{folder.name}: description is {len(description)} characters (max 1024)")
     return description
 
 

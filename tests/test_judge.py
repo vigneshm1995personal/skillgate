@@ -8,12 +8,12 @@ from skillgate_ai.config import (
     DEFAULT_JUDGE_MODEL,
     LLMConfig,
 )
-from skillgate_ai.errors import MissingLLMKeyError, SkillGateError
 from skillgate_ai.engine import _live_verdict, _maybe_explain_fail
-from skillgate_ai.output_match import REASON_MISSING_OUTPUT
+from skillgate_ai.errors import MissingLLMKeyError, SkillGateError
 from skillgate_ai.judge import SkipJudge, judge_stamp, resolve_judge
 from skillgate_ai.judge_bank import LOW_CONFIDENCE_WARNING
 from skillgate_ai.judge_openai import OutcomeJudge, make_openai_judge
+from skillgate_ai.output_match import REASON_MISSING_OUTPUT
 
 
 def _cfg(**overrides: object) -> LLMConfig:
@@ -220,7 +220,11 @@ def test_live_verdict_skip_keeps_det() -> None:
 
 def test_live_verdict_error_is_not_passed_when_det_green() -> None:
     passed, failures, stamped = _live_verdict(
-        {"status": "error", "passed": False, "reasons": ["The judge couldn't score this check (HTTP 402)."]},
+        {
+            "status": "error",
+            "passed": False,
+            "reasons": ["The judge couldn't score this check (HTTP 402)."],
+        },
         "pdf",
         det_passed=True,
         det_failures=[],

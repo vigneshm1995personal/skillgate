@@ -6,9 +6,7 @@ import errno
 import re
 from typing import Any
 
-SKILL_CHANGED_MESSAGE = (
-    "This skill changed since it passed. Run the checks again, then install."
-)
+SKILL_CHANGED_MESSAGE = "This skill changed since it passed. Run the checks again, then install."
 
 _HASH_MISMATCH = re.compile(
     r"hash|mismatch|skill_md|version mismatch",
@@ -149,9 +147,7 @@ def harness_http_error(status: int, *, openai: bool = True) -> HarnessError:
 
 def friendly_http_status(status: int, *, openai: bool = True) -> str:
     if status == 401:
-        return (
-            "The model service did not accept this API key."
-        )
+        return "The model service did not accept this API key."
     if status == 403:
         return (
             "Scoring is not enabled for this key."

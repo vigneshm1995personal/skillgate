@@ -15,7 +15,7 @@ _TERMINAL_COMPARE_STATUSES = frozenset({"done", "cancelled", "error"})
 _COMPARE_ID_RE = re.compile(r"^[a-f0-9]{12}$", re.IGNORECASE)
 
 _LOCK = threading.Lock()
-_CONTROLS: dict[str, "CompareControl"] = {}
+_CONTROLS: dict[str, CompareControl] = {}
 
 
 def _cancel_path(root: Path, compare_id: str) -> Path:

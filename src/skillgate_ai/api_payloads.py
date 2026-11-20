@@ -12,17 +12,19 @@ from fastapi import HTTPException, Request
 
 from skillgate_ai.case_pack import skill_has_dataset
 from skillgate_ai.catalog import SOURCE_LABELS, catalog_entries
-from skillgate_ai.eval_config import customer_config_label
-from skillgate_ai.history import load_deploys, load_history
-from skillgate_ai.ingest import ingest_skill
-from skillgate_ai.judge_copy import customer_scorer_name
 from skillgate_ai.deploy_gate import (
-    local_gate,
+    local_gate as local_gate,
+)
+from skillgate_ai.deploy_gate import (
     newest_gate_moving_row,
     pack_gate_decision,
     row_is_tryout,
     run_gate_decision,
 )
+from skillgate_ai.eval_config import customer_config_label
+from skillgate_ai.history import load_deploys, load_history
+from skillgate_ai.ingest import ingest_skill
+from skillgate_ai.judge_copy import customer_scorer_name
 from skillgate_ai.pack import browser_files, relevant_eval_fixtures
 
 SETTINGS_KEYS = (
@@ -87,9 +89,7 @@ def is_relative(path: Path, root: Path) -> bool:
         return False
 
 
-_BROWSER_DROP = frozenset(
-    {"config_label_raw", "check_kind", "provider", "backend", "via_gateway"}
-)
+_BROWSER_DROP = frozenset({"config_label_raw", "check_kind", "provider", "backend", "via_gateway"})
 
 # Live agent harnesses whose run model is a public id (not a provider secret).
 LIVE_AGENT_HARNESSES = frozenset({"cursor-agent", "codex", "claude", "claude-code"})
@@ -169,7 +169,9 @@ def _neutral_scored_by(text: str, stamp: dict[str, Any] | None) -> str:
     from skillgate_ai.judge_copy import SCORED_BY_JUDGE, scored_by_phrase
 
     lower = text.lower()
-    leaky = "openai decisions" in lower or "vercel ai gateway" in lower or "openai couldn't" in lower
+    leaky = (
+        "openai decisions" in lower or "vercel ai gateway" in lower or "openai couldn't" in lower
+    )
     if "couldn't" in lower or "could not" in lower:
         if not leaky:
             return text
@@ -231,7 +233,9 @@ def history_row_to_run(row: dict[str, Any], skill_path: Path) -> dict[str, Any]:
     )
 
 
-def _gate_source_run(runs: list[dict[str, Any]], hist: list[dict[str, Any]]) -> dict[str, Any] | None:
+def _gate_source_run(
+    runs: list[dict[str, Any]], hist: list[dict[str, Any]]
+) -> dict[str, Any] | None:
     row = newest_gate_moving_row(hist)
     if row is None:
         return None
@@ -324,9 +328,7 @@ def history_payload(state: AppState, skill_path: Path) -> dict[str, Any]:
     runs = [history_row_to_run(row, skill_path) for row in reversed(rows)]
     last_run = _gate_source_run(runs, rows)
     gate, _gate_reason = pack_gate_decision(skill_path)
-    deploys = [
-        _deploy_payload(row, index=i) for i, row in enumerate(load_deploys(skill_path))
-    ]
+    deploys = [_deploy_payload(row, index=i) for i, row in enumerate(load_deploys(skill_path))]
     last_deploy = deploys[-1] if deploys else None
     timeline = [
         {
@@ -352,7 +354,10 @@ def history_payload(state: AppState, skill_path: Path) -> dict[str, Any]:
                 "skill": skill_path.name,
                 "target": item.get("target"),
                 "status": item.get("status"),
-                "label": f"Install to {SOURCE_LABELS.get(item.get('target'), item.get('target') or 'agent')}",
+                "label": (
+                    "Install to "
+                    f"{SOURCE_LABELS.get(item.get('target'), item.get('target') or 'agent')}"
+                ),
             }
         )
     timeline.sort(key=lambda item: str(item.get("at") or ""), reverse=True)

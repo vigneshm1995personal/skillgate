@@ -5,9 +5,9 @@ import shutil
 from pathlib import Path
 
 import pytest
+from conftest import plain_text
 from typer.testing import CliRunner
 
-from conftest import plain_text
 from skillgate_ai.cli import _emit_json, app
 from skillgate_ai.demo_files import ensure_demo_pdfs
 from skillgate_ai.deploy import latest_check_passed
@@ -76,9 +76,9 @@ def test_live_missing_key_is_not_recorded_as_failed_check(
 def test_unknown_harness_is_not_recorded_and_does_not_block_deploy(
     project_root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from skillgate_ai.history import append_eval
-
     from conftest import enable_cursor_agent
+
+    from skillgate_ai.history import append_eval
 
     enable_cursor_agent(monkeypatch, tmp_path)
     monkeypatch.setenv("SKILLGATE_CURSOR_SKILLS", str(tmp_path / "cursor-skills"))
@@ -184,9 +184,7 @@ def test_emit_json_does_not_wrap_long_strings(capsys: pytest.CaptureFixture[str]
 
 
 def test_check_json_error_is_json(project_root: Path) -> None:
-    result = runner.invoke(
-        app, ["check", str(project_root / "skills" / "pdf"), "--json"]
-    )
+    result = runner.invoke(app, ["check", str(project_root / "skills" / "pdf"), "--json"])
     assert result.exit_code == 2
     payload = json.loads(result.stdout)
     assert "No agent is available" in str(payload.get("error") or "")

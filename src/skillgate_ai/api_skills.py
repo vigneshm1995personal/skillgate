@@ -77,10 +77,7 @@ def _listed_skill(state: Any, item: dict[str, Any]) -> dict[str, Any]:
 
 
 def _listed_skills(state: Any) -> list[dict[str, Any]]:
-    return [
-        _listed_skill(state, item)
-        for item in catalog_entries(state.root, include_agents=True)
-    ]
+    return [_listed_skill(state, item) for item in catalog_entries(state.root, include_agents=True)]
 
 
 def register_skill_routes(app: FastAPI) -> None:
@@ -125,7 +122,9 @@ def register_skill_routes(app: FastAPI) -> None:
     @app.post("/api/skills/import")
     async def import_skills(request: Request) -> dict[str, Any]:
         state = state_of(request)
-        body = await request.json() if request.headers.get("content-length") not in {None, "0"} else {}
+        body = (
+            await request.json() if request.headers.get("content-length") not in {None, "0"} else {}
+        )
         if not isinstance(body, dict):
             body = {}
         folder = str(body.get("folder") or body.get("path") or "").strip()

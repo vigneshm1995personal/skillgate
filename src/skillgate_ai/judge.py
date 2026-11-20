@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Any, Mapping, Protocol
+from collections.abc import Mapping
+from typing import Any, Protocol
 
 from skillgate_ai.config import LLMConfig
 from skillgate_ai.errors import MissingLLMKeyError, SkillGateError

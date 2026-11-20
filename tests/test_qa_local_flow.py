@@ -415,6 +415,6 @@ def test_react_ui_customer_copy() -> None:
             and ("evals/goldens" in text or "evals/fixtures" in text)
         ):
             hits.append(f"{rel}: raw evals path")
-        if 'Badge' in text and ">eval<" in text.lower():
+        if "Badge" in text and ">eval<" in text.lower():
             hits.append(f"{rel}: bare eval badge")
     assert hits == []

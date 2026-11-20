@@ -9,7 +9,7 @@ from pathlib import Path
 from typer.testing import CliRunner
 
 from skillgate_ai.cli import app
-from skillgate_ai.compare import run_models_compare, parse_arm_spec
+from skillgate_ai.compare import parse_arm_spec, run_models_compare
 from skillgate_ai.compare_control import request_cancel_compare
 from skillgate_ai.history import append_eval, load_compares
 
@@ -53,8 +53,8 @@ def test_compare_models_arm_file_and_spend_cap(tmp_path: Path, monkeypatch) -> N
     )
 
     def fake_run_check(target, **kwargs):
-        from skillgate_ai.gate import CheckResult
         from skillgate_ai.engine import SuiteReport, TaskReport
+        from skillgate_ai.gate import CheckResult
 
         report = SuiteReport(
             suite="pdf",
@@ -143,13 +143,21 @@ def test_compare_list_and_show(tmp_path: Path, monkeypatch) -> None:
         pack,
         run_id="r1",
         passed=True,
-        report={"pack_fingerprint": fp, "pack_case_ids": ["c1"], "tasks": [{"id": "c1", "passed": True}]},
+        report={
+            "pack_fingerprint": fp,
+            "pack_case_ids": ["c1"],
+            "tasks": [{"id": "c1", "passed": True}],
+        },
     )
     append_eval(
         pack,
         run_id="r2",
         passed=True,
-        report={"pack_fingerprint": fp, "pack_case_ids": ["c1"], "tasks": [{"id": "c1", "passed": True}]},
+        report={
+            "pack_fingerprint": fp,
+            "pack_case_ids": ["c1"],
+            "tasks": [{"id": "c1", "passed": True}],
+        },
     )
     versions = runner.invoke(
         app, ["compare", "versions", str(pack), "--run", "r1", "--run", "r2", "--json"]
@@ -206,8 +214,8 @@ def test_compare_models_prints_id_at_start(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("SKILLGATE_OPENAI_API_KEY", "sk-test")
 
     def fake_run_check(target, **kwargs):
-        from skillgate_ai.gate import CheckResult
         from skillgate_ai.engine import SuiteReport, TaskReport
+        from skillgate_ai.gate import CheckResult
 
         report = SuiteReport(
             suite="pdf",
@@ -259,8 +267,8 @@ def test_compare_models_cancel_stops_next_arm(tmp_path: Path, monkeypatch) -> No
     compare_id_holder: dict[str, str] = {}
 
     def fake_run_check(target, **kwargs):
-        from skillgate_ai.gate import CheckResult
         from skillgate_ai.engine import SuiteReport, TaskReport
+        from skillgate_ai.gate import CheckResult
 
         calls["n"] += 1
         if calls["n"] == 1:

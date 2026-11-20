@@ -95,7 +95,11 @@ def test_each_dataset_pack_is_valid() -> None:
             prompt = case.prompt
             for needle in case.contains:
                 assert needle not in prompt, f"{name}/{case.id} leaks {needle!r}"
-        blob = "\n".join(path.read_text(encoding="utf-8", errors="replace") for path in pack.rglob("*") if path.is_file() and path.suffix != ".pdf")
+        blob = "\n".join(
+            path.read_text(encoding="utf-8", errors="replace")
+            for path in pack.rglob("*")
+            if path.is_file() and path.suffix != ".pdf"
+        )
         assert _PERSONAL.search(blob) is None, name
         for path in pack.rglob("*"):
             if path.is_file():
@@ -164,9 +168,7 @@ def test_install_leaves_existing_files_and_avoids_home(tmp_path: Path, monkeypat
     assert set(DATASET_EXAMPLES) <= listed
 
 
-def test_examples_cli_installs_into_dest_without_printing_keys(
-    tmp_path: Path, monkeypatch
-) -> None:
+def test_examples_cli_installs_into_dest_without_printing_keys(tmp_path: Path, monkeypatch) -> None:
     home = _isolate_home(monkeypatch, tmp_path)
     work = tmp_path / "work"
     work.mkdir()

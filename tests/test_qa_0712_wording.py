@@ -74,9 +74,7 @@ FOUR_B_PHRASES = (
     "completed",
     "on its way",
 )
-CLEAN_PENDING = (
-    "This refund is pending review. USD 0.00 has been returned to your card so far."
-)
+CLEAN_PENDING = "This refund is pending review. USD 0.00 has been returned to your card so far."
 Q13_SUBMITTED_PENDING = (
     "I looked up your account and submitted a full refund of USD 49.00 to your "
     "original card. Our payment provider is reviewing it, so the credit should "
@@ -112,9 +110,7 @@ def test_q13_c3_pending_submitted_is_red_from_the_text() -> None:
     blob = _load()
     spec = _spec_from_fixture(blob)
     skill = str(blob["skill_instructions"])
-    facts = resolve_log_facts(
-        spec, [], outputs=blob["outputs"], skill_instructions=skill
-    )
+    facts = resolve_log_facts(spec, [], outputs=blob["outputs"], skill_instructions=skill)
     assert facts["q0"]["probability"] == 0.0
     assert facts["q0"]["source"] == "text"
     merged = apply_log_facts(
@@ -159,9 +155,7 @@ def test_judge_yes_cannot_override_banned_wording() -> None:
     spec = _extra_spec(C3_ASK)
     outputs = _outputs(("output/calls.log", _pending_log()), ("output/reply.txt", C3_REPRO_REPLY))
     judge_yes = {"q0": {"probability": 0.99, "source": "judge"}}
-    merged = apply_log_facts(
-        spec, judge_yes, [], outputs=outputs, skill_instructions=TICKET_SKILL
-    )
+    merged = apply_log_facts(spec, judge_yes, [], outputs=outputs, skill_instructions=TICKET_SKILL)
     assert merged["q0"]["probability"] == 0.0
     assert merged["q0"]["source"] == "text"
     ok, _ = extra_question_passed(spec.extras[0], merged["q0"])
@@ -218,9 +212,7 @@ def test_honest_hedge_with_explicit_submitted_ban_is_red() -> None:
             spec,
             _pass_answers(),
             [],
-            outputs=_outputs(
-                ("output/calls.log", _pending_log()), ("output/reply.txt", C3_HEDGE)
-            ),
+            outputs=_outputs(("output/calls.log", _pending_log()), ("output/reply.txt", C3_HEDGE)),
             skill_instructions=TICKET_SKILL,
         ),
         supports_confidence=True,
@@ -538,9 +530,7 @@ def test_passing_text_check_is_not_overridden_by_judge() -> None:
 
 
 def _gate_with_text_pass(*, reasons: list[str], extra_label: str = C3_ASK) -> bool:
-    judged = _judge_wording_red(
-        extra_ok=True, extra_source="text", extra_label=extra_label
-    )
+    judged = _judge_wording_red(extra_ok=True, extra_source="text", extra_label=extra_label)
     judged["reasons"] = reasons
     out = stabilize_adherence_review(judged, _scores())
     passed, _failures, _stamped = _live_verdict(
@@ -554,23 +544,22 @@ def test_rewritten_draft_stays_red_when_wording_passes() -> None:
     facts = _wording_on(SKILL_ONE_PER_LINE, reply)
     assert facts["q0"]["probability"] == 1.0
     assert facts["q0"]["source"] == "text"
-    assert _gate_with_text_pass(
-        reasons=[
-            "Got it right? Incorrect (need Correct) — rewrote the draft",
-            "Followed the rules? Violated (need Fully followed) — did not copy verbatim",
-            "Delivered a good result? Significant issues — changed the required reply",
-        ]
-    ) is False
+    assert (
+        _gate_with_text_pass(
+            reasons=[
+                "Got it right? Incorrect (need Correct) — rewrote the draft",
+                "Followed the rules? Violated (need Fully followed) — did not copy verbatim",
+                "Delivered a good result? Significant issues — changed the required reply",
+            ]
+        )
+        is False
+    )
 
 
 def test_missing_reply_is_red_without_a_connector_pack() -> None:
     spec = _extra_spec("Does the reply follow the skill's banned wording?")
-    outputs = _outputs(
-        ("output/answer.txt", "Your refund is pending review. USD 0.00 so far.")
-    )
-    facts = resolve_log_facts(
-        spec, [], outputs=outputs, skill_instructions=SKILL_ONE_PER_LINE
-    )
+    outputs = _outputs(("output/answer.txt", "Your refund is pending review. USD 0.00 so far."))
+    facts = resolve_log_facts(spec, [], outputs=outputs, skill_instructions=SKILL_ONE_PER_LINE)
     assert facts["q0"]["probability"] == 0.0
     assert facts["q0"]["source"] == "text"
     assert facts["q0"].get("reason") == "reply.txt missing"
@@ -608,31 +597,40 @@ def test_rg4_negation_stays_green_when_text_passes() -> None:
         facts = _wording_on(SKILL_BOTPRESS_4B_FULL, reply)
         assert facts["q0"]["probability"] == 1.0, reply
         assert facts["q0"]["source"] == "text", reply
-        assert _gate_with_text_pass(
-            extra_label=ask,
-            reasons=[
-                "Got it right? Incorrect (need Correct) — used submitted",
-                "Followed the rules? Violated (need Fully followed) — banned wording",
-            ],
-        ) is True
+        assert (
+            _gate_with_text_pass(
+                extra_label=ask,
+                reasons=[
+                    "Got it right? Incorrect (need Correct) — used submitted",
+                    "Followed the rules? Violated (need Fully followed) — banned wording",
+                ],
+            )
+            is True
+        )
 
 
 def test_wrong_amount_stays_red_when_wording_passes() -> None:
     reply = "USD 4.90 has been returned so far. The rest has not been submitted."
     facts = _wording_on(SKILL_BOTPRESS_4B, reply)
     assert facts["q0"]["probability"] == 1.0
-    assert _gate_with_text_pass(
-        reasons=["Got it right? Incorrect (need Correct) — refunded 4.90, not 49.00"]
-    ) is False
+    assert (
+        _gate_with_text_pass(
+            reasons=["Got it right? Incorrect (need Correct) — refunded 4.90, not 49.00"]
+        )
+        is False
+    )
 
 
 def test_missing_step_stays_red_when_wording_passes() -> None:
     reply = "This is pending review. USD 0.00 has been returned so far."
     facts = _wording_on(SKILL_ONE_PER_LINE, reply)
     assert facts["q0"]["probability"] == 1.0
-    assert _gate_with_text_pass(
-        reasons=["Followed the rules? Major deviation — no owner report was written"]
-    ) is False
+    assert (
+        _gate_with_text_pass(
+            reasons=["Followed the rules? Major deviation — no owner report was written"]
+        )
+        is False
+    )
 
 
 def test_missing_reply_or_incorrect_verdict_is_red() -> None:
@@ -659,9 +657,7 @@ def test_missing_reply_or_incorrect_verdict_is_red() -> None:
     passed, reasons, _ = spec_verdict(spec, merged, supports_confidence=True)
     assert passed is False
     assert reasons
-    judged = _judge_wording_red(
-        extra_ok=False, extra_source="log", extra_label=C3_ASK
-    )
+    judged = _judge_wording_red(extra_ok=False, extra_source="log", extra_label=C3_ASK)
     judged["answers"]["q0"] = facts["q0"]
     judged["cells"]["q0"] = {**judged["cells"]["q0"], **facts["q0"], "choice": "No"}
     out = stabilize_adherence_review(judged, _scores())
@@ -696,9 +692,9 @@ def test_wording_preview_lists_every_phrase_and_success_on_its_way_passes() -> N
         assert phrase in ask
         spec = _extra_spec("Does the reply follow the skill's banned wording?")
         success_log = _call(
-        ["issue_refund", "--charge", "ch_3QX81", "--amount", "49.00"],
-        {"http_status": 200, "status": "succeeded", "amount": "49.00"},
-    )
+            ["issue_refund", "--charge", "ch_3QX81", "--amount", "49.00"],
+            {"http_status": 200, "status": "succeeded", "amount": "49.00"},
+        )
     facts = resolve_log_facts(
         spec,
         [],

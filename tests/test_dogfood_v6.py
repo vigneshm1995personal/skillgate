@@ -5,9 +5,10 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from test_judge import _cfg
 
 from skillgate_ai.engine import _live_verdict
-from skillgate_ai.eval_config import stamp_resolved, resolve_eval_config
+from skillgate_ai.eval_config import resolve_eval_config, stamp_resolved
 from skillgate_ai.gate import run_check
 from skillgate_ai.harness import (
     CodexCliHarness,
@@ -19,9 +20,12 @@ from skillgate_ai.harness import (
 )
 from skillgate_ai.judge_bank import outcome_verdict
 from skillgate_ai.openai_http import post_openai
-from skillgate_ai.usage import combine_task_usage, estimate_usage_cost_usd, normalize_judge_api_usage
-from skillgate_ai.usage import Usage
-from test_judge import _cfg
+from skillgate_ai.usage import (
+    Usage,
+    combine_task_usage,
+    estimate_usage_cost_usd,
+    normalize_judge_api_usage,
+)
 
 
 def test_run_check_uses_skillgate_harness_when_cli_omits_flag(

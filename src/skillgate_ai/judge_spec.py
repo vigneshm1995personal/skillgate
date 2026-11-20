@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
-from typing import Any, Mapping, Sequence
+from typing import Any
 
 from skillgate_ai.errors import SuiteError
 from skillgate_ai.judge_bank import (
@@ -281,9 +282,7 @@ def spec_verdict(
     skipped_ids = {str(item) for item in (skipped or []) if str(item).strip()}
     blocking = [q for q in spec.questions if q.builtin and q.id in CHECK_CELL_ORDER]
     builtin_lock = {q.id: q for q in blocking}
-    passed_lock, lock_reasons = outcome_verdict(
-        {key: answers.get(key) for key in CHECK_CELL_ORDER}
-    )
+    passed_lock, lock_reasons = outcome_verdict({key: answers.get(key) for key in CHECK_CELL_ORDER})
     reasons: list[str] = []
     warnings: list[str] = []
     failed = False
@@ -296,11 +295,7 @@ def spec_verdict(
                 warnings.append(reason)
                 continue
             conf = extract_confidence(answers.get(key)) if key else None
-            if (
-                supports_confidence
-                and conf is not None
-                and conf < spec.min_confidence
-            ):
+            if supports_confidence and conf is not None and conf < spec.min_confidence:
                 unsure = True
                 continue
             failed = True
@@ -402,9 +397,11 @@ def extra_question_passed(question: JudgeQuestion, answer: Any) -> tuple[bool, s
     if not choice:
         return _unusable_or_fail(question)
     allowed = {str(row.get("value")): bool(row.get("pass")) for row in question.choices}
-    if question.choices and choice not in allowed and choice.lower() not in {
-        name.lower() for name in allowed
-    }:
+    if (
+        question.choices
+        and choice not in allowed
+        and choice.lower() not in {name.lower() for name in allowed}
+    ):
         return _unusable_or_fail(question)
     passed = _choice_passes(question, choice)
     if passed:
@@ -490,7 +487,9 @@ def _parse_choices(raw: Any, *, qid: str, kind: str) -> tuple[dict[str, Any], ..
     if kind != "choice":
         return ()
     if not isinstance(raw, list) or len(raw) < 2:
-        raise SuiteError(f"Question {qid}: pick-one questions need at least two choices.", exit_code=2)
+        raise SuiteError(
+            f"Question {qid}: pick-one questions need at least two choices.", exit_code=2
+        )
     rows: list[dict[str, Any]] = []
     for item in raw:
         if isinstance(item, str):

@@ -42,7 +42,9 @@ class LocalUIGuard(BaseHTTPMiddleware):
         if not host_is_loopback(host):
             return _forbid("This local UI only accepts requests on 127.0.0.1 or localhost.")
         if request.method in MUTATING:
-            content_type = (request.headers.get("content-type") or "").split(";", 1)[0].strip().lower()
+            content_type = (
+                (request.headers.get("content-type") or "").split(";", 1)[0].strip().lower()
+            )
             length = (request.headers.get("content-length") or "0").strip()
             empty_body = not content_type and length in {"", "0"}
             if not empty_body and content_type not in ALLOWED_CONTENT:

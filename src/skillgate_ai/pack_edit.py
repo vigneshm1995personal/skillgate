@@ -280,8 +280,10 @@ def add_pack_case(
     loaded = load_case_pack(skill_path)
     taken = {case.id for case in (loaded.cases if loaded else [])}
     wanted = case_id_slug(case_id) if str(case_id or "").strip() else ""
-    if wanted and loaded and case_is_locked(
-        loaded.skill, wanted, pack_case_ids=[c.id for c in loaded.cases]
+    if (
+        wanted
+        and loaded
+        and case_is_locked(loaded.skill, wanted, pack_case_ids=[c.id for c in loaded.cases])
     ):
         raise SuiteError(SEED_EDIT_MESSAGE, hint=SEED_EDIT_HINT)
     if wanted and wanted in taken and not force:

@@ -91,4 +91,3 @@ def test_gate_workflow_example_dest_matches_skill_name() -> None:
     assert "skillgate ingest /tmp/pdf" in text
     assert "SKILLGATE_OPENAI_API_KEY" in text
     assert "--key-env" in text
-

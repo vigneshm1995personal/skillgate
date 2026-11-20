@@ -70,9 +70,7 @@ def format_cli(report: SuiteReport) -> str:
             lines.append(f"       fix:  {task.advice.change}")
     lines.append("")
     if raw_gate == "needs review":
-        unsure = ", ".join(
-            t.task_id for t in report.tasks if getattr(t, "review", False)
-        )
+        unsure = ", ".join(t.task_id for t in report.tasks if getattr(t, "review", False))
         lines.append(f"Gate needs review. Unsure tasks: {unsure}")
     elif report.passed is True:
         lines.append("Gate is green.")
@@ -217,9 +215,7 @@ def report_to_dict(report: SuiteReport) -> dict:
         "passed_count": report.passed_count,
         "task_count": len(report.tasks),
         "failed_task_ids": [t.task_id for t in report.failed_tasks],
-        "review_task_ids": [
-            t.task_id for t in report.tasks if getattr(t, "review", False)
-        ],
+        "review_task_ids": [t.task_id for t in report.tasks if getattr(t, "review", False)],
         "tasks": tasks,
         "advice": primary,
         "note": report.note,
@@ -555,9 +551,7 @@ def _task_check_answers(task: TaskReport) -> tuple[list[dict[str, str]], str]:
         answers_map = judge.get("answers") if isinstance(judge.get("answers"), dict) else {}
         rows: list[dict[str, str]] = []
         if isinstance(raw, dict):
-            pairs = (
-                (str(key), cell) for key, cell in raw.items() if isinstance(cell, dict)
-            )
+            pairs = ((str(key), cell) for key, cell in raw.items() if isinstance(cell, dict))
         else:
             pairs = ((str(cell.get("label") or ""), cell) for cell in cells)
         for key, cell in pairs:

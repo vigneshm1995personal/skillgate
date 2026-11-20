@@ -69,7 +69,12 @@ def test_parity_table_is_in_docs() -> None:
 
 
 _SETTINGS_TSX = (
-    Path(__file__).resolve().parents[1] / "web" / "src" / "components" / "dashboard" / "settings-page.tsx"
+    Path(__file__).resolve().parents[1]
+    / "web"
+    / "src"
+    / "components"
+    / "dashboard"
+    / "settings-page.tsx"
 )
 _JUDGE_FORM_TSX = (
     Path(__file__).resolve().parents[1]
@@ -79,9 +84,7 @@ _JUDGE_FORM_TSX = (
     / "dashboard"
     / "judge-setup-form.tsx"
 )
-_JUDGE_SETUP_TS = (
-    Path(__file__).resolve().parents[1] / "web" / "src" / "lib" / "judge-setup.ts"
-)
+_JUDGE_SETUP_TS = Path(__file__).resolve().parents[1] / "web" / "src" / "lib" / "judge-setup.ts"
 _WEB_STATIC = Path(__file__).resolve().parents[1] / "src" / "skillgate_ai" / "web_static"
 _OLD_KEY_COPY = (
     "Model keys",
@@ -111,8 +114,9 @@ def test_settings_screen_has_no_provider_key_fields() -> None:
     assert "not signed in" in text
     assert "Decision model" in text
     assert "Not selected" in form
-    assert "A decision model scores each live check, and one is required." in _JUDGE_SETUP_TS.read_text(
-        encoding="utf-8"
+    assert (
+        "A decision model scores each live check, and one is required."
+        in _JUDGE_SETUP_TS.read_text(encoding="utf-8")
     )
     assert 'idPrefix="settings-judge"' in text
     assert "${idPrefix}-account-id" in form

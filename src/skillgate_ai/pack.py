@@ -259,7 +259,7 @@ def generate_sample_bytes(*, dest: str, prompt: str = "") -> bytes:
         body = f'{{\n  "source": {stem!r},\n  "note": {hint!r},\n  "total": "12.40"\n}}\n'
         return body.encode("utf-8")
     if suffix == ".csv":
-        return f"item,amount\n{stem},12.40\nnote,{hint}\n".encode("utf-8")
+        return f"item,amount\n{stem},12.40\nnote,{hint}\n".encode()
     text = f"Sample input for this check.\nItem: {stem}\nNote: {hint}\nTotal: 12.40\n"
     return text.encode("utf-8")
 
@@ -281,7 +281,7 @@ def write_sample_fixture(
             "SKILL.md is the skill, not a fixture.",
             hint="Pass a path under evals/fixtures/.",
         )
-    if "/" in name:
+    if "/" in name:  # noqa: SIM108
         relative = safe_relpath(name)
     else:
         relative = safe_relpath(f"{FIXTURE_DIR}/{name}")
@@ -394,12 +394,10 @@ def _without_leaked_pdf_demo(root: Path, rows: list[dict[str, Any]]) -> list[dic
     if _is_pdf_example_dir(root):
         return rows
     names = {Path(str(row.get("src") or "")).name for row in rows}
-    if not PDF_DEMO_FIXTURE_NAMES <= names:
+    if not names >= PDF_DEMO_FIXTURE_NAMES:
         return rows
     return [
-        row
-        for row in rows
-        if Path(str(row.get("src") or "")).name not in PDF_DEMO_FIXTURE_NAMES
+        row for row in rows if Path(str(row.get("src") or "")).name not in PDF_DEMO_FIXTURE_NAMES
     ]
 
 
@@ -530,6 +528,7 @@ def copy_skill_pack(
             include_evals=keep_evals,
             include_goldens=include_goldens,
         )
+
     try:
         if tmp.exists():
             shutil.rmtree(tmp)

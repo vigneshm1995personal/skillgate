@@ -24,7 +24,11 @@ def test_versions_rejects_same_run_twice(tmp_path: Path) -> None:
         pack,
         run_id="run-a",
         passed=True,
-        report={"pack_fingerprint": fp, "pack_case_ids": ["c1"], "tasks": [{"id": "c1", "passed": True}]},
+        report={
+            "pack_fingerprint": fp,
+            "pack_case_ids": ["c1"],
+            "tasks": [{"id": "c1", "passed": True}],
+        },
     )
     with pytest.raises(CompareError, match="different"):
         run_versions_compare(pack, run_ids=["run-a", "run-a"], root=tmp_path)

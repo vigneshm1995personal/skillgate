@@ -7,6 +7,7 @@ import subprocess
 from pathlib import Path
 
 import pytest
+from test_judge import _cfg
 
 from skillgate_ai.harness import (
     ClaudeCodeHarness,
@@ -18,7 +19,6 @@ from skillgate_ai.harness import (
 from skillgate_ai.ingest import Skill
 from skillgate_ai.sandbox import prepare_workspace
 from skillgate_ai.spans import spans_from_jsonl
-from test_judge import _cfg
 
 
 def test_claude_allowed_tools_include_skill() -> None:
@@ -32,7 +32,9 @@ def test_claude_allowed_tools_include_skill() -> None:
 def test_prepare_workspace_stages_claude_native(tmp_path: Path) -> None:
     pack = tmp_path / "pdf"
     pack.mkdir()
-    (pack / "SKILL.md").write_text("---\nname: pdf\ndescription: PDF\n---\n# pdf\n", encoding="utf-8")
+    (pack / "SKILL.md").write_text(
+        "---\nname: pdf\ndescription: PDF\n---\n# pdf\n", encoding="utf-8"
+    )
     skill = Skill(path=pack, name="pdf", description="PDF", body="# pdf\n")
     ws = tmp_path / "ws"
     prepare_workspace(ws, [skill], [], stage_claude_native=True)
@@ -92,7 +94,9 @@ def test_claude_harness_preserves_host_config_by_default(
     assert claude_config_isolation_enabled() is False
     monkeypatch.setattr("skillgate_ai.harness._claude_ready", lambda _c: True)
     monkeypatch.setattr("skillgate_ai.harness._resolve_claude_bin", lambda _p: "/bin/claude")
-    monkeypatch.setattr("skillgate_ai.harness._resolve_trigger_evidence", lambda *a, **k: (None, []))
+    monkeypatch.setattr(
+        "skillgate_ai.harness._resolve_trigger_evidence", lambda *a, **k: (None, [])
+    )
     monkeypatch.setattr("skillgate_ai.harness._write_selection", lambda *a: None)
     workspace = tmp_path / "ws"
     workspace.mkdir()
@@ -128,7 +132,9 @@ def test_claude_config_isolation_opt_in(tmp_path: Path, monkeypatch: pytest.Monk
     assert claude_config_isolation_enabled() is True
     monkeypatch.setattr("skillgate_ai.harness._claude_ready", lambda _c: True)
     monkeypatch.setattr("skillgate_ai.harness._resolve_claude_bin", lambda _p: "/bin/claude")
-    monkeypatch.setattr("skillgate_ai.harness._resolve_trigger_evidence", lambda *a, **k: (None, []))
+    monkeypatch.setattr(
+        "skillgate_ai.harness._resolve_trigger_evidence", lambda *a, **k: (None, [])
+    )
     monkeypatch.setattr("skillgate_ai.harness._write_selection", lambda *a: None)
     workspace = tmp_path / "ws"
     workspace.mkdir()

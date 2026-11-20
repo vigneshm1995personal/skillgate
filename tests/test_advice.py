@@ -13,9 +13,7 @@ PDF = Skill(
     name="pdf",
     description="Extract text from PDFs to output/extracted.txt. Create and merge PDFs.",
     body=(
-        "# Steps\n"
-        "1. Extract text to output/extracted.txt.\n"
-        "2. Create a PDF at output/status.pdf.\n"
+        "# Steps\n1. Extract text to output/extracted.txt.\n2. Create a PDF at output/status.pdf.\n"
     ),
 )
 
@@ -23,7 +21,9 @@ PDF = Skill(
 def _create_status_task() -> TaskSpec:
     return TaskSpec(
         id="create-status",
-        prompt='Create a PDF at output/status.pdf titled Q3 Status that contains "All systems are go."',
+        prompt=(
+            'Create a PDF at output/status.pdf titled Q3 Status that contains "All systems are go."'
+        ),
         expect_skill="pdf",
         scorers=[
             ScorerSpec(
@@ -137,8 +137,8 @@ def test_advise_behavior_fail_leads_and_does_not_blame_description() -> None:
         "The agent's behavior failed this check: no_auth_bypass → No. Review the run log below."
     )
     assert (
-        "Note: this skill wasn't opened during this run. If it should have been, you can review the description."
-        in advice.why
+        "Note: this skill wasn't opened during this run. If it should have been, "
+        "you can review the description." in advice.why
     )
     assert "never matched" not in blob
     assert "talks about something else" not in blob

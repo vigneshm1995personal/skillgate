@@ -81,9 +81,7 @@ def resolve_golden_src(root: Path, case_id: str, golden_path: str | None) -> Pat
             return named
     if folder.is_dir():
         matches = sorted(
-            path
-            for path in folder.iterdir()
-            if path.is_file() and path.stem == case_id
+            path for path in folder.iterdir() if path.is_file() and path.stem == case_id
         )
         if matches:
             return matches[0]

@@ -81,7 +81,9 @@ def test_judge_reset_drops_extras(tmp_path: Path, monkeypatch) -> None:
 def test_judge_provider_set_and_show(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("SKILLGATE_ROOT", str(tmp_path))
     monkeypatch.chdir(tmp_path)
-    saved = runner.invoke(app, ["judge", "provider", "set", "jev", "--base-url", "https://jev.example"])
+    saved = runner.invoke(
+        app, ["judge", "provider", "set", "jev", "--base-url", "https://jev.example"]
+    )
     out = plain_text(saved.stdout + saved.stderr)
     assert saved.exit_code == 0, out
     assert "the judge" in out.lower()
@@ -228,7 +230,9 @@ def test_pin_does_not_truncate_existing_case_ids(tmp_path: Path) -> None:
     reloaded = load_case_pack(dest)
     assert reloaded is not None
     assert any(case.id == long_id for case in reloaded.cases)
-    assert not any(case.id == long_id[:40].rstrip("-") and case.id != long_id for case in reloaded.cases)
+    assert not any(
+        case.id == long_id[:40].rstrip("-") and case.id != long_id for case in reloaded.cases
+    )
 
 
 def test_keys_list_labels_ai_gateway_key(tmp_path: Path, monkeypatch) -> None:

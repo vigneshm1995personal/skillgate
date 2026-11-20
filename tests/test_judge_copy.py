@@ -18,7 +18,9 @@ def _task(*, judge: dict | None, passed: bool = True) -> TaskReport:
     )
 
 
-def _report(*, tasks: list[TaskReport], config: dict | None = None, harness: str = "llm") -> SuiteReport:
+def _report(
+    *, tasks: list[TaskReport], config: dict | None = None, harness: str = "llm"
+) -> SuiteReport:
     return SuiteReport(
         suite="suite",
         title="title",

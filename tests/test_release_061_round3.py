@@ -23,7 +23,9 @@ ROOT = Path(__file__).resolve().parents[1]
 def test_bundle_web_static_invokes_pnpm_with_cwd_web_dir(tmp_path: Path) -> None:
     import importlib.util
 
-    spec = importlib.util.spec_from_file_location("skillgate_build", ROOT / "src" / "skillgate_build.py")
+    spec = importlib.util.spec_from_file_location(
+        "skillgate_build", ROOT / "src" / "skillgate_build.py"
+    )
     assert spec and spec.loader
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
@@ -39,7 +41,7 @@ def test_bundle_web_static_invokes_pnpm_with_cwd_web_dir(tmp_path: Path) -> None
     def fake_check_call(cmd, **kwargs):
         calls.append((list(cmd), kwargs))
 
-    with patch("subprocess.check_call", side_effect=fake_check_call):
+    with patch("subprocess.check_call", side_effect=fake_check_call):  # noqa: SIM117
         with patch("shutil.which", return_value="/usr/bin/pnpm"):
             module.bundle_web_static(
                 dest=tmp_path / "out",

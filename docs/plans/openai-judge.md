@@ -244,12 +244,12 @@ On each Pass-lock and Path cell, persist under `tasks[].judge` (history already 
 
 ```python
 answers[name] = {
-  "choice": str,                 # hosted field; Pass lock reads this
-  "confidence": float | None,    # Decisions choice field
-  "probabilities": [             # Decisions array, copied not invented
-    {"value": str, "probability": float},
-    ...
-  ],
+    "choice": str,  # hosted field; Pass lock reads this
+    "confidence": float | None,  # Decisions choice field
+    "probabilities": [  # Decisions array, copied not invented
+        {"value": str, "probability": float},
+        ...,
+    ],
 }
 ```
 

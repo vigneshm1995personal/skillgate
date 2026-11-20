@@ -3,10 +3,10 @@ from __future__ import annotations
 import socket
 from pathlib import Path
 
+from conftest import plain_text
 from fastapi.testclient import TestClient
 from typer.testing import CliRunner
 
-from conftest import plain_text
 from skillgate_ai.api import create_app
 from skillgate_ai.cli import app
 from skillgate_ai.skill_md import write_skill_md
@@ -98,7 +98,16 @@ def test_ui_busy_port_is_friendly_before_url(tmp_path: Path, monkeypatch) -> Non
     try:
         result = runner.invoke(
             app,
-            ["ui", "--host", "127.0.0.1", "--port", str(port), "--no-browser", "--root", str(tmp_path)],
+            [
+                "ui",
+                "--host",
+                "127.0.0.1",
+                "--port",
+                str(port),
+                "--no-browser",
+                "--root",
+                str(tmp_path),
+            ],
         )
         out = plain_text(result.stdout + result.stderr)
         assert result.exit_code != 0, out

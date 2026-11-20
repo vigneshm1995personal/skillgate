@@ -13,7 +13,11 @@ from typer.testing import CliRunner
 from skillgate_ai.cli import app
 from skillgate_ai.compare import run_versions_compare
 from skillgate_ai.history import append_eval, load_compares
-from skillgate_ai.judge_settings import judge_settings_path, load_judge_settings, save_judge_settings
+from skillgate_ai.judge_settings import (
+    judge_settings_path,
+    load_judge_settings,
+    save_judge_settings,
+)
 from skillgate_ai.keys import CUSTOMER_SETTINGS_KEYS
 from skillgate_ai.paths import config_root_for, project_root
 
@@ -48,7 +52,6 @@ def test_check_non_pack_with_case_errors_not_no_checks(tmp_path: Path, monkeypat
     ws = tmp_path / "ws"
     ws.mkdir()
     (ws / "skills").mkdir()
-    pdf = ROOT / "skills" / "pdf"
     monkeypatch.chdir(ws)
     monkeypatch.setenv("SKILLGATE_ROOT", str(ws))
     result = runner.invoke(app, ["check", "./pdf", "--case", "extract-hello"])
@@ -96,7 +99,7 @@ def test_judge_settings_file_omits_decisions_path_after_save(tmp_path: Path) -> 
 
 
 def test_stored_config_label_has_no_via_gateway(tmp_path: Path) -> None:
-    from skillgate_ai.eval_config import EvalRunConfig, coerce_eval_config
+    from skillgate_ai.eval_config import EvalRunConfig
 
     cfg = EvalRunConfig(
         harness="cursor-agent",
@@ -161,7 +164,7 @@ def test_compare_versions_git_outside_repo_no_started(tmp_path: Path, monkeypatc
 
 
 def test_failed_compare_appears_in_list(tmp_path: Path, monkeypatch) -> None:
-    from skillgate_ai.compare import CompareError, run_models_compare, parse_arm_spec
+    from skillgate_ai.compare import CompareError, parse_arm_spec, run_models_compare
 
     pack = tmp_path / "skills" / "pdf"
     shutil.copytree(ROOT / "skills" / "pdf", pack)

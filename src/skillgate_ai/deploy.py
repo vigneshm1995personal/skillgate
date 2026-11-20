@@ -6,8 +6,8 @@ import os
 from pathlib import Path
 from typing import NotRequired, Protocol, TypedDict
 
-from skillgate_ai.errors import DeployError, IngestError, friendly_os_error
 from skillgate_ai.deploy_gate import deploy_allowed, newest_gate_moving_row
+from skillgate_ai.errors import DeployError, IngestError, friendly_os_error
 from skillgate_ai.history import load_history
 
 __all__ = ["deploy_allowed"]

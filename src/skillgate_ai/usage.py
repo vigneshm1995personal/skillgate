@@ -230,9 +230,7 @@ def normalize_judge_api_usage(
     if isinstance(usage, dict):
         parts.append(usage)
     top_level = {
-        key: data[key]
-        for key in (*_IN_KEYS, *_OUT_KEYS, *_TOTAL_KEYS, *_COST_KEYS)
-        if key in data
+        key: data[key] for key in (*_IN_KEYS, *_OUT_KEYS, *_TOTAL_KEYS, *_COST_KEYS) if key in data
     }
     if top_level:
         parts.append(top_level)

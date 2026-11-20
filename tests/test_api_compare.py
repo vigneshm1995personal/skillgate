@@ -26,13 +26,21 @@ def test_api_compare_cancel_endpoint(tmp_path: Path, monkeypatch) -> None:
         pack,
         run_id="r1",
         passed=True,
-        report={"pack_fingerprint": fp, "pack_case_ids": ["c1"], "tasks": [{"id": "c1", "passed": True}]},
+        report={
+            "pack_fingerprint": fp,
+            "pack_case_ids": ["c1"],
+            "tasks": [{"id": "c1", "passed": True}],
+        },
     )
     append_eval(
         pack,
         run_id="r2",
         passed=True,
-        report={"pack_fingerprint": fp, "pack_case_ids": ["c1"], "tasks": [{"id": "c1", "passed": True}]},
+        report={
+            "pack_fingerprint": fp,
+            "pack_case_ids": ["c1"],
+            "tasks": [{"id": "c1", "passed": True}],
+        },
     )
     started = client.post(
         "/api/compare/versions",
@@ -62,13 +70,21 @@ def test_api_versions_compare_keeps_posted_compare_id(tmp_path: Path, monkeypatc
         pack,
         run_id="r1",
         passed=True,
-        report={"pack_fingerprint": fp, "pack_case_ids": ["c1"], "tasks": [{"id": "c1", "passed": True}]},
+        report={
+            "pack_fingerprint": fp,
+            "pack_case_ids": ["c1"],
+            "tasks": [{"id": "c1", "passed": True}],
+        },
     )
     append_eval(
         pack,
         run_id="r2",
         passed=True,
-        report={"pack_fingerprint": fp, "pack_case_ids": ["c1"], "tasks": [{"id": "c1", "passed": True}]},
+        report={
+            "pack_fingerprint": fp,
+            "pack_case_ids": ["c1"],
+            "tasks": [{"id": "c1", "passed": True}],
+        },
     )
     started = client.post(
         "/api/compare/versions",
@@ -94,7 +110,14 @@ def test_find_compare_anywhere_scans_catalog(tmp_path: Path) -> None:
     skills.mkdir(parents=True)
     pack = skills / "pdf"
     shutil.copytree(ROOT / "skills" / "pdf", pack)
-    row = {"compare_id": "cmp-test-01", "kind": "compare", "mode": "versions", "status": "done", "arms": [], "cases": []}
+    row = {
+        "compare_id": "cmp-test-01",
+        "kind": "compare",
+        "mode": "versions",
+        "status": "done",
+        "arms": [],
+        "cases": [],
+    }
     append_compare(pack, row=row)
     found = find_compare_anywhere(root, "cmp-test-01")
     assert found is not None

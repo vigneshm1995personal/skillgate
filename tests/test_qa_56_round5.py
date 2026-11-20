@@ -127,7 +127,9 @@ def test_harness_timeout_never_prints_the_prompt(
     assert "-p" not in blob
 
 
-def test_check_timeout_json_is_valid_exit_2(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_check_timeout_json_is_valid_exit_2(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     dest = tmp_path / "pack"
     dest.mkdir()
     (dest / "SKILL.md").write_text("---\nname: pack\n---\n", encoding="utf-8")
@@ -147,9 +149,7 @@ def test_check_timeout_json_is_valid_exit_2(tmp_path: Path, monkeypatch: pytest.
     assert result.exception is None or not isinstance(result.exception, subprocess.TimeoutExpired)
 
 
-def test_run_check_timeout_is_check_result(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_run_check_timeout_is_check_result(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     dest = tmp_path / "pack"
     dest.mkdir()
     (dest / "SKILL.md").write_text("---\nname: pack\n---\n", encoding="utf-8")
@@ -174,7 +174,11 @@ def test_gate_timeout_becomes_cannot_run_result() -> None:
         exit_code=err.exit_code,
         error={"message": err.message, "hint": err.hint},
     )
-    payload = {"error": result.error["message"], "hint": result.error.get("hint"), "exit_code": result.exit_code}
+    payload = {
+        "error": result.error["message"],
+        "hint": result.error.get("hint"),
+        "exit_code": result.exit_code,
+    }
     dumped = json.dumps(payload)
     assert json.loads(dumped)["exit_code"] == 2
     assert PROMPT_LEAK not in dumped

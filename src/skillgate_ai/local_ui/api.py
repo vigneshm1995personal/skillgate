@@ -18,7 +18,6 @@ from skillgate_ai.advice import (
 )
 from skillgate_ai.case_pack import CasePack, dataset_view, save_case_pack
 from skillgate_ai.config import (
-    NO_KEY_HINT,
     ROOT_ENV_NAMES,
     get_llm_config,
     load_env,
@@ -26,11 +25,11 @@ from skillgate_ai.config import (
 )
 from skillgate_ai.demo_files import ensure_demo_pdfs
 from skillgate_ai.errors import MissingLLMKeyError, SkillGateError, timeout_harness_error
-from skillgate_ai.keys import set_vault_key
 from skillgate_ai.gate import run_check
-from skillgate_ai.judge import SkipJudge, resolve_judge
 from skillgate_ai.history import load_history
 from skillgate_ai.ingest import ingest_skill
+from skillgate_ai.judge import SkipJudge, resolve_judge
+from skillgate_ai.keys import set_vault_key
 from skillgate_ai.live import create_control, drop_control, get_control
 from skillgate_ai.pack import (
     CannotSynthesizeFixture,
@@ -354,7 +353,11 @@ def _put_env(state: UiState, payload: dict[str, Any]) -> tuple[int, dict[str, An
             )
         if value:
             set_vault_key(state.root, key, value)
-    return 200, {"ok": True, "has_any_key": get_llm_config(state.root).has_any_key}, "application/json"
+    return (
+        200,
+        {"ok": True, "has_any_key": get_llm_config(state.root).has_any_key},
+        "application/json",
+    )
 
 
 LIVE_FAIL = "Your API key could not run this check."
@@ -466,7 +469,7 @@ def _apply_advice(state: UiState, payload: dict[str, Any]) -> tuple[int, dict[st
     raw = str(payload.get("description") or payload.get("paste") or "").strip()
     if not raw:
         raise SkillGateError("Pass a description or a SKILL.md paste block.")
-    if raw.lstrip().startswith("---"):
+    if raw.lstrip().startswith("---"):  # noqa: SIM108
         description = description_from_paste(raw)
     else:
         description = raw

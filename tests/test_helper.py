@@ -51,9 +51,7 @@ def _bundle(skill_dir: Path, name: str, manifest_hash: str) -> bytes:
     return buffer.getvalue()
 
 
-def test_connect_writes_0600_helper_json(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
+def test_connect_writes_0600_helper_json(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     target = tmp_path / "helper.json"
     monkeypatch.setattr(helper_mod, "CONFIG_PATH", target)
     monkeypatch.setattr(
@@ -215,9 +213,7 @@ def test_helper_installs_and_reports(
     assert (Path(os.environ["SKILLGATE_CURSOR_SKILLS"]) / "pdf" / "SKILL.md").is_file()
 
 
-def test_helper_install_launchd_plist(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
+def test_helper_install_launchd_plist(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     home = tmp_path
     monkeypatch.setattr(Path, "home", lambda: home)
     monkeypatch.setattr(helper_mod.sys, "platform", "darwin")
@@ -261,7 +257,7 @@ def test_read_json_wraps_bad_payload(monkeypatch: pytest.MonkeyPatch) -> None:
         def read(self) -> bytes:
             return b"not-json{"
 
-        def __enter__(self) -> "_Resp":
+        def __enter__(self) -> _Resp:
             return self
 
         def __exit__(self, *args) -> bool:
@@ -279,7 +275,7 @@ def test_http_get_wraps_incomplete_read(monkeypatch: pytest.MonkeyPatch) -> None
         def read(self) -> bytes:
             raise http.client.IncompleteRead(b"abc", 100)
 
-        def __enter__(self) -> "_Resp":
+        def __enter__(self) -> _Resp:
             return self
 
         def __exit__(self, *args) -> bool:
@@ -346,7 +342,7 @@ def test_run_helper_reports_incomplete_read_after_claim(
         def read(self) -> bytes:
             raise http.client.IncompleteRead(b"abc", 100)
 
-        def __enter__(self) -> "_Resp":
+        def __enter__(self) -> _Resp:
             return self
 
         def __exit__(self, *args) -> bool:

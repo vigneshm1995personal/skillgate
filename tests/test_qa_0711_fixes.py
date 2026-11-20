@@ -59,9 +59,7 @@ def _spec_from_fixture(blob: dict) -> JudgeSpec:
 def _rescore(blob: dict) -> tuple[bool, list[str], list[str], dict]:
     spec = _spec_from_fixture(blob)
     answers = apply_log_facts(spec, blob.get("answers") or {}, blob.get("spans") or [])
-    passed, reasons, warnings = spec_verdict(
-        spec, answers, supports_confidence=True
-    )
+    passed, reasons, warnings = spec_verdict(spec, answers, supports_confidence=True)
     return passed, reasons, warnings, answers
 
 
@@ -71,9 +69,7 @@ def _shell_span(command: str, result: str | None = None) -> dict:
         {"key": "gen_ai.tool.call.arguments", "value": {"stringValue": command}},
     ]
     if result is not None:
-        attrs.append(
-            {"key": "gen_ai.tool.call.result", "value": {"stringValue": result}}
-        )
+        attrs.append({"key": "gen_ai.tool.call.result", "value": {"stringValue": result}})
     return {"name": "tool.shell", "attributes": attrs}
 
 
@@ -299,9 +295,7 @@ def test_duplicate_check_without_a_log_still_uses_the_judge() -> None:
     spec = _spec_from_fixture(blob)
     facts = resolve_log_facts(spec, None)
     assert facts == {}
-    passed, reasons, _ = spec_verdict(
-        spec, blob["answers"] or {}, supports_confidence=True
-    )
+    passed, reasons, _ = spec_verdict(spec, blob["answers"] or {}, supports_confidence=True)
     assert passed is False
     assert any("no duplicate refund" in item.lower() for item in reasons)
 
@@ -360,11 +354,7 @@ def test_missing_tool_result_falls_back_to_the_judge() -> None:
             ]
         )
     )
-    spans = [
-        _shell_span(
-            "python3 payments_connector.py issue_refund --charge ch_1 --amount 49.00"
-        )
-    ]
+    spans = [_shell_span("python3 payments_connector.py issue_refund --charge ch_1 --amount 49.00")]
     answers = {"q_ret": {"probability": 0.1, "noul": 0.1}}
     merged = apply_log_facts(spec, answers, spans)
     assert merged["q_ret"]["probability"] == 0.1
@@ -381,17 +371,13 @@ def test_span_facts_skip_custom_check_on_the_judge_request() -> None:
                     {
                         "id": "no_dup",
                         "type": "predicate",
-                        "ask": (
-                            "Answer NO if the agent called issue_refund more than once."
-                        ),
+                        "ask": ("Answer NO if the agent called issue_refund more than once."),
                     }
                 )
             ]
         )
     )
-    spans = [
-        _shell_span("python3 payments_connector.py issue_refund --charge ch_1 --amount 49.00")
-    ]
+    spans = [_shell_span("python3 payments_connector.py issue_refund --charge ch_1 --amount 49.00")]
     extra = {
         "type": "predicate",
         "name": "no_dup",
@@ -468,7 +454,8 @@ def test_genuinely_wrong_run_still_goes_red() -> None:
                     "passed": False,
                     "review": False,
                     "reasons": [
-                        "Got it right? Incorrect (need Correct or Mostly correct) — The result is wrong."
+                        "Got it right? Incorrect (need Correct or Mostly correct) — "
+                        "The result is wrong."
                     ],
                     "cells": {
                         "correctness": {
@@ -508,7 +495,10 @@ def test_called_check_is_scored_from_the_log() -> None:
                 JudgeQuestion(
                     id="q_called",
                     type="predicate",
-                    ask="Did the agent call `lookup_charge`? Answer NO if it never called lookup_charge.",
+                    ask=(
+                        "Did the agent call `lookup_charge`? Answer NO if it never "
+                        "called lookup_charge."
+                    ),
                 )
             ]
         )
@@ -585,9 +575,10 @@ def test_needs_review_does_not_unlock_deploy() -> None:
     decision, reason = run_gate_decision(row)
     assert decision == "pending"
     assert "unsure" in reason.lower()
-    assert local_gate(
-        True, status="done", tryout=False, report={"gate": "needs review"}
-    ) == (decision, reason)
+    assert local_gate(True, status="done", tryout=False, report={"gate": "needs review"}) == (
+        decision,
+        reason,
+    )
 
 
 def test_docs_name_the_review_status() -> None:

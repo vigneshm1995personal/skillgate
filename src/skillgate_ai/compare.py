@@ -6,21 +6,22 @@ import copy
 import json
 import time
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
-from skillgate_ai.errors import SkillGateError
-from skillgate_ai.eval_config import harness_display_name
-from skillgate_ai.gate import run_check
 from skillgate_ai.compare_control import (
     clear_compare_cancel,
     create_compare_control,
     list_inflight_compares,
 )
+from skillgate_ai.errors import SkillGateError
+from skillgate_ai.eval_config import harness_display_name
+from skillgate_ai.gate import run_check
 from skillgate_ai.history import append_compare, load_compares, load_history
-from skillgate_ai.pack import skill_pack_hash
 from skillgate_ai.live import create_control, drop_control
+from skillgate_ai.pack import skill_pack_hash
 
 MAX_ARMS = 4
 MIN_ARMS = 2
@@ -191,7 +192,6 @@ def checks_for_case_ids(pack: Path, case_ids: list[str]) -> list[dict[str, Any]]
     loaded = load_case_pack(pack)
     if loaded is None:
         raise CompareError("This skill has no checks yet.")
-    by_id = {case.id: case for case in loaded.cases}
     ordered = _resolve_compare_case_ids(pack, case_ids)
     all_checks = {str(c["id"]): c for c in checks_from_pack(loaded)}
     return [all_checks[cid] for cid in ordered]
@@ -393,7 +393,9 @@ def _case_ids_from_report(report: dict[str, Any]) -> list[str]:
     return list(report.get("pack_case_ids") or [])
 
 
-def _arm_stats_from_report(report: dict[str, Any], case_ids: list[str]) -> tuple[int, int, dict[str, dict[str, Any]]]:
+def _arm_stats_from_report(
+    report: dict[str, Any], case_ids: list[str]
+) -> tuple[int, int, dict[str, dict[str, Any]]]:
     tasks = _task_map(report)
     active = case_ids or _case_ids_from_report(report)
     subset = {key: tasks[key] for key in active if key in tasks}
@@ -488,9 +490,7 @@ def _run_models_compare(
     active_case_ids = resolved_case_ids
     stopped_reason: str | None = None
     exit_code = 0
-    job_control = create_compare_control(
-        root, compare_id, skill=pack.name, mode="models"
-    )
+    job_control = create_compare_control(root, compare_id, skill=pack.name, mode="models")
 
     try:
         for spec in arms:
@@ -645,15 +645,9 @@ def preflight_versions_compare(
                 _history_report(pack, rid)
         return
     recent = [
-        str(row.get("run_id") or "")
-        for row in load_history(pack, limit=8)
-        if row.get("run_id")
+        str(row.get("run_id") or "") for row in load_history(pack, limit=8) if row.get("run_id")
     ]
-    hint = (
-        f"Recent runs: {', '.join(recent)}"
-        if recent
-        else "Use --run twice or --git twice."
-    )
+    hint = f"Recent runs: {', '.join(recent)}" if recent else "Use --run twice or --git twice."
     raise CompareError("Pick two history runs or two git refs.", hint=hint)
 
 
@@ -715,9 +709,7 @@ def _versions_dry_run_payload(
             arm["task_count"] = len(case_ids)
     else:
         recent = [
-            str(row.get("run_id") or "")
-            for row in load_history(pack, limit=8)
-            if row.get("run_id")
+            str(row.get("run_id") or "") for row in load_history(pack, limit=8) if row.get("run_id")
         ]
         picker = {
             "recent_runs": recent,
@@ -788,9 +780,7 @@ def run_versions_compare(
 ) -> CompareResult:
     pack = pack.expanduser().resolve()
     compare_id = compare_id or uuid.uuid4().hex[:12]
-    preflight_versions_compare(
-        pack, run_ids=run_ids, git_refs=git_refs, dry_run=dry_run
-    )
+    preflight_versions_compare(pack, run_ids=run_ids, git_refs=git_refs, dry_run=dry_run)
     if dry_run:
         return CompareResult(
             exit_code=0,
@@ -844,15 +834,9 @@ def _run_versions_compare(
         )
     if not run_ids or len(run_ids) != 2:
         recent = [
-            str(row.get("run_id") or "")
-            for row in load_history(pack, limit=8)
-            if row.get("run_id")
+            str(row.get("run_id") or "") for row in load_history(pack, limit=8) if row.get("run_id")
         ]
-        hint = (
-            f"Recent runs: {', '.join(recent)}"
-            if recent
-            else "Use --run twice or --git twice."
-        )
+        hint = f"Recent runs: {', '.join(recent)}" if recent else "Use --run twice or --git twice."
         raise CompareError("Pick two history runs or two git refs.", hint=hint)
     if rerun:
         configs = []
@@ -866,7 +850,7 @@ def _run_versions_compare(
         if len(configs) != 2:
             raise CompareError("Could not load run configs for re-run.")
         arms = []
-        for idx, (rid, cfg) in enumerate(zip(run_ids, configs, strict=True)):
+        for idx, (_rid, cfg) in enumerate(zip(run_ids, configs, strict=True)):
             arms.append(
                 CompareArmSpec(
                     arm_id=_arm_ids(2)[idx],

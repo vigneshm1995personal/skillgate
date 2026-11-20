@@ -64,16 +64,12 @@ def test_pass_lock_table() -> None:
     assert passed is True
 
     passed, reasons = outcome_verdict(
-        _pass_answers(
-            evidence_action_validity={"choice": "Partially supported", "confidence": 0.8}
-        )
+        _pass_answers(evidence_action_validity={"choice": "Partially supported", "confidence": 0.8})
     )
     assert passed is True
 
     passed, reasons = outcome_verdict(
-        _pass_answers(
-            instruction_adherence={"choice": "Major deviation", "confidence": 0.8}
-        )
+        _pass_answers(instruction_adherence={"choice": "Major deviation", "confidence": 0.8})
     )
     assert passed is False
     assert any("Followed the rules?" in item for item in reasons)

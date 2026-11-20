@@ -10,9 +10,7 @@ from skillgate_ai.errors import IngestError
 from skillgate_ai.ingest import NAME_RE, ingest_skill
 from skillgate_ai.skill_md import default_body, default_description, write_skill_md
 
-UNRELATED_PROMPT = (
-    "Write a pytest for a FastAPI /health endpoint. Do not touch any PDFs."
-)
+UNRELATED_PROMPT = "Write a pytest for a FastAPI /health endpoint. Do not touch any PDFs."
 
 
 def create_pack(
@@ -26,7 +24,10 @@ def create_pack(
     if not NAME_RE.match(slug) or not (1 <= len(slug) <= 64):
         raise IngestError(
             f"name {slug!r} is invalid",
-            hint="Use lowercase letters, numbers, and single hyphens; no leading/trailing/double hyphens.",
+            hint=(
+                "Use lowercase letters, numbers, and single hyphens; "
+                "no leading/trailing/double hyphens."
+            ),
         )
     dest = Path(parent).expanduser().resolve() / slug
     if dest.exists():

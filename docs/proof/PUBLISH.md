@@ -24,9 +24,9 @@ Private repositories need a **GitHub Secret Protection** license for repo-level 
 
 1. Open https://github.com/vigneshm1995personal/skillgate
 2. Click **Settings**.
-3. Sidebar: **Security and quality** → **Advanced Security**  
+3. Sidebar: **Security and quality** → **Advanced Security**
    (older layout: **Code security** / **Code security and analysis**).
-4. If **Secret Protection** is shown and **Enable** is available, click **Enable**.  
+4. If **Secret Protection** is shown and **Enable** is available, click **Enable**.
    If Enable is greyed out, the account has no Secret Protection license — skip until the repo is public, or buy the license.
 5. Under Secret Protection, click **Enable** next to **Push protection**.
 6. Confirm: Settings still shows Secret Protection = on, Push protection = on.
@@ -114,7 +114,7 @@ Do **not** create a PyPI API token. Do **not** put a password in GitHub secrets.
    - `pypi` (OIDC upload to https://pypi.org/p/skillgate-ai)
    - `ghcr` (`ghcr.io/vigneshm1995personal/skillgate:v0.3.0`)
 
-Until the GitHub repo is public, the GHCR package stays private (inherited). After the public flip, set the GHCR package visibility to public if you want `docker pull` without auth:  
+Until the GitHub repo is public, the GHCR package stays private (inherited). After the public flip, set the GHCR package visibility to public if you want `docker pull` without auth:
 https://github.com/users/vigneshm1995personal/packages/container/skillgate/settings
 
 ---

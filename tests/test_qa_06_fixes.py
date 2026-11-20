@@ -14,7 +14,7 @@ from skillgate_ai.cli import app
 from skillgate_ai.engine import SuiteReport, TaskReport
 from skillgate_ai.errors import SandboxError, SkillGateError, SuiteError
 from skillgate_ai.gate import persist_eval
-from skillgate_ai.history import append_eval, load_history
+from skillgate_ai.history import append_eval
 from skillgate_ai.judge_spec import resolve_judge_spec, spec_decisions_questions
 
 runner = CliRunner()
@@ -247,6 +247,7 @@ def test_docker_sandbox_fails_before_run_when_image_missing(monkeypatch) -> None
         if cmd[:3] == ["docker", "image", "inspect"] or (
             len(cmd) >= 3 and cmd[0] == "docker" and "inspect" in cmd
         ):
+
             class Proc:
                 returncode = 1
                 stdout = ""
@@ -330,7 +331,9 @@ def test_cli_deploy_writes_deploys_jsonl(tmp_path: Path, monkeypatch) -> None:
     assert result.exit_code == 0, out
     log = dest / "evals" / "deploys.jsonl"
     assert log.is_file(), "CLI deploy must append evals/deploys.jsonl"
-    rows = [json.loads(line) for line in log.read_text(encoding="utf-8").splitlines() if line.strip()]
+    rows = [
+        json.loads(line) for line in log.read_text(encoding="utf-8").splitlines() if line.strip()
+    ]
     assert rows[-1]["target"] == "cursor"
     assert rows[-1]["status"] == "installed"
 
@@ -575,9 +578,7 @@ def test_progress_done_task_keeps_expect_skill() -> None:
     assert payload["happened"] != "No skill was picked, as expected."
 
 
-def test_deploy_never_checked_without_key_names_missing_check(
-    tmp_path: Path, monkeypatch
-) -> None:
+def test_deploy_never_checked_without_key_names_missing_check(tmp_path: Path, monkeypatch) -> None:
     dest = _pdf(tmp_path)
     monkeypatch.setenv("SKILLGATE_ROOT", str(tmp_path))
     monkeypatch.chdir(tmp_path)

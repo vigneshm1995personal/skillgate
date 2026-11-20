@@ -79,7 +79,9 @@ def test_live_auto_uses_cursor_when_vault_has_cursor_key(
     assert harness.name == "cursor-agent"
 
 
-def test_vault_openai_key_does_not_start_checks(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_vault_openai_key_does_not_start_checks(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     monkeypatch.setenv("SKILLGATE_ROOT", str(tmp_path))
     set_vault_key(tmp_path, "OPENAI_API_KEY", "sk-from-vault")
     monkeypatch.setattr("skillgate_ai.harness._resolve_codex_bin", lambda _preferred: None)
@@ -124,6 +126,7 @@ def test_run_check_exit_2_without_judge_threads_no_judge_flag(
     project_root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from conftest import enable_cursor_agent
+
     from skillgate_ai.engine import SuiteReport, TaskReport
     from skillgate_ai.scorers import Score
 

@@ -18,7 +18,7 @@ from skillgate_ai.api_payloads import (
 )
 from skillgate_ai.catalog import find_skill
 from skillgate_ai.config import get_llm_config, load_env, missing_key_error
-from skillgate_ai.errors import MissingLLMKeyError, SkillGateError, timeout_harness_error
+from skillgate_ai.errors import SkillGateError, timeout_harness_error
 from skillgate_ai.gate import run_check
 from skillgate_ai.live import create_control, drop_control, get_control
 from skillgate_ai.report import progress_to_dict, report_to_dict
@@ -91,7 +91,11 @@ def start_run(state: AppState, body: dict[str, Any]) -> dict[str, Any]:
 
             pref = str(config.get("harness_pref") or "").strip().lower()
             requested = str(body.get("harness") or "").strip().lower()
-            harness = pref if pref in {"auto", "cursor-agent", "codex", "claude"} else (requested or "auto")
+            harness = (
+                pref
+                if pref in {"auto", "cursor-agent", "codex", "claude"}
+                else (requested or "auto")
+            )
             result = run_check(
                 skill_path,
                 harness=harness,
@@ -114,9 +118,7 @@ def start_run(state: AppState, body: dict[str, Any]) -> dict[str, Any]:
             status = "error" if result.error else "done"
             passed = None if result.report is None else result.report.passed
             harness = (report or {}).get("harness") or record.get("harness")
-            decision, reason = local_gate(
-                passed, status=status, tryout=tryout, report=report
-            )
+            decision, reason = local_gate(passed, status=status, tryout=tryout, report=report)
             record.update(
                 {
                     "status": status,
@@ -145,9 +147,7 @@ def start_run(state: AppState, body: dict[str, Any]) -> dict[str, Any]:
                 message = exc.message if isinstance(exc, SkillGateError) else str(exc)
                 hint = getattr(exc, "hint", None)
                 exit_code = getattr(exc, "exit_code", None)
-            decision, reason = local_gate(
-                None, status="error", tryout=tryout, gate_moved=False
-            )
+            decision, reason = local_gate(None, status="error", tryout=tryout, gate_moved=False)
             record.update(
                 {
                     "status": "error",

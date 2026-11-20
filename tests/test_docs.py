@@ -175,7 +175,7 @@ def test_quickstart_uses_example_and_keys() -> None:
 
 def test_docs_keys_set_never_puts_value_on_the_command_line() -> None:
     blob = README.read_text(encoding="utf-8") + "\n" + QUICKSTART.read_text(encoding="utf-8")
-    assert "keys set OPENAI_API_KEY \"$OPENAI_API_KEY\"" not in blob
+    assert 'keys set OPENAI_API_KEY "$OPENAI_API_KEY"' not in blob
     assert "keys set OPENAI_API_KEY $OPENAI_API_KEY" not in blob
     assert "keys set OPENAI_API_KEY sk-" not in blob
     assert "skillgate keys set OPENAI_API_KEY" in blob
@@ -249,10 +249,7 @@ def test_openrouter_docs_pipe_openrouter_key_and_explain_jev() -> None:
         end = text.find("### OpenAI")
         section = text[start:end]
         assert start >= 0, path.name
-        assert (
-            "printf '%s\\n' \"$OPENROUTER_API_KEY\" | skillgate keys set JEV_API_KEY"
-            in section
-        )
+        assert "printf '%s\\n' \"$OPENROUTER_API_KEY\" | skillgate keys set JEV_API_KEY" in section
         assert "$JEV_API_KEY" not in section
         assert "Jev" in section
 
@@ -323,8 +320,10 @@ def test_docker_docs_clone_before_compose() -> None:
 
 
 def test_openai_judge_docs_name_default_model() -> None:
-    blob = README.read_text(encoding="utf-8") + "\n" + (ROOT / "docs" / "judge.md").read_text(
-        encoding="utf-8"
+    blob = (
+        README.read_text(encoding="utf-8")
+        + "\n"
+        + (ROOT / "docs" / "judge.md").read_text(encoding="utf-8")
     )
     openai = blob[blob.find("### OpenAI") : blob.find("### Cloudflare")]
     assert "gpt-6-luna" in openai

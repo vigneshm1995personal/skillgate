@@ -87,8 +87,8 @@ def register_pack_commands(app: typer.Typer, case_app: typer.Typer, judge_app: t
         generate: bool = typer.Option(False, "--generate", help="Write a sample fixture"),
     ) -> None:
         """Write a file in this skill (SKILL.md, fixtures, evals/cases.yaml)."""
-        from skillgate_ai.pack import CannotSynthesizeFixture, write_pack_file, write_sample_fixture
         from skillgate_ai.ingest import ingest_skill
+        from skillgate_ai.pack import CannotSynthesizeFixture, write_pack_file, write_sample_fixture
 
         try:
             dest = _resolve_pack_arg(pack)
@@ -170,7 +170,11 @@ def register_pack_commands(app: typer.Typer, case_app: typer.Typer, judge_app: t
                 who = "Not scored"
             else:
                 who = report.get("scored_by") if isinstance(report.get("scored_by"), str) else ""
-                if not who or "openai decisions" in who.lower() or "vercel ai gateway" in who.lower():
+                if (
+                    not who
+                    or "openai decisions" in who.lower()
+                    or "vercel ai gateway" in who.lower()
+                ):
                     stamp = None
                     if isinstance(report.get("config"), dict):
                         stamp = report["config"].get("judge")

@@ -171,9 +171,9 @@ def test_settings_keys_write_vault(tmp_path: Path, monkeypatch) -> None:
     assert saved.json()["keys"]["OPENAI_API_KEY"]["from_vault"] is True
     vault = (tmp_path / ".skillgate" / "keys").read_text(encoding="utf-8")
     assert "OPENAI_API_KEY=sk-test-local" in vault
-    assert not (tmp_path / ".env").exists() or "sk-test-local" not in (
-        tmp_path / ".env"
-    ).read_text(encoding="utf-8")
+    assert not (tmp_path / ".env").exists() or "sk-test-local" not in (tmp_path / ".env").read_text(
+        encoding="utf-8"
+    )
     cleared = client.delete("/api/settings/keys/OPENAI_API_KEY")
     assert cleared.status_code == 200
     assert "sk-test-local" not in (tmp_path / ".skillgate" / "keys").read_text(encoding="utf-8")
@@ -184,7 +184,10 @@ def test_import_from_cursor_skills(tmp_path: Path, monkeypatch) -> None:
     write_skill_md(
         cursor,
         name="imported-skill",
-        description="Imported skill for local catalog tests. Use when the user asks for imported-skill notes.",
+        description=(
+            "Imported skill for local catalog tests. Use when the user asks for "
+            "imported-skill notes."
+        ),
     )
     client = _client(tmp_path, monkeypatch)
     listed = client.get("/api/skills")
@@ -222,9 +225,7 @@ def test_deploy_copies_into_agent_folder(tmp_path: Path, monkeypatch) -> None:
     assert pack.is_dir()
 
 
-def test_deploy_never_checked_without_key_names_missing_check(
-    tmp_path: Path, monkeypatch
-) -> None:
+def test_deploy_never_checked_without_key_names_missing_check(tmp_path: Path, monkeypatch) -> None:
     _copy_pack(tmp_path)
     client = _client(tmp_path, monkeypatch)
     res = client.post("/api/deploy", json={"target": "cursor", "skill": "pdf", "mode": "local"})
@@ -346,9 +347,7 @@ def test_zip_skips_dotdot_and_absolute_members(tmp_path: Path, monkeypatch) -> N
     assert not (tmp_path.parent / "outside.txt").is_file()
 
 
-def test_zip_keeps_valid_skill_and_drops_traversal_members(
-    tmp_path: Path, monkeypatch
-) -> None:
+def test_zip_keeps_valid_skill_and_drops_traversal_members(tmp_path: Path, monkeypatch) -> None:
     client = _client(tmp_path, monkeypatch)
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w") as archive:
@@ -833,7 +832,11 @@ def test_pack_file_cannot_wipe_seed_cases(tmp_path: Path, monkeypatch) -> None:
     client = _client(tmp_path, monkeypatch)
     res = client.post(
         "/api/skills/pack-file",
-        json={"skill": "pdf", "path": "evals/cases.yaml", "content": "schema: 1\nskill: pdf\ncases: []\n"},
+        json={
+            "skill": "pdf",
+            "path": "evals/cases.yaml",
+            "content": "schema: 1\nskill: pdf\ncases: []\n",
+        },
     )
     assert res.status_code == 400, res.text
     detail = res.json()["detail"]
@@ -965,9 +968,7 @@ def test_login_status_lists_agents_without_touching_home(
     assert list(home.iterdir()) == []
 
 
-def test_login_start_runs_official_login(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_login_start_runs_official_login(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     home = _isolate_home(monkeypatch, tmp_path)
     called: list[str] = []
 
@@ -998,9 +999,7 @@ def test_login_start_runs_official_login(
     assert list(home.iterdir()) == []
 
 
-def test_login_start_rejects_unknown_agent(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_login_start_rejects_unknown_agent(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _isolate_home(monkeypatch, tmp_path)
     client = _client(tmp_path, monkeypatch)
     res = client.post("/api/login/chatgpt", json={})

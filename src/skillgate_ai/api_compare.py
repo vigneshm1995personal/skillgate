@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import threading
 import uuid
-from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, Request
@@ -19,17 +18,16 @@ from skillgate_ai.compare import (
     find_compare,
     find_compare_anywhere,
     list_compares_merged,
-    strip_compare_list_meta,
     parse_arm_spec,
     preflight_versions_compare,
     run_models_compare,
     run_versions_compare,
-    scrub_compare_payload,
     scrub_customer_compare_payload,
+    strip_compare_list_meta,
 )
 from skillgate_ai.compare_control import request_cancel_compare
 from skillgate_ai.config import get_llm_config, load_env
-from skillgate_ai.errors import MissingLLMKeyError, timeout_harness_error
+from skillgate_ai.errors import timeout_harness_error
 
 
 def _finish_compare_job(
@@ -228,6 +226,10 @@ def _start_versions_compare(state: AppState, body: dict[str, Any]) -> dict[str, 
             )
 
     with state.lock:
-        state.compares[compare_id] = {"compare_id": compare_id, "status": "running", "mode": "versions"}
+        state.compares[compare_id] = {
+            "compare_id": compare_id,
+            "status": "running",
+            "mode": "versions",
+        }
     threading.Thread(target=worker, name=f"skillgate-compare-{compare_id}", daemon=True).start()
     return {"compare_id": compare_id, "status": "running"}

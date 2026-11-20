@@ -15,7 +15,6 @@ from typing import Any
 
 from skillgate_ai.config import LLMConfig, get_llm_config, load_env
 from skillgate_ai.demo_files import ensure_demo_pdfs
-from skillgate_ai.pack_schema import _example_marker_slug
 from skillgate_ai.engine import EvalProgress, SuiteReport, run_eval
 from skillgate_ai.errors import SkillGateError, timeout_harness_error
 from skillgate_ai.eval_config import (
@@ -28,8 +27,8 @@ from skillgate_ai.eval_config import (
     with_timeout_effective,
 )
 from skillgate_ai.harness import is_live_harness, live_harness_or_error
-from skillgate_ai.judge import SkipJudge, judge_stamp, resolve_judge
 from skillgate_ai.history import append_eval
+from skillgate_ai.judge import SkipJudge, judge_stamp, resolve_judge
 from skillgate_ai.live import RunControl
 from skillgate_ai.observability import (
     capture_run_failure,
@@ -37,8 +36,10 @@ from skillgate_ai.observability import (
     log_eval_finished,
     set_eval_passed,
 )
+from skillgate_ai.pack_schema import _example_marker_slug
 from skillgate_ai.paths import is_skill_pack, project_root, resolve_user_path
 from skillgate_ai.report import report_to_dict
+
 
 @dataclass
 class CheckResult:
@@ -254,9 +255,7 @@ def _execute_check(
             ingest_skill(skill_path, strict=True)
         resolved = live_harness_or_error(harness_pref, cfg)
         run_cfg = stamp_resolved(run_cfg, resolved.name, cfg)
-        outcome_judge = (
-            SkipJudge() if no_judge else resolve_judge(cfg, harness_name=resolved.name)
-        )
+        outcome_judge = SkipJudge() if no_judge else resolve_judge(cfg, harness_name=resolved.name)
         run_cfg = with_judge(run_cfg, judge_stamp(outcome_judge))
         mode = "live"
         with eval_transaction(
@@ -377,9 +376,7 @@ def _execute_check(
         and not tryout
         and is_live_harness(report.harness)
         and _quality_scoring_errored(report)
-    ):
-        exit_code = 2
-    elif (
+    ) or (
         report.passed
         and not no_judge
         and not tryout
@@ -416,7 +413,7 @@ def _quality_scoring_was_skipped(report: SuiteReport) -> bool:
                 return True
     cfg = report.config if isinstance(report.config, dict) else {}
     stamp = cfg.get("judge") if isinstance(cfg, dict) else None
-    if isinstance(stamp, dict) and str(stamp.get("provider") or "") == "skip":
+    if isinstance(stamp, dict) and str(stamp.get("provider") or "") == "skip":  # noqa: SIM103
         return True
     return False
 

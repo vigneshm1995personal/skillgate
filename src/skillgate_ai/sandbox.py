@@ -269,7 +269,7 @@ def _pump(
     try:
         for line in iter(stream.readline, ""):
             chunks.append(line)
-            try:
+            try:  # noqa: SIM105
                 sink.on_line(name, line.rstrip("\n"))
             except Exception:  # noqa: BLE001, S110 - a sink bug must not kill the harness
                 pass
@@ -365,9 +365,7 @@ def _sandbox_env(extra: dict[str, str] | None) -> dict[str, str]:
     bindir = str(Path(running_python()).resolve().parent)
     path = env.get("PATH", "")
     parts = [
-        item
-        for item in path.split(os.pathsep)
-        if item and Path(item).resolve() != Path(bindir)
+        item for item in path.split(os.pathsep) if item and Path(item).resolve() != Path(bindir)
     ]
     env["PATH"] = os.pathsep.join([bindir, *parts] if bindir else parts)
     return env

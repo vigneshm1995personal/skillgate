@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import re
-from typing import Any, Mapping
+from collections.abc import Mapping
+from typing import Any
 
 from skillgate_ai.errors import SkillGateError
 from skillgate_ai.judge_openai import (
@@ -19,7 +20,9 @@ from skillgate_ai.openai_http import PostFn, post_openai_json
 
 DISPLAY_NAME = "the judge"
 _ACCOUNT_ID = re.compile(r"^[A-Za-z0-9]+$")
-_WORKERS_AI = "https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/run/@cf/cloudflare/{model}"
+_WORKERS_AI = (
+    "https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/run/@cf/cloudflare/{model}"
+)
 
 
 class ClefBackend:

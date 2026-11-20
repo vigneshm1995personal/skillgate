@@ -313,7 +313,7 @@ class RunControl:
             flush = self._poll_flush
         if flush is None:
             return
-        try:
+        try:  # noqa: SIM105
             flush(poll)
         except Exception:  # noqa: BLE001 - never break the harness on flush
             pass
@@ -324,7 +324,7 @@ class RunControl:
             flush = self._live_flush
             if flush is None or self._task_id is None:
                 return
-        try:
+        try:  # noqa: SIM105
             flush(self.snapshot())
         except Exception:  # noqa: BLE001 - never break the harness on flush
             pass

@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Any, Mapping
+from collections.abc import Mapping
+from typing import Any
 
 YOUR_JUDGE = "your judge"
 CHOSEN_LABELS = {
@@ -24,7 +25,7 @@ def stamp_is_chosen(stamp: Mapping[str, Any] | None) -> bool:
     raw = stamp.get("chosen")
     if raw is True:
         return True
-    if isinstance(raw, str) and raw.strip().lower() in {"1", "true", "yes"}:
+    if isinstance(raw, str) and raw.strip().lower() in {"1", "true", "yes"}:  # noqa: SIM103
         return True
     return False
 

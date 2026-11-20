@@ -5,7 +5,8 @@ Shared with a future hosted TypeSafe wrapper so ordinals cannot drift.
 
 from __future__ import annotations
 
-from typing import Any, Mapping
+from collections.abc import Mapping
+from typing import Any
 
 CHECK_CELL_ORDER: tuple[str, ...] = (
     "task_completion",
@@ -35,9 +36,7 @@ PASS_LOCK: dict[str, frozenset[str]] = {
     "task_completion": frozenset({"fully completed"}),
     "correctness": frozenset({"correct", "mostly correct"}),
     "instruction_adherence": frozenset({"fully followed", "minor deviation"}),
-    "evidence_action_validity": frozenset(
-        {"fully supported", "partially supported", "n/a"}
-    ),
+    "evidence_action_validity": frozenset({"fully supported", "partially supported", "n/a"}),
     "result_quality": frozenset({"clear and complete", "mostly good"}),
 }
 
@@ -473,8 +472,7 @@ def decisions_questions(*, include_path: bool = True) -> list[dict[str, Any]]:
                 "name": key,
                 "instructions": instructions,
                 "choices": [
-                    {"value": name, "description": text}
-                    for name, text in criteria.items()
+                    {"value": name, "description": text} for name, text in criteria.items()
                 ],
             }
         )

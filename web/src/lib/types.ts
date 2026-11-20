@@ -825,4 +825,3 @@ export type PromoteDraft = {
   skill?: SkillPayload
   pack_files?: PackFile[]
 }
-

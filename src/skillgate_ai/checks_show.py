@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any
 
 from fastapi import Request
 
@@ -157,9 +158,7 @@ def register_check_routes(app: Any) -> None:
         return {"checks": list_check_rows(_pack(request, skill))}
 
     @app.get("/api/checks/{check_id}")
-    def show_check(
-        request: Request, check_id: str, skill: str | None = None
-    ) -> dict[str, Any]:
+    def show_check(request: Request, check_id: str, skill: str | None = None) -> dict[str, Any]:
         try:
             return prompt_for_id(check_id, pack=_pack(request, skill))
         except SkillGateError as exc:

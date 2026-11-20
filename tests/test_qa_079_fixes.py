@@ -52,9 +52,7 @@ def test_single_case_that_never_starts_is_not_saved_as_fail(
     assert load_history(pack) == []
 
 
-def test_unscored_history_row_is_not_run(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_unscored_history_row_is_not_run(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     pack = _skill(tmp_path)
     monkeypatch.setenv("SKILLGATE_ROOT", str(tmp_path))
     from skillgate_ai.history import append_eval
@@ -307,8 +305,7 @@ def test_add_question_without_pack_does_not_write_skills_pdf(
         encoding="utf-8",
     )
     cases = (
-        "schema: 1\nskill: pdf\ncases:\n"
-        "  - id: one\n    prompt: Hi.\n    should_trigger: false\n"
+        "schema: 1\nskill: pdf\ncases:\n  - id: one\n    prompt: Hi.\n    should_trigger: false\n"
     )
     cases_path = pdf / "evals" / "cases.yaml"
     cases_path.write_text(cases, encoding="utf-8")

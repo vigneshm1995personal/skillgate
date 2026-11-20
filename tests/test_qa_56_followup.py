@@ -237,9 +237,7 @@ def test_public_predicate_answer_drops_noul() -> None:
         )
     )
     payload = decisions_payload(confidence=0.91)
-    payload["answers"].append(
-        {"type": "noul", "name": "no_dup", "noul": 0.92, "probability": 0.92}
-    )
+    payload["answers"].append({"type": "noul", "name": "no_dup", "noul": 0.92, "probability": 0.92})
     judged = _score(_judge(FakePost([FakeResponse(200, payload)])), spec=spec)
     answer = judged["answers"]["no_dup"]
     assert answer.get("probability") == 0.92
