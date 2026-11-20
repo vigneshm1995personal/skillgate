@@ -119,7 +119,7 @@ def load_judge_settings(root: str | Path | None = None) -> JudgeProviderSettings
 
 
 def _rewrite_judge_file(path: Path, settings: JudgeProviderSettings) -> None:
-    payload = {
+    payload: dict[str, Any] = {
         "provider": settings.provider,
         "region": settings.region,
         "model": settings.model,
@@ -127,7 +127,7 @@ def _rewrite_judge_file(path: Path, settings: JudgeProviderSettings) -> None:
         "account_id": settings.account_id,
     }
     if settings.key_env:
-        payload["key_env"] = list(settings.key_env)
+        payload["key_env"] = list(settings.key_env)  # tuple[str, ...] → list for JSON
     try:
         flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC
         fd = os.open(path, flags, 0o600)
@@ -180,7 +180,7 @@ def save_judge_settings(
     dest = judge_settings_path(root)
     dest.parent.mkdir(parents=True, exist_ok=True)
     os.chmod(dest.parent, 0o700)
-    payload = {
+    payload: dict[str, Any] = {
         "provider": settings.provider,
         "region": settings.region,
         "model": settings.model,

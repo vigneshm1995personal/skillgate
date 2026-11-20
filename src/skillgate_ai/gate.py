@@ -217,7 +217,7 @@ def _execute_check(
     spec: Any,
     cfg: LLMConfig,
     sandbox_kind: str,
-    harness: str,
+    harness: str | None,
     expect_fail: bool,
     model: str | None,
     timeout: int | None,

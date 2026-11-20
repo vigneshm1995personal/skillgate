@@ -7,7 +7,7 @@ import re
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from skillgate_ai.advice import FixAdvice, advise_suite, advise_task
 from skillgate_ai.errors import (
@@ -47,9 +47,18 @@ def _extras_all_passed(judged: Mapping[str, Any]) -> bool:
     if isinstance(failures, list) and any(str(item).strip() for item in failures):
         return False
     reserved = set(CHECK_CELL_ORDER) | set(SOFT_CELL_ORDER)
-    cells = judged.get("cells") if isinstance(judged.get("cells"), Mapping) else {}
-    answers = judged.get("answers") if isinstance(judged.get("answers"), Mapping) else {}
-    questions = judged.get("questions") if isinstance(judged.get("questions"), Mapping) else {}
+    _cells = judged.get("cells")
+    cells: Mapping[str, Any] = (
+        cast(Mapping[str, Any], _cells) if isinstance(_cells, Mapping) else {}
+    )
+    _answers = judged.get("answers")
+    answers: Mapping[str, Any] = (
+        cast(Mapping[str, Any], _answers) if isinstance(_answers, Mapping) else {}
+    )
+    _questions = judged.get("questions")
+    questions: Mapping[str, Any] = (
+        cast(Mapping[str, Any], _questions) if isinstance(_questions, Mapping) else {}
+    )
     extra_ids = {key for blob in (cells, answers, questions) for key in blob if key not in reserved}
     return bool(extra_ids)
 
@@ -69,8 +78,14 @@ def _extras_from_source(judged: Mapping[str, Any], source: str) -> bool:
 
     wanted = source.strip().lower()
     reserved = set(CHECK_CELL_ORDER) | set(SOFT_CELL_ORDER)
-    cells = judged.get("cells") if isinstance(judged.get("cells"), Mapping) else {}
-    answers = judged.get("answers") if isinstance(judged.get("answers"), Mapping) else {}
+    _cells = judged.get("cells")
+    cells: Mapping[str, Any] = (
+        cast(Mapping[str, Any], _cells) if isinstance(_cells, Mapping) else {}
+    )
+    _answers = judged.get("answers")
+    answers: Mapping[str, Any] = (
+        cast(Mapping[str, Any], _answers) if isinstance(_answers, Mapping) else {}
+    )
     for blob in (cells, answers):
         for key, row in blob.items():
             if key in reserved or not isinstance(row, Mapping):
@@ -365,7 +380,7 @@ def run_eval(
             suite_dir = project_root
     root = project_root
     skill_rel = skill_override or spec.skill
-    skill_paths = []
+    skill_paths: list[str | Path] = []
     primary = _resolve_path(root, suite_dir, str(skill_rel))
     skill_paths.append(primary)
     for extra in spec.skills:
@@ -710,7 +725,7 @@ def _live_verdict(
     det_failures: list[str],
     mismatch: str | None = None,
     trigger_passed: bool | None = None,
-) -> tuple[bool, list[str], dict[str, Any] | None]:
+) -> tuple[bool | None, list[str], dict[str, Any] | None]:
     """Skip leaves det in charge. Errors fail closed. No-trigger keeps det.
     A completed bool ``passed`` overrides, including a low-confidence Pass.
     A failed skill trigger cannot pass or review. Gate ``passed`` is the
@@ -800,7 +815,7 @@ def _why_expected_output(
 
 def _maybe_explain_fail(
     judge: Judge | None,
-    passed: bool,
+    passed: bool | None,
     failures: list[str],
     judged: dict[str, Any] | None,
     *,
@@ -920,10 +935,10 @@ def _run_task(
                     if blocked is not None:
                         raise blocked from None
                     raise
-            blocked = cannot_run_message(
+            run_block_msg = cannot_run_message(
                 result.stdout or "", result.stderr or "", result.transcript or ""
             )
-            if blocked:
+            if run_block_msg:
                 hint = (
                     "Wait until the agent quota resets, then retry."
                     if usage_limit_message(
@@ -932,7 +947,7 @@ def _run_task(
                     else "Pick an available model, then retry."
                 )
                 raise HarnessError(
-                    blocked,
+                    run_block_msg,
                     hint=hint,
                     exit_code=2,
                 )
@@ -970,6 +985,7 @@ def _run_task(
             det_failures = [s.headline or s.detail for s in scores if not s.passed]
             trigger_passed = all(s.passed for s in scores if s.scorer == "skill_trigger")
             review = False
+            passed: bool | None
             if task.expect_skill is None:
                 judged = _no_trigger_skipped_judge(judge) if is_live_harness(harness.name) else None
                 passed, failures = det_passed, det_failures

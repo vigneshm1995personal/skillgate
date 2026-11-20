@@ -21,7 +21,7 @@ from skillgate_ai.judge_bank import (
     UNUSABLE_ANSWER,
     canonical_choice,
 )
-from skillgate_ai.live import KILL, SKIP, CheckAborted
+from skillgate_ai.live import KILL, CheckAborted
 from skillgate_ai.sandbox import LocalSandbox
 from skillgate_ai.scorers import Score, TriggerEvidence
 from skillgate_ai.suite import FileCopy, FileExpect, RubricCheck, ScorerSpec, SuiteSpec, TaskSpec
@@ -243,9 +243,7 @@ def test_task_timeout_env_beats_task_and_spec(monkeypatch: pytest.MonkeyPatch) -
 
 
 @pytest.mark.parametrize("bad", ["", "  ", "abc", "0", "-5"])
-def test_task_timeout_env_ignored_when_invalid(
-    monkeypatch: pytest.MonkeyPatch, bad: str
-) -> None:
+def test_task_timeout_env_ignored_when_invalid(monkeypatch: pytest.MonkeyPatch, bad: str) -> None:
     monkeypatch.setenv("SKILLGATE_TASK_TIMEOUT_SEC", bad)
     assert engine.env_task_timeout_sec() is None
     task = _task("a", timeout_sec=20)
@@ -531,9 +529,7 @@ def test_live_verdict_trigger_fail_default_reason() -> None:
 
 
 def test_live_verdict_non_dict_judge_keeps_det() -> None:
-    passed, failures, stamped = engine._live_verdict(
-        None, "demo", det_passed=True, det_failures=[]
-    )
+    passed, failures, stamped = engine._live_verdict(None, "demo", det_passed=True, det_failures=[])
     assert passed is True
     assert failures == []
     assert stamped is None
@@ -588,13 +584,9 @@ def test_live_verdict_judge_pass_overrides_det() -> None:
 
 def test_live_verdict_judge_fail_without_reasons_uses_det_or_default() -> None:
     judge = {"passed": False, "reasons": []}
-    passed, failures, _ = engine._live_verdict(
-        judge, "demo", det_passed=False, det_failures=["d"]
-    )
+    passed, failures, _ = engine._live_verdict(judge, "demo", det_passed=False, det_failures=["d"])
     assert failures == ["d"]
-    passed2, failures2, _ = engine._live_verdict(
-        judge, "demo", det_passed=True, det_failures=[]
-    )
+    passed2, failures2, _ = engine._live_verdict(judge, "demo", det_passed=True, det_failures=[])
     assert passed2 is False
     assert failures2 == ["The judge couldn't score this check."]
 
@@ -649,9 +641,7 @@ def test_stabilize_keeps_unsure_failing_choice_without_extras() -> None:
 def test_explain_fail_skipped_when_passed() -> None:
     judged = {"status": "completed", "passed": False}
     recording = RecordingJudge(verdict={"passed": False})
-    out = engine._maybe_explain_fail(
-        recording, True, ["x"], judged, check="c", transcript_tail=""
-    )
+    out = engine._maybe_explain_fail(recording, True, ["x"], judged, check="c", transcript_tail="")
     assert out is judged
     assert recording.why_calls == []
 
@@ -660,16 +650,12 @@ def test_explain_fail_skipped_on_error_or_unscored() -> None:
     recording = RecordingJudge(verdict={})
     err = {"status": "error"}
     assert (
-        engine._maybe_explain_fail(
-            recording, False, ["x"], err, check="c", transcript_tail=""
-        )
+        engine._maybe_explain_fail(recording, False, ["x"], err, check="c", transcript_tail="")
         is err
     )
     unscored = {"quality_unscored": True}
     assert (
-        engine._maybe_explain_fail(
-            recording, False, ["x"], unscored, check="c", transcript_tail=""
-        )
+        engine._maybe_explain_fail(recording, False, ["x"], unscored, check="c", transcript_tail="")
         is unscored
     )
     assert recording.why_calls == []
@@ -678,15 +664,11 @@ def test_explain_fail_skipped_on_error_or_unscored() -> None:
 def test_explain_fail_attaches_stripped_why() -> None:
     recording = RecordingJudge(verdict={"passed": False}, why="  w  ")
     judged = {"status": "completed", "passed": False}
-    out = engine._maybe_explain_fail(
-        recording, False, ["x"], judged, check="c", transcript_tail=""
-    )
+    out = engine._maybe_explain_fail(recording, False, ["x"], judged, check="c", transcript_tail="")
     assert out is not None
     assert out["why"] == "w"
     assert len(recording.why_calls) == 1
-    out2 = engine._maybe_explain_fail(
-        recording, None, ["x"], judged, check="c", transcript_tail=""
-    )
+    out2 = engine._maybe_explain_fail(recording, None, ["x"], judged, check="c", transcript_tail="")
     assert out2 is not None
     assert "why" in out2
 
@@ -694,9 +676,7 @@ def test_explain_fail_attaches_stripped_why() -> None:
 def test_explain_fail_blank_why_ignored() -> None:
     recording = RecordingJudge(verdict={}, why="  ")
     judged = {"status": "completed", "passed": False}
-    out = engine._maybe_explain_fail(
-        recording, False, ["x"], judged, check="c", transcript_tail=""
-    )
+    out = engine._maybe_explain_fail(recording, False, ["x"], judged, check="c", transcript_tail="")
     assert out is not None
     assert "why" not in out
 
@@ -726,9 +706,7 @@ def test_run_task_missing_golden_short_circuits(
     assert harness.calls == []
 
 
-def test_run_task_missing_input_file_raises_suite_error(
-    tmp_path: Path, skill_dir: Path
-) -> None:
+def test_run_task_missing_input_file_raises_suite_error(tmp_path: Path, skill_dir: Path) -> None:
     task = _task(
         "a",
         files=[FileCopy(src="evals/fixtures/nope.pdf", dest="in.pdf")],
@@ -805,9 +783,7 @@ def test_run_task_timeout_is_mapped(tmp_path: Path, skill_dir: Path) -> None:
         )
 
 
-def test_run_task_other_exception_reraised_unchanged(
-    tmp_path: Path, skill_dir: Path
-) -> None:
+def test_run_task_other_exception_reraised_unchanged(tmp_path: Path, skill_dir: Path) -> None:
     with pytest.raises(RuntimeError, match="boom"):
         engine._run_task(
             task=_task("a"),
@@ -955,9 +931,7 @@ def test_run_task_live_fail_calls_explain_fail_once(
     assert report.judge["why"] == "because"
 
 
-def test_run_task_no_trigger_live_skips_judge(
-    tmp_path: Path, skill_dir: Path
-) -> None:
+def test_run_task_no_trigger_live_skips_judge(tmp_path: Path, skill_dir: Path) -> None:
     report = engine._run_task(
         task=_task("a", expect=None),
         spec=_spec(_task("a", expect=None)),
@@ -973,9 +947,7 @@ def test_run_task_no_trigger_live_skips_judge(
     assert report.judge["status"] == "skip"
 
 
-def test_run_task_resets_sink_and_ends_control_on_error(
-    tmp_path: Path, skill_dir: Path
-) -> None:
+def test_run_task_resets_sink_and_ends_control_on_error(tmp_path: Path, skill_dir: Path) -> None:
     control = FakeControl()
     sandbox = LocalSandbox(tmp_path / "ws")
     with pytest.raises(RuntimeError, match="boom"):
@@ -1062,9 +1034,7 @@ def test_run_eval_red_when_any_task_fails(
     assert [t.passed for t in r.tasks] == [True, False]
 
 
-def test_run_eval_green_when_all_pass(
-    tmp_path: Path, skill_dir: Path, allow_trigger: None
-) -> None:
+def test_run_eval_green_when_all_pass(tmp_path: Path, skill_dir: Path, allow_trigger: None) -> None:
     spec = _spec(_task("t1"), _task("t2"))
     r = engine.run_eval(
         harness=FakeHarness(),
@@ -1081,9 +1051,7 @@ def test_run_eval_green_when_all_pass(
     assert r.timeout_effective == 10
 
 
-def test_run_eval_max_tasks_slices(
-    tmp_path: Path, skill_dir: Path, allow_trigger: None
-) -> None:
+def test_run_eval_max_tasks_slices(tmp_path: Path, skill_dir: Path, allow_trigger: None) -> None:
     spec = _spec(_task("t1"), _task("t2"), _task("t3"))
     r = engine.run_eval(
         harness=FakeHarness(),

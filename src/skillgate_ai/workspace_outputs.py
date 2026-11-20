@@ -99,12 +99,12 @@ def harness_final_answer(stdout: str) -> str | None:
         elif kind == "assistant":
             if _is_partial_assistant(obj):
                 continue
-            body = _cursor_assistant_text(obj)
-            if not body:
+            cursor_body = _cursor_assistant_text(obj)
+            if not cursor_body:
                 continue
-            last_assistant = body
+            last_assistant = cursor_body
             if saw_tool:
-                last_after_tool = body
+                last_after_tool = cursor_body
         elif kind == "result":
             body = str(obj.get("result") or "").strip()
             if body:

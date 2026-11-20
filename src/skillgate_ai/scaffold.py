@@ -56,7 +56,7 @@ def scaffold_trigger_cases(pack: str | Path) -> CasePack:
     skill = ingest_skill(root, strict=False)
     prompt = _prompt_from_description(skill.name, skill.description)
     cases = CasePack(
-        schema_version=1,
+        schema=1,
         skill=skill.name,
         cases=[
             PackCase(
@@ -108,7 +108,7 @@ def clone_pdf_layout(dest: str | Path, *, source: str | Path) -> Path:
     pack = load_case_pack(dst)
     if pack is not None:
         rewritten = CasePack(
-            schema_version=1,
+            schema=1,
             skill=dst.name,
             cases=pack.cases,
             budgets=pack.budgets,

@@ -10,7 +10,7 @@ import tempfile
 import threading
 from dataclasses import dataclass
 from pathlib import Path
-from typing import IO, Protocol
+from typing import IO, Protocol, cast
 
 from skillgate_ai.errors import SandboxError, agent_timeout_error
 from skillgate_ai.ingest import Skill
@@ -23,7 +23,9 @@ _PIPE_JOIN_SEC = 5.0
 
 
 class Sandbox(Protocol):
-    workspace: Path
+    @property
+    def workspace(self) -> Path: ...
+
     output_sink: OutputSink | None
 
     def run(
@@ -314,7 +316,7 @@ def open_sandbox(kind: str, docker_image: str) -> Sandbox:
     if kind in {"local", "fs", "temp"}:
         return LocalSandbox()
     if kind in {"docker", "container"}:
-        return DockerSandbox(docker_image)
+        return cast(Sandbox, DockerSandbox(docker_image))
     raise SandboxError(
         f"Unknown sandbox {kind!r}",
         hint="Use `local` or `docker`.",
