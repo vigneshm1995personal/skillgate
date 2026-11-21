@@ -16,11 +16,15 @@ from skillgate_ai.case_pack import (
     task_missing_golden,
 )
 from skillgate_ai.engine import SuiteReport, _run_task, _seed_skill_selection, _why_expected_output
-from skillgate_ai.harness import _MISSING, HarnessResult, _read_selection
+from skillgate_ai.harness import (
+    _MISSING,
+    HarnessResult,
+    _read_selection,
+    select_skill_from_descriptions,
+)
 from skillgate_ai.ingest import ingest_skill
 from skillgate_ai.report import report_to_dict
 from skillgate_ai.sandbox import LocalSandbox
-from skillgate_ai.harness import select_skill_from_descriptions
 from skillgate_ai.scorers import (
     RunArtifacts,
     TriggerEvidence,
@@ -365,4 +369,3 @@ def test_wrong_description_fails_trigger_even_if_selected() -> None:
     assert score.passed is False
     assert "description" in score.detail.lower()
     assert select_skill_from_descriptions(task.prompt, [skill]) != "memo"
-

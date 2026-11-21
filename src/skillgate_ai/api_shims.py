@@ -4,7 +4,12 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import FastAPI, Request
+from skillgate_ai.extras import UI_FEATURE, MissingExtraError
+
+try:
+    from fastapi import FastAPI, Request
+except ModuleNotFoundError as exc:
+    raise MissingExtraError(UI_FEATURE, "ui") from exc
 
 from skillgate_ai.api_payloads import fail, skill_payload, state_of
 from skillgate_ai.catalog import find_skill

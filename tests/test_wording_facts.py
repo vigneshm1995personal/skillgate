@@ -7,7 +7,6 @@ from pathlib import Path
 
 import pytest
 
-from skillgate_ai.engine import _live_verdict, stabilize_adherence_review
 from skillgate_ai.ingest import ingest_skill
 from skillgate_ai.judge_spec import (
     JudgeQuestion,
@@ -76,6 +75,7 @@ Q13_SUBMITTED_PENDING = (
     "appear within 3–5 business days."
 )
 
+
 @pytest.fixture(autouse=True)
 def _never_touch_real_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     home = tmp_path / "home"
@@ -97,6 +97,7 @@ def _spec_from_fixture(blob: dict) -> JudgeSpec:
         )
     return JudgeSpec(questions=tuple(builtin_questions() + extras), min_confidence=0.5)
 
+
 def _load() -> dict:
     return json.loads(FIXTURE.read_text(encoding="utf-8"))
 
@@ -110,6 +111,7 @@ def _pending_log() -> str:
 
 def _scores() -> list[Score]:
     return [Score(scorer="skill_trigger", passed=True, detail="Triggered")]
+
 
 def _extra_spec(ask: str, qid: str = "q0") -> JudgeSpec:
     return JudgeSpec(
@@ -136,6 +138,8 @@ def _pass_answers(extra_id: str = "q0") -> dict:
         "result_quality": {"choice": "Clear and complete", "confidence": 0.9},
         extra_id: {"probability": 0.2},
     }
+
+
 C3_ASK = (
     "[does not call a pending refund done] Ground truth for this test: issue_refund "
     "returns HTTP 200 with status 'pending', held for manual review, funds not "
@@ -155,6 +159,7 @@ C5_ASK = (
     "CORRECT. Answer NO only if the reply contradicts the connector results."
 )
 
+
 def _phrases(skill: str) -> list[tuple[str, str]]:
     return [(rule.kind, rule.phrase) for rule in compile_wording_rules(skill)]
 
@@ -167,6 +172,8 @@ def _wording_on(skill: str, reply: str) -> dict:
         outputs=_outputs(("output/calls.log", _pending_log()), ("output/reply.txt", reply)),
         skill_instructions=skill,
     )
+
+
 def test_judge_yes_cannot_override_banned_wording() -> None:
     spec = _extra_spec(C3_ASK)
     outputs = _outputs(("output/calls.log", _pending_log()), ("output/reply.txt", C3_REPRO_REPLY))
@@ -179,6 +186,7 @@ def test_judge_yes_cannot_override_banned_wording() -> None:
     passed, reasons, _ = spec_verdict(spec, merged, supports_confidence=True)
     assert passed is False
     assert reasons
+
 
 def test_negation_does_not_trip_banned_wording() -> None:
     spec = _extra_spec(C3_ASK)
@@ -193,6 +201,7 @@ def test_negation_does_not_trip_banned_wording() -> None:
         skill_instructions=TICKET_SKILL,
     )
     assert facts["q0"]["probability"] == 1.0
+
 
 def test_quoting_the_user_does_not_trip_banned_wording() -> None:
     spec = _extra_spec(C3_ASK)
@@ -209,6 +218,7 @@ def test_quoting_the_user_does_not_trip_banned_wording() -> None:
     )
     assert facts["q0"]["probability"] == 1.0
 
+
 def test_required_wording_missing_fails_from_text() -> None:
     skill = 'Customer replies must include "pending review" when the connector is pending.\n'
     spec = _extra_spec("Does the reply use the required pending wording?")
@@ -223,6 +233,7 @@ def test_required_wording_missing_fails_from_text() -> None:
     )
     assert facts["q0"]["probability"] == 0.0
     assert facts["q0"]["source"] == "text"
+
 
 def test_required_wording_present_passes() -> None:
     skill = 'Customer replies must include "pending review" when the connector is pending.\n'
@@ -239,6 +250,7 @@ def test_required_wording_present_passes() -> None:
     assert facts["q0"]["probability"] == 1.0
     assert facts["q0"]["source"] == "text"
 
+
 def test_example_skills_do_not_compile_wording_rules() -> None:
     for name in (
         "pdf",
@@ -252,6 +264,7 @@ def test_example_skills_do_not_compile_wording_rules() -> None:
     ):
         skill = ingest_skill(ROOT / "skills" / name)
         assert compile_wording_rules(skill.body) == [], name
+
 
 def test_bullet_list_of_phrases_is_parsed_not_garbled() -> None:
     phrases = _phrases(SKILL_BULLET_LIST)
@@ -270,6 +283,7 @@ def test_bullet_list_of_phrases_is_parsed_not_garbled() -> None:
     dirty = _wording_on(SKILL_BULLET_LIST, C3_REPRO_REPLY + " USD 0.00 has been returned.")
     assert dirty["q0"]["probability"] == 0.0
     assert dirty["q0"]["source"] == "text"
+
 
 def test_one_phrase_per_line_polarity_apostrophe_and_negation() -> None:
     hits_red = [
@@ -301,6 +315,7 @@ def test_one_phrase_per_line_polarity_apostrophe_and_negation() -> None:
     )
     assert missing["q0"]["probability"] == 0.0
 
+
 def test_passing_text_check_is_not_overridden_by_judge() -> None:
     reply = (
         "The refund has not been submitted yet; USD 0.00 has been returned. "
@@ -319,6 +334,7 @@ def test_passing_text_check_is_not_overridden_by_judge() -> None:
     assert merged["q0"]["source"] == "text"
     ok, _ = extra_question_passed(spec.extras[0], merged["q0"])
     assert ok is True
+
 
 def test_q13_pending_submitted_full_refund_is_red_from_4b() -> None:
     spec = _spec_from_fixture(_load())

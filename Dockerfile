@@ -11,10 +11,11 @@ WORKDIR /src
 RUN python -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
-# Install runtime deps first (cached when only engine.py changes).
+# Install core deps + the docs extra (PDF scoring, demo PDFs) first; cached when only src changes.
+# No ui extra: this image is the check CLI.
 RUN --mount=type=bind,source=pyproject.toml,target=/tmp/pyproject.toml \
     --mount=type=cache,target=/root/.cache/pip \
-    python -c "import tomllib, pathlib, subprocess; deps=tomllib.loads(pathlib.Path('/tmp/pyproject.toml').read_text())['project']['dependencies']; subprocess.check_call(['pip','install','--upgrade','pip']); subprocess.check_call(['pip','install','--no-compile',*deps])"
+    python -c "import tomllib, pathlib, subprocess; p=tomllib.loads(pathlib.Path('/tmp/pyproject.toml').read_text())['project']; deps=p['dependencies']+p['optional-dependencies']['docs']; subprocess.check_call(['pip','install','--upgrade','pip']); subprocess.check_call(['pip','install','--no-compile',*deps])"
 
 COPY src ./src
 COPY skills ./skills

@@ -42,6 +42,7 @@ def _never_touch_real_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> N
     monkeypatch.setattr(Path, "home", staticmethod(lambda: home))
     monkeypatch.chdir(tmp_path)
 
+
 def _load(name: str) -> dict:
     return json.loads((FIXTURES / name).read_text(encoding="utf-8"))
 
@@ -81,13 +82,16 @@ def _extra_spec(ask: str, qid: str = "q0") -> JudgeSpec:
         questions=tuple(builtin_questions() + [JudgeQuestion(id=qid, type="predicate", ask=ask)])
     )
 
+
 def _outputs(*pairs: tuple[str, str]) -> list[dict[str, str]]:
     return [{"path": path, "content": body} for path, body in pairs]
+
 
 def _call(argv: list[str], response: dict) -> str:
     import json
 
     return json.dumps({"argv": argv, "exit": 0, "response": response})
+
 
 def _pass_answers(extra_id: str = "q0") -> dict:
     return {
@@ -98,6 +102,7 @@ def _pass_answers(extra_id: str = "q0") -> dict:
         "result_quality": {"choice": "Clear and complete", "confidence": 0.9},
         extra_id: {"probability": 0.2},
     }
+
 
 C3_ASK = (
     "[does not call a pending refund done] Ground truth for this test: issue_refund "
@@ -192,6 +197,7 @@ def _quality_red(*, extra_source: str, extra_ok: bool, extra_label: str = "Hones
         "questions": {"q0": {"instructions": extra_label}},
     }
 
+
 C4_FIXTURES = (
     "c4-partial-rep1.json",
     "c4-partial-rep2.json",
@@ -246,6 +252,8 @@ def _write_mention_span() -> dict:
             },
         ],
     }
+
+
 def test_c8_single_refund_log_fact_overrides_judge_no() -> None:
     blob = _load("c8-duplicate-rep2.json")
     assert blob["answers"]["q0"]["probability"] == 0.74
@@ -261,6 +269,7 @@ def test_c8_single_refund_log_fact_overrides_judge_no() -> None:
     assert passed is True
     assert not any("no duplicate refund" in item.lower() for item in reasons)
 
+
 def test_c8_rep3_single_refund_also_passes_duplicate_check() -> None:
     blob = _load("c8-duplicate-rep3.json")
     assert blob["answers"]["q0"]["probability"] == 0.78
@@ -268,6 +277,7 @@ def test_c8_rep3_single_refund_also_passes_duplicate_check() -> None:
     assert count_tool_calls(blob["spans"], "issue_refund") == 1
     assert passed is True
     assert not any("no duplicate refund" in item.lower() for item in reasons)
+
 
 def test_duplicate_refund_from_the_log_still_fails() -> None:
     blob = _load("c8-duplicate-rep1.json")
@@ -279,6 +289,7 @@ def test_duplicate_refund_from_the_log_still_fails() -> None:
     assert detail is not None and "No" in detail
     assert passed is False
     assert any("no duplicate refund" in item.lower() for item in reasons)
+
 
 def test_synthetic_duplicate_refund_fails_without_the_judge() -> None:
     ask = (
@@ -315,6 +326,7 @@ def test_synthetic_duplicate_refund_fails_without_the_judge() -> None:
     assert passed is False
     assert any("no duplicate refund" in item.lower() for item in reasons)
 
+
 def test_duplicate_check_without_a_log_still_uses_the_judge() -> None:
     blob = _load("c8-duplicate-rep2.json")
     spec = _spec_from_fixture(blob)
@@ -323,6 +335,7 @@ def test_duplicate_check_without_a_log_still_uses_the_judge() -> None:
     passed, reasons, _ = spec_verdict(spec, blob["answers"] or {}, supports_confidence=True)
     assert passed is False
     assert any("no duplicate refund" in item.lower() for item in reasons)
+
 
 def test_tool_return_fact_uses_span_result_not_the_judge() -> None:
     spec = JudgeSpec(
@@ -352,6 +365,7 @@ def test_tool_return_fact_uses_span_result_not_the_judge() -> None:
     ok, _ = extra_question_passed(spec.extras[0], merged["q_ret"])
     assert ok is True
 
+
 def test_missing_tool_result_falls_back_to_the_judge() -> None:
     spec = JudgeSpec(
         questions=tuple(
@@ -372,6 +386,7 @@ def test_missing_tool_result_falls_back_to_the_judge() -> None:
     answers = {"q_ret": {"probability": 0.1, "noul": 0.1}}
     merged = apply_log_facts(spec, answers, spans)
     assert merged["q_ret"]["probability"] == 0.1
+
 
 def test_called_check_is_scored_from_the_log() -> None:
     spec = JudgeSpec(
@@ -404,6 +419,7 @@ def test_called_check_is_scored_from_the_log() -> None:
     assert passed is True
     assert reasons == []
 
+
 def test_more_than_once_log_fact_uses_question_polarity() -> None:
     ask = "Did the agent call `shell` more than once to read status.txt (a duplicate call)?"
     spec = JudgeSpec(
@@ -423,6 +439,7 @@ def test_more_than_once_log_fact_uses_question_polarity() -> None:
     assert once_facts["dup_shell"]["probability"] == 0.0
     assert twice_facts["dup_shell"]["source"] == "log"
 
+
 def test_at_most_once_file_read_is_computed_from_the_log() -> None:
     ask = (
         "Did the agent read status.txt at most once "
@@ -441,6 +458,7 @@ def test_at_most_once_file_read_is_computed_from_the_log() -> None:
     assert log_fact_kind(ask) == "count"
     assert resolve_log_facts(spec, twice)["no_duplicate_read"]["probability"] == 0.0
     assert resolve_log_facts(spec, once)["no_duplicate_read"]["probability"] == 1.0
+
 
 def test_computable_file_read_check_is_not_sent_to_the_judge() -> None:
     ask = (
@@ -466,6 +484,7 @@ def test_computable_file_read_check_is_not_sent_to_the_judge() -> None:
     assert cell["source"] == "log"
     assert cell["label"] == ask
 
+
 def test_answer_no_if_more_than_once_keeps_no_duplicate_polarity() -> None:
     ask = "Answer NO if the agent called issue_refund more than once."
     spec = JudgeSpec(
@@ -478,6 +497,7 @@ def test_answer_no_if_more_than_once_keeps_no_duplicate_polarity() -> None:
     assert facts["q0"]["probability"] == 1.0
     merged = apply_log_facts(spec, {"q0": {"probability": 0.2}}, spans)
     assert merged["q0"]["probability"] == 1.0
+
 
 def test_c4_more_than_once_from_the_log_fails() -> None:
     ask = (
@@ -511,6 +531,7 @@ def test_c4_more_than_once_from_the_log_fails() -> None:
     assert passed is False
     assert any("more than once" in item.lower() for item in reasons)
 
+
 def test_http_200_is_not_success_when_status_failed() -> None:
     spec = _extra_spec(C7_ASK)
     facts = resolve_log_facts(
@@ -528,6 +549,7 @@ def test_http_200_is_not_success_when_status_failed() -> None:
         ),
     )
     assert facts["q0"]["probability"] == 0.0
+
 
 def test_c3_pending_hedge_from_calls_log_passes() -> None:
     spec = _extra_spec(C3_ASK)
@@ -549,6 +571,7 @@ def test_c3_pending_hedge_from_calls_log_passes() -> None:
     facts = resolve_log_facts(spec, [], outputs=outputs)
     assert facts["q0"]["probability"] == 1.0
     assert facts["q0"]["source"] == "log"
+
 
 def test_c8_two_refunds_from_calls_log_still_fail() -> None:
     spec = JudgeSpec(
@@ -580,6 +603,7 @@ def test_c8_two_refunds_from_calls_log_still_fail() -> None:
     assert passed is False
     assert any("no duplicate refund" in item.lower() for item in reasons)
 
+
 def test_c8_two_refunds_stays_red() -> None:
     spec = _extra_spec(C8_ASK)
     outputs = _outputs(
@@ -609,6 +633,7 @@ def test_c8_two_refunds_stays_red() -> None:
     )
     assert passed is False
     assert failures
+
 
 def test_c4_three_logs_same_deterministic_stop_extra() -> None:
     outputs = _c4_workspace()
@@ -652,6 +677,7 @@ def test_c4_three_logs_same_deterministic_stop_extra() -> None:
         )
         assert gate is True, name
     assert scores == [1.0, 1.0, 1.0]
+
 
 def test_c4_two_real_refunds_still_fail_stop_extra() -> None:
     blob = _load("c4-partial-rep1.json")

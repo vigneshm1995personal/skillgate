@@ -119,6 +119,7 @@ def test_lenient_space_folder_uses_slug(tmp_path: Path) -> None:
     assert loaded.name == "idea-brainstorming"
     assert loaded.display_name == "Idea brainstorming"
 
+
 def test_ingest_warns_when_pandoc_missing(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setattr("shutil.which", lambda _name: None)
     pack = tmp_path / "doc"
@@ -129,4 +130,3 @@ def test_ingest_warns_when_pandoc_missing(tmp_path: Path, monkeypatch) -> None:
     )
     skill = ingest_skill(pack, strict=False)
     assert skill.warning and "pandoc" in skill.warning.lower()
-

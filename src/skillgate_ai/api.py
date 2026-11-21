@@ -7,9 +7,14 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, Request
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from skillgate_ai.extras import UI_FEATURE, MissingExtraError
+
+try:
+    from fastapi import FastAPI, Request
+    from fastapi.middleware.cors import CORSMiddleware
+    from fastapi.responses import JSONResponse
+except ModuleNotFoundError as exc:
+    raise MissingExtraError(UI_FEATURE, "ui") from exc
 
 from skillgate_ai import __version__
 from skillgate_ai.api_compare import register_compare_routes

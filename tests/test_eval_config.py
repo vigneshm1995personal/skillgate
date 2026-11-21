@@ -20,8 +20,8 @@ from skillgate_ai.eval_config import (
     parse_timeout_sec,
     resolve_eval_config,
     stamp_resolved,
-    with_timeout_effective,
     with_model,
+    with_timeout_effective,
 )
 
 
@@ -537,4 +537,3 @@ def test_with_model_promotes_stamped_alias_when_requested_missing() -> None:
     updated = with_model(run, "claude-sonnet-5-5")
     assert updated.model == "claude-sonnet-5-5"
     assert updated.requested_model == "sonnet"
-

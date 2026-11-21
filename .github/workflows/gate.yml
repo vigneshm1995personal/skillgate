@@ -61,6 +61,16 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install -e .
+      - name: core install pulls no ui/docs extras
+        run: |
+          python - <<'EOF'
+          import importlib.util, sys
+          mods = ("fastapi", "starlette", "uvicorn", "pypdf", "docx", "openpyxl", "reportlab")
+          found = [m for m in mods if importlib.util.find_spec(m)]
+          sys.exit(f"core install pulled extras: {found}" if found else 0)
+          EOF
+      - run: skillgate --help
+      - run: skillgate checks show path_efficiency
       # Dest folder must match SKILL.md `name:` (pdf), not example-pdf.
       # This repo has no live secrets, so check stays keyless and must exit 2.
       # Downstream Action: `skillgate check . --key-env OPENAI_API_KEY` with
@@ -73,6 +83,14 @@ jobs:
           set +e
           skillgate check /tmp/pdf
           test $? -eq 2
+      - name: ui without the ui extra exits 2 with the install hint
+        run: |
+          set +e
+          out=$(skillgate ui --no-browser 2>&1); code=$?
+          set -e
+          echo "$out"
+          test "$code" -eq 2
+          echo "$out" | grep -F "pip install 'skillgate-ai[ui]'"
 
   web-build:
     runs-on: ubuntu-latest
@@ -98,7 +116,7 @@ jobs:
       - name: pip install wheel and serve UI without pnpm
         run: |
           python -m venv /tmp/wheelenv
-          /tmp/wheelenv/bin/pip install dist/skillgate_ai-*.whl
+          /tmp/wheelenv/bin/pip install "$(ls dist/skillgate_ai-*.whl)"[ui]
           mkdir -p /tmp/emptyws
           /tmp/wheelenv/bin/python -c "from importlib.resources import files; p=files('skillgate_ai').joinpath('web_static/index.html'); assert p.is_file(), p"
           /tmp/wheelenv/bin/skillgate ui --root /tmp/emptyws --no-browser &

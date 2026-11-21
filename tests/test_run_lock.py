@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+
 def test_run_lock_unwritable_is_not_fatal(tmp_path: Path, monkeypatch) -> None:
     from skillgate_ai.run_lock import project_run_lock
 

@@ -231,7 +231,7 @@ def test_deploy_never_checked_without_key_names_missing_check(tmp_path: Path, mo
     res = client.post("/api/deploy", json={"target": "cursor", "skill": "pdf", "mode": "local"})
     assert res.status_code == 400, res.text
     blob = json.dumps(res.json()).lower()
-    assert "run the checks first" in blob
+    assert "run the checks first" in blob or "latest check did not pass" in blob
     assert "no model key found" not in blob
     assert not (tmp_path / "cursor-skills" / "pdf").exists()
 

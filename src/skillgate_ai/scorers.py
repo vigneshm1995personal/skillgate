@@ -7,8 +7,7 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from pypdf import PdfReader
-
+from skillgate_ai.extras import PDF_SCORING_FEATURE, import_extra
 from skillgate_ai.suite import FileExpect, RubricCheck, ScorerSpec, TaskSpec
 
 
@@ -337,6 +336,7 @@ def _file_text(path: Path) -> str:
 
 
 def _pdf_pages(path: Path) -> int | None:
+    PdfReader = import_extra("pypdf", extra="docs", feature=PDF_SCORING_FEATURE).PdfReader
     try:
         return len(PdfReader(str(path)).pages)
     except Exception:
@@ -344,6 +344,7 @@ def _pdf_pages(path: Path) -> int | None:
 
 
 def _pdf_text(path: Path) -> str | None:
+    PdfReader = import_extra("pypdf", extra="docs", feature=PDF_SCORING_FEATURE).PdfReader
     try:
         reader = PdfReader(str(path))
         return "\n".join((page.extract_text() or "") for page in reader.pages)
