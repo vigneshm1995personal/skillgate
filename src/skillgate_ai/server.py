@@ -8,9 +8,14 @@ import webbrowser
 from importlib.resources import files
 from pathlib import Path
 
-from fastapi import FastAPI
-from fastapi.responses import FileResponse, HTMLResponse, Response
-from starlette.staticfiles import StaticFiles
+from skillgate_ai.extras import UI_FEATURE, MissingExtraError, import_extra
+
+try:
+    from fastapi import FastAPI
+    from fastapi.responses import FileResponse, HTMLResponse, Response
+    from starlette.staticfiles import StaticFiles
+except ModuleNotFoundError as exc:
+    raise MissingExtraError(UI_FEATURE, "ui") from exc
 
 from skillgate_ai.api import create_app
 from skillgate_ai.errors import SkillGateError
@@ -152,7 +157,7 @@ def serve_ui(
     pack: Path | None = None,
     open_browser: bool = False,
 ) -> None:
-    import uvicorn
+    uvicorn = import_extra("uvicorn", extra="ui", feature=UI_FEATURE)
 
     _ensure_port_free(host, port)
     app = create_app(root=root, pack=pack)

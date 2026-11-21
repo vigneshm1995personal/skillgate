@@ -4,8 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from reportlab.lib.pagesizes import letter
-from reportlab.pdfgen import canvas
+from skillgate_ai.extras import DEMO_PDF_FEATURE, import_extra
 
 
 def _stale_example_marker(fixtures_dir: Path) -> bool:
@@ -42,6 +41,8 @@ def ensure_demo_pdfs(fixtures_dir: Path) -> None:
 
 
 def write_pdf(path: Path, text: str) -> None:
+    canvas = import_extra("reportlab.pdfgen.canvas", extra="docs", feature=DEMO_PDF_FEATURE)
+    letter = import_extra("reportlab.lib.pagesizes", extra="docs", feature=DEMO_PDF_FEATURE).letter
     c = canvas.Canvas(str(path), pagesize=letter)
     width, height = letter
     c.setFont("Times-Roman", 18)

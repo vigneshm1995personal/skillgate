@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+from skillgate_ai.errors import SandboxError
 from skillgate_ai.sandbox import (
     LocalSandbox,
     _sandbox_env,
@@ -64,3 +65,59 @@ def test_sandbox_runs_agent_entry_with_running_interpreter(tmp_path: Path) -> No
         assert Path(proc.stdout).resolve() == Path(sys.executable).resolve()
     finally:
         sandbox.close()
+
+
+def test_docker_sandbox_fails_before_run_when_image_missing(monkeypatch) -> None:
+    from skillgate_ai.sandbox import DockerSandbox
+
+    monkeypatch.setattr("skillgate_ai.sandbox.shutil.which", lambda _name: "/usr/bin/docker")
+
+    def fake_run(cmd, **_kwargs):
+        del _kwargs
+        if cmd[:3] == ["docker", "image", "inspect"] or (
+            len(cmd) >= 3 and cmd[0] == "docker" and "inspect" in cmd
+        ):
+
+            class Proc:
+                returncode = 1
+                stdout = ""
+                stderr = "Error: No such image: skillgate-sandbox:v0"
+
+            return Proc()
+
+        class Info:
+            returncode = 0
+            stdout = ""
+            stderr = ""
+
+        return Info()
+
+    monkeypatch.setattr("skillgate_ai.sandbox.subprocess.run", fake_run)
+    with pytest.raises(SandboxError, match="not installed|not found|image") as caught:
+        DockerSandbox("skillgate-sandbox:v0")
+    blob = f"{caught.value.message} {caught.value.hint or ''}".lower()
+    assert "125" not in blob
+    assert "sandbox local" in blob or "--sandbox local" in blob
+
+
+def test_docker_sandbox_fails_clearly_when_daemon_down(monkeypatch) -> None:
+    from skillgate_ai.sandbox import DockerSandbox
+
+    monkeypatch.setattr("skillgate_ai.sandbox.shutil.which", lambda _name: "/usr/bin/docker")
+
+    def fake_run(cmd, **_kwargs):
+        del cmd, _kwargs
+
+        class Proc:
+            returncode = 1
+            stdout = ""
+            stderr = "Cannot connect to the Docker daemon. Is the docker daemon running?"
+
+        return Proc()
+
+    monkeypatch.setattr("skillgate_ai.sandbox.subprocess.run", fake_run)
+    with pytest.raises(SandboxError, match="Docker") as caught:
+        DockerSandbox("skillgate-sandbox:v0")
+    blob = f"{caught.value.message} {caught.value.hint or ''}".lower()
+    assert "125" not in blob
+    assert "daemon" in blob or "reach docker" in blob or "start docker" in blob

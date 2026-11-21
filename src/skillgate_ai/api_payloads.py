@@ -6,9 +6,10 @@ import copy
 import threading
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, NoReturn
+from typing import TYPE_CHECKING, Any, NoReturn
 
-from fastapi import HTTPException, Request
+if TYPE_CHECKING:
+    from fastapi import Request
 
 from skillgate_ai.case_pack import skill_has_dataset
 from skillgate_ai.catalog import SOURCE_LABELS, catalog_entries
@@ -61,6 +62,8 @@ def state_of(request: Request) -> AppState:
 
 
 def fail(status: int, message: str, hint: str | None = None, **extra: Any) -> NoReturn:
+    from fastapi import HTTPException
+
     detail: dict[str, Any] = {"message": message}
     if hint:
         detail["hint"] = hint

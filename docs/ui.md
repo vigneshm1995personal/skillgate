@@ -2,6 +2,8 @@
 
 Optional loopback UI next to the CLI. **No Skill Gate account.** The gate is still `skillgate check` exiting 0 or 1.
 
+From PyPI: `pip install 'skillgate-ai[ui]'`. Dev checkout: `pip install -e ".[dev]"` already includes the UI extra.
+
 ```bash
 python3 -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"

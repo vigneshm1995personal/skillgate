@@ -6,7 +6,10 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any, cast
 
-from fastapi import Request
+try:
+    from fastapi import Request
+except ModuleNotFoundError:
+    Request = Any  # type: ignore[assignment,misc]  # core checks show needs no web stack
 
 from skillgate_ai.errors import SkillGateError
 from skillgate_ai.judge_spec import (

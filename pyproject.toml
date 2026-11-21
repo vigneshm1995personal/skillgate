@@ -41,17 +41,25 @@ dependencies = [
   "httpx>=0.27",
   "tenacity>=8.2",
   "python-dotenv>=1.0",
-  "pypdf>=4.2",
-  "python-docx>=1.1",
-  "openpyxl>=3.1",
-  "reportlab>=4.2",
+]
+
+[project.optional-dependencies]
+ui = [
   "fastapi>=0.115",
   "uvicorn>=0.30",
   "python-multipart>=0.0.9",
 ]
-
-[project.optional-dependencies]
+docs = [
+  "pypdf>=4.2",
+  "python-docx>=1.1",
+  "openpyxl>=3.1",
+  "reportlab>=4.2",
+]
+all = [
+  "skillgate-ai[ui,docs]",
+]
 dev = [
+  "skillgate-ai[all]",
   "pytest>=8.2",
   "pytest-timeout>=2.3",
   "ruff>=0.5",
@@ -113,7 +121,7 @@ select = ["E", "W", "F", "I", "UP", "B", "SIM"]
 # setuptools cmdclass names must match the setuptools command classes.
 "src/skillgate_build.py" = ["N801"]
 # Fixture copy / JS-in-Python strings that cannot wrap without changing values.
-"tests/test_qa_0712_wording.py" = ["E501"]
+"tests/test_wording_facts.py" = ["E501"]
 "tests/test_local_ui.py" = ["E501"]
 
 [tool.ruff.format]

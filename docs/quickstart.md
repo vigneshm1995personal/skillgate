@@ -15,7 +15,13 @@ skillgate version
 
 (`pip install skillgate` is a different product.) Latest on PyPI is `skillgate-ai==0.7.17` (same behavior as 0.7.12; do not use 0.7.13 or 0.7.14 — they regressed). To hack on this repo, clone it and `pip install -e .`.
 
-Skill scripts run with that same Python — install the skill’s own packages there too (the pdf example needs `pypdf`).
+| Install | Adds | Needed for |
+| --- | --- | --- |
+| `pip install 'skillgate-ai[ui]'` | FastAPI, uvicorn, python-multipart | `skillgate ui` |
+| `pip install 'skillgate-ai[docs]'` | pypdf, python-docx, openpyxl, reportlab | PDF checks, demo PDFs, document text for the decision model |
+| `pip install 'skillgate-ai[all]'` | both | everything |
+
+Skill scripts run with that same Python — install the skill’s own packages there too. For Skill Gate PDF scoring and the pdf example fixtures, use `pip install 'skillgate-ai[docs]'` (or `[all]`).
 
 ## Example datasets
 

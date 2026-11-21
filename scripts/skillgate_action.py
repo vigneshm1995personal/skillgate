@@ -73,7 +73,7 @@ def fetch_latest_version() -> str:
 
 
 def pip_install_args(version: str) -> list[str]:
-    return [f"skillgate-ai=={version}"]
+    return [f"skillgate-ai[docs]=={version}"]
 
 
 def install_release(version: str) -> None:

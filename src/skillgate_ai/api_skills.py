@@ -6,8 +6,13 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import unquote
 
-from fastapi import FastAPI, File, Form, Request, UploadFile
-from fastapi.responses import FileResponse
+from skillgate_ai.extras import UI_FEATURE, MissingExtraError
+
+try:
+    from fastapi import FastAPI, File, Form, Request, UploadFile
+    from fastapi.responses import FileResponse
+except ModuleNotFoundError as exc:
+    raise MissingExtraError(UI_FEATURE, "ui") from exc
 
 from skillgate_ai.advice import description_from_paste, rewrite_skill_description
 from skillgate_ai.api_intake import (

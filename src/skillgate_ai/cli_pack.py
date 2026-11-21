@@ -110,7 +110,7 @@ def register_pack_commands(app: typer.Typer, case_app: typer.Typer, judge_app: t
             written = write_pack_file(dest, rel=rel, content=data)
         except (SkillGateError, CannotSynthesizeFixture, OSError) as exc:
             message = str(exc) if not isinstance(exc, SkillGateError) else exc.render()
-            console.print(message)
+            console.print(message, markup=False)
             raise typer.Exit(getattr(exc, "exit_code", 1) or 1) from None
         console.print(written.get("path") or rel)
 

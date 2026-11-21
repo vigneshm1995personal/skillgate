@@ -4,9 +4,14 @@ from __future__ import annotations
 
 from urllib.parse import urlparse
 
-from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.requests import Request
-from starlette.responses import JSONResponse, Response
+from skillgate_ai.extras import UI_FEATURE, MissingExtraError
+
+try:
+    from starlette.middleware.base import BaseHTTPMiddleware
+    from starlette.requests import Request
+    from starlette.responses import JSONResponse, Response
+except ModuleNotFoundError as exc:
+    raise MissingExtraError(UI_FEATURE, "ui") from exc
 
 LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
 MUTATING = frozenset({"POST", "PUT", "PATCH", "DELETE"})

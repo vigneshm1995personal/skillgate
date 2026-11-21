@@ -51,9 +51,22 @@ skillgate check skills/json-response-sabotaged
 
 `skillgate examples install` writes six skills under `skills/`. Files already in that folder stay as they are. `skills/json-response` exits 0 when the live run is green. `skills/json-response-sabotaged` exits 1: the JSON checks fail, and the unrelated check can pass. Both checks exit 2 until an agent is available and a decision model is selected. Use `skillgate login` or `skillgate keys set` for the agent ([Sign in an agent](#sign-in-an-agent)), and `skillgate judge provider set` for the decision model. This repo tracks 0.7.17. PyPI latest is `skillgate-ai==0.7.17` (same behavior as 0.7.12; do not use 0.7.13 or 0.7.14). Clone and `pip install -e .` when hacking on the tool itself. A check that never starts is saved as not scored. `skillgate import` of a skill already in this project stops and leaves the files alone. A decision-model key is not an agent login.
 
+### Optional extras
+
+| Install | Adds | Needed for |
+| --- | --- | --- |
+| `pip install 'skillgate-ai[ui]'` | FastAPI, uvicorn, python-multipart | `skillgate ui` |
+| `pip install 'skillgate-ai[docs]'` | pypdf, python-docx, openpyxl, reportlab | PDF checks, demo PDFs, document text for the decision model |
+| `pip install 'skillgate-ai[all]'` | both | everything |
+
+When a feature needs an extra that is not installed, Skill Gate exits **2** with:
+
+`Missing optional dependency for {feature}. Install with: pip install 'skillgate-ai[{extra}]'`
+
 The same steps in the local UI:
 
 ```bash
+pip install 'skillgate-ai[ui]'
 skillgate ui
 ```
 

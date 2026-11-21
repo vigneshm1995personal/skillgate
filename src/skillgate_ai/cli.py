@@ -231,10 +231,10 @@ def ingest(
 
 def _present_check(result, *, verbose: bool = False) -> None:
     if result.error:
-        console.print(result.error["message"])
+        console.print(result.error["message"], markup=False)
         hint = result.error.get("hint")
         if hint:
-            console.print(hint)
+            console.print(hint, markup=False)
     elif result.report is not None:
         console.print(format_cli(result.report))
         if verbose:
@@ -391,10 +391,10 @@ def _run_gate(
                 }
             )
         else:
-            console.print(result.error["message"])
+            console.print(result.error["message"], markup=False)
             hint = result.error.get("hint")
             if hint:
-                console.print(hint)
+                console.print(hint, markup=False)
         raise typer.Exit(result.exit_code)
     report = result.report
     if report is None:
@@ -1233,6 +1233,14 @@ def ui_cmd(
     no_browser: bool = typer.Option(False, "--no-browser", help="Do not open a browser"),
 ) -> None:
     """Local React UI. No account. Run needs an agent (`skillgate login` or a key)."""
+    from skillgate_ai.extras import UI_FEATURE, MissingExtraError, require_extra
+
+    try:
+        require_extra("ui", feature=UI_FEATURE)
+    except MissingExtraError as exc:
+        console.print(exc.render(), markup=False)
+        raise typer.Exit(exc.exit_code) from None
+
     from skillgate_ai.server import serve_ui
 
     if port < 1 or port > 65535:
@@ -1255,7 +1263,7 @@ def ui_cmd(
             open_browser=should_open,
         )
     except SkillGateError as exc:
-        console.print(exc.render())
+        console.print(exc.render(), markup=False)
         raise typer.Exit(exc.exit_code) from None
     except OSError as exc:
         console.print(f"Could not bind {host}:{port}: {exc}")

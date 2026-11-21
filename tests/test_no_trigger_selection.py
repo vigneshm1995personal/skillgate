@@ -16,11 +16,21 @@ from skillgate_ai.case_pack import (
     task_missing_golden,
 )
 from skillgate_ai.engine import SuiteReport, _run_task, _seed_skill_selection, _why_expected_output
-from skillgate_ai.harness import _MISSING, HarnessResult, _read_selection
+from skillgate_ai.harness import (
+    _MISSING,
+    HarnessResult,
+    _read_selection,
+    select_skill_from_descriptions,
+)
 from skillgate_ai.ingest import ingest_skill
 from skillgate_ai.report import report_to_dict
 from skillgate_ai.sandbox import LocalSandbox
-from skillgate_ai.scorers import RunArtifacts, TriggerEvidence, score_task
+from skillgate_ai.scorers import (
+    RunArtifacts,
+    TriggerEvidence,
+    score_skill_trigger,
+    score_task,
+)
 from skillgate_ai.suite import FileExpect, ScorerSpec, TaskSpec
 
 PDF_PACK = Path(__file__).resolve().parents[1] / "skills" / "pdf"
@@ -337,3 +347,25 @@ def test_older_imported_no_trigger_notes_run_passes(
     assert report.selected_skill is None
     assert not any("missing file" in item for item in report.failures)
     assert not any("notes.txt" in item for item in (report.failures or []))
+
+
+def test_wrong_description_fails_trigger_even_if_selected() -> None:
+    from skillgate_ai.ingest import Skill
+
+    skill = Skill(
+        path=Path("/tmp/x"),
+        name="memo",
+        description="Only for unrelated meal planning.",
+        body="# memo\n",
+    )
+    task = TaskSpec(
+        id="t1",
+        prompt="Write output/memo.docx with meeting notes.",
+        expect_skill="memo",
+        scorers=[],
+    )
+    evidence = TriggerEvidence(selected_skill="memo", read_paths=[], transcript="")
+    score = score_skill_trigger(task, evidence, skills=[skill])
+    assert score.passed is False
+    assert "description" in score.detail.lower()
+    assert select_skill_from_descriptions(task.prompt, [skill]) != "memo"
