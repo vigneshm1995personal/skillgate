@@ -11,7 +11,7 @@ from skillgate_ai.errors import SkillGateError
 try:
     import fcntl
 except ImportError:  # Windows: skip exclusive lock; still refuse a second check in-process via UI.
-    fcntl = None
+    fcntl = None  # type: ignore[assignment]  # Windows has no fcntl
 
 BUSY_MESSAGE = "A check is already running."
 BUSY_HINT = "Wait for it to finish, or stop it first."

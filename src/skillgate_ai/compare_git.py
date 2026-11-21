@@ -186,9 +186,10 @@ def run_git_versions_compare(
                     config=arm_config,
                 )
             if result.error or result.report is None:
+                err = result.error or {}
                 raise CompareError(
-                    result.error.get("message") if result.error else f"Ref {ref} failed to run.",
-                    hint=result.error.get("hint") if result.error else None,
+                    str(err.get("message") or f"Ref {ref} failed to run."),
+                    hint=str(err["hint"]) if err.get("hint") else None,
                 )
             report = report_to_dict(result.report)
             fp = str(report.get("pack_fingerprint") or "")

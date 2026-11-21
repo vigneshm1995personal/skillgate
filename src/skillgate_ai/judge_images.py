@@ -83,8 +83,8 @@ def collect_images(
         try:
             with path.open("rb") as handle:
                 header = handle.read(16)
-                magic = sniff_output_bytes(header).get("magic")
-                if magic not in INLINE_MAGICS:
+                header_magic: str | None = sniff_output_bytes(header).get("magic")
+                if header_magic not in INLINE_MAGICS:
                     continue
                 data = header + handle.read()
         except OSError:
@@ -97,7 +97,7 @@ def collect_images(
         images.append(
             {
                 "type": "input_image",
-                "image_url": f"data:{INLINE_MAGICS[magic]};base64,{b64}",
+                "image_url": f"data:{INLINE_MAGICS[header_magic]};base64,{b64}",
             }
         )
     return images, omitted

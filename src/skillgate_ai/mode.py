@@ -7,10 +7,10 @@ app reads ``status.mode`` and ``status.slots``. Core never imports cloud.
 from __future__ import annotations
 
 import os
-from typing import Literal
+from typing import Final, Literal
 
-LOCAL = "local"
-CLOUD = "cloud"
+LOCAL: Final = "local"
+CLOUD: Final = "cloud"
 Mode = Literal["local", "cloud"]
 
 # Hidden in local (not locked). Names match the React slot checks.

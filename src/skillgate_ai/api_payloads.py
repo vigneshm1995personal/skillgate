@@ -6,7 +6,7 @@ import copy
 import threading
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, NoReturn
 
 from fastapi import HTTPException, Request
 
@@ -60,7 +60,7 @@ def state_of(request: Request) -> AppState:
     return request.app.state.ui
 
 
-def fail(status: int, message: str, hint: str | None = None, **extra: Any) -> None:
+def fail(status: int, message: str, hint: str | None = None, **extra: Any) -> NoReturn:
     detail: dict[str, Any] = {"message": message}
     if hint:
         detail["hint"] = hint

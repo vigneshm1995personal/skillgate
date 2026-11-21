@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from fastapi import Request
 
@@ -149,7 +149,7 @@ def register_check_routes(app: Any) -> None:
         if not isinstance(raw, dict):
             fail(400, "Pass the check to preview.")
         try:
-            return preview_question(raw)
+            return preview_question(cast(Mapping[str, Any], raw))
         except SkillGateError as exc:
             fail(400, exc.message, hint=exc.hint)
 

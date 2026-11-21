@@ -227,7 +227,7 @@ def set_question_on_fail(skill_path: str | Path, question_id: str, on_fail: str)
         raise SuiteError("This skill has no case pack yet.")
     current = pack.judge or JudgeBlock()
     if question_id in RESERVED_IDS:
-        on_fail_map = dict(current.on_fail or {})
+        on_fail_map: dict[str, str] = dict(current.on_fail or {})
         on_fail_map[question_id] = mapped
         updated = current.model_copy(update={"on_fail": on_fail_map})
     else:
