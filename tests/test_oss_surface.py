@@ -111,8 +111,10 @@ def test_local_ui_may_exist_without_hosted_names() -> None:
     assert (ROOT / "mode.py").is_file()
     repo_web = ROOT.parents[1] / "web"
     assert (repo_web / "package.json").is_file()
-    tree = ast.parse((ROOT / "cli.py").read_text(encoding="utf-8"), filename="cli.py")
-    imported = _imported_names(tree)
+    imported: set[str] = set()
+    for path in sorted((ROOT / "cli").rglob("*.py")):
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        imported |= _imported_names(tree)
     assert "skillgate_ai.web" not in imported
     assert "skillgate_ai.auth_siwv" not in imported
 

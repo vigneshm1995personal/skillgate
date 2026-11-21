@@ -668,7 +668,7 @@ def test_login_claude_force_runs_login(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_login_no_arg_runs_missing(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("skillgate_ai.cli._stdin_is_tty", lambda: False)
+    monkeypatch.setattr("skillgate_ai.cli.base._stdin_is_tty", lambda: False)
     called: list[str] = []
 
     def fake_login(agent: str, cfg) -> dict:

@@ -21,10 +21,7 @@ def _extras_all_passed(judged: Mapping[str, Any]) -> bool:
     answers = judged.get("answers") if isinstance(judged.get("answers"), Mapping) else {}
     questions = judged.get("questions") if isinstance(judged.get("questions"), Mapping) else {}
     extra_ids = {
-        key
-        for blob in (cells, answers, questions)
-        for key in (blob or {})
-        if key not in reserved
+        key for blob in (cells, answers, questions) for key in (blob or {}) if key not in reserved
     }
     return bool(extra_ids)
 
