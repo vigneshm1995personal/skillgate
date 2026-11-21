@@ -33,6 +33,7 @@ def _tail(text: str, limit: int = TRANSCRIPT_TAIL_CHARS) -> str:
         return ""
     return (text or "")[-limit:]
 
+
 def _cell_entry(key: str, answer: Any, labels: Mapping[str, str]) -> dict[str, Any]:
     choice = extract_choice(answer)
     cell: dict[str, Any] = {
@@ -45,10 +46,12 @@ def _cell_entry(key: str, answer: Any, labels: Mapping[str, str]) -> dict[str, A
         cell["confidence"] = confidence
     return cell
 
+
 def _user_content(text: str, images: list[dict[str, str]]) -> str | list[dict[str, Any]]:
     if images:
         return [{"type": "input_text", "text": text}, *images]
     return text
+
 
 def _state_text(state: Mapping[str, Any]) -> str:
     artifacts = state.get("artifacts")
@@ -72,6 +75,7 @@ def _state_text(state: Mapping[str, Any]) -> str:
     }
     return json.dumps(payload, ensure_ascii=True, default=str)
 
+
 def _artifacts_without_bodies(raw: Any) -> list[dict[str, Any]]:
     rows = raw if isinstance(raw, list) else []
     out: list[dict[str, Any]] = []
@@ -94,6 +98,7 @@ def _artifacts_without_bodies(raw: Any) -> list[dict[str, Any]]:
         )
     return out
 
+
 def _expected_outcome_text(state: Mapping[str, Any]) -> str | None:
     raw = state.get("expected_outcome")
     if isinstance(raw, str) and raw.strip():
@@ -114,6 +119,7 @@ def _expected_outcome_text(state: Mapping[str, Any]) -> str | None:
             bits.append("Required: " + "; ".join(needles))
     return "\n".join(bits) or None
 
+
 def _text_blob(raw: Any) -> Any:
     """Keep golden/actual text (`body`) for Decisions input. Drop raw bytes."""
     if not isinstance(raw, Mapping):
@@ -125,6 +131,7 @@ def _text_blob(raw: Any) -> Any:
         data["body"] = data.get("extracted_text")
     return data
 
+
 def _path_is_recorded(path: Any) -> bool:
     if not isinstance(path, Mapping):
         return False
@@ -135,12 +142,14 @@ def _path_is_recorded(path: Any) -> bool:
         return False
     return int(steps) > 0
 
+
 def _path_not_available_cell() -> dict[str, Any]:
     return {
         "label": SOFT_CELL_LABELS["path_efficiency"],
         "choice": None,
         "reason": PATH_NOT_AVAILABLE,
     }
+
 
 def _finished_answers(
     answers: dict[str, dict[str, Any]],
@@ -163,6 +172,7 @@ def _finished_answers(
         "usage": usage,
     }
 
+
 def _answer_row(key: str, item: Any) -> dict[str, Any]:
     if isinstance(item, str):
         mapping: Mapping[str, Any] = {"choice": item}
@@ -183,6 +193,7 @@ def _answer_row(key: str, item: Any) -> dict[str, Any]:
         row["probabilities"] = probabilities
     return row
 
+
 def _normalize_answers(
     raw: Mapping[str, Any],
     *,
@@ -202,6 +213,7 @@ def _normalize_answers(
                 answers[question.id] = coerce_extra_answer(raw.get(question.id), kind=question.type)
     return answers
 
+
 def _answers_from_decisions_list(payload: Mapping[str, Any]) -> dict[str, Any]:
     rows = payload.get("answers")
     mapped: dict[str, Any] = {}
@@ -215,6 +227,7 @@ def _answers_from_decisions_list(payload: Mapping[str, Any]) -> dict[str, Any]:
     elif isinstance(rows, Mapping):
         mapped = {str(key): _lift_decision_answer(item) for key, item in rows.items()}
     return mapped
+
 
 def _lift_decision_answer(item: Any) -> Any:
     """Copy ``noul`` onto ``probability`` so predicate checks can read it."""
@@ -232,6 +245,7 @@ def _lift_decision_answer(item: Any) -> Any:
         data["type"] = "predicate"
     return data
 
+
 def _annotate_payload_too_large(
     result: Mapping[str, Any], state: Mapping[str, Any]
 ) -> dict[str, Any]:
@@ -247,4 +261,3 @@ def _annotate_payload_too_large(
         return dict(result)
     joined = f"{reason} {size}".strip() if reason else size
     return {**result, "reason": joined}
-

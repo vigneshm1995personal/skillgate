@@ -34,11 +34,13 @@ GATEWAY_DISPLAY_NAME = "the judge"
 
 CHOSEN_DISPLAY_NAME = DISPLAY_NAME
 
+
 def _decisions_model(model: str) -> str:
     slug = (model or "").strip() or DEFAULT_MODEL
     if slug == DEFAULT_MODEL or slug.endswith("-decisions"):
         return slug
     return DEFAULT_MODEL
+
 
 class JudgeBackend(Protocol):
     """HTTP client for one decisions endpoint. A judge implements DecisionModel."""
@@ -68,6 +70,7 @@ class JudgeBackend(Protocol):
     ) -> dict[str, Any]:
         """POST JSON to this backend's OpenAI base URL."""
         ...
+
 
 class _OpenAIPosted:
     """HTTP for one OpenAI key/base/model. Backends own evaluate; why uses post_json."""
@@ -106,4 +109,3 @@ class _OpenAIPosted:
             retries=retries,
             who=self.who,
         )
-

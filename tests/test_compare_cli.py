@@ -81,7 +81,7 @@ def test_compare_models_arm_file_and_spend_cap(tmp_path: Path, monkeypatch) -> N
         )
         return CheckResult(report=report, exit_code=0, run_id=kwargs.get("run_id") or "r")
 
-    monkeypatch.setattr("skillgate_ai.compare.run_check", fake_run_check)
+    monkeypatch.setattr("skillgate_ai.compare.models.run_check", fake_run_check)
     monkeypatch.setenv("SKILLGATE_OPENAI_API_KEY", "sk-test")
 
     result = runner.invoke(
@@ -242,7 +242,7 @@ def test_compare_models_prints_id_at_start(tmp_path: Path, monkeypatch) -> None:
         )
         return CheckResult(report=report, exit_code=0, run_id=kwargs.get("run_id") or "r")
 
-    monkeypatch.setattr("skillgate_ai.compare.run_check", fake_run_check)
+    monkeypatch.setattr("skillgate_ai.compare.models.run_check", fake_run_check)
     result = runner.invoke(
         app,
         [
@@ -302,7 +302,7 @@ def test_compare_models_cancel_stops_next_arm(tmp_path: Path, monkeypatch) -> No
         )
         return CheckResult(report=report, exit_code=0, run_id=kwargs.get("run_id") or "r")
 
-    monkeypatch.setattr("skillgate_ai.compare.run_check", fake_run_check)
+    monkeypatch.setattr("skillgate_ai.compare.models.run_check", fake_run_check)
 
     def run():
         compare_id_holder["id"] = "abcd12345678"

@@ -334,9 +334,7 @@ class OutcomeJudge:
                 scoring_endpoint=_scoring_endpoint(evaluated),
             ),
             spec=resolved,
-            confidence=bool(
-                getattr(self.backend, "supports_confidence", self.supports_confidence)
-            ),
+            confidence=bool(getattr(self.backend, "supports_confidence", self.supports_confidence)),
         )
         upstream = evaluated.get("upstream")
         if isinstance(upstream, str) and upstream.strip():
@@ -474,11 +472,13 @@ class OutcomeJudge:
         del reasons, judged, check, transcript_tail, expected_output, actual_output
         return None
 
+
 def _scoring_endpoint(evaluated: Mapping[str, Any]) -> str | None:
     raw = evaluated.get("scoring_endpoint")
     if isinstance(raw, str) and raw.strip():
         return raw.strip()
     return None
+
 
 def _sum_judge_usage(rounds: list[Mapping[str, Any]]) -> dict[str, Any] | None:
     from skillgate_ai.usage import usage_from_mapping
@@ -507,10 +507,10 @@ def _sum_judge_usage(rounds: list[Mapping[str, Any]]) -> dict[str, Any] | None:
         "cost_usd": cost,
     }
 
+
 def _as_path(value: Any) -> Path | None:
     if isinstance(value, Path):
         return value
     if isinstance(value, str) and value.strip():
         return Path(value)
     return None
-

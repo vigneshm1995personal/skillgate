@@ -111,7 +111,7 @@ def test_models_compare_writes_run_and_compare_rows(
             report=report, exit_code=0 if report.passed else 1, run_id=kwargs.get("run_id") or "r1"
         )
 
-    monkeypatch.setattr("skillgate_ai.compare.run_check", fake_run_check)
+    monkeypatch.setattr("skillgate_ai.compare.models.run_check", fake_run_check)
     monkeypatch.setenv("SKILLGATE_ROOT", str(tmp_path))
     monkeypatch.setenv("SKILLGATE_OPENAI_API_KEY", "sk-test")
 
@@ -169,7 +169,7 @@ def test_models_compare_fingerprint_mismatch_exits_1(
         )
         return CheckResult(report=report, exit_code=0, run_id="x")
 
-    monkeypatch.setattr("skillgate_ai.compare.run_check", fake_run_check)
+    monkeypatch.setattr("skillgate_ai.compare.models.run_check", fake_run_check)
     monkeypatch.setenv("SKILLGATE_OPENAI_API_KEY", "sk-test")
 
     with pytest.raises(CompareError) as exc:
@@ -302,7 +302,7 @@ def test_spend_cap_stops_without_exit_1(tmp_path: Path, monkeypatch: pytest.Monk
         report.tasks[0].usage = {"tokens_total": 1, "cost_usd": 3.0}
         return CheckResult(report=report, exit_code=0, run_id=kwargs.get("run_id") or "r")
 
-    monkeypatch.setattr("skillgate_ai.compare.run_check", fake_run_check)
+    monkeypatch.setattr("skillgate_ai.compare.models.run_check", fake_run_check)
     monkeypatch.setenv("SKILLGATE_OPENAI_API_KEY", "sk-test")
 
     result = run_models_compare(

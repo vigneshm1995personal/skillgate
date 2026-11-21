@@ -134,6 +134,7 @@ class DecisionsBackend(_OpenAIPosted):
             }
         return {"ok": False, "message": str(result.get("reason") or "Could not connect.")}
 
+
 def ping_openai_backend(
     backend: JudgeBackend, *, display_name: str = DISPLAY_NAME
 ) -> dict[str, Any]:
@@ -165,6 +166,7 @@ def ping_openai_backend(
     if isinstance(upstream, str) and upstream.strip():
         payload["upstream"] = upstream.strip()
     return payload
+
 
 def make_openai_judge(
     *,
@@ -207,4 +209,3 @@ def make_openai_judge(
         supports_why=False,
         supports_confidence=True,
     )
-

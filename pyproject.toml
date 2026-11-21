@@ -153,7 +153,7 @@ module = [
   "skillgate_ai.catalog",  # dynamic catalog rows; needs TypedDict
   "skillgate_ai.cli",  # Typer Option defaults + str|None flows
   "skillgate_ai.cli_pack",  # Typer Option defaults + str|None flows
-  "skillgate_ai.compare",  # deep report-dict Any; own PR
+  "skillgate_ai.compare.*",  # deep report-dict Any; own PR
   "skillgate_ai.harness",  # 2k lines JSONL/subprocess Any; own PR
   "skillgate_ai.helper",  # sync payload dicts; needs TypedDict
   "skillgate_ai.judge",  # Judge Protocol kwargs vs impls; own PR
