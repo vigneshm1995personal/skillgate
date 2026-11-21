@@ -24,6 +24,66 @@ def test_with_running_python_rewrites_bare_python3() -> None:
     assert with_running_python([]) == []
 
 
+def test_sandbox_env_allowlist_drops_unlisted_secret(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("FOO_TOKEN", "not-for-sandbox")
+    env = _sandbox_env(None)
+    assert "FOO_TOKEN" not in env
+
+
+@pytest.mark.parametrize(
+    "name,value",
+    [
+        ("CODEX_HOME", "/tmp/codex-home"),
+        ("CLAUDE_CONFIG_DIR", "/tmp/claude-config"),
+        ("HTTP_PROXY", "http://127.0.0.1:8080"),
+        ("HTTPS_PROXY", "https://127.0.0.1:8443"),
+        ("NO_PROXY", "localhost"),
+        ("http_proxy", "http://127.0.0.1:8080"),
+        ("https_proxy", "https://127.0.0.1:8443"),
+        ("no_proxy", "localhost"),
+        ("SSL_CERT_FILE", "/etc/ssl/cert.pem"),
+        ("SSL_CERT_DIR", "/etc/ssl/certs"),
+        ("REQUESTS_CA_BUNDLE", "/etc/ssl/ca-bundle.crt"),
+    ],
+)
+def test_sandbox_env_allowlist_passes_harness_vars(
+    monkeypatch: pytest.MonkeyPatch, name: str, value: str
+) -> None:
+    monkeypatch.setenv(name, value)
+    env = _sandbox_env(None)
+    assert env.get(name) == value
+
+
+def test_sandbox_child_inherits_codex_home_from_pytest_isolation(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """conftest ``_isolate_codex_home`` must survive the sandbox allowlist."""
+    isolated = str(tmp_path / "pytest-codex-home")
+    monkeypatch.setenv("CODEX_HOME", isolated)
+    work = tmp_path / "work"
+    work.mkdir()
+    sandbox = LocalSandbox(work)
+    try:
+        proc = sandbox.run(
+            [
+                sys.executable,
+                "-c",
+                "import os; print(os.environ.get('CODEX_HOME', ''), end='')",
+            ],
+        )
+        assert proc.returncode == 0, proc.stderr
+        assert proc.stdout == isolated
+    finally:
+        sandbox.close()
+
+
+def test_sandbox_env_includes_extra_and_python_flags() -> None:
+    env = _sandbox_env({"CUSTOM_FLAG": "1"})
+    assert env["CUSTOM_FLAG"] == "1"
+    assert env["PYTHONDONTWRITEBYTECODE"] == "1"
+    assert env["PYTHONUNBUFFERED"] == "1"
+
+
 def test_sandbox_env_puts_running_interpreter_first_on_path(tmp_path: Path) -> None:
     fake = str(tmp_path / "bin")
     env = _sandbox_env({"PATH": fake})

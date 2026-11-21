@@ -15,6 +15,7 @@ import pytest
 from skillgate_ai import helper as helper_mod
 from skillgate_ai.errors import SKILL_CHANGED_MESSAGE, customer_job_error
 from skillgate_ai.helper import connect, install_launchd_plist, process_job, run_helper
+from skillgate_ai.http_retry import RetryableStatus
 from skillgate_ai.pack import copy_skill_pack, skill_pack_hash
 
 
@@ -244,7 +245,7 @@ def test_http_get_wraps_urlerror(monkeypatch: pytest.MonkeyPatch) -> None:
     def boom(*args, **kwargs):
         raise urllib.error.URLError("timed out")
 
-    monkeypatch.setattr(urllib.request, "urlopen", boom)
+    monkeypatch.setattr(helper_mod, "_urlopen", boom)
     with pytest.raises(helper_mod.SkillGateError) as exc:
         helper_mod._http_get("https://host.example/bundle")
     assert exc.value.message == helper_mod._UNREACHABLE
@@ -263,7 +264,7 @@ def test_read_json_wraps_bad_payload(monkeypatch: pytest.MonkeyPatch) -> None:
         def __exit__(self, *args) -> bool:
             return False
 
-    monkeypatch.setattr(urllib.request, "urlopen", lambda *args, **kwargs: _Resp())
+    monkeypatch.setattr(helper_mod, "_urlopen", lambda *args, **kwargs: _Resp())
     req = urllib.request.Request("https://host.example/poll", method="GET")
     with pytest.raises(helper_mod.SkillGateError) as exc:
         helper_mod._read_json(req, timeout=1)
@@ -281,7 +282,7 @@ def test_http_get_wraps_incomplete_read(monkeypatch: pytest.MonkeyPatch) -> None
         def __exit__(self, *args) -> bool:
             return False
 
-    monkeypatch.setattr(urllib.request, "urlopen", lambda *args, **kwargs: _Resp())
+    monkeypatch.setattr(helper_mod, "_urlopen", lambda *args, **kwargs: _Resp())
     with pytest.raises(helper_mod.SkillGateError) as exc:
         helper_mod._http_get("https://host.example/bundle")
     assert exc.value.message == helper_mod._UNREACHABLE
@@ -310,7 +311,7 @@ def test_run_helper_reports_network_error_after_claim(
         raise urllib.error.URLError("timed out")
 
     monkeypatch.setattr(helper_mod, "_http_post", fake_post)
-    monkeypatch.setattr(urllib.request, "urlopen", boom)
+    monkeypatch.setattr(helper_mod, "_urlopen", boom)
     run_helper({"url": "https://host.example", "token": "tok"}, once=True)
     assert reported
     assert reported[0]["status"] == "failed"
@@ -349,10 +350,142 @@ def test_run_helper_reports_incomplete_read_after_claim(
             return False
 
     monkeypatch.setattr(helper_mod, "_http_post", fake_post)
-    monkeypatch.setattr(urllib.request, "urlopen", lambda *args, **kwargs: _Resp())
+    monkeypatch.setattr(helper_mod, "_urlopen", lambda *args, **kwargs: _Resp())
     run_helper({"url": "https://host.example", "token": "tok"}, once=True)
     assert reported
     assert reported[0]["status"] == "failed"
     blob = json.dumps(reported[0])
     assert "IncompleteRead" not in blob
     assert "Couldn't reach Skill Gate" in reported[0]["error"]
+
+
+def test_connect_config_dir_is_0700(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    target = tmp_path / "cfg" / "helper.json"
+    monkeypatch.setattr(helper_mod, "CONFIG_PATH", target)
+    monkeypatch.setattr(
+        helper_mod,
+        "_http_post",
+        lambda url, payload, **kwargs: {
+            "token": "tok",
+            "device_id": "dev-1",
+            "name": "My Mac",
+        },
+    )
+    connect("https://host.example", "ABC12345")
+    assert target.parent.is_dir()
+    assert os.stat(target.parent).st_mode & 0o777 == 0o700
+
+
+def test_exchange_post_not_retried_on_503(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    target = tmp_path / "helper.json"
+    monkeypatch.setattr(helper_mod, "CONFIG_PATH", target)
+    calls = {"n": 0}
+
+    def flaky(_req, **kwargs):
+        calls["n"] += 1
+        raise RetryableStatus(503)
+
+    monkeypatch.setattr(helper_mod, "_urlopen", flaky)
+    with pytest.raises(helper_mod.SkillGateError):
+        connect("https://host.example", "ABC12345")
+    assert calls["n"] == 1
+
+
+def test_poll_post_not_retried_on_503(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = {"n": 0}
+
+    def flaky(_req, **kwargs):
+        calls["n"] += 1
+        raise RetryableStatus(503)
+
+    monkeypatch.setattr(helper_mod, "_urlopen", flaky)
+    run_helper({"url": "https://host.example", "token": "tok"}, once=True)
+    assert calls["n"] == 1
+
+
+def test_results_post_retries_on_503(monkeypatch: pytest.MonkeyPatch) -> None:
+    result_attempts = {"n": 0}
+    monkeypatch.setattr("skillgate_ai.http_retry.sleep", lambda _s: None)
+
+    job = {
+        "id": "j1",
+        "skill_name": "pdf",
+        "skill_md_hash": "abc",
+        "targets": [],
+    }
+
+    def flaky(req, **kwargs):
+        if req.full_url.endswith("/api/helper/poll"):
+            payload = json.dumps({"job": job}).encode("utf-8")
+
+            class _Poll:
+                def read(self) -> bytes:
+                    return payload
+
+                def __enter__(self) -> _Poll:
+                    return self
+
+                def __exit__(self, *args) -> bool:
+                    return False
+
+            return _Poll()
+        if "/api/helper/results/" in req.full_url:
+            result_attempts["n"] += 1
+            if result_attempts["n"] < 3:
+                raise RetryableStatus(503)
+
+            class _Ok:
+                def read(self) -> bytes:
+                    return b"{}"
+
+                def __enter__(self) -> _Ok:
+                    return self
+
+                def __exit__(self, *args) -> bool:
+                    return False
+
+            return _Ok()
+        raise AssertionError(f"unexpected url {req.full_url}")
+
+    monkeypatch.setattr(helper_mod, "_urlopen", flaky)
+    monkeypatch.setattr(
+        helper_mod, "process_job", lambda *args, **kwargs: {"status": "installed", "targets": []}
+    )
+    run_helper({"url": "https://host.example", "token": "tok"}, once=True)
+    assert result_attempts["n"] == 3
+
+
+def test_redirect_strips_authorization_cross_origin() -> None:
+    handler = helper_mod._StripAuthRedirectHandler()
+    req = urllib.request.Request(
+        "https://host.example/start",
+        headers={"Authorization": "Bearer secret-token"},
+        method="GET",
+    )
+
+    class _Resp:
+        status = 302
+        headers = {"Location": "http://other.example/path"}
+
+    new_req = handler.redirect_request(req, None, 302, "Found", {}, "http://other.example/path")
+    assert new_req is not None
+    lowered = {k.lower(): v for k, v in new_req.header_items()}
+    assert "authorization" not in lowered
+
+
+def test_redirect_keeps_authorization_same_origin() -> None:
+    handler = helper_mod._StripAuthRedirectHandler()
+    req = urllib.request.Request(
+        "https://host.example/start",
+        headers={"Authorization": "Bearer secret-token"},
+        method="GET",
+    )
+
+    class _Resp:
+        status = 302
+        headers = {"Location": "https://host.example/other"}
+
+    new_req = handler.redirect_request(req, None, 302, "Found", {}, "https://host.example/other")
+    assert new_req is not None
+    lowered = {k.lower(): v for k, v in new_req.header_items()}
+    assert lowered.get("authorization") == "Bearer secret-token"

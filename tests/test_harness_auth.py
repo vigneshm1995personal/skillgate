@@ -247,6 +247,7 @@ def test_claude_startable_with_cli_login(monkeypatch: pytest.MonkeyPatch) -> Non
 def test_claude_run_omits_empty_key_when_cli_login(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
+    monkeypatch.delenv("CLAUDE_CONFIG_DIR", raising=False)
     sandbox = _FakeSandbox(tmp_path)
     _stub_run(monkeypatch)
     monkeypatch.setattr("skillgate_ai.harness.auth._claude_ready", lambda _c: True)
@@ -257,6 +258,32 @@ def test_claude_run_omits_empty_key_when_cli_login(
     assert "CLAUDE_CONFIG_DIR" not in sandbox.env
     assert sandbox.env.get("CLAUDE_CODE_DISABLE_BUNDLED_SKILLS") == "1"
     assert result.auth_mode == AUTH_CLI_LOGIN
+
+
+def test_claude_run_passes_host_claude_config_dir(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    host_config = str(tmp_path / "host-claude-config")
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", host_config)
+    sandbox = _FakeSandbox(tmp_path / "ws")
+    sandbox.workspace.mkdir()
+    _stub_run(monkeypatch)
+    monkeypatch.setattr("skillgate_ai.harness.auth._claude_ready", lambda _c: True)
+    monkeypatch.setattr("skillgate_ai.harness.bins._resolve_claude_bin", lambda _p: "/bin/claude")
+    ClaudeCodeHarness(_cfg(anthropic_api_key=None)).run(sandbox, "task", [], timeout_sec=5)
+    assert sandbox.env.get("CLAUDE_CONFIG_DIR") == host_config
+
+
+def test_codex_run_passes_host_codex_home(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    host_codex = str(tmp_path / "host-codex-home")
+    monkeypatch.setenv("CODEX_HOME", host_codex)
+    sandbox = _FakeSandbox(tmp_path / "ws")
+    sandbox.workspace.mkdir()
+    _stub_run(monkeypatch)
+    monkeypatch.setattr("skillgate_ai.harness.auth._codex_ready", lambda _c: True)
+    monkeypatch.setattr("skillgate_ai.harness.bins._resolve_codex_bin", lambda _p: "/bin/codex")
+    CodexCliHarness(_cfg(codex_api_key=None)).run(sandbox, "task", [], timeout_sec=5)
+    assert sandbox.env.get("CODEX_HOME") == host_codex
 
 
 def test_claude_run_injects_key_when_set(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:

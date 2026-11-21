@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+
 import skillgate_ai.harness.auth as auth
 import skillgate_ai.harness.bins as bins
 import skillgate_ai.harness.selection as selection
@@ -171,6 +173,9 @@ class CodexCliHarness:
         env: dict[str, str] = {"SKILLGATE_TASK": prompt}
         if key:
             env["CODEX_API_KEY"] = key
+        codex_home = os.environ.get("CODEX_HOME", "").strip()
+        if codex_home:
+            env["CODEX_HOME"] = codex_home
         proc = _sandbox_run(sandbox, command, env=env, timeout=timeout_sec)
         _raise_if_cannot_run(proc.stdout or "", proc.stderr or "")
         transcript = _codex_transcript(proc.stdout or "", proc.stderr or "")

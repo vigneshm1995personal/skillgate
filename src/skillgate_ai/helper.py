@@ -7,6 +7,7 @@ never listens on a port.
 
 from __future__ import annotations
 
+import contextlib
 import http.client
 import io
 import json
@@ -46,11 +47,17 @@ def helper_config_path() -> Path:
     return CONFIG_PATH
 
 
-def _http_post(url: str, payload: dict, *, headers: dict | None = None) -> dict:
+def _http_post(
+    url: str,
+    payload: dict,
+    *,
+    headers: dict | None = None,
+    retries: bool = False,
+) -> dict:
     data = json.dumps(payload).encode("utf-8")
     hdrs = {"Content-Type": "application/json", **(headers or {})}
     req = urllib.request.Request(url, data=data, method="POST", headers=hdrs)
-    return _read_json(req, timeout=60)
+    return _read_json(req, timeout=60, retries=retries)
 
 
 def _request_error(exc: BaseException) -> SkillGateError:
@@ -59,10 +66,44 @@ def _request_error(exc: BaseException) -> SkillGateError:
     return SkillGateError(_UNREACHABLE)
 
 
-def _urlopen_bytes(req: urllib.request.Request, *, timeout: int) -> bytes:
+class _StripAuthRedirectHandler(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        new_req = super().redirect_request(req, fp, code, msg, headers, newurl)
+        if new_req is None:
+            return None
+        old = urllib.parse.urlparse(req.full_url)
+        new = urllib.parse.urlparse(newurl)
+        if (old.scheme, old.hostname, old.port) == (new.scheme, new.hostname, new.port):
+            return new_req
+        stripped = {
+            key: value for key, value in new_req.header_items() if key.lower() != "authorization"
+        }
+        return urllib.request.Request(
+            newurl,
+            data=new_req.data,
+            headers=stripped,
+            method=new_req.get_method(),
+        )
+
+
+_HELPER_OPENER: urllib.request.OpenerDirector | None = None
+
+
+def _helper_opener() -> urllib.request.OpenerDirector:
+    global _HELPER_OPENER
+    if _HELPER_OPENER is None:
+        _HELPER_OPENER = urllib.request.build_opener(_StripAuthRedirectHandler())
+    return _HELPER_OPENER
+
+
+def _urlopen(req: urllib.request.Request, *, timeout: int):
+    return _helper_opener().open(req, timeout=timeout)
+
+
+def _urlopen_bytes(req: urllib.request.Request, *, timeout: int, retries: bool = True) -> bytes:
     def _once() -> bytes:
         try:
-            with urllib.request.urlopen(req, timeout=timeout) as resp:
+            with _urlopen(req, timeout=timeout) as resp:
                 return resp.read()
         except urllib.error.HTTPError as exc:
             if is_retryable_status(exc.code):
@@ -74,7 +115,7 @@ def _urlopen_bytes(req: urllib.request.Request, *, timeout: int) -> bytes:
             raise _request_error(exc) from exc
 
     try:
-        return call_with_retry(_once)
+        return call_with_retry(_once, retries=retries)
     except RetryableStatus as exc:
         source = exc.response
         if isinstance(source, BaseException):
@@ -94,8 +135,8 @@ def _http_get(url: str, *, headers: dict | None = None) -> bytes:
     return _urlopen_bytes(req, timeout=120)
 
 
-def _read_json(req: urllib.request.Request, *, timeout: int) -> dict:
-    body = _urlopen_bytes(req, timeout=timeout)
+def _read_json(req: urllib.request.Request, *, timeout: int, retries: bool = True) -> dict:
+    body = _urlopen_bytes(req, timeout=timeout, retries=retries)
     if not body:
         return {}
     try:
@@ -129,6 +170,27 @@ def _require_secure_url(base: str) -> None:
     )
 
 
+def _write_helper_config(path: Path, config: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with contextlib.suppress(OSError):
+        os.chmod(path.parent, 0o700)
+    text = json.dumps(config, indent=2) + "\n"
+    fd, tmp_path = tempfile.mkstemp(dir=path.parent, prefix=".helper-", suffix=".json")
+    closed = False
+    try:
+        os.write(fd, text.encode("utf-8"))
+        os.fchmod(fd, 0o600)
+        os.close(fd)
+        closed = True
+        os.replace(tmp_path, path)
+    finally:
+        if not closed:
+            os.close(fd)
+        leftover = Path(tmp_path)
+        if leftover.is_file() and leftover != path:
+            leftover.unlink(missing_ok=True)
+
+
 def connect(url: str, code: str, name: str | None = None) -> dict:
     """Exchange a one-time pairing code for a device token (stored 0600)."""
     base = (url or "").rstrip("/")
@@ -149,10 +211,7 @@ def connect(url: str, code: str, name: str | None = None) -> dict:
         "device_id": device_id,
         "name": data.get("name") or name or "Mac",
     }
-    path = helper_config_path()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(config, indent=2), encoding="utf-8")
-    os.chmod(path, 0o600)
+    _write_helper_config(helper_config_path(), config)
     return config
 
 
@@ -289,7 +348,12 @@ def run_helper(config: dict, *, once: bool = False, sleep_sec: int = 5) -> None:
             except Exception as exc:  # noqa: BLE001 — claimed jobs must report failed
                 result = _failed_result(job.get("targets") or [], _friendly_reason(exc))
             try:  # noqa: SIM105
-                _http_post(f"{url}/api/helper/results/{job['id']}", result, headers=headers)
+                _http_post(
+                    f"{url}/api/helper/results/{job['id']}",
+                    result,
+                    headers=headers,
+                    retries=True,
+                )
             except SkillGateError:
                 pass
         if once:

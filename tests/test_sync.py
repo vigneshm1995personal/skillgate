@@ -207,3 +207,66 @@ def test_sync_install_launchd_plist(monkeypatch: pytest.MonkeyPatch, tmp_path: P
     assert plist["RunAtLoad"] is True
     assert "https://github.com/acme/skills.git" in plist["ProgramArguments"]
     assert os.stat(dest).st_mode & 0o777 == 0o644
+
+
+def test_clone_uses_double_dash_and_timeout(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from skillgate_ai import sync as sync_mod
+
+    captured: dict[str, object] = {}
+
+    def fake_run(cmd, **kwargs):
+        captured["cmd"] = list(cmd)
+        captured["timeout"] = kwargs.get("timeout")
+
+        class _Proc:
+            returncode = 0
+            stdout = ""
+            stderr = ""
+
+        return _Proc()
+
+    monkeypatch.setattr(sync_mod.subprocess, "run", fake_run)
+    sync_mod._clone("https://example.com/repo.git", tmp_path / "work")
+    cmd = captured["cmd"]
+    assert "--" in cmd
+    assert cmd[cmd.index("--") + 1] == "https://example.com/repo.git"
+    assert captured["timeout"] == 300
+
+
+def test_clone_rejects_git_transport_syntax(tmp_path: Path) -> None:
+    from skillgate_ai import sync as sync_mod
+    from skillgate_ai.errors import SkillGateError
+
+    with pytest.raises(SkillGateError, match="Invalid git repo URL"):
+        sync_mod._validate_repo_url("git::https://evil.example/repo.git")
+
+
+def test_clone_rejects_option_injection_url(tmp_path: Path) -> None:
+    from skillgate_ai import sync as sync_mod
+    from skillgate_ai.errors import SkillGateError
+
+    with pytest.raises(SkillGateError, match="Invalid git repo URL"):
+        sync_mod._clone("--upload-pack=echo pwned", tmp_path / "work")
+
+
+def test_clone_error_redacts_credentials(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    from skillgate_ai import sync as sync_mod
+    from skillgate_ai.errors import SkillGateError
+
+    def fake_run(cmd, **kwargs):
+        class _Proc:
+            returncode = 1
+            stdout = ""
+            stderr = "fatal: auth failed for https://user:secret@github.com/acme/repo.git"
+
+        return _Proc()
+
+    monkeypatch.setattr(sync_mod.subprocess, "run", fake_run)
+    url = "https://user:secret@github.com/acme/repo.git"
+    with pytest.raises(SkillGateError) as exc:
+        sync_mod._clone(url, tmp_path / "work")
+    message = f"{exc.value.message} {exc.value.hint or ''}"
+    assert "secret" not in message
+    assert "user:secret@" not in message
