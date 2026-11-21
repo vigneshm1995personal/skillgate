@@ -7,7 +7,7 @@ path; drafts and suggest-from-skill checks are not.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from skillgate_ai.case_pack.models import (
     _JSONISH_RE,
@@ -65,7 +65,7 @@ def pin_checks(skill_path: str | Path, checks: list[dict[str, Any]]) -> CasePack
         case = _case_from_check(root, raw, skill_name)
         by_id[case.id] = case
     pack = CasePack(
-        schema_version=1,
+        schema=1,
         skill=skill_name,
         cases=list(by_id.values()),
         budgets=existing.budgets if existing else None,
@@ -102,7 +102,7 @@ def pin_case_ids(skill_path: str | Path, case_ids: list[str]) -> CasePack:
     if missing:
         raise ValueError(f"Unknown case ids: {', '.join(missing)}")
     out = CasePack(
-        schema_version=1,
+        schema=1,
         skill=pack.skill,
         cases=updated,
         budgets=pack.budgets,
@@ -292,5 +292,5 @@ def _persist_golden(
     if len(contains_list) > 1:
         text = "\n".join(contains_list) + "\n"
     write_pack_file(root, rel=rel, content=text)
-    kind = "json" if suffix == ".json" else "text"
+    kind: Literal["json", "text"] = "json" if suffix == ".json" else "text"
     return CaseGolden(output_path=dest_output, path=rel, kind=kind)

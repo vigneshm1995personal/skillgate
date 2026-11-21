@@ -6,6 +6,7 @@ import os
 import signal
 import subprocess
 import threading
+from typing import Any
 
 import skillgate_ai.harness.auth as auth
 import skillgate_ai.harness.bins as bins
@@ -16,7 +17,7 @@ from skillgate_ai.config import (
 from skillgate_ai.harness.base import _AGENT_INSTALL, _login_timeout_sec
 
 
-def _terminate_process_group(proc: subprocess.Popen[str]) -> None:
+def _terminate_process_group(proc: subprocess.Popen[Any]) -> None:
     """SIGTERM the child's process group, then SIGKILL if it ignores the term."""
     if proc.poll() is not None:
         return

@@ -122,7 +122,7 @@ def register_case_import(case_app: typer.Typer) -> None:
                 dest,
                 data,
                 filename=file.name,
-                on_conflict=conflict,  # type: ignore[arg-type]
+                on_conflict=conflict,  # type: ignore[arg-type]  # Typer str; values validated to ON_CONFLICT literals above
                 dry_run=dry_run,
             )
         except CaseImportError as exc:

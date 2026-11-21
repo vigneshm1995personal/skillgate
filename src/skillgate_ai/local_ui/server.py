@@ -7,6 +7,7 @@ import threading
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from typing import cast
 from urllib.parse import unquote, urlparse
 
 from skillgate_ai.local_ui.api import UiState, handle
@@ -41,7 +42,9 @@ def make_handler(state: UiState):
             return
 
         def _cors(self) -> None:
-            host = self.headers.get("Host", f"127.0.0.1:{self.server.server_address[1]}")
+            # TCP HTTPServer: (host, port)
+            port = cast("tuple[str, int]", self.server.server_address)[1]
+            host = self.headers.get("Host", f"127.0.0.1:{port}")
             origin = self.headers.get("Origin") or f"http://{host}"
             if origin.startswith(("http://127.0.0.1", "http://localhost")):
                 self.send_header("Access-Control-Allow-Origin", origin)
@@ -114,15 +117,15 @@ def make_handler(state: UiState):
                 payload = json.dumps({"error": str(exc)}).encode("utf-8")
                 self._send(400, payload, "application/json")
                 return
-            status, data, ctype = handle(
+            status, payload_data, ctype = handle(
                 state, method=self.command, path=route, query=parsed.query, body=body
             )
-            if data is None:
+            if payload_data is None:
                 raw = b""
-            elif isinstance(data, bytes):
-                raw = data
+            elif isinstance(payload_data, bytes):
+                raw = payload_data
             else:
-                raw = json.dumps(data).encode("utf-8")
+                raw = json.dumps(payload_data).encode("utf-8")
             self._send(status, raw, ctype)
 
     return Handler
@@ -139,7 +142,8 @@ def start_background(
     server = ThreadingHTTPServer((host, port), make_handler(state))
     thread = threading.Thread(target=server.serve_forever, name="skillgate-ui", daemon=True)
     thread.start()
-    bound_host, bound_port = server.server_address[:2]
+    # AF_INET bind → (str, int)
+    bound_host, bound_port = cast("tuple[str, int]", server.server_address[:2])
     base = f"http://{bound_host}:{bound_port}"
     return server, base, state
 
@@ -154,7 +158,7 @@ def serve_ui(
 ) -> None:
     state = UiState(root=root.resolve(), initial_pack=pack.resolve() if pack else None)
     server = ThreadingHTTPServer((host, port), make_handler(state))
-    bound_host, bound_port = server.server_address[:2]
+    bound_host, bound_port = cast("tuple[str, int]", server.server_address[:2])
     url = f"http://{bound_host}:{bound_port}/"
     print(f"Skill Gate UI (local, no account) at {url}", flush=True)
     print("Stop with Ctrl+C.", flush=True)

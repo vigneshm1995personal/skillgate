@@ -313,7 +313,7 @@ def ping_judge(cfg: LLMConfig, *, verbose: bool = False) -> dict[str, str | bool
     return {"ok": ok, "message": message}
 
 
-def judge_stamp(judge: Judge | None) -> dict[str, str]:
+def judge_stamp(judge: Judge | None) -> dict[str, Any]:
     if judge is None or isinstance(judge, SkipJudge) or getattr(judge, "name", "") == "skip":
         return {
             "provider": "skip",

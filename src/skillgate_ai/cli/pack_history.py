@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import typer
 
@@ -30,7 +31,8 @@ def _print_history_rows(rows: list) -> None:
                 gate = "not run"
             who = "Not scored"
         else:
-            who = report.get("scored_by") if isinstance(report.get("scored_by"), str) else ""
+            scored_by = report.get("scored_by")
+            who = scored_by if isinstance(scored_by, str) else ""
             if not who or "openai decisions" in who.lower() or "vercel ai gateway" in who.lower():
                 stamp = None
                 if isinstance(report.get("config"), dict):
@@ -151,7 +153,8 @@ def _find_history_row(run_id: str, pack: Path | None) -> tuple[dict, Path | None
 def _print_history_run(row: dict) -> None:
     from skillgate_ai import cli as _cli
 
-    report = row.get("report") if isinstance(row.get("report"), dict) else {}
+    raw_report = row.get("report")
+    report: dict[str, Any] = raw_report if isinstance(raw_report, dict) else {}
     passed_flag = row.get("passed")
     err = row.get("error") if isinstance(row.get("error"), dict) else {}
     cannot_run = "cannot run" in str((err or {}).get("message") or "").lower()
@@ -179,7 +182,8 @@ def _print_history_run(row: dict) -> None:
             _cli.console.print(f"  {message}")
         if hint:
             _cli.console.print(f"  {hint}")
-    tasks = report.get("tasks") if isinstance(report.get("tasks"), list) else []
+    raw_tasks = report.get("tasks")
+    tasks: list[Any] = raw_tasks if isinstance(raw_tasks, list) else []
     for task in tasks:
         if not isinstance(task, dict):
             continue

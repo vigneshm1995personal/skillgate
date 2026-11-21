@@ -118,8 +118,9 @@ def _infer_from_skill_tool(blob: str, skills: list[Skill]) -> str | None:
         for item in chunks:
             if item.get("tool") != "skill":
                 continue
-            args = item.get("args") if isinstance(item.get("args"), dict) else {}
-            name = _skill_tool_name_from_args(args)
+            raw_args = item.get("args")
+            skill_args: dict[str, Any] = raw_args if isinstance(raw_args, dict) else {}
+            name = _skill_tool_name_from_args(skill_args)
             if not name:
                 continue
             resolved = canonical_skill_name(name, skills) or name

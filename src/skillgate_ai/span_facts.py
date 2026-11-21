@@ -510,7 +510,8 @@ def _refund_status(row: Mapping[str, Any]) -> str:
     resp = _response_of(row)
     status = str(resp.get("status") or "").strip().lower()
     http = resp.get("http_status")
-    err = resp.get("error") if isinstance(resp.get("error"), Mapping) else {}
+    raw_err = resp.get("error")
+    err: Mapping[str, Any] = raw_err if isinstance(raw_err, Mapping) else {}
     msg = str(err.get("message") or resp.get("message") or "").lower()
     if status == "succeeded":
         return "succeeded"

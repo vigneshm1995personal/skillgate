@@ -6,6 +6,7 @@ import re
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import yaml
 
@@ -191,8 +192,10 @@ def behavior_question_ids(judge: dict | None) -> list[str]:
     extras = [
         str(item).strip() for item in (judge.get("extra_failures") or []) if str(item).strip()
     ]
-    cells = judge.get("cells") if isinstance(judge.get("cells"), dict) else {}
-    questions = judge.get("questions") if isinstance(judge.get("questions"), dict) else {}
+    raw_cells = judge.get("cells")
+    cells: dict[str, Any] = raw_cells if isinstance(raw_cells, dict) else {}
+    raw_questions = judge.get("questions")
+    questions: dict[str, Any] = raw_questions if isinstance(raw_questions, dict) else {}
     found: list[str] = []
 
     def add(qid: str) -> None:
@@ -524,7 +527,7 @@ def _description_from_prompts(name: str, prompts: list[str]) -> str:
 
 
 def _when_clause(prompts: list[str]) -> str:
-    bits = []
+    bits: list[str] = []
     for prompt in prompts[:3]:
         cleaned = re.sub(r"\s+", " ", prompt).strip().rstrip(".")
         if len(cleaned) > 90:

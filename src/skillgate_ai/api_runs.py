@@ -52,7 +52,8 @@ def start_run(state: AppState, body: dict[str, Any]) -> dict[str, Any]:
     checks = body.get("checks") if isinstance(body.get("checks"), list) else None
     if not get_llm_config(state.root).has_any_key:
         raise missing_key_error()
-    config = body.get("config") if isinstance(body.get("config"), dict) else {}
+    raw_config = body.get("config")
+    config: dict[str, Any] = raw_config if isinstance(raw_config, dict) else {}
     if state.gate_busy():
         fail(409, "A check or compare is already running.")
     with state.lock:
@@ -122,7 +123,7 @@ def start_run(state: AppState, body: dict[str, Any]) -> dict[str, Any]:
                 report["tryout"] = True
             status = "error" if result.error else "done"
             passed = None if result.report is None else result.report.passed
-            harness = (report or {}).get("harness") or record.get("harness")
+            final_harness = (report or {}).get("harness") or record.get("harness")
             decision, reason = local_gate(passed, status=status, tryout=tryout, report=report)
             record.update(
                 {
@@ -133,7 +134,7 @@ def start_run(state: AppState, body: dict[str, Any]) -> dict[str, Any]:
                     "gate_reason": reason,
                     "error": result.error,
                     "report": report,
-                    "harness": harness,
+                    "harness": final_harness,
                     "demo_notice": result.demo_notice,
                     "tryout": tryout,
                     "exit_code": result.exit_code,
@@ -143,6 +144,7 @@ def start_run(state: AppState, body: dict[str, Any]) -> dict[str, Any]:
             )
             attach_stamped_config(record, report)
         except Exception as exc:  # noqa: BLE001 — surface to the poller
+            exit_code: int | None
             blocked = timeout_harness_error(exc)
             if blocked is not None:
                 message = blocked.message

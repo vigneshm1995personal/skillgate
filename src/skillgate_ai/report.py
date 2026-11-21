@@ -548,7 +548,8 @@ def _task_check_answers(task: TaskReport) -> tuple[list[dict[str, str]], str]:
     elif isinstance(raw, list):
         cells = [item for item in raw if isinstance(item, dict)]
     if cells:
-        answers_map = judge.get("answers") if isinstance(judge.get("answers"), dict) else {}
+        raw_answers_map = judge.get("answers")
+        answers_map: dict[str, Any] = raw_answers_map if isinstance(raw_answers_map, dict) else {}
         rows: list[dict[str, str]] = []
         if isinstance(raw, dict):
             pairs = ((str(key), cell) for key, cell in raw.items() if isinstance(cell, dict))
@@ -567,7 +568,7 @@ def _task_check_answers(task: TaskReport) -> tuple[list[dict[str, str]], str]:
                     row["source_label"] = label
             rows.append(row)
         return rows, "openai"
-    rows: list[dict[str, str]] = []
+    rows = []
     for score in task.scores:
         title = (score.headline or score.detail or "Check").strip()
         mark = "Yes" if score.passed else "No"
@@ -606,8 +607,10 @@ def _extra_source_lines(task: TaskReport) -> list[str]:
     from skillgate_ai.judge_bank import CHECK_CELL_ORDER, SOFT_CELL_ORDER
 
     judge = task.judge if isinstance(task.judge, dict) else {}
-    cells = judge.get("cells") if isinstance(judge.get("cells"), dict) else {}
-    answers = judge.get("answers") if isinstance(judge.get("answers"), dict) else {}
+    raw_cells = judge.get("cells")
+    cells: dict[str, Any] = raw_cells if isinstance(raw_cells, dict) else {}
+    raw_answers = judge.get("answers")
+    answers: dict[str, Any] = raw_answers if isinstance(raw_answers, dict) else {}
     lines: list[str] = []
     for key, cell in cells.items():
         if key in CHECK_CELL_ORDER or key in SOFT_CELL_ORDER:
