@@ -101,7 +101,7 @@ jobs:
           set -e
           echo "$out"
           test "$code" -eq 2
-          echo "$out" | grep -F "pip install 'skillgate-ai[ui]'"
+          echo "$out" | tr -d '\n' | grep -F "pip install 'skillgate-ai[ui]'"
 
   web-build:
     runs-on: ubuntu-latest
