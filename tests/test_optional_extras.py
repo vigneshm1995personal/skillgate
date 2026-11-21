@@ -217,7 +217,7 @@ def test_dockerfile_installs_docs_extra_not_ui() -> None:
     text = (ROOT / "Dockerfile").read_text(encoding="utf-8")
     assert "['optional-dependencies']['docs']" in text
     assert "[ui]" not in text
-    assert "fastapi" not in text
+    assert "fastapi" not in text.lower()
 
 
 def test_readme_and_quickstart_document_extras() -> None:

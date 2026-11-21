@@ -64,10 +64,21 @@ jobs:
       - name: core install pulls no ui/docs extras
         run: |
           python - <<'EOF'
-          import importlib.util, sys
-          mods = ("fastapi", "starlette", "uvicorn", "pypdf", "docx", "openpyxl", "reportlab")
-          found = [m for m in mods if importlib.util.find_spec(m)]
-          sys.exit(f"core install pulled extras: {found}" if found else 0)
+          import subprocess, sys
+          names = (
+              "fastapi",
+              "starlette",
+              "uvicorn",
+              "python-multipart",
+              "pypdf",
+              "python-docx",
+              "openpyxl",
+              "reportlab",
+          )
+          out = subprocess.check_output([sys.executable, "-m", "pip", "freeze"], text=True)
+          installed = {line.split("==", 1)[0].lower() for line in out.splitlines() if "==" in line}
+          pulled = [n for n in names if n.lower() in installed]
+          sys.exit(f"core install pulled extras: {pulled}" if pulled else 0)
           EOF
       - run: skillgate --help
       - run: skillgate checks show path_efficiency
