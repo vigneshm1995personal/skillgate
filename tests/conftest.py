@@ -50,9 +50,9 @@ def _no_live_keys(monkeypatch: pytest.MonkeyPatch) -> None:
     from skillgate_ai.keys import reset_key_env_bindings
 
     reset_key_env_bindings()
-    monkeypatch.setattr("skillgate_ai.harness._codex_session_ok", lambda cfg: False)
-    monkeypatch.setattr("skillgate_ai.harness._cursor_session_ok", lambda cfg: False)
-    monkeypatch.setattr("skillgate_ai.harness._claude_session_ok", lambda cfg: False)
+    monkeypatch.setattr("skillgate_ai.harness.auth._codex_session_ok", lambda cfg: False)
+    monkeypatch.setattr("skillgate_ai.harness.auth._cursor_session_ok", lambda cfg: False)
+    monkeypatch.setattr("skillgate_ai.harness.auth._claude_session_ok", lambda cfg: False)
     monkeypatch.setenv("AI_GATEWAY_API_KEY", "")
     monkeypatch.setenv("CURSOR_API_KEY", "")
     monkeypatch.setenv("CODEX_API_KEY", "")
@@ -95,8 +95,10 @@ def enable_cursor_agent(monkeypatch: pytest.MonkeyPatch, root: Path | None = Non
     if root is not None:
         monkeypatch.setenv("SKILLGATE_ROOT", str(root))
     monkeypatch.setenv("SKILLGATE_CURSOR_API_KEY", "cur-test")
-    monkeypatch.setattr("skillgate_ai.harness._resolve_agent_bin", lambda _preferred: "/bin/agent")
-    monkeypatch.setattr("skillgate_ai.harness._resolve_claude_bin", lambda _preferred: None)
+    monkeypatch.setattr(
+        "skillgate_ai.harness.bins._resolve_agent_bin", lambda _preferred: "/bin/agent"
+    )
+    monkeypatch.setattr("skillgate_ai.harness.bins._resolve_claude_bin", lambda _preferred: None)
 
 
 @pytest.fixture

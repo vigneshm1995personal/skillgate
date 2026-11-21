@@ -130,13 +130,13 @@ def login(
     from skillgate_ai.config import get_llm_config
     from skillgate_ai.harness import (
         AUTH_CLI_LOGIN,
-        claude_auth_kind,
         cursor_auth_kind,
         format_harness_status,
         harness_auth_status,
         normalize_login_agent,
         run_official_login,
     )
+    from skillgate_ai.harness.auth import claude_auth_kind
 
     root = _boot()
     if status:

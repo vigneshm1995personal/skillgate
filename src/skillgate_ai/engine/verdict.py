@@ -246,7 +246,7 @@ def _live_verdict(
             return False, list(det_failures), unscored
         if reason == UNUSABLE_ANSWER:
             return False, [reason], {**unscored, "passed": False}
-        return None, [reason], unscored
+        return None, [reason], unscored  # type: ignore[return-value]
     if judge.get("status") == "skip" or judge.get("passed") is None:
         return det_passed, det_failures, judge
     passed = bool(judge.get("passed"))

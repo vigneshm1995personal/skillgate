@@ -92,12 +92,12 @@ def test_claude_harness_preserves_host_config_by_default(
 
     monkeypatch.delenv("SKILLGATE_CLAUDE_ISOLATE_CONFIG", raising=False)
     assert claude_config_isolation_enabled() is False
-    monkeypatch.setattr("skillgate_ai.harness._claude_ready", lambda _c: True)
-    monkeypatch.setattr("skillgate_ai.harness._resolve_claude_bin", lambda _p: "/bin/claude")
+    monkeypatch.setattr("skillgate_ai.harness.auth._claude_ready", lambda _c: True)
+    monkeypatch.setattr("skillgate_ai.harness.bins._resolve_claude_bin", lambda _p: "/bin/claude")
     monkeypatch.setattr(
-        "skillgate_ai.harness._resolve_trigger_evidence", lambda *a, **k: (None, [])
+        "skillgate_ai.harness.selection._resolve_trigger_evidence", lambda *a, **k: (None, [])
     )
-    monkeypatch.setattr("skillgate_ai.harness._write_selection", lambda *a: None)
+    monkeypatch.setattr("skillgate_ai.harness.selection._write_selection", lambda *a: None)
     workspace = tmp_path / "ws"
     workspace.mkdir()
     ClaudeCodeHarness(_cfg(anthropic_api_key="ant-test")).run(
@@ -130,12 +130,12 @@ def test_claude_config_isolation_opt_in(tmp_path: Path, monkeypatch: pytest.Monk
 
     monkeypatch.setenv("SKILLGATE_CLAUDE_ISOLATE_CONFIG", "1")
     assert claude_config_isolation_enabled() is True
-    monkeypatch.setattr("skillgate_ai.harness._claude_ready", lambda _c: True)
-    monkeypatch.setattr("skillgate_ai.harness._resolve_claude_bin", lambda _p: "/bin/claude")
+    monkeypatch.setattr("skillgate_ai.harness.auth._claude_ready", lambda _c: True)
+    monkeypatch.setattr("skillgate_ai.harness.bins._resolve_claude_bin", lambda _p: "/bin/claude")
     monkeypatch.setattr(
-        "skillgate_ai.harness._resolve_trigger_evidence", lambda *a, **k: (None, [])
+        "skillgate_ai.harness.selection._resolve_trigger_evidence", lambda *a, **k: (None, [])
     )
-    monkeypatch.setattr("skillgate_ai.harness._write_selection", lambda *a: None)
+    monkeypatch.setattr("skillgate_ai.harness.selection._write_selection", lambda *a: None)
     workspace = tmp_path / "ws"
     workspace.mkdir()
     ClaudeCodeHarness(_cfg()).run(

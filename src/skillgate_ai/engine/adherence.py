@@ -20,7 +20,12 @@ def _extras_all_passed(judged: Mapping[str, Any]) -> bool:
     cells = judged.get("cells") if isinstance(judged.get("cells"), Mapping) else {}
     answers = judged.get("answers") if isinstance(judged.get("answers"), Mapping) else {}
     questions = judged.get("questions") if isinstance(judged.get("questions"), Mapping) else {}
-    extra_ids = {key for blob in (cells, answers, questions) for key in blob if key not in reserved}
+    extra_ids = {
+        key
+        for blob in (cells, answers, questions)
+        for key in (blob or {})
+        if key not in reserved
+    }
     return bool(extra_ids)
 
 
@@ -42,7 +47,7 @@ def _extras_from_source(judged: Mapping[str, Any], source: str) -> bool:
     cells = judged.get("cells") if isinstance(judged.get("cells"), Mapping) else {}
     answers = judged.get("answers") if isinstance(judged.get("answers"), Mapping) else {}
     for blob in (cells, answers):
-        for key, row in blob.items():
+        for key, row in (blob or {}).items():
             if key in reserved or not isinstance(row, Mapping):
                 continue
             if str(row.get("source") or "").strip().lower() == wanted:
