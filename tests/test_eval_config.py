@@ -21,6 +21,7 @@ from skillgate_ai.eval_config import (
     resolve_eval_config,
     stamp_resolved,
     with_timeout_effective,
+    with_model,
 )
 
 
@@ -519,3 +520,21 @@ def test_customer_run_details_names_claude_model() -> None:
     )
     assert "Code agent" in details
     assert "claude-opus-5-5" in details
+
+
+def test_with_model_keeps_requested_alias() -> None:
+    run = EvalRunConfig(harness="claude", model="sonnet", requested_model="sonnet")
+    updated = with_model(run, "claude-sonnet-5-5")
+    assert updated.model == "claude-sonnet-5-5"
+    assert updated.requested_model == "sonnet"
+    payload = updated.to_dict()
+    assert payload["model"] == "claude-sonnet-5-5"
+    assert payload["requested_model"] == "sonnet"
+
+
+def test_with_model_promotes_stamped_alias_when_requested_missing() -> None:
+    run = EvalRunConfig(harness="claude", model="sonnet")
+    updated = with_model(run, "claude-sonnet-5-5")
+    assert updated.model == "claude-sonnet-5-5"
+    assert updated.requested_model == "sonnet"
+

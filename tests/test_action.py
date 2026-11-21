@@ -152,7 +152,7 @@ def test_latest_version_installs_that_exact_release(monkeypatch, tmp_path) -> No
 def test_explicit_version_is_passed_to_pip_install() -> None:
     mod = _load_action_module()
     assert mod.pip_install_args("0.7.9") == [
-        "skillgate-ai==0.7.9",
+        "skillgate-ai[docs]==0.7.9",
     ]
 
 
@@ -376,4 +376,4 @@ def test_install_release_invokes_pip(monkeypatch) -> None:
     mod.install_release("0.7.9")
     assert seen[0][1:3] == ["-m", "pip"]
     assert seen[0][3] == "install"
-    assert seen[0][4] == "skillgate-ai==0.7.9"
+    assert seen[0][4] == "skillgate-ai[docs]==0.7.9"
