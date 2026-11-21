@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# ruff: noqa: E501
 """Fix harness package dependency order and seam-style cross-calls."""
 
 from __future__ import annotations
@@ -71,9 +72,11 @@ def _qualify_seams(text: str, submod: str) -> str:
     for mod, names in SEAM_MODULES.items():
         if RANK[mod] >= rank:
             continue
-        if f"from skillgate_ai.harness import {mod}" not in text:
-            if f"import skillgate_ai.harness.{mod}" not in text:
-                text = f"from skillgate_ai.harness import {mod}\n" + text
+        if (
+            f"from skillgate_ai.harness import {mod}" not in text
+            and f"import skillgate_ai.harness.{mod}" not in text
+        ):
+            text = f"from skillgate_ai.harness import {mod}\n" + text
         for name in names:
             text = re.sub(rf"(?<![\w.]){re.escape(name)}\(", rf"{mod}.{name}(", text)
     return text

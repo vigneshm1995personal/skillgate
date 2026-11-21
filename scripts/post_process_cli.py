@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# ruff: noqa: E501
 """Post-process split cli package."""
 
 from __future__ import annotations

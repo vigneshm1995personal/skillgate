@@ -6,10 +6,8 @@ from __future__ import annotations
 import argparse
 import ast
 import json
-import re
 import subprocess
 import sys
-from collections.abc import Iterable
 from pathlib import Path
 
 BUILTINS = set(dir(__builtins__)) if isinstance(__builtins__, dict) else set(dir(__builtins__))

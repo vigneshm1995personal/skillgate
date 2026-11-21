@@ -1,0 +1,70 @@
+Write a complete implementation spec to the file docs/specs/slim-deps-qa-cleanup.md (create/overwrite). Output ONLY the markdown file content when done — the file must be saved at that path.
+
+Repository: skillgate (PyPI package skillgate-ai), branch origin/main @ 44cff6b.
+
+## Task A: Delete 23 QA/release/dogfood dump test files
+
+These 23 files (15 test_qa_*, 5 test_release_*, 3 test_dogfood_*):
+tests/test_qa_local_flow.py, test_qa_hn_setup.py, test_qa_cli_fixes.py, test_qa_56_round7.py, test_qa_56_round6.py, test_qa_56_round5.py, test_qa_56_round4.py, test_qa_56_round3.py, test_qa_56_retest.py, test_qa_56_followup.py, test_qa_079_fixes.py, test_qa_0712_wording.py, test_qa_0711_fixes.py, test_qa_0710_fixes.py, test_qa_06_fixes.py, test_release_072_round3.py, test_release_072.py, test_release_061_round3.py, test_release_061_round2.py, test_release_061_fixes.py, test_dogfood_v7.py, test_dogfood_v6.py, test_dogfood_fixes.py
+
+For EACH file: one-line delete reason + name the permanent test file(s) that already cover the same behavior (search tests/test_*.py and tests/integration/*.py). Examples of permanent coverage: test_engine.py, test_gate.py, test_check_cli.py, test_judge*.py, test_api_*.py, test_local_ui.py, test_cli_*.py, tests/integration/*.
+
+DO NOT delete or change: tests/integration/*, tests/test_engine.py, tests/conftest.py.
+
+Remove pyproject.toml ruff per-file-ignore for tests/test_qa_0712_wording.py when deleted.
+
+## Task B: Slim core dependencies
+
+Current [project.dependencies] in pyproject.toml (14 packages):
+typer, rich, pyyaml, pydantic, httpx, tenacity, python-dotenv, pypdf, python-docx, openpyxl, reportlab, fastapi, uvicorn, python-multipart
+
+MOVE to optional extras:
+- ui and/or server extra: fastapi, uvicorn, python-multipart (local UI + skillgate ui command)
+- docs and/or office extra: pypdf, python-docx, openpyxl, reportlab (document text extraction, PDF scoring, demo PDF generation)
+- all extra: union of the above
+Keep core: typer, rich, pyyaml, pydantic, httpx, tenacity, python-dotenv (7 packages)
+
+### Import sites today (must document lazy import + which extra):
+
+**fastapi** (top-level today):
+- src/skillgate_ai/api.py, api_compare.py, api_evals.py, api_runs.py, api_shims.py, api_skills.py, api_payloads.py, checks_show.py
+- cli.py: lazy `from skillgate_ai.server import serve_ui` at ui command already
+
+**uvicorn**: src/skillgate_ai/server.py inside serve function (already lazy import uvicorn.run)
+
+**pypdf**: src/skillgate_ai/scorers.py TOP LEVEL (must fix); document_text.py already lazy in _pdf_text; skills/pdf scripts stay bundled skill code not package imports
+
+**reportlab**: src/skillgate_ai/demo_files.py TOP LEVEL; document_text does not use reportlab
+
+**python-docx, openpyxl**: document_text.py lazy in _docx_text, _xlsx_text
+
+**python-multipart**: only via FastAPI UploadFile/File — covered by server/ui extra
+
+### Friendly error pattern
+
+Add src/skillgate_ai/extras.py (or deps.py) with require_extra(name: str) raising ImportError or a small SkillgateExtrasError with EXACT message:
+`Missing optional dependency for {feature}. Install with: pip install 'skillgate-ai[{extra}]'`
+Specify extra name per call site (ui vs docs vs all).
+
+### New tests (spec must name exact test functions and file tests/test_optional_extras.py or similar):
+1. Core CLI `import skillgate_ai.cli` / typer app loads with only core deps (no fastapi installed) — may need subprocess venv in test or importlib checks
+2. Calling serve_ui or create_app without ui extra raises friendly error mentioning pip install skillgate-ai[ui]
+3. Pdf scoring / demo_files without docs extra raises friendly error mentioning [docs]
+4. document_text paths still work when extras installed (dev CI installs all)
+
+### CI/Docker/README updates:
+- .github/workflows/gate.yml: test job needs extras for FastAPI tests; gate job may stay core-only; web-build wheel test runs skillgate ui — needs [ui] or [all]; docker build installs only project.dependencies — pdf example may need reportlab in image OR gate uses prebuilt fixtures; specify solution in spec
+- Dockerfile: build stage pip install — use .[all] or split runtime vs check needs
+- README.md + docs/quickstart.md: document pip install skillgate-ai[ui], [docs], [all]
+
+## Spec structure required:
+1. Summary
+2. Files to delete (table: path | reason | coverage elsewhere)
+3. pyproject.toml exact [project.dependencies] and [project.optional-dependencies] blocks
+4. New module extras.py API
+5. Lazy import checklist (file | symbol | extra | error trigger)
+6. Step-by-step implementation order (numbered)
+7. Acceptance criteria (checklist)
+8. DO-NOT-TOUCH list (no file splitting, no logic changes beyond import gating, keep tests/integration and test_engine.py intact, no version bump)
+
+Read the actual source files in the repo to make the spec precise. Be exhaustive.

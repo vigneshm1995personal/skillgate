@@ -323,7 +323,13 @@ def _run_task(
             )
             task_usage = _combined_usage(task_usage, judged, result, run_config)
             advice = _task_advice(
-                task, scores, skills, result, reference=reference, sibling_prompts=sibling_prompts, judged=judged
+                task,
+                scores,
+                skills,
+                result,
+                reference=reference,
+                sibling_prompts=sibling_prompts,
+                judged=judged,
             )
             breadcrumb_task(
                 "end",
