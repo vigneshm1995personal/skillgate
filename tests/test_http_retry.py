@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+import ssl
+import urllib.error
+
 import httpx
 import pytest
 
 from skillgate_ai.http_retry import (
     DEFAULT_ATTEMPTS,
     RetryableStatus,
+    RetryBudgetExceeded,
     call_with_retry,
     is_retryable_status,
     parse_retry_after,
@@ -109,17 +113,71 @@ def test_respects_retry_after(monkeypatch: pytest.MonkeyPatch) -> None:
     assert delays[0] == 7.0
 
 
-def test_retry_after_capped_at_max_wait(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_retry_after_honored_when_within_deadline(monkeypatch: pytest.MonkeyPatch) -> None:
     delays: list[float] = []
     monkeypatch.setattr("skillgate_ai.http_retry.sleep", delays.append)
+    calls = {"n": 0}
 
     def once() -> str:
-        raise RetryableStatus(503, retry_after=120.0)
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise RetryableStatus(503, retry_after=45.0)
+        return "ok"
+
+    assert call_with_retry(once, max_wait_sec=30.0, deadline_sec=120.0) == "ok"
+    assert delays == [45.0]
+
+
+def test_retry_after_exceeds_deadline_raises_budget_exceeded(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("skillgate_ai.http_retry.sleep", lambda _s: None)
+
+    def once() -> str:
+        raise RetryableStatus(429, retry_after=90.0)
+
+    with pytest.raises(RetryBudgetExceeded):
+        call_with_retry(once, attempts=5, deadline_sec=10.0)
+
+
+def test_does_not_retry_unsupported_protocol() -> None:
+    calls = {"n": 0}
+
+    def once() -> str:
+        calls["n"] += 1
+        raise httpx.UnsupportedProtocol("bad")
+
+    with pytest.raises(httpx.UnsupportedProtocol):
+        call_with_retry(once)
+    assert calls["n"] == 1
+
+
+def test_does_not_retry_ssl_cert_verification_urllib() -> None:
+    calls = {"n": 0}
+
+    def once() -> str:
+        calls["n"] += 1
+        raise urllib.error.URLError(ssl.SSLCertVerificationError("cert"))
+
+    with pytest.raises(urllib.error.URLError):
+        call_with_retry(once)
+    assert calls["n"] == 1
+
+
+def test_stop_before_delay_limits_attempts_under_tight_deadline(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    delays: list[float] = []
+    monkeypatch.setattr("skillgate_ai.http_retry.sleep", delays.append)
+    calls = {"n": 0}
+
+    def once() -> str:
+        calls["n"] += 1
+        raise RetryableStatus(503)
 
     with pytest.raises(RetryableStatus):
-        call_with_retry(once, attempts=2, max_wait_sec=30.0, deadline_sec=10_000)
-    assert delays
-    assert delays[0] == 30.0
+        call_with_retry(once, attempts=100, deadline_sec=0.01, max_wait_sec=30.0)
+    assert calls["n"] < 100
 
 
 def test_gives_up_after_attempt_cap(monkeypatch: pytest.MonkeyPatch) -> None:

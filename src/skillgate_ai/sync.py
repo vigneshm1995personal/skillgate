@@ -10,11 +10,13 @@ from __future__ import annotations
 import json
 import os
 import plistlib
+import re
 import shutil
 import subprocess
 import sys
 import tempfile
 import time
+import urllib.parse
 from pathlib import Path
 
 from skillgate_ai.deploy import adapters, latest_check_passed
@@ -46,15 +48,52 @@ def normalize_targets(targets: list[str] | tuple[str, ...]) -> list[str]:
     return out
 
 
+def _validate_repo_url(repo_url: str) -> str:
+    url = (repo_url or "").strip()
+    if not url:
+        raise SkillGateError("A git repo URL is required.")
+    if url.startswith("-"):
+        raise SkillGateError("Invalid git repo URL.")
+    parsed = urllib.parse.urlparse(url)
+    if parsed.scheme and parsed.scheme not in {"http", "https", "ssh", "git", "file"}:
+        raise SkillGateError("Invalid git repo URL.")
+    if parsed.scheme == "ext" or url.lower().startswith("ext::"):
+        raise SkillGateError("Invalid git repo URL.")
+    if re.search(r"[\x00-\x1f\x7f]", url):
+        raise SkillGateError("Invalid git repo URL.")
+    return url
+
+
+def _redact_repo_url(repo_url: str) -> str:
+    parsed = urllib.parse.urlparse(repo_url)
+    if not parsed.username and not parsed.password:
+        return repo_url
+    host = parsed.hostname or ""
+    netloc = host
+    if parsed.port:
+        netloc = f"{host}:{parsed.port}"
+    return urllib.parse.urlunparse(
+        (parsed.scheme, netloc, parsed.path or "", parsed.params, parsed.query, parsed.fragment)
+    )
+
+
+def _redact_credentials(text: str) -> str:
+    """Remove user:pass@ fragments from git output."""
+    return re.sub(r"://[^/@\s]+@", "://", text)
+
+
 def _clone(repo_url: str, work: Path) -> None:
+    validated = _validate_repo_url(repo_url)
     proc = subprocess.run(
-        ["git", "clone", "--depth", "1", repo_url, str(work)],
+        ["git", "clone", "--depth", "1", "--", validated, str(work)],
         capture_output=True,
         text=True,
+        timeout=300,
     )
     if proc.returncode != 0:
-        hint = _redact(proc.stderr)
-        raise SkillGateError(f"Could not clone the skills repo: {repo_url}", hint=hint or None)
+        hint = _redact(_redact_credentials(proc.stderr))
+        safe = _redact_repo_url(validated)
+        raise SkillGateError(f"Could not clone the skills repo: {safe}", hint=hint or None)
 
 
 def _redact(stderr: str) -> str:

@@ -9,6 +9,8 @@ from __future__ import annotations
 import http.client
 import logging
 import os
+import socket
+import ssl
 import urllib.error
 from collections.abc import Callable, Mapping
 from datetime import UTC, datetime
@@ -21,7 +23,7 @@ from tenacity import (
     Retrying,
     retry_if_exception,
     stop_after_attempt,
-    stop_after_delay,
+    stop_before_delay,
     wait_random_exponential,
 )
 
@@ -54,6 +56,10 @@ class RetryableStatus(Exception):
         self.retry_after = retry_after
         self.response = response
         super().__init__(f"HTTP {status}")
+
+
+class RetryBudgetExceeded(RetryableStatus):
+    """Retry-After or backoff would exceed the total retry deadline."""
 
 
 def retry_attempts() -> int:
@@ -135,27 +141,55 @@ def retry_after_from_response(response: object) -> float | None:
 
 
 def is_retryable_exception(exc: BaseException) -> bool:
+    if isinstance(exc, RetryBudgetExceeded):
+        return False
     if isinstance(exc, RetryableStatus):
         return True
-    if isinstance(exc, (httpx.TimeoutException, httpx.TransportError)):
+    if isinstance(exc, httpx.TimeoutException):
+        return True
+    if isinstance(
+        exc,
+        (
+            httpx.ConnectError,
+            httpx.ReadError,
+            httpx.WriteError,
+            httpx.RemoteProtocolError,
+            httpx.PoolTimeout,
+        ),
+    ):
         return True
     if isinstance(exc, (TimeoutError, ConnectionError)):
         return True
     if isinstance(exc, urllib.error.HTTPError):
         return False
-    return isinstance(exc, (urllib.error.URLError, http.client.HTTPException))
+    if isinstance(exc, urllib.error.URLError):
+        reason = exc.reason
+        if isinstance(reason, ssl.SSLCertVerificationError):
+            return False
+        if isinstance(reason, socket.gaierror):
+            return reason.errno == socket.EAI_AGAIN
+        return isinstance(reason, (TimeoutError, ConnectionError, OSError))
+    return isinstance(exc, http.client.HTTPException)
 
 
 class _WaitRetryOrExponential:
-    def __init__(self, max_wait: float) -> None:
+    def __init__(self, max_wait: float, deadline_sec: float) -> None:
         self._max = max_wait
+        self._deadline = deadline_sec
         self._exp = wait_random_exponential(multiplier=0.5, max=max_wait)
 
     def __call__(self, retry_state: RetryCallState) -> float:
+        elapsed = retry_state.seconds_since_start if retry_state.seconds_since_start else 0.0
+        remaining = self._deadline - elapsed
+        if remaining <= 0:
+            raise RetryBudgetExceeded(0, retry_after=None)
         exc = retry_state.outcome.exception() if retry_state.outcome else None
         if isinstance(exc, RetryableStatus) and exc.retry_after is not None:
-            return min(max(exc.retry_after, 0.0), self._max)
-        return min(float(self._exp(retry_state)), self._max)
+            delay = max(exc.retry_after, 0.0)
+            if delay > remaining:
+                raise RetryBudgetExceeded(exc.status, retry_after=delay)
+            return delay
+        return min(float(self._exp(retry_state)), self._max, remaining)
 
 
 def _log_retry(retry_state: RetryCallState) -> None:
@@ -188,8 +222,8 @@ def call_with_retry(
     max_wait = max_wait_sec if max_wait_sec is not None else retry_max_wait()
     deadline = deadline_sec if deadline_sec is not None else retry_deadline()
     retrying = Retrying(
-        stop=stop_after_attempt(n) | stop_after_delay(deadline),
-        wait=_WaitRetryOrExponential(float(max_wait)),
+        stop=stop_after_attempt(n) | stop_before_delay(deadline),
+        wait=_WaitRetryOrExponential(float(max_wait), float(deadline)),
         retry=retry_if_exception(is_retryable_exception),
         sleep=sleep,
         reraise=True,

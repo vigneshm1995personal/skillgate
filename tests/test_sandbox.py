@@ -24,6 +24,19 @@ def test_with_running_python_rewrites_bare_python3() -> None:
     assert with_running_python([]) == []
 
 
+def test_sandbox_env_allowlist_drops_github_token(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("GITHUB_TOKEN", "gh_secret_value")
+    env = _sandbox_env(None)
+    assert "GITHUB_TOKEN" not in env
+
+
+def test_sandbox_env_includes_extra_and_python_flags() -> None:
+    env = _sandbox_env({"CUSTOM_FLAG": "1"})
+    assert env["CUSTOM_FLAG"] == "1"
+    assert env["PYTHONDONTWRITEBYTECODE"] == "1"
+    assert env["PYTHONUNBUFFERED"] == "1"
+
+
 def test_sandbox_env_puts_running_interpreter_first_on_path(tmp_path: Path) -> None:
     fake = str(tmp_path / "bin")
     env = _sandbox_env({"PATH": fake})
