@@ -158,7 +158,7 @@ module = [
   "skillgate_ai.helper",  # sync payload dicts; needs TypedDict
   "skillgate_ai.judge",  # Judge Protocol kwargs vs impls; own PR
   "skillgate_ai.judge_context",  # trajectory dict Any unions; own PR
-  "skillgate_ai.judge_openai",  # raw HTTP payloads; needs provider TypedDicts
+  "skillgate_ai.judge_openai.*",  # raw HTTP payloads; needs provider TypedDicts
   "skillgate_ai.judge_spec",  # merged YAML spec dicts; own PR
   "skillgate_ai.local_ui.api",  # untyped request JSON; needs validation models
   "skillgate_ai.local_ui.server",  # dynamic http.server handler attrs
