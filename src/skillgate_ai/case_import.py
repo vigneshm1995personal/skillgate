@@ -8,7 +8,7 @@ import json
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 import yaml
 
@@ -363,7 +363,8 @@ def _validate_check_dict(
         candidate = root / golden_path
         if not candidate.is_file():
             raise ValueError(f"Pin could not find golden file {golden_path}.")
-    file_items = raw.get("files") if isinstance(raw.get("files"), list) else []
+    raw_files = raw.get("files")
+    file_items: list[Any] = raw_files if isinstance(raw_files, list) else []
     for item in file_items:
         if not isinstance(item, dict):
             continue
@@ -383,7 +384,8 @@ def _validate_check_dict(
             status="pinned",
             prompt=str(raw.get("prompt") or "").strip(),
             should_trigger=should,
-            contains=contains if isinstance(contains, list) else contains,
+            # _contains_list before-validator normalizes str/None
+            contains=cast("list[str]", contains),
             judge=parse_judge_block(raw.get("judge")),
         )
     except ValueError as exc:

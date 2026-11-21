@@ -135,7 +135,7 @@ def _agent_prompt(
             return _claude_discover_prompt(task, skills)
         return _cursor_discover_prompt(task, skills)
     if native_claude:
-        return _claude_prompt(task, skills, pinned_skill=pinned)  # type: ignore[arg-type]
+        return _claude_prompt(task, skills, pinned_skill=pinned)
     return _cursor_prompt(task, skills, pinned_skill=pinned)
 
 

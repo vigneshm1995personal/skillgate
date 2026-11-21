@@ -230,7 +230,8 @@ def _dispatch(
     if method == "POST" and path == "/api/packs":
         return _create_pack(state, payload)
     if method == "GET" and path == "/api/pack":
-        raw = (qs.get("path") or [None])[0]
+        paths = qs.get("path")
+        raw = paths[0] if paths else None
         return 200, pack_payload(state, raw), "application/json"
     if method == "PUT" and path == "/api/pack/skill-md":
         return _put_skill_md(state, payload)

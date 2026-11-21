@@ -208,7 +208,7 @@ def import_from_agent_folders(
     slugs = {item.strip() for item in (only or []) if str(item).strip()}
     dest_parent = workspace_skills_root(root)
     dest_parent.mkdir(parents=True, exist_ok=True)
-    imported: list[dict[str, str]] = []
+    imported: list[dict[str, str | None]] = []
     skipped: list[dict[str, str]] = []
     for source in wanted:
         if source == "workspace":

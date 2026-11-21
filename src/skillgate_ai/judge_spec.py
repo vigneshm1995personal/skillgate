@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
-from typing import Any
+from typing import Any, overload
 
 from skillgate_ai.errors import SuiteError
 from skillgate_ai.judge_bank import (
@@ -176,7 +176,7 @@ def resolve_judge_spec(
                 on_fail[name] = _on_fail_value(value, default="block")
         if "min_confidence" in layer and layer.get("min_confidence") is not None:
             try:
-                min_confidence = float(layer.get("min_confidence"))
+                min_confidence = float(layer["min_confidence"])
             except (TypeError, ValueError) as exc:
                 raise SuiteError("min_confidence must be a number.") from exc
         if layer.get("score_no_trigger") is True:
@@ -384,8 +384,8 @@ def extra_question_passed(question: JudgeQuestion, answer: Any) -> tuple[bool, s
         score = _extract_score(answer)
         if score is None:
             return _unusable_or_fail(question)
-        threshold = _gte(question.pass_if, default=None)
-        if threshold is not None and float(score) < threshold:
+        score_threshold: float | None = _gte(question.pass_if, default=None)
+        if score_threshold is not None and float(score) < score_threshold:
             return False, f"{question.ask} {score}"
         if question.levels:
             pass_levels = _pass_levels(question)
@@ -519,11 +519,19 @@ def _parse_levels(raw: Any, *, qid: str, kind: str) -> tuple[str, ...]:
     return tuple(str(item).strip() for item in raw if str(item).strip())
 
 
+@overload
+def _gte(pass_if: Mapping[str, Any] | None, *, default: float) -> float: ...
+
+
+@overload
+def _gte(pass_if: Mapping[str, Any] | None, *, default: None) -> float | None: ...
+
+
 def _gte(pass_if: Mapping[str, Any] | None, *, default: float | None) -> float | None:
     if not isinstance(pass_if, Mapping) or "gte" not in pass_if:
         return default
     try:
-        return float(pass_if.get("gte"))
+        return float(pass_if["gte"])
     except (TypeError, ValueError):
         return default
 

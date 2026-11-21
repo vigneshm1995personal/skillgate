@@ -204,9 +204,9 @@ def add_judge_question(
     parsed = parse_extra_question(raw)
     extra = ExtraQuestion(
         id=parsed.id,
-        type=parsed.type,  # type: ignore[arg-type]
+        type=parsed.type,  # type: ignore[arg-type]  # parse_extra_question validated type; str → Literal
         ask=parsed.ask,
-        on_fail=parsed.on_fail,  # type: ignore[arg-type]
+        on_fail=parsed.on_fail,  # type: ignore[arg-type]  # parse_extra_question validated on_fail; str → Literal
         choices=list(parsed.choices) or None,
         levels=list(parsed.levels) or None,
         pass_if=parsed.pass_if,
