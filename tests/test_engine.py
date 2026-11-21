@@ -51,7 +51,7 @@ def crumbs(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, str, dict[str, An
     def _crumb(phase: str, tid: str, **kw: Any) -> None:
         calls.append((phase, tid, kw))
 
-    monkeypatch.setattr(engine, "breadcrumb_task", _crumb)
+    monkeypatch.setattr("skillgate_ai.engine.task.breadcrumb_task", _crumb)
     return calls
 
 
@@ -1150,7 +1150,7 @@ def test_run_eval_closes_sandbox_even_when_task_raises(
         boxed.append(sb)
         return sb
 
-    monkeypatch.setattr(engine, "open_sandbox", open_rec)
+    monkeypatch.setattr("skillgate_ai.engine.run.open_sandbox", open_rec)
     spec = _spec(_task("t1"))
     with pytest.raises(RuntimeError, match="boom"):
         engine.run_eval(

@@ -30,3 +30,4 @@ evals/history/*.jsonl
 !.env.example
 uv.lock
 skillgate.db
+.spec-prompt-slim-deps.txt

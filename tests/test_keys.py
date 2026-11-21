@@ -113,8 +113,11 @@ def test_keys_set_prompts_hidden_when_value_omitted(
 ) -> None:
     monkeypatch.setenv("SKILLGATE_ROOT", str(tmp_path))
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr("skillgate_ai.cli._stdin_is_tty", lambda: True)
-    monkeypatch.setattr("skillgate_ai.cli.getpass.getpass", lambda prompt="": "sk-hidden-prompt")
+    monkeypatch.setattr("skillgate_ai.cli.base._stdin_is_tty", lambda: True)
+    monkeypatch.setattr(
+        "skillgate_ai.cli.base.getpass.getpass",
+        lambda prompt="": "sk-hidden-prompt",
+    )
     result = runner.invoke(app, ["keys", "set", "OPENAI_API_KEY"])
     out = plain_text(result.stdout + result.stderr)
     assert result.exit_code == 0, out
@@ -127,7 +130,7 @@ def test_keys_set_reads_stdin_when_value_omitted(
 ) -> None:
     monkeypatch.setenv("SKILLGATE_ROOT", str(tmp_path))
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr("skillgate_ai.cli._stdin_is_tty", lambda: False)
+    monkeypatch.setattr("skillgate_ai.cli.base._stdin_is_tty", lambda: False)
     result = runner.invoke(app, ["keys", "set", "OPENAI_API_KEY"], input="sk-from-stdin\n")
     out = plain_text(result.stdout + result.stderr)
     assert result.exit_code == 0, out

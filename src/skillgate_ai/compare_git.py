@@ -149,7 +149,7 @@ def run_git_versions_compare(
                 harness_pref=harness,
             )
             runner = run_check_fn
-            from skillgate_ai.compare import run_check as default_run
+            from skillgate_ai.compare.models import run_check as default_run
 
             fn = runner or default_run
             run_id = uuid.uuid4().hex[:12]

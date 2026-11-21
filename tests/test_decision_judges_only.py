@@ -19,7 +19,7 @@ from skillgate_ai.workspace_outputs import collect_workspace_outputs
 ROOT = Path(__file__).resolve().parents[1]
 _JUDGE_SOURCES = (
     ROOT / "src" / "skillgate_ai" / "judge.py",
-    ROOT / "src" / "skillgate_ai" / "judge_openai.py",
+    *sorted((ROOT / "src" / "skillgate_ai" / "judge_openai").glob("*.py")),
     ROOT / "src" / "skillgate_ai" / "judge_providers" / "jev.py",
     ROOT / "src" / "skillgate_ai" / "judge_providers" / "clef.py",
     ROOT / "src" / "skillgate_ai" / "openai_http.py",

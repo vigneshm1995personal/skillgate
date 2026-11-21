@@ -18,36 +18,36 @@ from skillgate_ai.harness import (
 
 
 def test_auto_prefers_cursor_when_available(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("skillgate_ai.harness._resolve_agent_bin", lambda _p: "/bin/agent")
-    monkeypatch.setattr("skillgate_ai.harness._resolve_codex_bin", lambda _p: "/bin/codex")
-    monkeypatch.setattr("skillgate_ai.harness._codex_ready", lambda _c: True)
+    monkeypatch.setattr("skillgate_ai.harness.bins._resolve_agent_bin", lambda _p: "/bin/agent")
+    monkeypatch.setattr("skillgate_ai.harness.bins._resolve_codex_bin", lambda _p: "/bin/codex")
+    monkeypatch.setattr("skillgate_ai.harness.auth._codex_ready", lambda _c: True)
     cfg = _cfg(cursor_api_key="cur-test", codex_api_key="codex-test")
     harness = live_harness_or_error("auto", cfg)
     assert isinstance(harness, CursorAgentHarness)
 
 
 def test_auto_uses_codex_when_cursor_unavailable(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("skillgate_ai.harness._resolve_agent_bin", lambda _p: None)
-    monkeypatch.setattr("skillgate_ai.harness._resolve_codex_bin", lambda _p: "/bin/codex")
-    monkeypatch.setattr("skillgate_ai.harness._codex_ready", lambda _c: True)
+    monkeypatch.setattr("skillgate_ai.harness.bins._resolve_agent_bin", lambda _p: None)
+    monkeypatch.setattr("skillgate_ai.harness.bins._resolve_codex_bin", lambda _p: "/bin/codex")
+    monkeypatch.setattr("skillgate_ai.harness.auth._codex_ready", lambda _c: True)
     cfg = _cfg(codex_api_key="codex-test")
     harness = live_harness_or_error("auto", cfg)
     assert isinstance(harness, CodexCliHarness)
 
 
 def test_auto_uses_claude_when_only_anthropic(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("skillgate_ai.harness._resolve_agent_bin", lambda _p: None)
-    monkeypatch.setattr("skillgate_ai.harness._resolve_codex_bin", lambda _p: None)
-    monkeypatch.setattr("skillgate_ai.harness._resolve_claude_bin", lambda _p: "/bin/claude")
+    monkeypatch.setattr("skillgate_ai.harness.bins._resolve_agent_bin", lambda _p: None)
+    monkeypatch.setattr("skillgate_ai.harness.bins._resolve_codex_bin", lambda _p: None)
+    monkeypatch.setattr("skillgate_ai.harness.bins._resolve_claude_bin", lambda _p: "/bin/claude")
     cfg = _cfg(anthropic_api_key="ant-test")
     harness = live_harness_or_error("auto", cfg)
     assert isinstance(harness, ClaudeCodeHarness)
 
 
 def test_openai_key_does_not_select_llm_harness(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("skillgate_ai.harness._resolve_agent_bin", lambda _p: None)
-    monkeypatch.setattr("skillgate_ai.harness._resolve_codex_bin", lambda _p: None)
-    monkeypatch.setattr("skillgate_ai.harness._resolve_claude_bin", lambda _p: None)
+    monkeypatch.setattr("skillgate_ai.harness.bins._resolve_agent_bin", lambda _p: None)
+    monkeypatch.setattr("skillgate_ai.harness.bins._resolve_codex_bin", lambda _p: None)
+    monkeypatch.setattr("skillgate_ai.harness.bins._resolve_claude_bin", lambda _p: None)
     cfg = _cfg(openai_api_key="sk-test", gateway_api_key="gw-test")
     with pytest.raises(MissingLLMKeyError) as caught:
         live_harness_or_error("auto", cfg)

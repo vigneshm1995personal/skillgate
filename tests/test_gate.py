@@ -70,9 +70,11 @@ def test_live_auto_uses_cursor_when_vault_has_cursor_key(
 ) -> None:
     monkeypatch.setenv("SKILLGATE_ROOT", str(tmp_path))
     set_vault_key(tmp_path, "CURSOR_API_KEY", "cur-from-vault")
-    monkeypatch.setattr("skillgate_ai.harness._resolve_codex_bin", lambda _preferred: None)
-    monkeypatch.setattr("skillgate_ai.harness._resolve_claude_bin", lambda _preferred: None)
-    monkeypatch.setattr("skillgate_ai.harness._resolve_agent_bin", lambda _preferred: "/bin/agent")
+    monkeypatch.setattr("skillgate_ai.harness.bins._resolve_codex_bin", lambda _preferred: None)
+    monkeypatch.setattr("skillgate_ai.harness.bins._resolve_claude_bin", lambda _preferred: None)
+    monkeypatch.setattr(
+        "skillgate_ai.harness.bins._resolve_agent_bin", lambda _preferred: "/bin/agent"
+    )
     cfg = get_llm_config(tmp_path)
     harness = live_harness_or_error("auto", cfg)
     assert isinstance(harness, CursorAgentHarness)
@@ -84,9 +86,9 @@ def test_vault_openai_key_does_not_start_checks(
 ) -> None:
     monkeypatch.setenv("SKILLGATE_ROOT", str(tmp_path))
     set_vault_key(tmp_path, "OPENAI_API_KEY", "sk-from-vault")
-    monkeypatch.setattr("skillgate_ai.harness._resolve_codex_bin", lambda _preferred: None)
-    monkeypatch.setattr("skillgate_ai.harness._resolve_agent_bin", lambda _preferred: None)
-    monkeypatch.setattr("skillgate_ai.harness._resolve_claude_bin", lambda _preferred: None)
+    monkeypatch.setattr("skillgate_ai.harness.bins._resolve_codex_bin", lambda _preferred: None)
+    monkeypatch.setattr("skillgate_ai.harness.bins._resolve_agent_bin", lambda _preferred: None)
+    monkeypatch.setattr("skillgate_ai.harness.bins._resolve_claude_bin", lambda _preferred: None)
     cfg = get_llm_config(tmp_path)
     assert cfg.openai_api_key == "sk-from-vault"
     assert cfg.has_any_key is False
@@ -188,7 +190,7 @@ def test_run_check_exit_2_without_judge_threads_no_judge_flag(
 def test_live_without_key_still_errors(
     project_root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr("skillgate_ai.harness._resolve_codex_bin", lambda _preferred: None)
+    monkeypatch.setattr("skillgate_ai.harness.bins._resolve_codex_bin", lambda _preferred: None)
     dest = tmp_path / "pdf"
     shutil.copytree(project_root / "skills" / "pdf", dest)
     ensure_demo_pdfs(dest / "evals" / "fixtures")
