@@ -8,7 +8,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 TASK = ROOT / "src/skillgate_ai/engine/task.py"
 
-HELPERS = '''
+HELPERS = """
 def _missing_golden_report(task: TaskSpec, skill_root: Path | None) -> TaskReport | None:
     from skillgate_ai.case_pack import MISSING_GOLDEN_REASON, task_missing_golden
 
@@ -229,9 +229,9 @@ def _task_advice(
     )
 
 
-'''
+"""
 
-NEW_RUN_TASK = '''
+NEW_RUN_TASK = """
 def _run_task(
     *,
     task: TaskSpec,
@@ -375,7 +375,7 @@ def _run_task(
             breadcrumb_task("end", task.id, passed=False)
 
 
-'''
+"""
 
 
 def main() -> None:
@@ -383,9 +383,9 @@ def main() -> None:
     start = text.index("def _run_task(")
     end = text.index("\ndef _skipped_report(")
     text = text[:start] + HELPERS + NEW_RUN_TASK + text[end + 1 :]
-  # strip duplicate future import
+    # strip duplicate future import
     text = text.replace(
-        'from __future__ import annotations\n\nfrom __future__ import annotations\n',
+        "from __future__ import annotations\n\nfrom __future__ import annotations\n",
         "from __future__ import annotations\n\n",
     )
     TASK.write_text(text, encoding="utf-8")

@@ -72,7 +72,11 @@ def strip_decorator_lines(text: str) -> str:
         s = line.strip()
         if s.startswith("@app.") or s.startswith("@keys_app.") or s.startswith("@examples_app."):
             continue
-        if s.startswith("@judge_app.") or s.startswith("@checks_app.") or s.startswith("@case_app."):
+        if (
+            s.startswith("@judge_app.")
+            or s.startswith("@checks_app.")
+            or s.startswith("@case_app.")
+        ):
             continue
         if s.startswith("@judge_provider_app."):
             continue
@@ -122,7 +126,10 @@ def process_base() -> None:
     path = CLI / "base.py"
     raw = path.read_text(encoding="utf-8")
     # keep only through first duplicate - clean double future
-    raw = raw.replace("from __future__ import annotations\n\nfrom __future__ import annotations\n", "from __future__ import annotations\n\n")
+    raw = raw.replace(
+        "from __future__ import annotations\n\nfrom __future__ import annotations\n",
+        "from __future__ import annotations\n\n",
+    )
     # remove command decorators except @app.callback on _main
     lines = []
     for line in raw.splitlines():
@@ -221,26 +228,61 @@ def register_all() -> None:
 
 def write_init() -> None:
     rows: list[tuple[str, str]] = [
-        ("base", "app"), ("base", "console"), ("base", "_emit_json"), ("base", "_boot"),
-        ("base", "_version_callback"), ("base", "_main"), ("base", "_HARNESS_HELP"),
-        ("base", "_SANDBOX_HELP"), ("base", "_KEY_ENV_HELP"), ("base", "_VERBOSE_HELP"),
-        ("base", "_parse_targets"), ("base", "_bind_key_env"), ("base", "_stdin_is_tty"),
-        ("base", "_read_omitted_key"), ("base", "_resolve_pack_arg"), ("base", "keys_app"),
-        ("base", "examples_app"), ("base", "judge_app"), ("base", "judge_provider_app"),
-        ("base", "checks_app"), ("base", "case_app"),
-        ("cmd_agents", "version"), ("cmd_agents", "_print_agent_status"), ("cmd_agents", "_login_targets"),
-        ("cmd_agents", "login"), ("cmd_agents", "doctor"), ("cmd_agents", "ingest"),
-        ("cmd_gate", "_present_check"), ("cmd_gate", "_verbose_scoring_lines"), ("cmd_gate", "_run_gate"),
-        ("cmd_gate", "check_pack"), ("cmd_gate", "run_suite"),
-        ("cmd_deploy", "deploy"), ("cmd_deploy", "sync"), ("cmd_deploy", "connect"),
-        ("cmd_deploy", "helper"), ("cmd_deploy", "list_assets"),
-        ("cmd_keys", "keys_set"), ("cmd_keys", "keys_clear"), ("cmd_keys", "keys_list"),
-        ("cmd_scaffold", "init_cmd"), ("cmd_scaffold", "new_cmd"), ("cmd_scaffold", "example_cmd"),
-        ("cmd_scaffold", "examples_list_cmd"), ("cmd_scaffold", "examples_install_cmd"),
-        ("cmd_judge", "checks_show_cmd"), ("cmd_judge", "judge_show"), ("cmd_judge", "judge_reset"),
-        ("cmd_judge", "judge_add_question_cmd"), ("cmd_judge", "case_add_cmd"),
-        ("cmd_judge", "judge_provider_show"), ("cmd_judge", "judge_provider_set"),
-        ("cmd_judge", "_run_judge_test"), ("cmd_judge", "judge_test"), ("cmd_judge", "judge_provider_test"),
+        ("base", "app"),
+        ("base", "console"),
+        ("base", "_emit_json"),
+        ("base", "_boot"),
+        ("base", "_version_callback"),
+        ("base", "_main"),
+        ("base", "_HARNESS_HELP"),
+        ("base", "_SANDBOX_HELP"),
+        ("base", "_KEY_ENV_HELP"),
+        ("base", "_VERBOSE_HELP"),
+        ("base", "_parse_targets"),
+        ("base", "_bind_key_env"),
+        ("base", "_stdin_is_tty"),
+        ("base", "_read_omitted_key"),
+        ("base", "_resolve_pack_arg"),
+        ("base", "keys_app"),
+        ("base", "examples_app"),
+        ("base", "judge_app"),
+        ("base", "judge_provider_app"),
+        ("base", "checks_app"),
+        ("base", "case_app"),
+        ("cmd_agents", "version"),
+        ("cmd_agents", "_print_agent_status"),
+        ("cmd_agents", "_login_targets"),
+        ("cmd_agents", "login"),
+        ("cmd_agents", "doctor"),
+        ("cmd_agents", "ingest"),
+        ("cmd_gate", "_present_check"),
+        ("cmd_gate", "_verbose_scoring_lines"),
+        ("cmd_gate", "_run_gate"),
+        ("cmd_gate", "check_pack"),
+        ("cmd_gate", "run_suite"),
+        ("cmd_deploy", "deploy"),
+        ("cmd_deploy", "sync"),
+        ("cmd_deploy", "connect"),
+        ("cmd_deploy", "helper"),
+        ("cmd_deploy", "list_assets"),
+        ("cmd_keys", "keys_set"),
+        ("cmd_keys", "keys_clear"),
+        ("cmd_keys", "keys_list"),
+        ("cmd_scaffold", "init_cmd"),
+        ("cmd_scaffold", "new_cmd"),
+        ("cmd_scaffold", "example_cmd"),
+        ("cmd_scaffold", "examples_list_cmd"),
+        ("cmd_scaffold", "examples_install_cmd"),
+        ("cmd_judge", "checks_show_cmd"),
+        ("cmd_judge", "judge_show"),
+        ("cmd_judge", "judge_reset"),
+        ("cmd_judge", "judge_add_question_cmd"),
+        ("cmd_judge", "case_add_cmd"),
+        ("cmd_judge", "judge_provider_show"),
+        ("cmd_judge", "judge_provider_set"),
+        ("cmd_judge", "_run_judge_test"),
+        ("cmd_judge", "judge_test"),
+        ("cmd_judge", "judge_provider_test"),
         ("cmd_ui", "ui_cmd"),
     ]
     lines = [
