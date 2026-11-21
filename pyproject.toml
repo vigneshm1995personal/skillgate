@@ -93,7 +93,10 @@ skillgate_ai = [
 testpaths = ["tests"]
 pythonpath = ["src", "tests"]
 timeout = 120
-markers = ["slow: integration tests (git install, etc.)"]
+markers = [
+    "slow: integration tests (git install, etc.)",
+    "integration: CLI-to-gate E2E under tests/integration (fake agent + fake decision HTTP; live smoke opt-in)",
+]
 
 [tool.ruff]
 line-length = 100
