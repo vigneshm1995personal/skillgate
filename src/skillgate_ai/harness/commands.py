@@ -253,6 +253,9 @@ def _claude_sandbox_env(workspace: Path, base: dict[str, str]) -> dict[str, str]
     from skillgate_ai.harness.prompts import claude_config_isolation_enabled
 
     if not claude_config_isolation_enabled():
+        config_dir = os.environ.get("CLAUDE_CONFIG_DIR", "").strip()
+        if config_dir:
+            env["CLAUDE_CONFIG_DIR"] = config_dir
         return env
     home = workspace / ".skillgate" / "claude-home"
     home.mkdir(parents=True, exist_ok=True)

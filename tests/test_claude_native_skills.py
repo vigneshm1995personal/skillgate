@@ -92,6 +92,7 @@ def test_claude_harness_preserves_host_config_by_default(
 
     monkeypatch.delenv("SKILLGATE_CLAUDE_ISOLATE_CONFIG", raising=False)
     assert claude_config_isolation_enabled() is False
+    monkeypatch.delenv("CLAUDE_CONFIG_DIR", raising=False)
     monkeypatch.setattr("skillgate_ai.harness.auth._claude_ready", lambda _c: True)
     monkeypatch.setattr("skillgate_ai.harness.bins._resolve_claude_bin", lambda _p: "/bin/claude")
     monkeypatch.setattr(

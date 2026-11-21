@@ -235,6 +235,14 @@ def test_clone_uses_double_dash_and_timeout(
     assert captured["timeout"] == 300
 
 
+def test_clone_rejects_git_transport_syntax(tmp_path: Path) -> None:
+    from skillgate_ai import sync as sync_mod
+    from skillgate_ai.errors import SkillGateError
+
+    with pytest.raises(SkillGateError, match="Invalid git repo URL"):
+        sync_mod._validate_repo_url("git::https://evil.example/repo.git")
+
+
 def test_clone_rejects_option_injection_url(tmp_path: Path) -> None:
     from skillgate_ai import sync as sync_mod
     from skillgate_ai.errors import SkillGateError

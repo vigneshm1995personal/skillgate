@@ -59,6 +59,8 @@ def _validate_repo_url(repo_url: str) -> str:
         raise SkillGateError("Invalid git repo URL.")
     if parsed.scheme == "ext" or url.lower().startswith("ext::"):
         raise SkillGateError("Invalid git repo URL.")
+    if re.match(r"^[a-z][a-z0-9+.-]*::", url, re.IGNORECASE):
+        raise SkillGateError("Invalid git repo URL.")
     if re.search(r"[\x00-\x1f\x7f]", url):
         raise SkillGateError("Invalid git repo URL.")
     return url
