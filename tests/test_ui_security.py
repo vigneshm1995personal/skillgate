@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import os
 import socket
 from pathlib import Path
 
+import pytest
 from conftest import plain_text
 from fastapi.testclient import TestClient
 from typer.testing import CliRunner
@@ -118,3 +120,72 @@ def test_ui_busy_port_is_friendly_before_url(tmp_path: Path, monkeypatch) -> Non
         assert "Traceback" not in out
     finally:
         sock.close()
+
+
+def _symlink_or_skip(src: Path, dest: Path) -> None:
+    try:
+        os.symlink(src, dest)
+    except (OSError, NotImplementedError):
+        pytest.skip("symlinks not supported here")
+
+
+def test_symlinked_skill_dir_outside_root_is_rejected(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("SKILLGATE_CURSOR_SKILLS", str(tmp_path / "cursor-skills"))
+    monkeypatch.setenv("SKILLGATE_CODEX_SKILLS", str(tmp_path / "codex-skills"))
+    monkeypatch.setenv("SKILLGATE_CLAUDE_SKILLS", str(tmp_path / "claude-skills"))
+    outside = tmp_path / "outside" / "evil"
+    write_skill_md(outside, name="evil", description="Outside.", body="# SECRET\n")
+    (outside / "secret.txt").write_text("leak", encoding="utf-8")
+    workspace = tmp_path / "project"
+    (workspace / "skills").mkdir(parents=True)
+    _symlink_or_skip(outside, workspace / "skills" / "evil")
+    client = _client(workspace, monkeypatch)
+    listing = client.get("/api/skills")
+    assert listing.status_code == 200
+    assert all(item.get("slug") != "evil" for item in listing.json()["skills"])
+    detail = client.get("/api/skills/evil")
+    assert detail.status_code in {400, 404}
+    pack_file = client.get("/api/skills/evil/pack-file", params={"path": "secret.txt"})
+    assert pack_file.status_code in {400, 404}
+    pack_raw = client.get("/api/skills/evil/pack-raw", params={"path": "SKILL.md"})
+    assert pack_raw.status_code in {400, 404}
+
+
+def test_symlinked_skill_md_outside_root_is_rejected(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("SKILLGATE_CURSOR_SKILLS", str(tmp_path / "cursor-skills"))
+    monkeypatch.setenv("SKILLGATE_CODEX_SKILLS", str(tmp_path / "codex-skills"))
+    monkeypatch.setenv("SKILLGATE_CLAUDE_SKILLS", str(tmp_path / "claude-skills"))
+    outside_md = tmp_path / "outside" / "SKILL.md"
+    outside_md.parent.mkdir(parents=True)
+    outside_md.write_text(
+        "---\nname: evil\ndescription: Outside.\n---\n# SECRET\n",
+        encoding="utf-8",
+    )
+    workspace = tmp_path / "project"
+    evil = workspace / "skills" / "evil"
+    evil.mkdir(parents=True)
+    _symlink_or_skip(outside_md, evil / "SKILL.md")
+    client = _client(workspace, monkeypatch)
+    listing = client.get("/api/skills")
+    assert listing.status_code == 200
+    assert all(item.get("slug") != "evil" for item in listing.json()["skills"])
+    detail = client.get("/api/skills/evil")
+    assert detail.status_code in {400, 404}
+    assert "SECRET" not in detail.text
+
+
+def test_symlinked_skill_inside_root_is_allowed(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("SKILLGATE_CURSOR_SKILLS", str(tmp_path / "cursor-skills"))
+    monkeypatch.setenv("SKILLGATE_CODEX_SKILLS", str(tmp_path / "codex-skills"))
+    monkeypatch.setenv("SKILLGATE_CLAUDE_SKILLS", str(tmp_path / "claude-skills"))
+    workspace = tmp_path / "project"
+    real = workspace / "shared" / "pdf-tools"
+    write_skill_md(real, name="pdf-tools", description="Tools.", body="# PDF\n")
+    (workspace / "skills").mkdir(parents=True)
+    _symlink_or_skip(real, workspace / "skills" / "pdf-tools")
+    client = _client(workspace, monkeypatch)
+    listing = client.get("/api/skills")
+    assert listing.status_code == 200
+    assert any(item.get("slug") == "pdf-tools" for item in listing.json()["skills"])
+    detail = client.get("/api/skills/pdf-tools")
+    assert detail.status_code == 200

@@ -57,6 +57,20 @@ def _iter_skill_dirs(parent: Path) -> list[Path]:
     return found
 
 
+def _workspace_skill_dir(path: Path, root: Path) -> Path | None:
+    """Resolved skill folder when it and its SKILL.md stay inside ``root``; else None."""
+    try:
+        resolved = path.resolve()
+        skill_md = (resolved / "SKILL.md").resolve()
+    except OSError:
+        return None
+    if not is_under_root(resolved, root) or not is_under_root(skill_md, root):
+        return None
+    if not skill_md.is_file():
+        return None
+    return resolved
+
+
 def catalog_entries(root: Path, *, include_agents: bool = False) -> list[dict[str, Any]]:
     """Skills in this project.
 
@@ -69,7 +83,12 @@ def catalog_entries(root: Path, *, include_agents: bool = False) -> list[dict[st
     names_seen: set[str] = set()
 
     def add(path: Path, source: str) -> None:
-        resolved = path.resolve()
+        if source == "workspace":
+            resolved = _workspace_skill_dir(path, root)
+            if resolved is None:
+                return
+        else:
+            resolved = path.resolve()
         if resolved in seen:
             return
         if not (resolved / "SKILL.md").is_file():
@@ -175,12 +194,13 @@ def find_skill(root: Path, name: str) -> Path:
             return resolved
         if not is_under_root(resolved, root):
             raise SkillGateError("That path is outside this project.")
-        if (resolved / "SKILL.md").is_file():
-            return resolved
+        contained = _workspace_skill_dir(resolved, root)
+        if contained is not None:
+            return contained
     if NAME_RE.match(text):
-        workspace = workspace_skills_root(root) / text
-        if (workspace / "SKILL.md").is_file():
-            return workspace.resolve()
+        contained = _workspace_skill_dir(workspace_skills_root(root) / text, root)
+        if contained is not None:
+            return contained
     for entry in catalog_entries(root, include_agents=True):
         if (
             entry["name"] == text
