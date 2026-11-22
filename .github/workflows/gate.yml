@@ -83,7 +83,15 @@ jobs:
         name: Web unit tests
         working-directory: web
         run: pnpm install --frozen-lockfile && pnpm test
-      - run: pytest -q -m "not integration"
+      - name: Unit tests (no integration)
+        run: |
+          if [ "${{ matrix.python-version }}" = "3.12" ]; then
+            pytest -q -m "not integration"
+          else
+            # pnpm is only installed on 3.12; this test needs a fresh web/ build toolchain.
+            pytest -q -m "not integration" \
+              --deselect tests/test_packaging_ui.py::test_web_static_matches_fresh_pnpm_build
+          fi
 
   integration:
     name: integration (${{ matrix.python-version }})
