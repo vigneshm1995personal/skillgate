@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- CI: commit `uv.lock` and install with `uv sync --locked`; Python 3.11–3.13 matrix on unit and integration jobs; GitHub Actions pinned by commit SHA; release workflow runs the full gate suite before build/publish; Dependabot for uv, npm, Actions, and Docker base images.
 - Core install is slim (7 dependencies). Optional extras: `ui` (FastAPI, uvicorn, python-multipart), `docs` (pypdf, python-docx, openpyxl, reportlab), and `all`. Missing extras exit **2** with `Missing optional dependency for {feature}. Install with: pip install 'skillgate-ai[{extra}]'`. The Docker CLI image and GitHub Action install `[docs]`; `pip install -e ".[dev]"` includes `[all]`. Removed 23 one-off QA/release/dogfood dump test files; 42 tests were copied into permanent suites.
 - Outbound HTTP (judge scoring and the Mac helper) uses shared tenacity backoff: jittered exponential waits up to 30s, at most 5 attempts or a 60s deadline. Retries timeouts, network errors, HTTP 429, and 5xx, honors `Retry-After`, and never retries 4xx auth/validation. Override with `SKILLGATE_HTTP_RETRY_ATTEMPTS`, `SKILLGATE_HTTP_RETRY_MAX_WAIT`, and `SKILLGATE_HTTP_RETRY_DEADLINE`.
 

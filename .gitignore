@@ -28,6 +28,5 @@ evals/history/*.jsonl
 
 *.env
 !.env.example
-uv.lock
 skillgate.db
 .spec-prompt-slim-deps.txt
