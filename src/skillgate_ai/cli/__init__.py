@@ -29,26 +29,25 @@ from skillgate_ai.cli.cmd_agents import doctor as doctor
 from skillgate_ai.cli.cmd_agents import ingest as ingest
 from skillgate_ai.cli.cmd_agents import login as login
 from skillgate_ai.cli.cmd_agents import version as version
+from skillgate_ai.cli.cmd_case import case_add_cmd as case_add_cmd
+from skillgate_ai.cli.cmd_compare import register_compare_commands as register_compare_commands
 from skillgate_ai.cli.cmd_deploy import connect as connect
 from skillgate_ai.cli.cmd_deploy import deploy as deploy
 from skillgate_ai.cli.cmd_deploy import helper as helper
 from skillgate_ai.cli.cmd_deploy import list_assets as list_assets
 from skillgate_ai.cli.cmd_deploy import sync as sync
-from skillgate_ai.cli.cmd_gate import _present_check as _present_check
 from skillgate_ai.cli.cmd_gate import _run_gate as _run_gate
-from skillgate_ai.cli.cmd_gate import _verbose_scoring_lines as _verbose_scoring_lines
 from skillgate_ai.cli.cmd_gate import check_pack as check_pack
 from skillgate_ai.cli.cmd_gate import run_suite as run_suite
-from skillgate_ai.cli.cmd_judge import _run_judge_test as _run_judge_test
-from skillgate_ai.cli.cmd_judge import case_add_cmd as case_add_cmd
 from skillgate_ai.cli.cmd_judge import checks_show_cmd as checks_show_cmd
 from skillgate_ai.cli.cmd_judge import judge_add_question_cmd as judge_add_question_cmd
-from skillgate_ai.cli.cmd_judge import judge_provider_set as judge_provider_set
-from skillgate_ai.cli.cmd_judge import judge_provider_show as judge_provider_show
-from skillgate_ai.cli.cmd_judge import judge_provider_test as judge_provider_test
 from skillgate_ai.cli.cmd_judge import judge_reset as judge_reset
 from skillgate_ai.cli.cmd_judge import judge_show as judge_show
-from skillgate_ai.cli.cmd_judge import judge_test as judge_test
+from skillgate_ai.cli.cmd_judge_provider import _run_judge_test as _run_judge_test
+from skillgate_ai.cli.cmd_judge_provider import judge_provider_set as judge_provider_set
+from skillgate_ai.cli.cmd_judge_provider import judge_provider_show as judge_provider_show
+from skillgate_ai.cli.cmd_judge_provider import judge_provider_test as judge_provider_test
+from skillgate_ai.cli.cmd_judge_provider import judge_test as judge_test
 from skillgate_ai.cli.cmd_keys import keys_clear as keys_clear
 from skillgate_ai.cli.cmd_keys import keys_list as keys_list
 from skillgate_ai.cli.cmd_keys import keys_set as keys_set
@@ -58,8 +57,9 @@ from skillgate_ai.cli.cmd_scaffold import examples_list_cmd as examples_list_cmd
 from skillgate_ai.cli.cmd_scaffold import init_cmd as init_cmd
 from skillgate_ai.cli.cmd_scaffold import new_cmd as new_cmd
 from skillgate_ai.cli.cmd_ui import ui_cmd as ui_cmd
+from skillgate_ai.cli.gate_output import _present_check as _present_check
+from skillgate_ai.cli.gate_output import _verbose_scoring_lines as _verbose_scoring_lines
 from skillgate_ai.cli.pack_commands import register_pack_commands as register_pack_commands
 from skillgate_ai.cli.tree import register_all
-from skillgate_ai.cli_compare import register_compare_commands as register_compare_commands
 
 register_all()

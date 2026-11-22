@@ -13,17 +13,20 @@ from skillgate_ai.cli.base import (
     keys_app,
 )
 from skillgate_ai.cli.cmd_agents import doctor, ingest, login, version
+from skillgate_ai.cli.cmd_case import case_add_cmd
+from skillgate_ai.cli.cmd_compare import register_compare_commands
 from skillgate_ai.cli.cmd_deploy import connect, deploy, helper, list_assets, sync
 from skillgate_ai.cli.cmd_gate import check_pack, run_suite
 from skillgate_ai.cli.cmd_judge import (
-    case_add_cmd,
     checks_show_cmd,
     judge_add_question_cmd,
+    judge_reset,
+    judge_show,
+)
+from skillgate_ai.cli.cmd_judge_provider import (
     judge_provider_set,
     judge_provider_show,
     judge_provider_test,
-    judge_reset,
-    judge_show,
     judge_test,
 )
 from skillgate_ai.cli.cmd_keys import keys_clear, keys_list, keys_set
@@ -36,7 +39,6 @@ from skillgate_ai.cli.cmd_scaffold import (
 )
 from skillgate_ai.cli.cmd_ui import ui_cmd
 from skillgate_ai.cli.pack_commands import register_pack_commands
-from skillgate_ai.cli_compare import register_compare_commands
 
 
 def register_all() -> None:

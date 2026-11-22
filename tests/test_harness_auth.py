@@ -9,6 +9,7 @@ import sys
 import threading
 import time
 from pathlib import Path
+from typing import Any
 
 import pytest
 from conftest import plain_text
@@ -896,31 +897,37 @@ def test_run_inherited_keyboard_interrupt_kills_group(
 
     grandchild = tmp_path / "grandchild.py"
     grandchild.write_text(
-        "import signal, sys, time\n"
+        "import signal, sys\n"
         "def on_term(signum, frame):\n"
         "    open(sys.argv[1], 'w').write('dead')\n"
         "    sys.exit(0)\n"
         "signal.signal(signal.SIGTERM, on_term)\n"
-        "time.sleep(60)\n",
+        "print('ready', flush=True)\n"
+        "while True:\n"
+        "    signal.pause()\n",
         encoding="utf-8",
     )
     parent = tmp_path / "parent.py"
     parent.write_text(
-        "import os, subprocess, sys, time\n"
-        "child = subprocess.Popen([sys.executable, sys.argv[2], sys.argv[3]])\n"
-        "open(sys.argv[1], 'w').write(f'{os.getpid()} {child.pid}')\n"
-        "time.sleep(60)\n",
+        "import os, signal, subprocess, sys\n"
+        "child = subprocess.Popen([sys.executable, sys.argv[1], sys.argv[2]])\n"
+        "print(f'{os.getpid()} {child.pid}', flush=True)\n"
+        "while True:\n"
+        "    signal.pause()\n",
         encoding="utf-8",
     )
-    pids_file = tmp_path / "pids.txt"
     dead_marker = tmp_path / "dead.txt"
     real_popen = harness_login.subprocess.Popen
+    seen: dict[str, Any] = {}
 
     class KeyboardInterruptPopen:
         def __init__(self, argv, start_new_session=False):
-            self._proc = real_popen(argv, start_new_session=start_new_session)
+            self._proc = real_popen(
+                argv, start_new_session=start_new_session, stdout=subprocess.PIPE, text=True
+            )
             self.start_new_session = start_new_session
             self._interrupted = False
+            seen["proc"] = self._proc
 
         @property
         def pid(self):
@@ -929,9 +936,7 @@ def test_run_inherited_keyboard_interrupt_kills_group(
         def wait(self, timeout=None):
             if not self._interrupted:
                 self._interrupted = True
-                deadline = time.time() + 5
-                while time.time() < deadline and not pids_file.is_file():
-                    time.sleep(0.05)
+                seen["lines"] = [self._proc.stdout.readline().strip() for _ in range(2)]
                 raise KeyboardInterrupt()
             return self._proc.wait(timeout=timeout)
 
@@ -941,13 +946,16 @@ def test_run_inherited_keyboard_interrupt_kills_group(
     monkeypatch.setattr("skillgate_ai.harness.login.subprocess.Popen", KeyboardInterruptPopen)
     with pytest.raises(KeyboardInterrupt):
         harness_login._run_inherited(
-            [sys.executable, str(parent), str(pids_file), str(grandchild), str(dead_marker)]
+            [sys.executable, str(parent), str(grandchild), str(dead_marker)]
         )
-    parent_pid, child_pid = (int(part) for part in pids_file.read_text(encoding="utf-8").split())
+    lines = seen["lines"]
+    assert "ready" in lines, lines
+    (pid_line,) = [line for line in lines if line != "ready"]
+    parent_pid, child_pid = (int(part) for part in pid_line.split())
     assert _pid_gone(parent_pid)
-    deadline = time.time() + 5
-    while time.time() < deadline and not dead_marker.is_file():
-        time.sleep(0.05)
+    proc = seen["proc"]
+    proc.stdout.read()
+    proc.stdout.close()
     assert dead_marker.is_file()
     assert _pid_gone(child_pid)
 

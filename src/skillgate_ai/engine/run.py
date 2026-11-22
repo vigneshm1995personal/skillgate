@@ -25,7 +25,6 @@ from skillgate_ai.harness import (
 from skillgate_ai.ingest import Skill, ingest_skill, ingest_skills
 from skillgate_ai.judge import Judge, default_judge
 from skillgate_ai.live import RunControl
-from skillgate_ai.observability import report_eval_outcome, set_eval_passed
 from skillgate_ai.sandbox import open_sandbox
 from skillgate_ai.suite import SuiteSpec, TaskSpec, load_suite
 
@@ -257,7 +256,6 @@ def _eval_finish(
     stamp_fp: str | None,
     stamp_ids: tuple[str, ...] | None,
     reference: Skill | None,
-    run_id: str,
 ) -> SuiteReport:
     if control is not None and control.kill_requested and not sliced:
         _fill_killed(reports, spec)
@@ -288,7 +286,6 @@ def _eval_finish(
         stamp_fp=stamp_fp,
         stamp_ids=stamp_ids,
         reference=reference,
-        run_id=run_id,
     )
 
 
@@ -305,14 +302,12 @@ def _complete_suite_report(
     stamp_fp: str | None,
     stamp_ids: tuple[str, ...] | None,
     reference: Skill | None,
-    run_id: str,
 ) -> SuiteReport:
     passed = _suite_passed(reports)
     primary_skill = skills[0] if skills else None
     suite_advice = (
         advise_suite(primary_skill, reports, reference=reference) if primary_skill else None
     )
-    set_eval_passed(passed)
     report = SuiteReport(
         suite=spec.suite,
         title=spec.title or spec.suite,
@@ -329,7 +324,6 @@ def _complete_suite_report(
         pack_fingerprint=stamp_fp,
         pack_case_ids=stamp_ids,
     )
-    report_eval_outcome(report, run_id=run_id)
     return report
 
 
@@ -426,7 +420,6 @@ def run_eval(
         stamp_fp=stamp_fp,
         stamp_ids=stamp_ids,
         reference=reference,
-        run_id=run_id,
     )
 
 

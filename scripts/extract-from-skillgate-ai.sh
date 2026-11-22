@@ -43,7 +43,6 @@ ALLOW=(
   src/skillgate_ai/ingest.py
   src/skillgate_ai/live.py
   src/skillgate_ai/metrics.py
-  src/skillgate_ai/observability.py
   src/skillgate_ai/pack.py
   src/skillgate_ai/paths.py
   src/skillgate_ai/report.py

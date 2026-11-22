@@ -101,11 +101,10 @@ def test_cli_imports_without_hosted() -> None:
     pass
 
 
-def test_local_ui_may_exist_without_hosted_names() -> None:
-    assert (ROOT / "local_ui").is_dir()
+def test_local_ui_removed_and_no_hosted_names() -> None:
+    assert not (ROOT / "local_ui").exists()
     assert not (ROOT / "web.py").exists()
     assert not (ROOT / "wizard.py").exists()
-    assert not (ROOT / "local_ui" / "wizard.py").exists()
     assert (ROOT / "api.py").is_file()
     assert (ROOT / "server.py").is_file()
     assert (ROOT / "mode.py").is_file()
@@ -117,14 +116,6 @@ def test_local_ui_may_exist_without_hosted_names() -> None:
         imported |= _imported_names(tree)
     assert "skillgate_ai.web" not in imported
     assert "skillgate_ai.auth_siwv" not in imported
-
-
-def test_static_index_is_packaged() -> None:
-    from importlib.resources import files
-
-    index = files("skillgate_ai.local_ui").joinpath("static/index.html")
-    text = index.read_text(encoding="utf-8")
-    assert "no account" in text.lower()
 
 
 def _is_skillgate_hosted_host(host: str) -> bool:

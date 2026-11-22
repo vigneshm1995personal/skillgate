@@ -44,17 +44,6 @@ def skill_dir(tmp_path: Path) -> Path:
     return d
 
 
-@pytest.fixture
-def crumbs(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, str, dict[str, Any]]]:
-    calls: list[tuple[str, str, dict[str, Any]]] = []
-
-    def _crumb(phase: str, tid: str, **kw: Any) -> None:
-        calls.append((phase, tid, kw))
-
-    monkeypatch.setattr("skillgate_ai.engine.task.breadcrumb_task", _crumb)
-    return calls
-
-
 def _skill(skill_dir: Path):
     return ingest_skill(skill_dir, strict=False)
 
@@ -967,10 +956,8 @@ def test_run_task_resets_sink_and_ends_control_on_error(tmp_path: Path, skill_di
     assert control.begun == ["a"]
 
 
-def test_run_task_breadcrumb_end_once(
-    tmp_path: Path, skill_dir: Path, crumbs: list[tuple[str, str, dict[str, Any]]]
-) -> None:
-    engine._run_task(
+def test_run_task_harness_error_propagates(tmp_path: Path, skill_dir: Path) -> None:
+    report = engine._run_task(
         task=_task("a"),
         spec=_spec(_task("a")),
         skills=[_skill(skill_dir)],
@@ -980,10 +967,7 @@ def test_run_task_breadcrumb_end_once(
         suite_dir=tmp_path,
         judge=SkipJudge(),
     )
-    phases = [p for p, _, _ in crumbs]
-    assert phases == ["start", "end"]
-    assert "passed" in crumbs[-1][2]
-    crumbs.clear()
+    assert report.task_id == "a"
     with pytest.raises(RuntimeError, match="boom"):
         engine._run_task(
             task=_task("b"),
@@ -995,9 +979,6 @@ def test_run_task_breadcrumb_end_once(
             suite_dir=tmp_path,
             judge=SkipJudge(),
         )
-    phases2 = [p for p, _, _ in crumbs]
-    assert phases2 == ["start", "end"]
-    assert crumbs[-1][2] == {"passed": False}
 
 
 # --- run_eval ---

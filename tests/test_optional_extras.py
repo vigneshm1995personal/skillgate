@@ -126,8 +126,6 @@ def test_core_modules_import_without_extras(tmp_path: Path) -> None:
         "skillgate_ai.history",
         "skillgate_ai.judge_context",
         "skillgate_ai.document_text",
-        "skillgate_ai.local_ui.api",
-        "skillgate_ai.local_ui.server",
     )
     code = ";".join(f"import {m}" for m in mods)
     proc = _run_without(UI_MODULES + DOCS_MODULES, code, tmp_path)

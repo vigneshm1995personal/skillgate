@@ -5,7 +5,7 @@ Local Apache-2.0 gate for Agent Skills. One pack on disk + `skillgate check` (ex
 ## Stack
 
 - Python ≥ 3.11 (`src/skillgate_ai/`), CLI via Typer (`skillgate` / `skillgate-ai`)
-- Optional local UI: `skillgate ui` (stdlib server + static assets under `src/skillgate_ai/local_ui/`)
+- Optional local UI: `skillgate ui` (FastAPI `skillgate_ai.server`, needs `skillgate-ai[ui]`; React app from `web/` shipped as `src/skillgate_ai/web_static/`)
 - Docker image ENTRYPOINT is `skillgate`; default CMD is `check /pack`
 
 ## Layout

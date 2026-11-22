@@ -2,8 +2,6 @@ from __future__ import annotations
 
 import json
 import shutil
-import threading
-import time
 from pathlib import Path
 
 from typer.testing import CliRunner
@@ -264,7 +262,8 @@ def test_compare_models_cancel_stops_next_arm(tmp_path: Path, monkeypatch) -> No
     monkeypatch.setenv("SKILLGATE_ROOT", str(tmp_path))
     monkeypatch.setenv("SKILLGATE_OPENAI_API_KEY", "sk-test")
     calls = {"n": 0}
-    compare_id_holder: dict[str, str] = {}
+    compare_id = "abcd12345678"
+    cancel_outcomes: list[str] = []
 
     def fake_run_check(target, **kwargs):
         from skillgate_ai.engine import SuiteReport, TaskReport
@@ -272,11 +271,7 @@ def test_compare_models_cancel_stops_next_arm(tmp_path: Path, monkeypatch) -> No
 
         calls["n"] += 1
         if calls["n"] == 1:
-            threading.Timer(
-                0.05,
-                lambda: request_cancel_compare(tmp_path, compare_id_holder["id"]),
-            ).start()
-            time.sleep(0.08)
+            cancel_outcomes.append(request_cancel_compare(tmp_path, compare_id))
         report = SuiteReport(
             suite="pdf",
             title="t",
@@ -304,19 +299,17 @@ def test_compare_models_cancel_stops_next_arm(tmp_path: Path, monkeypatch) -> No
 
     monkeypatch.setattr("skillgate_ai.compare.models.run_check", fake_run_check)
 
-    def run():
-        compare_id_holder["id"] = "abcd12345678"
-        return run_models_compare(
-            pack,
-            arms=[
-                parse_arm_spec("A:codex", arm_id="a", index=0),
-                parse_arm_spec("B:cursor-agent", arm_id="b", index=1),
-            ],
-            root=tmp_path,
-            compare_id="abcd12345678",
-        )
-
-    result = run()
+    result = run_models_compare(
+        pack,
+        arms=[
+            parse_arm_spec("A:codex", arm_id="a", index=0),
+            parse_arm_spec("B:cursor-agent", arm_id="b", index=1),
+        ],
+        root=tmp_path,
+        compare_id=compare_id,
+    )
+    assert cancel_outcomes == ["requested"]
+    assert calls["n"] == 1
     assert result.payload["status"] == "cancelled"
     assert len(result.payload["arms"]) == 1
     assert load_compares(pack)[-1]["status"] == "cancelled"
