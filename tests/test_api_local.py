@@ -181,9 +181,7 @@ def test_settings_keys_write_vault(tmp_path: Path, monkeypatch) -> None:
 
 def test_settings_keys_reject_line_breaks(tmp_path: Path, monkeypatch) -> None:
     client = _client(tmp_path, monkeypatch)
-    res = client.put(
-        "/api/settings/keys/OPENAI_API_KEY", json={"value": "sk-line1\nMALICIOUS=1"}
-    )
+    res = client.put("/api/settings/keys/OPENAI_API_KEY", json={"value": "sk-line1\nMALICIOUS=1"})
     assert res.status_code == 400, res.text
     assert "line break" in res.text.lower()
     vault = tmp_path / ".skillgate" / "keys"

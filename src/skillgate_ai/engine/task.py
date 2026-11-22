@@ -443,9 +443,7 @@ def _run_task(
             suite_dir=suite_dir,
             skill_root=skill_root,
         )
-        result, skipped = _harness_result_or_skip(
-            task, harness, sandbox, skills, timeout, control
-        )
+        result, skipped = _harness_result_or_skip(task, harness, sandbox, skills, timeout, control)
         if skipped is not None:
             return skipped
         assert result is not None

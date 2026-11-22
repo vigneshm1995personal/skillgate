@@ -160,9 +160,7 @@ Each sub-registrar keeps the lazy `from skillgate_ai.cli import …` inside its 
 ```python
 def test_settings_keys_reject_line_breaks(tmp_path: Path, monkeypatch) -> None:
     client = _client(tmp_path, monkeypatch)
-    res = client.put(
-        "/api/settings/keys/OPENAI_API_KEY", json={"value": "sk-line1\nMALICIOUS=1"}
-    )
+    res = client.put("/api/settings/keys/OPENAI_API_KEY", json={"value": "sk-line1\nMALICIOUS=1"})
     assert res.status_code == 400, res.text
     assert "line break" in res.text.lower()
     vault = tmp_path / ".skillgate" / "keys"
@@ -332,70 +330,70 @@ Rules: no `sleep`, retry, rerun or skip, and no timing thresholds. Keep every or
 
 Replacement body. The signature and the `from skillgate_ai.harness import login as harness_login` line stay. Add `from typing import Any` to the module imports.
 ```python
-    grandchild = tmp_path / "grandchild.py"
-    grandchild.write_text(
-        "import signal, sys\n"
-        "def on_term(signum, frame):\n"
-        "    open(sys.argv[1], 'w').write('dead')\n"
-        "    sys.exit(0)\n"
-        "signal.signal(signal.SIGTERM, on_term)\n"
-        "print('ready', flush=True)\n"
-        "while True:\n"
-        "    signal.pause()\n",
-        encoding="utf-8",
-    )
-    parent = tmp_path / "parent.py"
-    parent.write_text(
-        "import os, signal, subprocess, sys\n"
-        "child = subprocess.Popen([sys.executable, sys.argv[1], sys.argv[2]])\n"
-        "print(f'{os.getpid()} {child.pid}', flush=True)\n"
-        "while True:\n"
-        "    signal.pause()\n",
-        encoding="utf-8",
-    )
-    dead_marker = tmp_path / "dead.txt"
-    real_popen = harness_login.subprocess.Popen
-    seen: dict[str, Any] = {}
+grandchild = tmp_path / "grandchild.py"
+grandchild.write_text(
+    "import signal, sys\n"
+    "def on_term(signum, frame):\n"
+    "    open(sys.argv[1], 'w').write('dead')\n"
+    "    sys.exit(0)\n"
+    "signal.signal(signal.SIGTERM, on_term)\n"
+    "print('ready', flush=True)\n"
+    "while True:\n"
+    "    signal.pause()\n",
+    encoding="utf-8",
+)
+parent = tmp_path / "parent.py"
+parent.write_text(
+    "import os, signal, subprocess, sys\n"
+    "child = subprocess.Popen([sys.executable, sys.argv[1], sys.argv[2]])\n"
+    "print(f'{os.getpid()} {child.pid}', flush=True)\n"
+    "while True:\n"
+    "    signal.pause()\n",
+    encoding="utf-8",
+)
+dead_marker = tmp_path / "dead.txt"
+real_popen = harness_login.subprocess.Popen
+seen: dict[str, Any] = {}
 
-    class KeyboardInterruptPopen:
-        def __init__(self, argv, start_new_session=False):
-            self._proc = real_popen(
-                argv, start_new_session=start_new_session, stdout=subprocess.PIPE, text=True
-            )
-            self.start_new_session = start_new_session
-            self._interrupted = False
-            seen["proc"] = self._proc
 
-        @property
-        def pid(self):
-            return self._proc.pid
-
-        def wait(self, timeout=None):
-            if not self._interrupted:
-                self._interrupted = True
-                # Blocks until the parent is up and the grandchild's SIGTERM handler is installed.
-                seen["lines"] = [self._proc.stdout.readline().strip() for _ in range(2)]
-                raise KeyboardInterrupt()
-            return self._proc.wait(timeout=timeout)
-
-        def poll(self):
-            return self._proc.poll()
-
-    monkeypatch.setattr("skillgate_ai.harness.login.subprocess.Popen", KeyboardInterruptPopen)
-    with pytest.raises(KeyboardInterrupt):
-        harness_login._run_inherited(
-            [sys.executable, str(parent), str(grandchild), str(dead_marker)]
+class KeyboardInterruptPopen:
+    def __init__(self, argv, start_new_session=False):
+        self._proc = real_popen(
+            argv, start_new_session=start_new_session, stdout=subprocess.PIPE, text=True
         )
-    lines = seen["lines"]
-    assert "ready" in lines, lines
-    (pid_line,) = [line for line in lines if line != "ready"]
-    parent_pid, child_pid = (int(part) for part in pid_line.split())
-    assert _pid_gone(parent_pid)
-    proc = seen["proc"]
-    proc.stdout.read()  # EOF only after parent and grandchild have both exited
-    proc.stdout.close()
-    assert dead_marker.is_file()
-    assert _pid_gone(child_pid)
+        self.start_new_session = start_new_session
+        self._interrupted = False
+        seen["proc"] = self._proc
+
+    @property
+    def pid(self):
+        return self._proc.pid
+
+    def wait(self, timeout=None):
+        if not self._interrupted:
+            self._interrupted = True
+            # Blocks until the parent is up and the grandchild's SIGTERM handler is installed.
+            seen["lines"] = [self._proc.stdout.readline().strip() for _ in range(2)]
+            raise KeyboardInterrupt()
+        return self._proc.wait(timeout=timeout)
+
+    def poll(self):
+        return self._proc.poll()
+
+
+monkeypatch.setattr("skillgate_ai.harness.login.subprocess.Popen", KeyboardInterruptPopen)
+with pytest.raises(KeyboardInterrupt):
+    harness_login._run_inherited([sys.executable, str(parent), str(grandchild), str(dead_marker)])
+lines = seen["lines"]
+assert "ready" in lines, lines
+(pid_line,) = [line for line in lines if line != "ready"]
+parent_pid, child_pid = (int(part) for part in pid_line.split())
+assert _pid_gone(parent_pid)
+proc = seen["proc"]
+proc.stdout.read()  # EOF only after parent and grandchild have both exited
+proc.stdout.close()
+assert dead_marker.is_file()
+assert _pid_gone(child_pid)
 ```
 
 - **Assertions kept:** `pytest.raises(KeyboardInterrupt)`, `_pid_gone(parent_pid)`, `dead_marker.is_file()`, `_pid_gone(child_pid)`.
