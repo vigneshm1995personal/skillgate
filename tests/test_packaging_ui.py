@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import importlib.util
+import os
 import shutil
 import subprocess
 from pathlib import Path
+
+import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 PACKAGED_UI = ROOT / "src" / "skillgate_ai" / "web_static"
@@ -82,6 +85,17 @@ def _git_indexed_web_static() -> dict[str, bytes]:
     return files
 
 
+def _web_toolchain_missing() -> str | None:
+    """Why `pnpm exec tsc` / `vite build` cannot run here, or None when they can."""
+    if shutil.which("pnpm") is None:
+        return "pnpm is not on PATH"
+    bin_dir = WEB_DIR / "node_modules" / ".bin"
+    missing = [tool for tool in ("tsc", "vite") if not (bin_dir / tool).exists()]
+    if missing:
+        return f"web/node_modules/.bin has no {' or '.join(missing)}"
+    return None
+
+
 def test_web_static_is_tracked_and_not_gitignored() -> None:
     """The wheel copies this folder; it must be in git, not a leftover local build."""
     tracked = subprocess.check_output(
@@ -111,13 +125,21 @@ def test_web_static_matches_fresh_pnpm_build(tmp_path: Path) -> None:
         "  python3 -c 'from skillgate_build import bundle_web_static; bundle_web_static()'\n"
         "  git add src/skillgate_ai/web_static"
     )
+    missing = _web_toolchain_missing()
+    if missing is not None:
+        if os.environ.get("CI"):
+            pytest.fail(f"{missing}; CI must run the web_static freshness check.")
+        pytest.skip(
+            f"{missing}; run `cd web && pnpm install --frozen-lockfile` "
+            "to check web_static freshness."
+        )
+    pnpm = shutil.which("pnpm")
+    assert pnpm is not None
     working = PACKAGED_UI / "index.html"
     original = working.read_bytes() if working.is_file() else None
     working.parent.mkdir(parents=True, exist_ok=True)
     working.write_text("POISON — pip install -e rebuilt the working tree\n", encoding="utf-8")
     try:
-        pnpm = shutil.which("pnpm")
-        assert pnpm, "pnpm is required to verify the packaged UI against a fresh web/ build"
         fresh = tmp_path / "dist"
         subprocess.check_call([pnpm, "--dir", str(WEB_DIR), "exec", "tsc", "-b"], cwd=WEB_DIR)
         subprocess.check_call(

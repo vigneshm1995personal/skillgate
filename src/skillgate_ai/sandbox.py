@@ -15,7 +15,6 @@ from typing import IO, Protocol, cast
 from skillgate_ai.errors import SandboxError, agent_timeout_error
 from skillgate_ai.ingest import Skill
 from skillgate_ai.live import CheckAborted, OutputSink
-from skillgate_ai.observability import breadcrumb_harness_spawn, breadcrumb_timeout
 from skillgate_ai.pack import copy_skill_pack
 from skillgate_ai.suite import DEFAULT_TASK_TIMEOUT_SEC
 
@@ -101,7 +100,6 @@ class LocalSandbox:
     ) -> subprocess.CompletedProcess[str]:
         command = with_running_python(command)
         merged = _sandbox_env(env)
-        breadcrumb_harness_spawn(command)
         sink = self.output_sink
         try:
             if sink is None:
@@ -125,7 +123,6 @@ class LocalSandbox:
                 sink=sink,
             )
         except subprocess.TimeoutExpired:
-            breadcrumb_timeout(command, timeout)
             raise agent_timeout_error(timeout) from None
 
     def close(self) -> None:
@@ -174,7 +171,6 @@ class DockerSandbox:
             docker_cmd.extend(["-e", f"{key}={value}"])
         docker_cmd.append(self.image)
         docker_cmd.extend(command)
-        breadcrumb_harness_spawn(docker_cmd)
         sink = self.output_sink
         try:
             if sink is None:
@@ -194,7 +190,6 @@ class DockerSandbox:
                 sink=sink,
             )
         except subprocess.TimeoutExpired:
-            breadcrumb_timeout(docker_cmd, timeout + 30)
             raise agent_timeout_error(timeout) from None
         except FileNotFoundError as exc:
             raise SandboxError("Docker executable disappeared while running.") from exc

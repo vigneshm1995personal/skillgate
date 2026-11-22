@@ -32,7 +32,6 @@ from skillgate_ai.harness import (
 from skillgate_ai.ingest import Skill
 from skillgate_ai.judge import Judge
 from skillgate_ai.live import KILL, CheckAborted, RunControl
-from skillgate_ai.observability import breadcrumb_task, span
 from skillgate_ai.pack import resolve_input_file
 from skillgate_ai.sandbox import Sandbox, prepare_workspace
 from skillgate_ai.scorers import RunArtifacts, Score, score_task
@@ -315,8 +314,7 @@ def _score_and_judge_task(
         stdout=result.stdout,
         stderr=result.stderr,
     )
-    with span("eval.score", task.id):
-        scores = score_task(task, artifacts, skills=skills)
+    scores = score_task(task, artifacts, skills=skills)
     spans = getattr(result, "spans", None) or _spans_from_transcript(result.transcript)
     from skillgate_ai.metrics import count_path_steps
 
@@ -347,16 +345,15 @@ def _harness_result_or_skip(
     timeout: int,
     control: RunControl | None,
 ) -> tuple[HarnessResult | None, TaskReport | None]:
-    with span("eval.harness", harness.name):
-        try:
-            result: HarnessResult = harness.run(sandbox, task.prompt, skills, timeout)
-        except CheckAborted as exc:
-            return None, _skipped_report(task, KILL_FAILURE if exc.reason == KILL else SKIP_FAILURE)
-        except Exception as exc:
-            blocked = timeout_harness_error(exc, timeout_sec=timeout)
-            if blocked is not None:
-                raise blocked from None
-            raise
+    try:
+        result: HarnessResult = harness.run(sandbox, task.prompt, skills, timeout)
+    except CheckAborted as exc:
+        return None, _skipped_report(task, KILL_FAILURE if exc.reason == KILL else SKIP_FAILURE)
+    except Exception as exc:
+        blocked = timeout_harness_error(exc, timeout_sec=timeout)
+        if blocked is not None:
+            raise blocked from None
+        raise
     _raise_if_run_blocked(result, timeout=timeout)
     if control is not None and control.kill_requested:
         return None, _skipped_report(task, KILL_FAILURE)
@@ -432,79 +429,65 @@ def _run_task(
     if control is not None:
         sandbox.output_sink = control
         control.begin_task(task.id, task.prompt)
-    breadcrumb_task("start", task.id, timeout_sec=timeout)
-    ended = False
     try:
-        with span("eval.task", task.id, expect_skill=task.expect_skill or ""):
-            skill_root = skills[0].path if skills else None
-            missing = _missing_golden_report(task, skill_root) if skill_root is not None else None
-            if missing is not None:
-                ended = True
-                return missing
-            _, file_baseline = _stage_workspace(
-                task,
-                skills,
-                harness,
-                sandbox,
-                root=root,
-                suite_dir=suite_dir,
-                skill_root=skill_root,
-            )
-            result, skipped = _harness_result_or_skip(
-                task, harness, sandbox, skills, timeout, control
-            )
-            if skipped is not None:
-                ended = True
-                return skipped
-            assert result is not None
-            task_usage = _task_usage(control, result)
-            scores, spans, passed, failures, judged, review, file_baseline = _score_and_judge_task(
-                task,
-                sandbox=sandbox,
-                result=result,
-                skills=skills,
-                harness=harness,
-                judge=judge,
-                skill_root=skill_root,
-                file_baseline=file_baseline,
-            )
-            task_usage = _combined_usage(task_usage, judged, result, run_config)
-            advice = _task_advice(
-                task,
-                scores,
-                skills,
-                result,
-                reference=reference,
-                sibling_prompts=sibling_prompts,
-                judged=judged,
-            )
-            breadcrumb_task(
-                "end",
-                task.id,
-                passed=passed,
-                returncode=result.returncode,
-            )
-            ended = True
-            return _build_task_report(
-                task,
-                sandbox=sandbox,
-                result=result,
-                passed=passed,
-                scores=scores,
-                failures=failures,
-                spans=spans,
-                task_usage=task_usage,
-                judged=judged,
-                advice=advice,
-                review=review,
-                file_baseline=file_baseline,
-            )
+        skill_root = skills[0].path if skills else None
+        missing = _missing_golden_report(task, skill_root) if skill_root is not None else None
+        if missing is not None:
+            return missing
+        _, file_baseline = _stage_workspace(
+            task,
+            skills,
+            harness,
+            sandbox,
+            root=root,
+            suite_dir=suite_dir,
+            skill_root=skill_root,
+        )
+        result, skipped = _harness_result_or_skip(
+            task, harness, sandbox, skills, timeout, control
+        )
+        if skipped is not None:
+            return skipped
+        assert result is not None
+        task_usage = _task_usage(control, result)
+        scores, spans, passed, failures, judged, review, file_baseline = _score_and_judge_task(
+            task,
+            sandbox=sandbox,
+            result=result,
+            skills=skills,
+            harness=harness,
+            judge=judge,
+            skill_root=skill_root,
+            file_baseline=file_baseline,
+        )
+        task_usage = _combined_usage(task_usage, judged, result, run_config)
+        advice = _task_advice(
+            task,
+            scores,
+            skills,
+            result,
+            reference=reference,
+            sibling_prompts=sibling_prompts,
+            judged=judged,
+        )
+        return _build_task_report(
+            task,
+            sandbox=sandbox,
+            result=result,
+            passed=passed,
+            scores=scores,
+            failures=failures,
+            spans=spans,
+            task_usage=task_usage,
+            judged=judged,
+            advice=advice,
+            review=review,
+            file_baseline=file_baseline,
+        )
     finally:
         if control is not None:
             sandbox.output_sink = None
             control.end_task()
-        if not ended:
-            breadcrumb_task("end", task.id, passed=False)
 
 
 def _skipped_report(task: TaskSpec, reason: str) -> TaskReport:

@@ -12,8 +12,6 @@ import http.client
 import io
 import json
 import os
-import plistlib
-import shutil
 import sys
 import tempfile
 import time
@@ -32,6 +30,7 @@ from skillgate_ai.http_retry import (
     retry_after_from_response,
 )
 from skillgate_ai.ingest import ingest_skill
+from skillgate_ai.launchd import launch_agents_dir, skillgate_binary, write_launch_agent
 from skillgate_ai.pack import skill_pack_hash
 
 CONFIG_DIR = Path.home() / ".config" / "skillgate"
@@ -365,21 +364,9 @@ def install_launchd_plist() -> Path:
     """Write a macOS LaunchAgent that runs ``skillgate helper`` hands-off."""
     if sys.platform != "darwin":
         raise SkillGateError("LaunchAgent autostart is macOS-only.")
-    binary = shutil.which("skillgate") or "skillgate"
-    plist = {
-        "Label": LAUNCH_AGENT_LABEL,
-        "RunAtLoad": True,
-        "KeepAlive": False,
-        "ProgramArguments": [binary, "helper"],
-    }
-    launch_dir = Path.home() / "Library" / "LaunchAgents"
-    launch_dir.mkdir(parents=True, exist_ok=True)
-    try:  # noqa: SIM105
-        os.chmod(launch_dir, 0o755)
-    except OSError:
-        pass
-    dest = launch_dir / f"{LAUNCH_AGENT_LABEL}.plist"
-    with open(dest, "wb") as handle:
-        plistlib.dump(plist, handle)
-    os.chmod(dest, 0o644)
-    return dest
+    return write_launch_agent(
+        launch_agents_dir(),
+        label=LAUNCH_AGENT_LABEL,
+        program_arguments=[skillgate_binary(), "helper"],
+        keep_alive=False,
+    )

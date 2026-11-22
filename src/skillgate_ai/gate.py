@@ -30,12 +30,6 @@ from skillgate_ai.harness import is_live_harness, live_harness_or_error
 from skillgate_ai.history import append_eval
 from skillgate_ai.judge import SkipJudge, judge_stamp, resolve_judge
 from skillgate_ai.live import RunControl
-from skillgate_ai.observability import (
-    capture_run_failure,
-    eval_transaction,
-    log_eval_finished,
-    set_eval_passed,
-)
 from skillgate_ai.pack_schema import _example_marker_slug
 from skillgate_ai.paths import is_skill_pack, project_root, resolve_user_path
 from skillgate_ai.report import report_to_dict
@@ -231,7 +225,6 @@ def _execute_check(
     no_judge: bool = False,
 ) -> CheckResult:
     rid = run_id or uuid.uuid4().hex[:12]
-    skill_label = skill_path.name if skill_path else suite_path.stem
     run_cfg: EvalRunConfig | None = None
     demo_notice: str | None = None
     started = False
@@ -257,66 +250,48 @@ def _execute_check(
         run_cfg = stamp_resolved(run_cfg, resolved.name, cfg)
         outcome_judge = SkipJudge() if no_judge else resolve_judge(cfg, harness_name=resolved.name)
         run_cfg = with_judge(run_cfg, judge_stamp(outcome_judge))
-        mode = "live"
-        with eval_transaction(
+        started = True
+        report = run_eval(
+            None if spec is not None else suite_path,
+            spec=spec,
+            harness=resolved,
+            sandbox_kind=sandbox_kind,
+            docker_image=cfg.docker_image,
+            project_root=project,
+            skill_override=skill_path or (suite_path if spec is not None else None),
             run_id=rid,
-            skill=skill_label,
-            harness=resolved.name,
-            mode=mode,
-            suite=suite_path.stem,
-            sandbox=sandbox_kind,
-        ):
-            started = True
-            report = run_eval(
-                None if spec is not None else suite_path,
-                spec=spec,
-                harness=resolved,
-                sandbox_kind=sandbox_kind,
-                docker_image=cfg.docker_image,
-                project_root=project,
-                skill_override=skill_path or (suite_path if spec is not None else None),
-                run_id=rid,
-                timeout_override=run_cfg.timeout_sec,
-                config=run_cfg.to_dict(),
-                on_progress=on_progress,
-                control=control,
-                judge=outcome_judge,
-                strict_ingest=source == "cli",
-            )
-            run_cfg = with_timeout_effective(run_cfg, report.timeout_effective)
-            agent_model = next((t.model for t in report.tasks if t.model), None)
-            if agent_model:
-                run_cfg = with_model(run_cfg, agent_model)
-            report.config = run_cfg.to_dict()
-            set_eval_passed(report.passed)
-            log_eval_finished(
-                run_id=rid,
-                skill=report.skill,
-                harness=report.harness,
-                passed=report.passed,
-            )
-            persist_root = Path(report.skill_path) if report.skill_path else pack_root
-            payload = report_to_dict(report)
-            if tryout:
-                payload["tryout"] = True
-            persist_eval(
-                pack_root=persist_root,
-                run_id=rid,
-                passed=report.passed,
-                report=payload,
-                config=run_cfg,
-                tryout=tryout,
-            )
+            timeout_override=run_cfg.timeout_sec,
+            config=run_cfg.to_dict(),
+            on_progress=on_progress,
+            control=control,
+            judge=outcome_judge,
+            strict_ingest=source == "cli",
+        )
+        run_cfg = with_timeout_effective(run_cfg, report.timeout_effective)
+        agent_model = next((t.model for t in report.tasks if t.model), None)
+        if agent_model:
+            run_cfg = with_model(run_cfg, agent_model)
+        report.config = run_cfg.to_dict()
+        persist_root = Path(report.skill_path) if report.skill_path else pack_root
+        payload = report_to_dict(report)
+        if tryout:
+            payload["tryout"] = True
+        persist_eval(
+            pack_root=persist_root,
+            run_id=rid,
+            passed=report.passed,
+            report=payload,
+            config=run_cfg,
+            tryout=tryout,
+        )
     except Exception as exc:
         blocked = timeout_harness_error(exc)
         if blocked is None:
             if not isinstance(exc, SkillGateError):
                 raise
-            capture_run_failure(exc)
             persist_root = skill_path or pack_root
             err = {"message": exc.message, "hint": exc.hint}
         else:
-            capture_run_failure(blocked)
             persist_root = skill_path or pack_root
             exc = blocked
             err = {"message": blocked.message, "hint": blocked.hint}

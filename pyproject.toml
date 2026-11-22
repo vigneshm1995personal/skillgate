@@ -92,7 +92,6 @@ sdist = "skillgate_build.sdist"
 
 [tool.setuptools.package-data]
 skillgate_ai = [
-  "local_ui/static/*",
   "web_static/*",
   "web_static/**/*",
   "examples/**/*",
@@ -124,7 +123,6 @@ select = ["E", "W", "F", "I", "UP", "B", "SIM"]
 "src/skillgate_build.py" = ["N801"]
 # Fixture copy / JS-in-Python strings that cannot wrap without changing values.
 "tests/test_wording_facts.py" = ["E501"]
-"tests/test_local_ui.py" = ["E501"]
 
 [tool.ruff.format]
 quote-style = "double"

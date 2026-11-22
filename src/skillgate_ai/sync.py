@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import json
 import os
-import plistlib
 import re
 import shutil
 import subprocess
@@ -22,6 +21,7 @@ from pathlib import Path
 from skillgate_ai.deploy import adapters, latest_check_passed
 from skillgate_ai.errors import SkillGateError
 from skillgate_ai.ingest import ingest_skill
+from skillgate_ai.launchd import launch_agents_dir, skillgate_binary, write_launch_agent
 from skillgate_ai.pack import copy_skill_pack
 
 DEFAULT_TARGETS = ("cursor", "codex", "claude")
@@ -243,10 +243,6 @@ def run_sync_loop(
         time.sleep(max(1, interval))
 
 
-def launch_agents_dir() -> Path:
-    return Path.home() / "Library" / "LaunchAgents"
-
-
 def install_launchd_plist(
     repo_url: str,
     *,
@@ -259,25 +255,13 @@ def install_launchd_plist(
     selected = normalize_targets(list(targets) if targets else default_targets())
     if not repo_url or not repo_url.strip():
         raise SkillGateError("A skills repo URL is required for sync autostart.")
-    binary = shutil.which("skillgate") or "skillgate"
-    program = [binary, "sync", "--repo", repo_url.strip()]
+    program = [skillgate_binary(), "sync", "--repo", repo_url.strip()]
     if selected:
         program += ["--targets", ",".join(selected)]
     if interval > 0:
         program += ["--interval", str(interval)]
-    plist = {
-        "Label": LAUNCH_AGENT_LABEL,
-        "RunAtLoad": True,
-        "ProgramArguments": program,
-    }
-    launch_dir = launch_agents_dir()
-    launch_dir.mkdir(parents=True, exist_ok=True)
-    try:  # noqa: SIM105
-        os.chmod(launch_dir, 0o755)
-    except OSError:
-        pass
-    dest = launch_dir / f"{LAUNCH_AGENT_LABEL}.plist"
-    with open(dest, "wb") as handle:
-        plistlib.dump(plist, handle)
-    os.chmod(dest, 0o644)
-    return dest
+    return write_launch_agent(
+        launch_agents_dir(),
+        label=LAUNCH_AGENT_LABEL,
+        program_arguments=program,
+    )
