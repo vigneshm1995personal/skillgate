@@ -50,9 +50,11 @@ def register_import_command(app: typer.Typer) -> None:
                     _cli.console.print(f"imported  {row.get('slug') or row.get('name')}")
                 return
             if zip_path is not None or markdown is not None:
+                from typing import cast
+
                 from skillgate_ai.api_intake import extract_uploaded_skill
 
-                path = zip_path or markdown
+                path = cast(Path, zip_path or markdown)  # guarded: one of --zip/--md is set
                 data = path.expanduser().read_bytes()
                 dest = extract_uploaded_skill(root, data, filename=path.name)
                 _cli.console.print(f"Imported {dest}")
@@ -102,6 +104,7 @@ def register_skill_write(skill_app: typer.Typer) -> None:
                 )
                 _cli.console.print(written.get("path") or rel)
                 return
+            data: str | bytes
             if src is not None:
                 data = src.expanduser().read_bytes()
             elif content is not None:

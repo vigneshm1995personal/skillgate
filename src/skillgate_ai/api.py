@@ -246,7 +246,7 @@ def _register_core_routes(app: FastAPI) -> None:
         body = await request.json() or {}
         if not isinstance(body, dict):
             body = {}
-        key_env = {"key_env": body.get("key_env")} if "key_env" in body else {}
+        key_env: dict[str, Any] = {"key_env": body.get("key_env")} if "key_env" in body else {}
         try:
             settings = save_judge_settings(
                 state.root,

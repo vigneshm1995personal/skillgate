@@ -180,7 +180,7 @@ def _ingest_claude_stream_event(
         if kind == "tool_use":
             command = _claude_tool_command(part)
             call_id = str(part.get("id") or "").strip()
-            row = {
+            row: dict[str, Any] = {
                 "command": command[:500],
                 "output": None,
                 "tool": str(part.get("name") or "").strip() or None,
@@ -193,9 +193,9 @@ def _ingest_claude_stream_event(
             continue
         output = _claude_tool_output(part)
         call_id = str(part.get("tool_use_id") or part.get("id") or "").strip()
-        row = pending.pop(call_id, None) if call_id else None
-        if row is not None:
-            row["output"] = output[:_COMMAND_OUTPUT_CAP] if output else None
+        matched = pending.pop(call_id) if call_id and call_id in pending else None
+        if matched is not None:
+            matched["output"] = output[:_COMMAND_OUTPUT_CAP] if output else None
             continue
         runs.append(
             {

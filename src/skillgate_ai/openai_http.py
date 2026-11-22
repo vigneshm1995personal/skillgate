@@ -203,7 +203,7 @@ def post_openai(
         return call_with_retry(_once, retries=retries)
     except RetryableStatus as exc:
         if exc.response is not None:
-            return exc.response  # type: ignore[return-value]
+            return exc.response  # type: ignore[return-value]  # RetryableStatus.response is the last HTTP response object
         raise
 
 

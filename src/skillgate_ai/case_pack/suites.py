@@ -259,7 +259,7 @@ def suite_from_checks(
             if case_is_locked(existing.skill, c.id, pack_case_ids=all_ids) and c.id not in present
         )
     pack = CasePack(
-        schema_version=1,
+        schema=1,
         skill=skill_name,
         cases=cases,
         judge=existing.judge if existing else None,
@@ -313,7 +313,7 @@ def checks_fingerprint(checks: list[dict[str, Any]], *, skill: str) -> str:
                 output_optional=raw.get("output_optional", False),
             )
         )
-    return pack_fingerprint(CasePack(schema_version=1, skill=skill, cases=cases))
+    return pack_fingerprint(CasePack(schema=1, skill=skill, cases=cases))
 
 
 def _project_root_for_skill(skill_path: Path) -> Path | None:

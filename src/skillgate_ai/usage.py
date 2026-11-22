@@ -37,7 +37,9 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, TypeVar
+
+_Num = TypeVar("_Num", int, float)
 
 # Order matters: prefer the harness's own underscore names, then OpenAI's
 # prompt/completion names, then Cursor's camelCase, then short aliases.
@@ -387,7 +389,7 @@ def render_stream_line(raw: str) -> str | None:
     return raw
 
 
-def _pick(current: float | None, update: float | None) -> float | None:
+def _pick(current: _Num | None, update: _Num | None) -> _Num | None:
     if update is None:
         return current
     if current is None:

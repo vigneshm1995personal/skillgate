@@ -62,7 +62,7 @@ class CursorAgentHarness:
     name = "cursor-agent"
     # Last-known CLI family ids (docs only). Evaluate picker uses live
     # GET https://api.cursor.com/v1/models for the current CURSOR_API_KEY.
-    supported_models = ("composer-2.5", "composer-2.5-fast")
+    supported_models: tuple[str, ...] = ("composer-2.5", "composer-2.5-fast")
 
     def __init__(self, cfg: LLMConfig):
         self.cfg = cfg
@@ -125,7 +125,7 @@ class CodexCliHarness:
     name = "codex"
     # Codex *client* models for ChatGPT-session auth (https://developers.openai.com/codex/models).
     # Do not list gateway model ids like openai/gpt-4o-mini — ChatGPT login rejects them.
-    supported_models = (
+    supported_models: tuple[str, ...] = (
         "gpt-5.6-luna",
         "gpt-5.6-terra",
         "gpt-6-astra",
@@ -214,7 +214,7 @@ class ClaudeCodeHarness:
     name = "claude"
     # Claude Code model aliases and full ids (code.claude.com/docs/en/model-config).
     # `default` clears any override; Claude resolves it per plan.
-    supported_models = (
+    supported_models: tuple[str, ...] = (
         "default",
         "best",
         "fable",

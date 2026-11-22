@@ -206,9 +206,8 @@ class OutcomeJudge:
             evaluate, state=state, images=images, spec=ask_spec, first=evaluated
         )
         if facts and evaluated.get("status") == "completed":
-            answers = (
-                dict(evaluated.get("answers")) if isinstance(evaluated.get("answers"), dict) else {}
-            )
+            raw_answers = evaluated.get("answers")
+            answers: dict[str, Any] = dict(raw_answers) if isinstance(raw_answers, dict) else {}
             answers.update(facts)
             evaluated = dict(evaluated)
             evaluated["answers"] = answers
@@ -388,7 +387,8 @@ class OutcomeJudge:
                 soft_questions=soft_questions,
                 extra_warnings=extra_warnings,
             )
-        answers = evaluated.get("answers") if isinstance(evaluated.get("answers"), dict) else {}
+        raw_answers = evaluated.get("answers")
+        answers: dict[str, Any] = raw_answers if isinstance(raw_answers, dict) else {}
         if not include_path:
             answers = {key: value for key, value in answers.items() if key not in SOFT_CELL_ORDER}
         confidence = bool(getattr(self.backend, "supports_confidence", self.supports_confidence))

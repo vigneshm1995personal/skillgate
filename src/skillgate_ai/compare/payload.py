@@ -18,7 +18,8 @@ def _usage_for_task_ids(report: dict[str, Any], task_ids: list[str]) -> dict[str
     found = False
     for task_id in task_ids:
         task = tasks.get(task_id) or {}
-        usage = task.get("usage") if isinstance(task.get("usage"), dict) else {}
+        raw_usage = task.get("usage")
+        usage: dict[str, Any] = raw_usage if isinstance(raw_usage, dict) else {}
         if usage.get("tokens_total") is not None:
             tokens += int(usage["tokens_total"])
             found = True
@@ -174,7 +175,8 @@ def scrub_customer_compare_payload(payload: dict[str, Any]) -> dict[str, Any]:
     for arm in data.get("arms") or []:
         if not isinstance(arm, dict):
             continue
-        cfg = arm.get("config") if isinstance(arm.get("config"), dict) else {}
+        raw_cfg = arm.get("config")
+        cfg: dict[str, Any] = raw_cfg if isinstance(raw_cfg, dict) else {}
         harness = str(cfg.get("harness") or cfg.get("harness_pref") or "cursor-agent")
         arm["subtitle"] = harness_display_name(harness, harness)
         # Keep user arm labels from compare specs; only fill when missing.

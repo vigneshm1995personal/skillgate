@@ -34,7 +34,14 @@ class DeployAdapter(Protocol):
         """Directory that will contain <name>/SKILL.md."""
         ...
 
-    def install(self, *, skill: Skill, source: Path) -> DeployResult:
+    def install(
+        self,
+        *,
+        skill: Skill,
+        source: Path,
+        force: bool = False,
+        remote_gated: bool = False,
+    ) -> DeployResult:
         """Copy source skill pack to skills_root / skill.name. Re-ingest dest."""
         ...
 

@@ -126,14 +126,14 @@ def register_eval_routes(app: FastAPI) -> None:
                     skill_path,
                     data,
                     filename=file.filename,
-                    on_conflict=conflict,  # type: ignore[arg-type]
+                    on_conflict=conflict,  # type: ignore[arg-type]  # API str; values validated to ON_CONFLICT literals above
                 )
             else:
                 plan = apply_case_import(
                     skill_path,
                     data,
                     filename=file.filename,
-                    on_conflict=conflict,  # type: ignore[arg-type]
+                    on_conflict=conflict,  # type: ignore[arg-type]  # API str; values validated to ON_CONFLICT literals above
                     dry_run=False,
                 )
         except CaseImportError as exc:
