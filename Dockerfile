@@ -3,25 +3,32 @@
 # python:3.12-slim-bookworm index digest (hub.docker.com, 2026-10-02).
 # Pin matches private CI (setup-python 3.12) and requires-python >=3.11.
 ARG PYTHON_IMAGE=python:3.12-slim-bookworm@sha256:54c85f3c47607a77f32adec749d3c81d1348bf25833671f512b26a9b6d778cb3
+# uv 0.12.13 index digest — keep in sync with setup-uv `version:` in CI (UV_VERSION).
+ARG UV_IMAGE=ghcr.io/astral-sh/uv:0.12.13@sha256:b485bd65cc2cf1c9a93b3554012c9c3778cf7b1b5fd3d3096ce9e1226c97e1e6
+
+FROM ${UV_IMAGE} AS uv
 
 # --- Build stage ---
 FROM ${PYTHON_IMAGE} AS build
 WORKDIR /src
+COPY --from=uv /uv /usr/local/bin/uv
+ENV UV_PROJECT_ENVIRONMENT=/opt/venv \
+    UV_PYTHON_DOWNLOADS=never \
+    UV_LINK_MODE=copy \
+    UV_COMPILE_BYTECODE=0 \
+    PATH="/opt/venv/bin:$PATH"
 
-RUN python -m venv /opt/venv
-ENV PATH="/opt/venv/bin:$PATH"
-
-# Install core deps + the docs extra (PDF scoring, demo PDFs) first; cached when only src changes.
-# No ui extra: this image is the check CLI.
-RUN --mount=type=bind,source=pyproject.toml,target=/tmp/pyproject.toml \
-    --mount=type=cache,target=/root/.cache/pip \
-    python -c "import tomllib, pathlib, subprocess; p=tomllib.loads(pathlib.Path('/tmp/pyproject.toml').read_text())['project']; deps=p['dependencies']+p['optional-dependencies']['docs']; subprocess.check_call(['pip','install','--upgrade','pip']); subprocess.check_call(['pip','install','--no-compile',*deps])"
+# Locked core deps + pyproject ['optional-dependencies']['docs'] (no ui: check CLI only).
+RUN --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
+    --mount=type=bind,source=uv.lock,target=uv.lock \
+    --mount=type=cache,target=/root/.cache/uv \
+    uv sync --locked --no-install-project --no-editable --extra docs
 
 COPY src ./src
 COPY skills ./skills
-COPY pyproject.toml README.md LICENSE ./
-RUN --mount=type=cache,target=/root/.cache/pip \
-    pip install --no-deps --no-compile .
+COPY pyproject.toml uv.lock README.md LICENSE ./
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --locked --no-editable --extra docs
 
 # --- Dev stage (Compose live-edit) ---
 FROM ${PYTHON_IMAGE} AS dev
