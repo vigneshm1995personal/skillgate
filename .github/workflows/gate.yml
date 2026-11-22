@@ -46,7 +46,7 @@ jobs:
       - run: ruff format --check
       - run: mypy src
 
-  test:
+  test-matrix:
     name: test (${{ matrix.python-version }})
     runs-on: ubuntu-latest
     timeout-minutes: 25
@@ -67,33 +67,38 @@ jobs:
           enable-cache: true
           cache-dependency-glob: "uv.lock"
           cache-suffix: py${{ matrix.python-version }}-${{ github.job }}
-      - if: matrix.python-version == '3.12'
-        uses: pnpm/action-setup@7088e561eb65bb68695d245aa206f005ef30921d # v4.1.0
+      - uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda # v4.1.0
         with:
           version: 10
-      - if: matrix.python-version == '3.12'
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: "22"
           cache: pnpm
           cache-dependency-path: web/pnpm-lock.yaml
       - run: uv sync --locked --extra dev --python "${{ matrix.python-version }}"
       - run: echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
+      - name: Install web toolchain (pnpm deps for packaging UI test)
+        working-directory: web
+        run: pnpm install --frozen-lockfile
       - if: matrix.python-version == '3.12'
         name: Web unit tests
         working-directory: web
-        run: pnpm install --frozen-lockfile && pnpm test
-      - name: Unit tests (no integration)
-        run: |
-          if [ "${{ matrix.python-version }}" = "3.12" ]; then
-            pytest -q -m "not integration"
-          else
-            # pnpm is only installed on 3.12; this test needs a fresh web/ build toolchain.
-            pytest -q -m "not integration" \
-              --deselect tests/test_packaging_ui.py::test_web_static_matches_fresh_pnpm_build
-          fi
+        run: pnpm test
+      - run: pytest -q -m "not integration"
 
-  integration:
+  test:
+    runs-on: ubuntu-latest
+    needs: test-matrix
+    if: always()
+    steps:
+      - name: Require all test matrix legs to succeed
+        run: |
+          case "${{ needs.test-matrix.result }}" in
+            success) exit 0 ;;
+            *) echo "test matrix result: ${{ needs.test-matrix.result }}"; exit 1 ;;
+          esac
+
+  integration-matrix:
     name: integration (${{ matrix.python-version }})
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -118,6 +123,18 @@ jobs:
       - run: echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
       - name: Integration tests (no network; live smoke skipped)
         run: pytest -q -m integration tests/integration
+
+  integration:
+    runs-on: ubuntu-latest
+    needs: integration-matrix
+    if: always()
+    steps:
+      - name: Require all integration matrix legs to succeed
+        run: |
+          case "${{ needs.integration-matrix.result }}" in
+            success) exit 0 ;;
+            *) echo "integration matrix result: ${{ needs.integration-matrix.result }}"; exit 1 ;;
+          esac
 
   gate:
     runs-on: ubuntu-latest
@@ -197,7 +214,7 @@ jobs:
           enable-cache: true
           cache-dependency-glob: "uv.lock"
           cache-suffix: py3.12-${{ github.job }}
-      - uses: pnpm/action-setup@7088e561eb65bb68695d245aa206f005ef30921d # v4.1.0
+      - uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda # v4.1.0
         with:
           version: 10
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
