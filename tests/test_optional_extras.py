@@ -201,6 +201,19 @@ def test_ui_modules_each_raise_friendly_error_without_fastapi(module: str, tmp_p
     assert proc.returncode == 0, proc.stdout + proc.stderr
 
 
+def test_mcp_extra_declared() -> None:
+    data = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    extras = data["project"]["optional-dependencies"]
+    assert "mcp>=" in " ".join(extras["mcp"])
+    assert "mcp" in " ".join(extras["all"])
+
+
+def test_require_extra_mcp_names_extra() -> None:
+    from skillgate_ai.extras import MCP_FEATURE
+
+    require_extra("mcp", feature=MCP_FEATURE)
+
+
 def test_pyproject_core_dependencies_are_slim() -> None:
     data = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
     deps = data["project"]["dependencies"]
@@ -224,6 +237,7 @@ def test_readme_and_quickstart_document_extras() -> None:
     for needle in (
         "skillgate-ai[ui]",
         "skillgate-ai[docs]",
+        "skillgate-ai[mcp]",
         "skillgate-ai[all]",
     ):
         assert needle in readme

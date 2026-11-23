@@ -57,7 +57,8 @@ skillgate check skills/json-response-sabotaged
 | --- | --- | --- |
 | `pip install 'skillgate-ai[ui]'` | FastAPI, uvicorn, python-multipart | `skillgate ui` |
 | `pip install 'skillgate-ai[docs]'` | pypdf, python-docx, openpyxl, reportlab | PDF checks, demo PDFs, document text for the decision model |
-| `pip install 'skillgate-ai[all]'` | both | everything |
+| `pip install 'skillgate-ai[mcp]'` | mcp | `skillgate mcp` (stdio MCP tools; [MCP setup](https://github.com/vigneshm1995personal/skillgate/blob/main/docs/mcp.md)) |
+| `pip install 'skillgate-ai[all]'` | ui, docs, mcp | everything |
 
 When a feature needs an extra that is not installed, Skill Gate exits **2** with:
 
@@ -208,7 +209,7 @@ skillgate compare versions skills/pdf --dry-run
 skillgate ui
 ```
 
-`--expect-fail` exits 0 only when the live run is red. `skillgate deploy` copies the skill files after this pack already has a passing check. It does not run check for you. Deploy stays blocked until an agent is available, even after a green check. The folder for each agent is listed under [Sign in an agent](#sign-in-an-agent). `skillgate ui` serves the local UI at http://127.0.0.1:8765. A version compare takes two `--run` ids or two `--git` refs. `skillgate example NAME` writes `skills/NAME`. `skillgate judge add-question` needs a skill pack. `skillgate case remove` keeps the original checks of the bundled examples.
+`--expect-fail` exits 0 only when the live run is red. `skillgate deploy` copies the skill files after this pack already has a passing check. It does not run check for you. Deploy stays blocked until an agent is available, even after a green check. The folder for each agent is listed under [Sign in an agent](#sign-in-an-agent). `skillgate ui` serves the local UI at http://127.0.0.1:8765. `skillgate mcp` serves tools over MCP ([docs](https://github.com/vigneshm1995personal/skillgate/blob/main/docs/mcp.md)). A version compare takes two `--run` ids or two `--git` refs. `skillgate example NAME` writes `skills/NAME`. `skillgate judge add-question` needs a skill pack. `skillgate case remove` keeps the original checks of the bundled examples.
 
 Create a workspace and a skill:
 

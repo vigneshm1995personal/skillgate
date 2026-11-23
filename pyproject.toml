@@ -56,8 +56,11 @@ docs = [
   "openpyxl>=3.1",
   "reportlab>=4.2",
 ]
+mcp = [
+  "mcp>=1.9,<2",
+]
 all = [
-  "skillgate-ai[ui,docs]",
+  "skillgate-ai[ui,docs,mcp]",
 ]
 dev = [
   "skillgate-ai[all]",

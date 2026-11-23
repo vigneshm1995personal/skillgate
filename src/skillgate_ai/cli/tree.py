@@ -30,6 +30,7 @@ from skillgate_ai.cli.cmd_judge_provider import (
     judge_test,
 )
 from skillgate_ai.cli.cmd_keys import keys_clear, keys_list, keys_set
+from skillgate_ai.cli.cmd_mcp import mcp_cmd
 from skillgate_ai.cli.cmd_scaffold import (
     example_cmd,
     examples_install_cmd,
@@ -71,5 +72,6 @@ def register_all() -> None:
     judge_app.command("test")(judge_test)
     judge_provider_app.command("test")(judge_provider_test)
     app.command("ui")(ui_cmd)
+    app.command("mcp")(mcp_cmd)
     register_pack_commands(app, case_app, judge_app)
     register_compare_commands(app, key_env_help=_KEY_ENV_HELP)

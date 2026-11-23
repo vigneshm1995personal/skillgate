@@ -1332,3 +1332,37 @@ def test_claude_model_persists_to_run_history_and_cli_summary(
     summary = format_cli(result.report)
     assert "Code agent" in summary
     assert "claude-opus-5-5" in summary
+
+
+def test_login_status_probes_isolate_stdio(monkeypatch: pytest.MonkeyPatch) -> None:
+    import subprocess
+
+    from skillgate_ai.harness.auth import (
+        _probe_claude_login_status,
+        _probe_codex_login_status,
+        _probe_cursor_login_status,
+    )
+
+    calls: list[dict[str, object]] = []
+
+    def recorder(*_args, **kwargs):
+        calls.append(dict(kwargs))
+
+        class Proc:
+            returncode = 0
+            stdout = "Logged in"
+            stderr = ""
+
+        return Proc()
+
+    monkeypatch.setattr("skillgate_ai.harness.auth.subprocess.run", recorder)
+    _probe_cursor_login_status("/x/agent")
+    _probe_codex_login_status("/x/codex")
+    _probe_claude_login_status("/x/claude")
+    assert len(calls) == 3
+    for kwargs in calls:
+        assert kwargs["stdin"] is subprocess.DEVNULL
+        assert kwargs["capture_output"] is True
+        assert kwargs["close_fds"] is True
+        if sys.platform != "win32":
+            assert kwargs["start_new_session"] is True

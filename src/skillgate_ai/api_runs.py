@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import threading
-import uuid
 from typing import Any
 
 from skillgate_ai.extras import UI_FEATURE, MissingExtraError
@@ -16,30 +14,15 @@ except ModuleNotFoundError as exc:
 from skillgate_ai.api_payloads import (
     AppState,
     fail,
-    local_gate,
     run_from_history,
     scrub_browser_payload,
     state_of,
 )
 from skillgate_ai.catalog import find_skill
 from skillgate_ai.config import get_llm_config, load_env, missing_key_error
-from skillgate_ai.errors import SkillGateError, timeout_harness_error
-from skillgate_ai.gate import run_check
-from skillgate_ai.live import create_control, drop_control, get_control
-from skillgate_ai.report import progress_to_dict, report_to_dict
-
-
-def attach_stamped_config(record: dict[str, Any], report: dict[str, Any] | None) -> None:
-    """Replace the request config with the resolved stamp so UI Result/Metrics match the run."""
-    from skillgate_ai.eval_config import EvalRunConfig, customer_run_details
-
-    stamped = report.get("config") if isinstance(report, dict) else None
-    if isinstance(stamped, dict):
-        merged = dict(stamped)
-        cfg = EvalRunConfig.from_dict(merged)
-        if cfg is not None:
-            merged["label"] = customer_run_details(cfg)
-        record["config"] = merged
+from skillgate_ai.live import get_control
+from skillgate_ai.run_registry import RunRegistry, RunRequest
+from skillgate_ai.run_registry import attach_stamped_config as attach_stamped_config
 
 
 def start_run(state: AppState, body: dict[str, Any]) -> dict[str, Any]:
@@ -56,122 +39,18 @@ def start_run(state: AppState, body: dict[str, Any]) -> dict[str, Any]:
     config: dict[str, Any] = raw_config if isinstance(raw_config, dict) else {}
     if state.gate_busy():
         fail(409, "A check or compare is already running.")
-    with state.lock:
-        run_id = uuid.uuid4().hex[:12]
-        seed = {
-            "id": run_id,
-            "status": "running",
-            "passed": None,
-            "gate": None,
-            "gate_decision": "pending",
-            "skill": skill_path.name,
-            "skill_path": str(skill_path),
-            "harness": str(body.get("harness") or "auto"),
-            "tryout": tryout,
-            "completed_count": 0,
-            "task_count": len(checks) if checks else None,
-            "current_task_id": None,
-            "error": None,
-            "report": None,
-            "config": config,
-            "model": config.get("model"),
-            "timeout_sec": config.get("timeout_sec"),
-            "temperature": config.get("temperature"),
-            "reasoning_effort": config.get("reasoning_effort"),
-        }
-        state.runs[run_id] = seed
-        create_control(run_id)
-
-    def worker() -> None:
-        record = state.runs[run_id]
-        control = get_control(run_id)
-        try:
-
-            def on_progress(progress) -> None:
-                payload = progress_to_dict(progress)
-                record["report"] = payload
-                record["completed_count"] = payload.get("completed_count")
-                record["task_count"] = payload.get("task_count")
-                record["current_task_id"] = payload.get("current_task_id")
-                record["harness"] = payload.get("harness") or record.get("harness")
-
-            pref = str(config.get("harness_pref") or "").strip().lower()
-            requested = str(body.get("harness") or "").strip().lower()
-            harness = (
-                pref
-                if pref in {"auto", "cursor-agent", "codex", "claude"}
-                else (requested or "auto")
-            )
-            result = run_check(
-                skill_path,
-                harness=harness,
-                on_progress=on_progress,
-                control=control,
-                run_id=run_id,
-                source="ui",
-                root=state.root,
-                checks=[dict(item) for item in checks] if checks else None,
-                model=config.get("model"),
-                timeout=config.get("timeout_sec"),
-                temperature=config.get("temperature"),
-                reasoning_effort=config.get("reasoning_effort"),
-                tryout=tryout,
-                no_judge=bool(body.get("no_judge")),
-            )
-            report = report_to_dict(result.report) if result.report is not None else None
-            if report is not None and tryout:
-                report["tryout"] = True
-            status = "error" if result.error else "done"
-            passed = None if result.report is None else result.report.passed
-            final_harness = (report or {}).get("harness") or record.get("harness")
-            decision, reason = local_gate(passed, status=status, tryout=tryout, report=report)
-            record.update(
-                {
-                    "status": status,
-                    "passed": passed,
-                    "gate": (report or {}).get("gate"),
-                    "gate_decision": decision,
-                    "gate_reason": reason,
-                    "error": result.error,
-                    "report": report,
-                    "harness": final_harness,
-                    "demo_notice": result.demo_notice,
-                    "tryout": tryout,
-                    "exit_code": result.exit_code,
-                    "completed_count": (report or {}).get("task_count"),
-                    "task_count": (report or {}).get("task_count"),
-                }
-            )
-            attach_stamped_config(record, report)
-        except Exception as exc:  # noqa: BLE001 — surface to the poller
-            exit_code: int | None
-            blocked = timeout_harness_error(exc)
-            if blocked is not None:
-                message = blocked.message
-                hint = blocked.hint
-                exit_code = blocked.exit_code
-            else:
-                message = exc.message if isinstance(exc, SkillGateError) else str(exc)
-                hint = getattr(exc, "hint", None)
-                exit_code = getattr(exc, "exit_code", None)
-            decision, reason = local_gate(None, status="error", tryout=tryout, gate_moved=False)
-            record.update(
-                {
-                    "status": "error",
-                    "passed": None,
-                    "gate": None,
-                    "gate_decision": decision,
-                    "gate_reason": reason,
-                    "error": {"message": message, "hint": hint},
-                    "tryout": tryout,
-                    "exit_code": exit_code,
-                }
-            )
-        finally:
-            drop_control(run_id)
-
-    threading.Thread(target=worker, name=f"skillgate-run-{run_id}", daemon=True).start()
-    return {"id": run_id, "status": "running"}
+    registry = RunRegistry(state.root, runs=state.runs, lock=state.lock, busy=state.gate_busy)
+    return registry.start(
+        RunRequest(
+            skill_path=skill_path,
+            harness=str(body.get("harness") or "auto"),
+            checks=[dict(item) for item in checks] if checks else None,
+            config=config,
+            tryout=tryout,
+            no_judge=bool(body.get("no_judge")),
+            source="ui",
+        )
+    )
 
 
 def register_run_routes(app: FastAPI) -> None:

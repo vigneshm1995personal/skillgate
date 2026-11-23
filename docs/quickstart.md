@@ -19,7 +19,8 @@ skillgate version
 | --- | --- | --- |
 | `pip install 'skillgate-ai[ui]'` | FastAPI, uvicorn, python-multipart | `skillgate ui` |
 | `pip install 'skillgate-ai[docs]'` | pypdf, python-docx, openpyxl, reportlab | PDF checks, demo PDFs, document text for the decision model |
-| `pip install 'skillgate-ai[all]'` | both | everything |
+| `pip install 'skillgate-ai[mcp]'` | mcp | `skillgate mcp` |
+| `pip install 'skillgate-ai[all]'` | ui, docs, mcp | everything |
 
 Skill scripts run with that same Python — install the skill’s own packages there too. For Skill Gate PDF scoring and the pdf example fixtures, use `pip install 'skillgate-ai[docs]'` (or `[all]`).
 
