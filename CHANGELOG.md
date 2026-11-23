@@ -1,7 +1,14 @@
 # Changelog
 
-## Unreleased
+## 0.7.18
 
+- Tool-call checks: pack and case `tool_checks` declare `must_call`, `must_not_call`, and consequential-tool policies, scored from `calls.log` and spans. A failed tool check makes the gate red even when the judge passes. Shell rules match on the command name, so an echoed command does not count as a call; `azd up`, `azd_up`, and `shell:azd_up` are treated as the same tool. (#91)
+- Public skill ingest accepts nested `metadata`; an invalid skill name is slugified and a warning is shown. Session-limit and auth errors in harness transcripts are detected per provider and reported as cannot-run, with an auth hint. `skillgate ui --pack` keeps that skill's run history. (#90)
+- `plugin/` folder for the Cursor and Claude plugin directories: `.cursor-plugin/` and `.claude-plugin/` manifests, MCP skills, and a `plugin/bin/skillgate-mcp` launcher that uses the plugin root. (#88)
+- `skillgate mcp`: a stdio MCP server with 13 tools (check start/poll/cancel, reports, datasets, cases, validate, doctor). It shares the run table with the local UI. Install with `pip install 'skillgate-ai[mcp]'`; `[all]` includes it. Harness child processes are kept off the MCP JSON-RPC stream. (#87)
+- Judge: when the project has no decision model selected, judge settings and keys are read from `~/.skillgate`. Project settings and `SKILLGATE_*` env vars still take precedence. (#84, #85)
+- Typing/lint: mypy `check_untyped_defs`; TypedDicts for the OTLP, judge, metrics, and payload shapes; ruff `BLE` and `S` rules enabled. No CLI changes. (#83)
+- Security: a workspace skill is accepted only when its resolved directory and `SKILL.md` both stay inside the project root. Symlinks that point outside are left out of the catalog and rejected by `find_skill`. (#82)
 - Internal cleanup: removed the unused stdlib `skillgate_ai.local_ui` server and assets (`skillgate ui` is the FastAPI app) and the no-op observability stubs; one shared LaunchAgent writer for `helper`/`sync`; split large CLI modules. No CLI changes.
 - CI: commit `uv.lock` and install with `uv sync --locked`; Python 3.11–3.13 matrix on unit and integration jobs; GitHub Actions pinned by commit SHA; release workflow runs the full gate suite before build/publish; Dependabot for uv, npm, Actions, and Docker base images.
 - Core install is slim (7 dependencies). Optional extras: `ui` (FastAPI, uvicorn, python-multipart), `docs` (pypdf, python-docx, openpyxl, reportlab), and `all`. Missing extras exit **2** with `Missing optional dependency for {feature}. Install with: pip install 'skillgate-ai[{extra}]'`. The Docker CLI image and GitHub Action install `[docs]`; `pip install -e ".[dev]"` includes `[all]`. Removed 23 one-off QA/release/dogfood dump test files; 42 tests were copied into permanent suites.

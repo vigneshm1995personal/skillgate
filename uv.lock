@@ -1,5 +1,5 @@
 version = 1
-revision = 5
+revision = 3
 requires-python = ">=3.11"
 resolution-markers = [
     "python_full_version >= '3.15'",
@@ -1715,7 +1715,7 @@ wheels = [
 
 [[package]]
 name = "skillgate-ai"
-version = "0.7.17"
+version = "0.7.18"
 source = { editable = "." }
 dependencies = [
     { name = "httpx" },
