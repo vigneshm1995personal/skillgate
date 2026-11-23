@@ -40,6 +40,7 @@ from skillgate_ai.pack_schema import (
     keep_locked_case,
 )
 from skillgate_ai.suite import DEFAULT_TASK_TIMEOUT_SEC, SuiteSpec, _normalize_suite
+from skillgate_ai.tool_check_schema import merge_tool_checks
 
 
 def pack_fingerprint(pack: CasePack) -> str:
@@ -47,12 +48,15 @@ def pack_fingerprint(pack: CasePack) -> str:
     for case in pack.cases:
         if case.status != "pinned":
             continue
-        dump = case.model_dump(include=set(PACK_FINGERPRINT_FIELDS) - {"budgets", "judge"})
+        fp_fields = set(PACK_FINGERPRINT_FIELDS) - {"budgets", "judge", "tool_checks"}
+        dump = case.model_dump(include=fp_fields)
         effective = merge_budgets(pack.budgets, case.budgets)
         if effective is not None:
             dump["budgets"] = effective.to_sparse_dict()
         if case.judge is not None and not case.judge.is_empty():
             dump["judge"] = case.judge.to_sparse_dict()
+        if case.tool_checks is not None and not case.tool_checks.is_empty():
+            dump["tool_checks"] = case.tool_checks.to_sparse_dict()
         if case.output_optional:
             dump["output_optional"] = True
             dump["contains"] = list(case.contains)
@@ -60,6 +64,8 @@ def pack_fingerprint(pack: CasePack) -> str:
     payload: dict[str, Any] = {"cases": pinned}
     if pack.judge is not None and not pack.judge.is_empty():
         payload["pack_judge"] = pack.judge.to_sparse_dict()
+    if pack.tool_checks is not None and not pack.tool_checks.is_empty():
+        payload["pack_tool_checks"] = pack.tool_checks.to_sparse_dict()
     blob = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
     return hashlib.sha256(blob.encode("utf-8")).hexdigest()[:16]
 
@@ -79,6 +85,8 @@ def suite_fingerprint(spec: SuiteSpec) -> str:
         effective = parse_budgets(task.budgets)
         if effective is not None:
             row["budgets"] = effective.to_sparse_dict()
+        if task.tool_checks is not None and not task.tool_checks.is_default():
+            row["tool_checks"] = task.tool_checks.model_dump(exclude_defaults=True)
         payload.append(row)
     blob = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
     return hashlib.sha256(blob.encode("utf-8")).hexdigest()[:16]
@@ -149,6 +157,13 @@ def suite_from_pack(pack: CasePack, skill_rel: str) -> SuiteSpec:
         effective = merge_budgets(pack.budgets, case.budgets)
         if effective is not None:
             task_raw["budgets"] = effective.to_sparse_dict()
+        merged_tools = merge_tool_checks(
+            pack.tool_checks,
+            case.tool_checks,
+            should_trigger=case.should_trigger,
+        )
+        if merged_tools is not None:
+            task_raw["tool_checks"] = merged_tools.model_dump()
         raw_tasks.append(task_raw)
     raw = _normalize_suite(
         {
@@ -189,6 +204,8 @@ def checks_from_pack(pack: CasePack, *, include_drafts: bool = False) -> list[di
         }
         if case.judge is not None and not case.judge.is_empty():
             check["judge"] = case.judge.to_sparse_dict()
+        if case.tool_checks is not None and not case.tool_checks.is_empty():
+            check["tool_checks"] = case.tool_checks.to_sparse_dict()
         warning = no_trigger_output_warning(case)
         if warning:
             check["warning"] = warning

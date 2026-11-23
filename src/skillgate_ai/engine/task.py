@@ -10,6 +10,7 @@ from skillgate_ai.advice import FixAdvice, advise_task
 from skillgate_ai.engine.adherence import stabilize_adherence_review
 from skillgate_ai.engine.models import KILL_FAILURE, SKIP_FAILURE, TaskReport
 from skillgate_ai.engine.verdict import (
+    _apply_tool_failures,
     _live_verdict,
     _maybe_explain_fail,
     _no_trigger_skipped_judge,
@@ -36,6 +37,7 @@ from skillgate_ai.pack import resolve_input_file
 from skillgate_ai.sandbox import Sandbox, prepare_workspace
 from skillgate_ai.scorers import RunArtifacts, Score, score_task
 from skillgate_ai.suite import SuiteSpec, TaskSpec
+from skillgate_ai.tool_checks import score_tool_checks, tool_check_failures
 
 
 def task_timeout_sec(
@@ -193,6 +195,7 @@ def _judge_task(
     had_path: Any,
     file_baseline: Any,
 ) -> tuple[bool | None, list[str], Any, bool]:
+    tool_failures = tool_check_failures(scores)
     det_passed = all(s.passed for s in scores)
     det_failures = [s.headline or s.detail for s in scores if not s.passed]
     trigger_passed = all(s.passed for s in scores if s.scorer == "skill_trigger")
@@ -201,6 +204,7 @@ def _judge_task(
     if task.expect_skill is None:
         judged = _no_trigger_skipped_judge(judge) if is_live_harness(harness.name) else None
         passed, failures = det_passed, det_failures
+        passed, failures, judged = _apply_tool_failures(passed, failures, judged, tool_failures)
     elif is_live_harness(harness.name):
         judged, mismatch, golden_payload, actual_payload = _run_outcome_judge(
             task,
@@ -225,6 +229,7 @@ def _judge_task(
             mismatch=mismatch,
             trigger_passed=trigger_passed,
         )
+        passed, failures, judged = _apply_tool_failures(passed, failures, judged, tool_failures)
         review = bool(passed) and bool(isinstance(judged, dict) and judged.get("review"))
         judged = _maybe_explain_fail(
             judge,
@@ -243,6 +248,7 @@ def _judge_task(
     else:
         judged = None
         passed, failures = det_passed, det_failures
+        passed, failures, judged = _apply_tool_failures(passed, failures, judged, tool_failures)
     return passed, failures, judged, review
 
 
@@ -322,6 +328,10 @@ def _score_and_judge_task(
     )
     scores = score_task(task, artifacts, skills=skills)
     spans = getattr(result, "spans", None) or _spans_from_transcript(result.transcript)
+    scores = [
+        *scores,
+        *score_tool_checks(task, sandbox.workspace, spans=spans, transcript=result.transcript),
+    ]
     from skillgate_ai.metrics import count_path_steps
 
     steps, errors, had_path = count_path_steps(spans, result.transcript)

@@ -73,6 +73,8 @@ Omit `output_optional` to keep the output file required. On a saved check, run `
 
 Optional `judge:` on the pack or a case adds extra scoring questions **on top of** Skill Gate’s six. Built-in ids cannot be reused; they can only change Fail vs warn (`on_fail`). Seed packs keep their original case ids.
 
+Optional `tool_checks:` on the pack (`calls_log`, `consequential_tools`, `builtin_consequential`, `must_not_call`, `skip_consequential_check`) or a case (`must_call`, `must_not_call`, `allow_consequential`, `skip_consequential_check`). Unknown keys are an error. See [Tool-call checks](writing-a-dataset.md#tool-call-checks).
+
 Pick who scores in Settings or `skillgate judge provider set`. Keys stay in `.skillgate/keys` — never ambient `OPENAI_API_KEY` / `AWS_*` unless `--key-env`.
 
 `skillgate check <pack>` expands pinned cases into scorers:

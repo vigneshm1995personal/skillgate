@@ -299,3 +299,11 @@ def parse_judge_block(raw: object) -> JudgeBlock | None:
     except Exception as exc:
         raise SuiteError(friendly_validation_error(exc, kind="Judge")) from exc
     return None if block.is_empty() else block
+
+
+from skillgate_ai.tool_check_schema import (  # noqa: E402, I001
+    CaseToolChecks as CaseToolChecks,
+    PackToolChecks as PackToolChecks,
+    ToolCallRule as ToolCallRule,
+    parse_tool_checks_block as parse_tool_checks_block,
+)

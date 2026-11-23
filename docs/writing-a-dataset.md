@@ -137,6 +137,17 @@ skillgate ui
 
 A red names the failing check and includes the judge's reason, for example `Got the job done? Not completed (need Fully completed) — …`. After majority voting, a blocking answer still below 0.5 confidence is `unsure, needs review` (not a fail). Custom checks about tool-call counts, whether a tool was called, what it returned, or what the customer reply said versus `output/calls.log` are scored from the log when that is possible. The CLI, JSON, and UI label those answers `from the log`, `from the log/text`, or `from the judge`. Explicit banned or required wording in the skill is scored from `output/reply.txt`. A missing reply fails that extra. A passing text check answers that wording rule. A judge fail that only restates it does not turn the gate red. Incorrect, Violated, or Major deviation about a rewritten draft, a wrong amount, or a missing step still fail. Use "more than once" / "at most once" / "duplicate", a file name such as `status.txt`, "called `tool_name`", or "returned" / "result" in the ask (backtick or snake_case tool name) if you want the log to score it. How majority re-asking works, which questions are blocking (`Followed the rules?` is one), where to read `tasks[].judge.votes`, and that `--no-judge` still needs an agent are in [Bring your own judge](judge.md). List saved run ids with `skillgate history --pack skills/json-response`.
 
+## Tool-call checks
+
+Some cases are about what the agent *did*, not what it wrote. Put those rules in `tool_checks:` on the case. Skill Gate checks them from `output/calls.log`, the agent's tool calls, and its shell commands. It never asks the judge. A failed tool check makes the case red even when every judge answer is green.
+
+- `must_call`: tools the agent has to call. Add `args_match` to require arguments (`amount: 4900`, `{contains: "ch_"}`, `{regex: "^ord_"}`), and `min` / `max` for counts.
+- `must_not_call`: tools the agent must not call in this case. Pack-level `must_not_call` applies to every case.
+
+Every case also gets one built-in rule: **no unrequested consequential calls**. Sending email or messages, refunds, charges, payouts, deploys, publishes, deletes, `git push`, `azd up`, and `terraform apply` are consequential. A case where that action *is* the task lists it in `allow_consequential` (or in `must_call`). Add your own connector names to the pack's `consequential_tools`. Opt a case out with `skip_consequential_check: true`. Drafting is not sending: `create_draft` passes.
+
+A call counts even if it failed. A refund that returned 502 is still a refund the agent tried.
+
 ## Banned and required wording
 
 Put the phrases in quotes. These all compile the same deterministic text check:

@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field, ValidationError, field_validator
 
 from skillgate_ai.errors import SuiteError, friendly_validation_error
 from skillgate_ai.metrics import CaseBudgets
+from skillgate_ai.tool_check_schema import TaskToolChecks
 
 # Live cursor-agent / Codex tasks routinely need >120s. Env SKILLGATE_TASK_TIMEOUT_SEC still wins.
 DEFAULT_TASK_TIMEOUT_SEC = 300
@@ -57,6 +58,7 @@ class TaskSpec(BaseModel):
     timeout_sec: int | None = None
     budgets: CaseBudgets | None = None
     trigger_mode: bool = False
+    tool_checks: TaskToolChecks | None = None
 
     @field_validator("id")
     @classmethod

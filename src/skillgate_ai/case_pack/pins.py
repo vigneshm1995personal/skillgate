@@ -152,6 +152,9 @@ def _case_from_check(root: Path, raw: dict[str, Any], skill_name: str) -> PackCa
     case_id = case_id_slug(str(raw.get("id") or "example"))
     should = bool(raw.get("should_trigger", True))
     judge = parse_judge_block(raw.get("judge"))
+    from skillgate_ai.tool_check_schema import parse_tool_checks_block
+
+    tool_checks = parse_tool_checks_block(raw.get("tool_checks"), level="case")
     file_items = raw.get("files") if isinstance(raw.get("files"), list) else []
     inline = _inline_input_text(raw)
     if inline is not None:
@@ -191,6 +194,7 @@ def _case_from_check(root: Path, raw: dict[str, Any], skill_name: str) -> PackCa
         min_pages=raw.get("min_pages"),
         budgets=parse_budgets(raw.get("budgets")),
         judge=judge,
+        tool_checks=tool_checks,
         output_optional=raw.get("output_optional", False),
     )
 

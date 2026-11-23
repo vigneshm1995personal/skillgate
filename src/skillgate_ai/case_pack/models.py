@@ -32,6 +32,7 @@ from skillgate_ai.pack_schema import (
     ExtraQuestion as ExtraQuestion,
 )
 from skillgate_ai.suite import SuiteSpec
+from skillgate_ai.tool_check_schema import CaseToolChecks, PackToolChecks
 
 CASES_REL = "evals/cases.yaml"
 
@@ -43,7 +44,16 @@ NO_TRIGGER_OUTPUT_WARNING = "Expected output on a no-trigger check is ignored."
 
 EXPECTED_WITHOUT_TARGET = "This check has expected text, but no output file to compare it with."
 
-PACK_FINGERPRINT_FIELDS = ("id", "prompt", "should_trigger", "input", "golden", "budgets", "judge")
+PACK_FINGERPRINT_FIELDS = (
+    "id",
+    "prompt",
+    "should_trigger",
+    "input",
+    "golden",
+    "budgets",
+    "judge",
+    "tool_checks",
+)
 
 _CASE_ID_RE = re.compile(r"^[a-z0-9-]+$")
 
@@ -87,6 +97,7 @@ class PackCase(BaseModel):
     min_pages: int | None = None
     budgets: CaseBudgets | None = None
     judge: JudgeBlock | None = None
+    tool_checks: CaseToolChecks | None = None
     trigger_mode: bool = False
     output_optional: bool = False
 
@@ -125,6 +136,16 @@ class CasePack(BaseModel):
     cases: list[PackCase]
     budgets: CaseBudgets | None = None
     judge: JudgeBlock | None = None
+    tool_checks: PackToolChecks | None = None
+
+    @model_validator(mode="after")
+    def _tool_check_patterns_ok(self) -> CasePack:
+        for case in self.cases:
+            if not case.should_trigger and case.tool_checks and case.tool_checks.must_call:
+                raise ValueError(
+                    "must_call on a no-trigger check never runs. Move it to a should_trigger case."
+                )
+        return self
 
     @model_validator(mode="after")
     def _unique_ids(self) -> CasePack:
