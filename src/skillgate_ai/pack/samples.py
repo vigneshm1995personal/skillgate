@@ -11,7 +11,7 @@ from skillgate_ai.pack.constants import (
     _UNSYNTHESIZABLE,
     IMAGE_SUFFIXES,
 )
-from skillgate_ai.pack.pathsafe import _safe_filename, implied_fixture_name
+from skillgate_ai.pack.pathsafe import implied_fixture_name
 
 
 class CannotSynthesizeFixture(ValueError):
@@ -66,10 +66,10 @@ def generate_sample_bytes(*, dest: str, prompt: str = "") -> bytes:
     if suffix in IMAGE_SUFFIXES or cannot_synthesize_sample(dest=dest, prompt=prompt):
         raise CannotSynthesizeFixture()
     if suffix == ".pdf":
-        from tempfile import TemporaryDirectory
+        from tempfile import NamedTemporaryFile
 
-        with TemporaryDirectory() as tmp:
-            path = Path(tmp) / _safe_filename(name)
+        with NamedTemporaryFile(suffix=".pdf", delete=True) as tmp:
+            path = Path(tmp.name)
             write_pdf(path, f"Sample input: {hint[:80]}")
             return path.read_bytes()
     if suffix == ".json":
