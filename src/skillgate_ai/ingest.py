@@ -20,7 +20,16 @@ GENERIC_MOUNT_NAMES = frozenset({"pack"})
 
 def folder_matches_skill(folder: str, name: str) -> bool:
     """True when SKILL.md `name:` matches the folder, or a generic Docker mount."""
-    return name == folder or folder in GENERIC_MOUNT_NAMES
+    if name == folder or folder in GENERIC_MOUNT_NAMES:
+        return True
+    return folder_slug(Path(folder)) == name
+
+
+def slugify_skill_name(name: str) -> str:
+    """Normalize a display name to agentskills slug form."""
+    slug = re.sub(r"[^a-z0-9]+", "-", name.strip().lower())
+    slug = re.sub(r"-+", "-", slug).strip("-")
+    return slug
 
 
 def canonical_skill_name(value: object, skills: list[Skill]) -> str | None:
@@ -58,7 +67,7 @@ class Skill:
     license: str | None = None
     compatibility: str | None = None
     allowed_tools: str | None = None
-    metadata: dict[str, str] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
     extra_frontmatter: dict[str, Any] = field(default_factory=dict)
     display_name: str = ""
     warning: str | None = None
@@ -111,14 +120,18 @@ def ingest_skill(path: str | Path, *, strict: bool = True) -> Skill:
     if not isinstance(parsed, dict):
         raise IngestError(f"{folder.name}/SKILL.md frontmatter must be a mapping of fields")
 
-    name = _require_name(parsed.get("name"), folder)
+    name, name_warning = _require_name(parsed.get("name"), folder)
     description = _require_description(parsed.get("description"), folder)
     clean_meta, extra, compatibility = _frontmatter_extras(parsed, folder, strict=True)
+    display = name
+    raw_name = parsed.get("name")
+    if isinstance(raw_name, str) and raw_name.strip() and raw_name.strip() != name:
+        display = raw_name.strip()
 
     skill = Skill(
         path=folder,
         name=name,
-        display_name=name,
+        display_name=display,
         description=description,
         body=body,
         license=_opt_str(parsed.get("license")),
@@ -126,6 +139,7 @@ def ingest_skill(path: str | Path, *, strict: bool = True) -> Skill:
         allowed_tools=_opt_str(parsed.get("allowed-tools")),
         metadata=clean_meta,
         extra_frontmatter=extra,
+        warning=name_warning,
     )
     _attach_tool_warnings(skill)
     _require_cases_match(folder)
@@ -295,23 +309,31 @@ def _attach_tool_warnings(skill: Skill) -> None:
 
 def _frontmatter_extras(
     parsed: dict[str, Any], folder: Path, *, strict: bool
-) -> tuple[dict[str, str], dict[str, Any], Any]:
+) -> tuple[dict[str, Any], dict[str, Any], Any]:
     metadata = parsed.get("metadata") or {}
     if metadata is None:
         metadata = {}
     if not isinstance(metadata, dict):
         if strict:
-            raise IngestError(
-                f"{folder.name}: metadata must be a map of string keys to string values"
-            )
+            raise IngestError(f"{folder.name}: metadata must be a map of string keys to values")
         metadata = {}
-    clean_meta: dict[str, str] = {}
+    clean_meta: dict[str, Any] = {}
     for key, value in metadata.items():
-        if not isinstance(key, str) or not isinstance(value, (str, int, float, bool)):
+        if not isinstance(key, str):
             if strict:
-                raise IngestError(f"{folder.name}: metadata values must be strings (key {key!r})")
+                raise IngestError(f"{folder.name}: metadata keys must be strings")
             continue
-        clean_meta[str(key)] = str(value)
+        if value is None:
+            continue
+        if isinstance(value, (str, int, float, bool)):
+            clean_meta[str(key)] = value if isinstance(value, str) else str(value)
+        elif isinstance(value, (dict, list)):
+            clean_meta[str(key)] = value
+        elif strict:
+            bad_type = type(value).__name__
+            raise IngestError(
+                f"{folder.name}: metadata value for {key!r} has unsupported type {bad_type}"
+            )
     extra = {k: v for k, v in parsed.items() if k not in KNOWN_FIELDS}
     compatibility = parsed.get("compatibility")
     if compatibility is not None:  # noqa: SIM102
@@ -322,26 +344,32 @@ def _frontmatter_extras(
     return clean_meta, extra, compatibility
 
 
-def _require_name(value: Any, folder: Path) -> str:
+def _require_name(value: Any, folder: Path) -> tuple[str, str | None]:
     if not isinstance(value, str) or not value.strip():
         raise IngestError(f"{folder.name}/SKILL.md is missing required frontmatter field `name`")
-    name = value.strip()
-    if not (1 <= len(name) <= 64):
-        raise IngestError(f"{folder.name}: name must be 1–64 characters (got {len(name)})")
-    if not NAME_RE.match(name):
-        raise IngestError(
-            f"{folder.name}: name {name!r} is invalid",
-            hint=(
-                "Use lowercase letters, numbers, and single hyphens; "
-                "no leading/trailing/double hyphens."
-            ),
-        )
+    raw = value.strip()
+    if not (1 <= len(raw) <= 64):
+        raise IngestError(f"{folder.name}: name must be 1–64 characters (got {len(raw)})")
+    warning: str | None = None
+    if NAME_RE.match(raw):
+        name = raw
+    else:
+        name = slugify_skill_name(raw)
+        if not name or not NAME_RE.match(name):
+            raise IngestError(
+                f"{folder.name}: name {raw!r} is invalid",
+                hint=(
+                    "Use lowercase letters, numbers, and single hyphens; "
+                    "no leading/trailing/double hyphens."
+                ),
+            )
+        warning = f"Skill name {raw!r} was normalized to {name!r}."
     if not folder_matches_skill(folder.name, name):
         raise IngestError(
             f"Skill name {name!r} must match the folder name {folder.name!r}",
             hint="Rename the folder or the `name` field so they match.",
         )
-    return name
+    return name, warning
 
 
 def _require_description(value: Any, folder: Path) -> str:

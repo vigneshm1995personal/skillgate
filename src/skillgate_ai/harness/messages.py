@@ -99,38 +99,59 @@ _USAGE_LIMIT_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Claude Code provider banner (not generic "session limit" skill prose).
+_CLAUDE_SESSION_LIMIT = re.compile(
+    r"You've hit your session limit · resets",
+    re.IGNORECASE,
+)
+
 _MODEL_UNAVAILABLE_RE = re.compile(
     r"cannot use this model(?:\s*:\s*\S+)?",
     re.IGNORECASE,
 )
 
 
+def _usage_limit_payload(payload: str) -> bool:
+    if _CLAUDE_SESSION_LIMIT.search(payload):
+        return True
+    return bool(_USAGE_LIMIT_RE.search(payload))
+
+
+def _usage_limit_plaintext(text: str) -> bool:
+    if _CLAUDE_SESSION_LIMIT.search(text):
+        return True
+    return bool(_USAGE_LIMIT_RE.search(text) and "usage limit" in text.lower())
+
+
 def usage_limit_message(stdout: str, stderr: str = "", transcript: str = "") -> str | None:
     """Agent quota / usage-limit text is cannot-run, not a quality red."""
     blob = "\n".join(part for part in (stdout, stderr, transcript) if part)
-    if not blob or not _USAGE_LIMIT_RE.search(blob):
+    if not blob:
         return None
-    if _USAGE_LIMIT_RE.search(stderr or ""):
+    if stderr and (_USAGE_LIMIT_RE.search(stderr) or _CLAUDE_SESSION_LIMIT.search(stderr)):
         return USAGE_LIMIT_MESSAGE
     if "ActionRequiredError" in blob:
         return USAGE_LIMIT_MESSAGE
-    for line in blob.splitlines():
-        text = line.strip()
-        if not text.startswith("{"):
-            if _USAGE_LIMIT_RE.search(text) and "usage limit" in text.lower():
+    if _CLAUDE_SESSION_LIMIT.search(blob) or _USAGE_LIMIT_RE.search(blob):
+        for line in blob.splitlines():
+            text = line.strip()
+            if not text.startswith("{"):
+                if _usage_limit_plaintext(text):
+                    return USAGE_LIMIT_MESSAGE
+                continue
+            try:
+                obj = json.loads(text)
+            except json.JSONDecodeError:
+                continue
+            if not isinstance(obj, dict):
+                continue
+            kind = str(obj.get("type") or "")
+            errored = kind == "error" or (kind == "result" and obj.get("is_error") is True)
+            if not errored and kind != "error":
+                continue
+            payload = " ".join(str(obj.get(key) or "") for key in ("message", "error", "result"))
+            if _usage_limit_payload(payload):
                 return USAGE_LIMIT_MESSAGE
-            continue
-        try:
-            obj = json.loads(text)
-        except json.JSONDecodeError:
-            continue
-        if not isinstance(obj, dict):
-            continue
-        kind = str(obj.get("type") or "")
-        errored = kind == "error" or (kind == "result" and obj.get("is_error") is True)
-        payload = " ".join(str(obj.get(key) or "") for key in ("message", "error", "result"))
-        if (errored or kind == "error") and _USAGE_LIMIT_RE.search(payload):
-            return USAGE_LIMIT_MESSAGE
     if re.search(r"Weekly usage limit reached", blob, re.IGNORECASE):
         return USAGE_LIMIT_MESSAGE
     return None
@@ -170,13 +191,15 @@ def model_unavailable_message(stdout: str, stderr: str = "", transcript: str = "
 
 
 def cannot_run_message(stdout: str, stderr: str = "", transcript: str = "") -> str | None:
-    return usage_limit_message(stdout, stderr, transcript) or model_unavailable_message(
-        stdout, stderr, transcript
+    return (
+        usage_limit_message(stdout, stderr, transcript)
+        or auth_failure_message(stdout, stderr, transcript)
+        or model_unavailable_message(stdout, stderr, transcript)
     )
 
 
 def _raise_if_cannot_run(stdout: str, stderr: str, transcript: str = "") -> None:
-    _raise_if_auth_failed(stdout, stderr)
+    _raise_if_auth_failed(stdout, stderr, transcript)
     quota = usage_limit_message(stdout, stderr, transcript)
     if quota:
         raise HarnessError(
@@ -194,32 +217,33 @@ def _raise_if_cannot_run(stdout: str, stderr: str, transcript: str = "") -> None
     )
 
 
-def auth_failure_message(stdout: str, stderr: str) -> str | None:
-    """Auth failure in harness stderr or an error event. Not assistant prose."""
+def auth_failure_message(stdout: str, stderr: str, transcript: str = "") -> str | None:
+    """Auth failure in harness stderr or JSONL error events only — not assistant prose."""
     if _AUTH_FAILURE_RE.search(stderr or ""):
         return "The agent is not signed in."
-    for line in (stdout or "").splitlines():
-        text = line.strip()
-        if not text.startswith("{"):
-            continue
-        try:
-            obj = json.loads(text)
-        except json.JSONDecodeError:
-            continue
-        if not isinstance(obj, dict):
-            continue
-        kind = str(obj.get("type") or "")
-        errored = kind == "error" or (kind == "result" and obj.get("is_error") is True)
-        if not errored:
-            continue
-        blob = " ".join(str(obj.get(key) or "") for key in ("message", "error", "result"))
-        if _AUTH_FAILURE_RE.search(blob):
-            return "The agent is not signed in."
+    for source in (stdout or "", transcript or ""):
+        for line in source.splitlines():
+            text = line.strip()
+            if not text.startswith("{"):
+                continue
+            try:
+                obj = json.loads(text)
+            except json.JSONDecodeError:
+                continue
+            if not isinstance(obj, dict):
+                continue
+            kind = str(obj.get("type") or "")
+            errored = kind == "error" or (kind == "result" and obj.get("is_error") is True)
+            if not errored:
+                continue
+            blob = " ".join(str(obj.get(key) or "") for key in ("message", "error", "result"))
+            if _AUTH_FAILURE_RE.search(blob):
+                return "The agent is not signed in."
     return None
 
 
-def _raise_if_auth_failed(stdout: str, stderr: str) -> None:
-    message = auth_failure_message(stdout, stderr)
+def _raise_if_auth_failed(stdout: str, stderr: str, transcript: str = "") -> None:
+    message = auth_failure_message(stdout, stderr, transcript)
     if message is None:
         return
     raise HarnessError(

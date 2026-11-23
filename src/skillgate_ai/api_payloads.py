@@ -27,6 +27,7 @@ from skillgate_ai.history import load_deploys, load_history
 from skillgate_ai.ingest import ingest_skill
 from skillgate_ai.judge_copy import customer_scorer_name
 from skillgate_ai.pack import browser_files, relevant_eval_fixtures
+from skillgate_ai.paths import is_skill_pack
 
 SETTINGS_KEYS = (
     "CURSOR_API_KEY",
@@ -424,7 +425,10 @@ def workspace_history(state: AppState) -> dict[str, Any]:
     deploys: list[DeployRow] = []
     last_run = None
     last_deploy = None
-    for entry in catalog_entries(state.root):
+    entries = catalog_entries(state.root)
+    if not entries and is_skill_pack(state.root):
+        return history_payload(state, state.root.resolve())
+    for entry in entries:
         hist = history_payload(state, Path(entry["absolute"]))
         timeline.extend(hist["timeline"])
         deploys.extend(hist.get("deploys") or [])

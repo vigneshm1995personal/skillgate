@@ -146,13 +146,19 @@ def _raise_if_run_blocked(result: HarnessResult, *, timeout: int) -> HarnessResu
         result.stdout or "", result.stderr or "", result.transcript or ""
     )
     if run_block_msg:
-        hint = (
-            "Wait until the agent quota resets, then retry."
-            if usage_limit_message(
-                result.stdout or "", result.stderr or "", result.transcript or ""
-            )
-            else "Pick an available model, then retry."
+        stdout, stderr, transcript = (
+            result.stdout or "",
+            result.stderr or "",
+            result.transcript or "",
         )
+        from skillgate_ai.harness.messages import auth_failure_message
+
+        if auth_failure_message(stdout, stderr, transcript):
+            hint = "Run `skillgate login`."
+        elif usage_limit_message(stdout, stderr, transcript):
+            hint = "Wait until the agent quota resets, then retry."
+        else:
+            hint = "Pick an available model, then retry."
         raise HarnessError(
             run_block_msg,
             hint=hint,

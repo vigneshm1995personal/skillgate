@@ -34,7 +34,10 @@ def ui_cmd(
     if port < 1 or port > 65535:
         base.console.print("Port must be between 1 and 65535.")
         raise typer.Exit(2)
-    workspace = (root or project_root()).expanduser().resolve()
+    if pack is not None:
+        workspace = pack.expanduser().resolve()
+    else:
+        workspace = (root or project_root()).expanduser().resolve()
     load_env(workspace)
     should_open = open_browser and not no_browser
     if host not in {"127.0.0.1", "localhost", "::1"}:

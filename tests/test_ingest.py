@@ -47,14 +47,15 @@ def test_missing_frontmatter(tmp_path: Path) -> None:
 
 
 def test_bad_name_hyphens(tmp_path: Path) -> None:
-    folder = tmp_path / "pdf--x"
+    folder = tmp_path / "pdf-x"
     folder.mkdir()
     (folder / "SKILL.md").write_text(
         "---\nname: pdf--x\ndescription: Bad name on purpose for ingest.\n---\n",
         encoding="utf-8",
     )
-    with pytest.raises(IngestError, match="invalid"):
-        ingest_skill(folder)
+    skill = ingest_skill(folder)
+    assert skill.name == "pdf-x"
+    assert skill.warning and "normalized" in skill.warning.lower()
 
 
 def test_discover_missing_dir_raises(tmp_path: Path) -> None:
@@ -77,12 +78,13 @@ def test_lenient_keeps_display_name(tmp_path: Path) -> None:
         "---\n\n# Go\n",
         encoding="utf-8",
     )
-    with pytest.raises(IngestError, match="invalid"):
-        ingest_skill(folder)
+    loaded = ingest_skill(folder)
+    assert loaded.name == "idea-brainstorming"
+    assert loaded.display_name == "Idea brainstorming"
+    assert loaded.warning and "normalized" in loaded.warning.lower()
     loaded = ingest_skill(folder, strict=False)
     assert loaded.name == "idea-brainstorming"
     assert loaded.display_name == "Idea brainstorming"
-    assert loaded.warning is None
     assert "Brainstorm" in loaded.description
 
 
@@ -118,6 +120,50 @@ def test_lenient_space_folder_uses_slug(tmp_path: Path) -> None:
     loaded = ingest_skill(folder, strict=False)
     assert loaded.name == "idea-brainstorming"
     assert loaded.display_name == "Idea brainstorming"
+
+
+def test_ingest_strict_nested_metadata(tmp_path: Path) -> None:
+    folder = tmp_path / "gws"
+    folder.mkdir()
+    (folder / "evals").mkdir()
+    (folder / "SKILL.md").write_text(
+        "---\n"
+        "name: gws\n"
+        "description: Google workspace skill.\n"
+        "metadata:\n"
+        "  openclaw:\n"
+        "    nested: true\n"
+        "---\n",
+        encoding="utf-8",
+    )
+    skill = ingest_skill(folder)
+    assert skill.metadata["openclaw"] == {"nested": True}
+
+
+def test_ingest_strict_slugifies_display_name(tmp_path: Path) -> None:
+    folder = tmp_path / "zendesk-automation"
+    folder.mkdir()
+    (folder / "evals").mkdir()
+    (folder / "SKILL.md").write_text(
+        "---\nname: Zendesk Automation\ndescription: Zendesk support automation skill.\n---\n",
+        encoding="utf-8",
+    )
+    skill = ingest_skill(folder)
+    assert skill.name == "zendesk-automation"
+    assert skill.display_name == "Zendesk Automation"
+    assert skill.warning and "normalized" in skill.warning.lower()
+
+
+def test_ingest_strict_slugify_empty_raises(tmp_path: Path) -> None:
+    folder = tmp_path / "empty"
+    folder.mkdir()
+    (folder / "evals").mkdir()
+    (folder / "SKILL.md").write_text(
+        "---\nname: '!!!'\ndescription: No slug possible.\n---\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(IngestError, match="invalid"):
+        ingest_skill(folder)
 
 
 def test_ingest_warns_when_pandoc_missing(tmp_path: Path, monkeypatch) -> None:
