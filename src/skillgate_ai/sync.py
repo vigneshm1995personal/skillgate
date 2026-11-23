@@ -86,8 +86,8 @@ def _redact_credentials(text: str) -> str:
 
 def _clone(repo_url: str, work: Path) -> None:
     validated = _validate_repo_url(repo_url)
-    proc = subprocess.run(
-        ["git", "clone", "--depth", "1", "--", validated, str(work)],
+    proc = subprocess.run(  # noqa: S603 - validated repo URL passed after --
+        ["git", "clone", "--depth", "1", "--", validated, str(work)],  # noqa: S607 - git resolved from PATH by design
         capture_output=True,
         text=True,
         timeout=300,

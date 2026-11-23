@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import enum
 import json
 import re
 from pathlib import Path
-from typing import Any
+from typing import Any, Final, Literal
 
 from skillgate_ai.errors import HarnessError
 from skillgate_ai.ingest import Skill, canonical_skill_name
@@ -19,10 +20,14 @@ def _write_selection(workspace: Path, selected: str | None) -> None:
     target.write_text(json.dumps({"skill": selected}), encoding="utf-8")
 
 
-_MISSING = object()
+class _Missing(enum.Enum):
+    MISSING = enum.auto()
 
 
-def _read_selection(workspace: Path):
+_MISSING: Final = _Missing.MISSING
+
+
+def _read_selection(workspace: Path) -> str | None | Literal[_Missing.MISSING]:
     """Pre-seeded skill name, ``None`` for null pin, or ``_MISSING`` if absent."""
     target = workspace / ".skillgate" / "selected.json"
     if not target.is_file():

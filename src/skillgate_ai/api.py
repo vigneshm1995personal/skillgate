@@ -59,8 +59,8 @@ def ui_build_id() -> str:
         if value:
             return value[:12]
     try:
-        out = subprocess.check_output(
-            ["git", "rev-parse", "--short=12", "HEAD"],
+        out = subprocess.check_output(  # noqa: S603 - fixed git argv, 1s timeout
+            ["git", "rev-parse", "--short=12", "HEAD"],  # noqa: S607 - git resolved from PATH by design
             cwd=_package_git_cwd(),
             stderr=subprocess.DEVNULL,
             timeout=1,

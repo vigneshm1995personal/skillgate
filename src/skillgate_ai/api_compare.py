@@ -175,7 +175,7 @@ def _start_models_compare(state: AppState, body: dict[str, Any]) -> dict[str, An
             _finish_compare_job(state, compare_id, result)
         except CompareError as exc:
             _fail_compare_job(state, compare_id, message=exc.message, hint=exc.hint)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:  # noqa: BLE001 - worker thread boundary; failure is recorded on the compare job
             blocked = timeout_harness_error(exc)
             _fail_compare_job(
                 state,
@@ -221,7 +221,7 @@ def _start_versions_compare(state: AppState, body: dict[str, Any]) -> dict[str, 
             _finish_compare_job(state, compare_id, result)
         except CompareError as exc:
             _fail_compare_job(state, compare_id, message=exc.message, hint=exc.hint)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:  # noqa: BLE001 - worker thread boundary; failure is recorded on the compare job
             blocked = timeout_harness_error(exc)
             _fail_compare_job(
                 state,

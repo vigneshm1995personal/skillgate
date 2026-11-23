@@ -62,7 +62,7 @@ def resolve_version(raw: str) -> str:
 
 def fetch_latest_version() -> str:
     try:
-        with urllib.request.urlopen(PYPI_JSON, timeout=30) as response:
+        with urllib.request.urlopen(PYPI_JSON, timeout=30) as response:  # noqa: S310 - constant https PyPI URL
             payload = json.load(response)
         version = str(payload["info"]["version"]).strip()
     except (OSError, ValueError, KeyError, TypeError) as exc:
@@ -79,7 +79,7 @@ def pip_install_args(version: str) -> list[str]:
 def install_release(version: str) -> None:
     cmd = [sys.executable, "-m", "pip", "install", *pip_install_args(version)]
     print(f"Installing skillgate-ai=={version}", flush=True)
-    completed = subprocess.run(cmd, check=False)
+    completed = subprocess.run(cmd, check=False)  # noqa: S603 - argv list; sys.executable -m pip with a validated version
     if completed.returncode != 0:
         raise ActionError(f"Could not install skillgate-ai=={version}.")
 
@@ -124,7 +124,9 @@ def check_command() -> list[str]:
 
 def run_command(cmd: list[str]) -> tuple[int, str]:
     try:
-        completed = subprocess.run(cmd, check=False, text=True, capture_output=True)
+        completed = subprocess.run(  # noqa: S603 - argv list; inputs come from the workflow's own with: block
+            cmd, check=False, text=True, capture_output=True
+        )
     except FileNotFoundError:
         return 2, f"Could not run {cmd[0]}."
     _write(sys.stdout, completed.stdout)

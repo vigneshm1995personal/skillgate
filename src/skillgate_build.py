@@ -66,11 +66,13 @@ def bundle_web_static(
     pnpm = shutil.which("pnpm")
     if package_json.is_file() and pnpm:
         # Corepack reads packageManager from cwd — not from --dir web.
-        subprocess.check_call(
+        subprocess.check_call(  # noqa: S603 - pnpm resolved by shutil.which; fixed args
             [pnpm, "install", "--frozen-lockfile"],
             cwd=web_dir,
         )
-        subprocess.check_call([pnpm, "build"], cwd=web_dir)
+        subprocess.check_call(  # noqa: S603 - pnpm resolved by shutil.which; fixed args
+            [pnpm, "build"], cwd=web_dir
+        )
     if (web_dist / "index.html").is_file():
         if dest.exists():
             shutil.rmtree(dest)

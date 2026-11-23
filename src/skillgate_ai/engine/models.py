@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from skillgate_ai.advice import FixAdvice
+from skillgate_ai.metrics import TaskMetrics
 from skillgate_ai.scorers import Score
 
 SKIP_FAILURE = "Skipped by user"
@@ -32,7 +33,7 @@ class TaskReport:
     usage: dict[str, Any] | None = None
     judge: dict[str, Any] | None = None
     spans: list[dict[str, Any]] | None = None
-    metrics: dict[str, Any] | None = None
+    metrics: TaskMetrics | None = None
     model: str | None = None
     review: bool = False
 
@@ -52,7 +53,7 @@ class TaskProgress:
     transcript: str = ""
     judge: dict[str, Any] | None = None
     spans: list[dict[str, Any]] | None = None
-    metrics: dict[str, Any] | None = None
+    metrics: TaskMetrics | None = None
     usage: dict[str, Any] | None = None
     expect_skill: str | None = None
     selected_skill: str | None = None

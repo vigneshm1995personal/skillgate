@@ -105,7 +105,7 @@ class LocalSandbox:
             if sink is None:
                 # Close stdin. An inherited pipe makes Codex wait on
                 # "Reading additional input from stdin..." until TimeoutExpired.
-                return subprocess.run(
+                return subprocess.run(  # noqa: S603 - argv list without shell; running the harness CLI is the sandbox's job
                     command,
                     cwd=str(cwd or self.workspace),
                     env=merged,
@@ -174,7 +174,7 @@ class DockerSandbox:
         sink = self.output_sink
         try:
             if sink is None:
-                return subprocess.run(
+                return subprocess.run(  # noqa: S603 - docker argv list without shell; --network none
                     docker_cmd,
                     text=True,
                     capture_output=True,
@@ -210,7 +210,7 @@ def _run_streaming(
     abort = sink.should_abort()
     if abort:
         raise CheckAborted(abort)
-    proc = subprocess.Popen(
+    proc = subprocess.Popen(  # noqa: S603 - argv list without shell; streaming harness run
         command,
         cwd=cwd,
         env=env,
@@ -276,8 +276,8 @@ def _pump(
 
 def _ensure_docker_image(image: str) -> None:
     try:
-        inspect = subprocess.run(
-            ["docker", "image", "inspect", image],
+        inspect = subprocess.run(  # noqa: S603 - fixed docker inspect argv
+            ["docker", "image", "inspect", image],  # noqa: S607 - docker resolved from PATH by design
             capture_output=True,
             text=True,
             timeout=20,

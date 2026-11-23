@@ -180,7 +180,7 @@ def _git_text_artifacts(workspace: Path) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     for rel, args in commands:
         try:
-            proc = subprocess.run(
+            proc = subprocess.run(  # noqa: S603 - fixed git argv from module constants
                 args,
                 cwd=workspace,
                 env=env,

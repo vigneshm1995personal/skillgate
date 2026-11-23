@@ -315,7 +315,7 @@ class RunControl:
             return
         try:  # noqa: SIM105
             flush(poll)
-        except Exception:  # noqa: BLE001 - never break the harness on flush
+        except Exception:  # noqa: BLE001, S110 - never break the harness on flush
             pass
 
     def notify_live(self) -> None:
@@ -326,7 +326,7 @@ class RunControl:
                 return
         try:  # noqa: SIM105
             flush(self.snapshot())
-        except Exception:  # noqa: BLE001 - never break the harness on flush
+        except Exception:  # noqa: BLE001, S110 - never break the harness on flush
             pass
 
     # --- read model -----------------------------------------------------

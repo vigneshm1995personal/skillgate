@@ -419,7 +419,7 @@ def outcome_verdict(answers: Mapping[str, Any] | None) -> tuple[bool, list[str]]
     """Pass lock. Invalid/missing enums fail closed."""
     if unusable_answers(answers):
         return False, [UNUSABLE_ANSWER]
-    assert isinstance(answers, Mapping)
+    assert isinstance(answers, Mapping)  # noqa: S101 - type-narrowing invariant guaranteed by the branch above
     reasons: list[str] = []
     for key in CHECK_CELL_ORDER:
         raw_choice = extract_choice(answers.get(key))

@@ -260,7 +260,7 @@ def _eval_finish(
     if control is not None and control.kill_requested and not sliced:
         _fill_killed(reports, spec)
     if sliced:
-        assert next_task_index is not None
+        assert next_task_index is not None  # noqa: S101 - type-narrowing invariant guaranteed by the branch above
         return _sliced_report(
             spec,
             skills,

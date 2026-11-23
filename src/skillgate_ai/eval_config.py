@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
 from typing import Any
 
@@ -54,7 +55,7 @@ class EvalRunConfig:
     reasoning_effort: str | None = None
     source: str = "env"
     applied: dict[str, bool] = field(default_factory=dict)
-    judge: dict[str, str] | None = None
+    judge: Mapping[str, object] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -255,7 +256,7 @@ def with_model(run: EvalRunConfig, model: str | None) -> EvalRunConfig:
     return replace(run, model=resolved, requested_model=requested)
 
 
-def with_judge(run: EvalRunConfig, stamp: dict[str, str] | None) -> EvalRunConfig:
+def with_judge(run: EvalRunConfig, stamp: Mapping[str, object] | None) -> EvalRunConfig:
     return replace(run, judge=dict(stamp) if stamp else None)
 
 

@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 import yaml
+from pydantic import ValidationError
 
 from skillgate_ai.case_pack.models import (
     CASES_REL,
@@ -109,7 +110,7 @@ def load_case_pack(skill_path: str | Path) -> CasePack | None:
         )
     try:
         pack = CasePack.model_validate(raw)
-    except Exception as exc:
+    except ValidationError as exc:
         raise SuiteError(
             friendly_validation_error(exc, kind="Case pack", raw=raw),
             exit_code=2,
@@ -129,7 +130,7 @@ def save_case_pack(skill_path: str | Path, pack: CasePack) -> Path:
     root = Path(skill_path).expanduser().resolve()
     try:
         CasePack.model_validate(pack.model_dump())
-    except Exception as exc:
+    except ValidationError as exc:
         raise SuiteError(friendly_validation_error(exc, kind="Case pack")) from None
     dest = cases_path(root)
     previous = None
@@ -138,7 +139,7 @@ def save_case_pack(skill_path: str | Path, pack: CasePack) -> Path:
             raw = yaml.safe_load(dest.read_text(encoding="utf-8")) or {}
             if isinstance(raw, dict):
                 previous = CasePack.model_validate(raw)
-        except Exception:
+        except (OSError, UnicodeDecodeError, yaml.YAMLError, ValidationError):
             previous = None
     _reject_removed_seed_cases(previous, pack)
     _reject_missing_seed_cases(pack, root)

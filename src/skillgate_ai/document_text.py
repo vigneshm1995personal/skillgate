@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 from skillgate_ai.pack_files import GOLDEN_TAIL_CHARS
+
+_LOG = logging.getLogger(__name__)
 
 _TEXT_SUFFIXES = frozenset({".pdf", ".docx", ".xlsx"})
 
@@ -28,7 +31,8 @@ def extract_document_text(path: Path, *, limit: int = GOLDEN_TAIL_CHARS) -> str 
         if suffix in {".xlsx", ".xlsm"}:
             return _cap(_xlsx_text(path), limit=limit)
         return _cap(_pdf_text(path), limit=limit)
-    except Exception:
+    except Exception:  # noqa: BLE001 - untrusted file parser boundary; returns None
+        _LOG.debug("document text extraction failed for %s", path.name, exc_info=True)
         return None
 
 

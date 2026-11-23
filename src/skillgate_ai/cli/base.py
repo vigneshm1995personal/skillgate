@@ -93,7 +93,7 @@ def _bind_key_env(key_env: list[str] | None) -> None:
 def _stdin_is_tty() -> bool:
     try:
         return sys.stdin.isatty()
-    except Exception:
+    except (AttributeError, OSError, ValueError):
         return False
 
 

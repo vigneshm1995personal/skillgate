@@ -111,7 +111,7 @@ line-length = 100
 target-version = "py311"
 
 [tool.ruff.lint]
-select = ["E", "W", "F", "I", "UP", "B", "SIM"]
+select = ["E", "W", "F", "I", "UP", "B", "SIM", "BLE", "S"]
 
 [tool.ruff.lint.per-file-ignores]
 # Typer/FastAPI declare CLI and form params with Option/Form/File defaults.
@@ -123,6 +123,12 @@ select = ["E", "W", "F", "I", "UP", "B", "SIM"]
 "src/skillgate_build.py" = ["N801"]
 # Fixture copy / JS-in-Python strings that cannot wrap without changing values.
 "tests/test_wording_facts.py" = ["E501"]
+# Single-line JSON golden literals; wrapping would change the contract under test.
+"tests/test_wire_shapes.py" = ["E501"]
+# Tests use assert, subprocess, temp paths and fake secrets by design.
+"tests/**/*.py" = ["S"]
+# Seed skill packs are hashed fixtures shipped as examples; their scripts are agent-side code.
+"skills/**/scripts/*.py" = ["S603"]
 
 [tool.ruff.format]
 quote-style = "double"
@@ -132,7 +138,7 @@ line-ending = "lf"
 [tool.mypy]
 python_version = "3.11"
 ignore_missing_imports = true
-check_untyped_defs = false
+check_untyped_defs = true
 warn_unused_ignores = true
 pretty = true
 mypy_path = "src"
