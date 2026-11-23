@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Any
+from typing import Any, NotRequired, TypedDict
 from urllib.parse import unquote
 
 from skillgate_ai.extras import UI_FEATURE, MissingExtraError
@@ -20,7 +21,7 @@ from skillgate_ai.api_intake import (
     import_path_or_git_result,
     write_pasted_skill,
 )
-from skillgate_ai.api_payloads import fail, history_payload, skill_payload, state_of
+from skillgate_ai.api_payloads import AppState, fail, history_payload, skill_payload, state_of
 from skillgate_ai.catalog import (
     agent_source_status,
     catalog_entries,
@@ -50,7 +51,24 @@ _PICKER_SOURCE_LABELS = {
 }
 
 
-def _broken_skill_row(item: dict[str, Any]) -> dict[str, Any]:
+class BrokenSkillRow(TypedDict):
+    id: str
+    name: str
+    slug: str
+    description: str
+    warning: str
+    path: str
+    absolute: str
+    uploaded: bool
+    seed: bool
+    sabotaged: bool
+    gate: str
+    pack_files: list[Mapping[str, Any]]
+    source: NotRequired[str]
+    source_label: NotRequired[str]
+
+
+def _broken_skill_row(item: Mapping[str, Any]) -> BrokenSkillRow:
     folder = Path(str(item.get("absolute") or item.get("name") or "skill"))
     return {
         "id": item.get("id") or item.get("name") or folder.name,
@@ -68,7 +86,8 @@ def _broken_skill_row(item: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _listed_skill(state: Any, item: dict[str, Any]) -> dict[str, Any]:
+def _listed_skill(state: AppState, item: Mapping[str, Any]) -> dict[str, Any] | BrokenSkillRow:
+    payload: dict[str, Any] | BrokenSkillRow
     try:
         payload = skill_payload(state, Path(item["absolute"]))
     except (SkillGateError, OSError, ValueError):
@@ -81,7 +100,7 @@ def _listed_skill(state: Any, item: dict[str, Any]) -> dict[str, Any]:
     return payload
 
 
-def _listed_skills(state: Any) -> list[dict[str, Any]]:
+def _listed_skills(state: AppState) -> list[dict[str, Any] | BrokenSkillRow]:
     return [_listed_skill(state, item) for item in catalog_entries(state.root, include_agents=True)]
 
 
@@ -93,7 +112,7 @@ def register_skill_routes(app: FastAPI) -> None:
     @app.post("/api/examples/install")
     async def install_dataset_examples(request: Request) -> dict[str, Any]:
         state = state_of(request)
-        body: dict[str, Any] = {}
+        body: Mapping[str, Any] = {}
         if request.headers.get("content-length") not in {None, "0"}:
             parsed = await request.json()
             if isinstance(parsed, dict):

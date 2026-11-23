@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import Any
+from typing import Any, NotRequired, TypedDict
 
 from skillgate_ai.judge_bank import (
     CHECK_CELL_LABELS,
@@ -32,6 +32,7 @@ from skillgate_ai.judge_openai.payload import (
 )
 from skillgate_ai.judge_providers.decision import DecisionModel, require_decision_model
 from skillgate_ai.judge_spec import (
+    JudgeQuestion,
     JudgeSpec,
     builtin_spec,
     extra_block_failure_map,
@@ -40,8 +41,25 @@ from skillgate_ai.judge_spec import (
 from skillgate_ai.span_facts import resolve_log_facts
 
 
-def _extra_cell(question: Any, raw: Any) -> tuple[dict[str, Any], dict[str, Any] | None]:
-    cell: dict[str, Any] = {
+class ExtraCell(TypedDict):
+    label: str
+    choice: str | None
+    reason: str | None
+    source: NotRequired[str]
+    probability: NotRequired[float]
+    score: NotRequired[Any]
+    status: NotRequired[str]
+
+
+class JudgeUsageSum(TypedDict):
+    tokens_in: int | None
+    tokens_out: int | None
+    tokens_total: int | None
+    cost_usd: float | None
+
+
+def _extra_cell(question: JudgeQuestion, raw: Any) -> tuple[ExtraCell, dict[str, Any] | None]:
+    cell: ExtraCell = {
         "label": question.ask,
         "choice": extract_choice(raw),
         "reason": None,
@@ -267,13 +285,13 @@ class OutcomeJudge:
         reasons: list[str],
         why: str | None,
         answers: Any,
-        soft_answers: dict[str, Any],
-        cells: dict[str, Any],
-        citations: dict[str, Any],
+        soft_answers: Mapping[str, Any],
+        cells: Mapping[str, Any],
+        citations: Mapping[str, Any],
         usage: Any,
         warnings: list[str],
-        questions: dict[str, Any],
-        soft_questions: dict[str, Any],
+        questions: Mapping[str, Any],
+        soft_questions: Mapping[str, Any],
         scoring_endpoint: str | None = None,
     ) -> dict[str, Any]:
         payload = {
@@ -310,8 +328,8 @@ class OutcomeJudge:
         *,
         model: str,
         resolved: JudgeSpec,
-        citations: dict[str, Any],
-        soft_questions: dict[str, Any],
+        citations: Mapping[str, Any],
+        soft_questions: Mapping[str, Any],
         extra_warnings: list[str],
     ) -> dict[str, Any]:
         reason = str(evaluated.get("reason") or "The judge couldn't score this check.")
@@ -342,13 +360,13 @@ class OutcomeJudge:
 
     def _verdict_cells(
         self,
-        pass_answers: dict[str, Any],
-        soft_answers: dict[str, Any],
+        pass_answers: Mapping[str, Any],
+        soft_answers: Mapping[str, Any],
         *,
         include_path: bool,
         confidence: bool,
-    ) -> dict[str, dict[str, Any]]:
-        cells: dict[str, dict[str, Any]] = {}
+    ) -> dict[str, dict[str, Any] | ExtraCell]:
+        cells: dict[str, dict[str, Any] | ExtraCell] = {}
         for key in CHECK_CELL_ORDER:
             cells[key] = _cell_entry(key, pass_answers.get(key), CHECK_CELL_LABELS)
             if confidence:
@@ -366,8 +384,8 @@ class OutcomeJudge:
         self,
         evaluated: Mapping[str, Any],
         *,
-        artifacts: list[dict[str, Any]],
-        omitted: list[dict[str, Any]],
+        artifacts: Sequence[Mapping[str, Any]],
+        omitted: Sequence[Mapping[str, Any]],
         include_path: bool,
         spec: JudgeSpec | None = None,
     ) -> dict[str, Any]:
@@ -388,7 +406,7 @@ class OutcomeJudge:
                 extra_warnings=extra_warnings,
             )
         raw_answers = evaluated.get("answers")
-        answers: dict[str, Any] = raw_answers if isinstance(raw_answers, dict) else {}
+        answers: Mapping[str, Any] = raw_answers if isinstance(raw_answers, dict) else {}
         if not include_path:
             answers = {key: value for key, value in answers.items() if key not in SOFT_CELL_ORDER}
         confidence = bool(getattr(self.backend, "supports_confidence", self.supports_confidence))
@@ -482,7 +500,7 @@ def _scoring_endpoint(evaluated: Mapping[str, Any]) -> str | None:
     return None
 
 
-def _sum_judge_usage(rounds: list[Mapping[str, Any]]) -> dict[str, Any] | None:
+def _sum_judge_usage(rounds: list[Mapping[str, Any]]) -> JudgeUsageSum | None:
     from skillgate_ai.usage import usage_from_mapping
 
     tokens_in = tokens_out = tokens_total = cost = None
