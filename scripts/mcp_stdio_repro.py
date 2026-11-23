@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Repro: MCP stdio client + check_start + poll until done or server death."""
+
 from __future__ import annotations
 
 import argparse
@@ -17,7 +18,6 @@ async def run_once(harness: str, poll_sec: float) -> dict:
     from mcp import ClientSession, StdioServerParameters
     from mcp.client.stdio import stdio_client
 
-    py_path = os.pathsep.join([str(ROOT / "src")] + sys.path)
     env = {k: v for k, v in os.environ.items() if k != "PYTHONPATH"}
     env["PYTHONPATH"] = str(ROOT / "src")
     params = StdioServerParameters(
@@ -63,7 +63,7 @@ async def run_once(harness: str, poll_sec: float) -> dict:
                     outcome["error"] = "timeout"
                     break
             outcome["last"] = last
-    except Exception as exc:
+    except BaseException as exc:  # noqa: BLE001 — repro records any client/transport failure
         outcome["error"] = f"{type(exc).__name__}: {exc}"
     outcome["duration"] = round(time.monotonic() - t0, 1)
     return outcome
