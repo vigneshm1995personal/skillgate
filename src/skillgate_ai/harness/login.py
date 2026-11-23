@@ -51,7 +51,7 @@ def _run_inherited(argv: list[str], *, timeout: float | None = None) -> int:
     forwarder is only installed (and restored) from the main thread; the local
     UI can start a login from a worker thread.
     """
-    proc = subprocess.Popen(argv, start_new_session=True)
+    proc = subprocess.Popen(argv, start_new_session=True)  # noqa: S603 - resolved official agent CLI + fixed login subcommand
     interrupted: dict[str, int | None] = {"sig": None}
     in_main_thread = threading.current_thread() is threading.main_thread()
 

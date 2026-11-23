@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 import yaml
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, ValidationError, field_validator
 
 from skillgate_ai.errors import SuiteError, friendly_validation_error
 from skillgate_ai.metrics import CaseBudgets
@@ -117,7 +117,7 @@ def load_suite(path: str | Path) -> tuple[SuiteSpec, Path]:
     raw = _normalize_suite(raw)
     try:
         spec = SuiteSpec.model_validate(raw)
-    except Exception as exc:
+    except ValidationError as exc:
         raise SuiteError(friendly_validation_error(exc, kind="Eval suite", raw=raw)) from None
     return spec, suite_path.parent
 

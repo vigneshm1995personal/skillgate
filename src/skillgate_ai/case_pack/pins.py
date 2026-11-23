@@ -20,6 +20,7 @@ from skillgate_ai.case_pack.models import (
     _reject_missing_seed_cases,
 )
 from skillgate_ai.case_pack.store import cases_path, load_case_pack, save_case_pack
+from skillgate_ai.errors import SkillGateError
 from skillgate_ai.metrics import parse_budgets
 from skillgate_ai.pack import (
     FIXTURE_DIR,
@@ -119,7 +120,7 @@ def _skill_name(root: Path) -> str:
             from skillgate_ai.ingest import ingest_skill
 
             return ingest_skill(root, strict=False).name
-        except Exception:
+        except (SkillGateError, OSError, ValueError):
             pass
     return root.name
 

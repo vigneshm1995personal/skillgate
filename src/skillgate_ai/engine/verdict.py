@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from skillgate_ai.judge_context import ScorerRow
 
 from skillgate_ai.harness import (
     HarnessResult,
@@ -51,7 +54,7 @@ def _resolve_task_spec(skill_root: Path, pack: Any, case: Any):
     return resolve_judge_spec(project=project, pack=pack_block, case=case_block)
 
 
-def _score_rows(scores: list[Score]) -> list[dict[str, Any]]:
+def _score_rows(scores: list[Score]) -> list[ScorerRow]:
     return [
         {
             "scorer": item.scorer,

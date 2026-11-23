@@ -12,22 +12,47 @@ is a Gate block, not a Jev Fail.
 from __future__ import annotations
 
 import re
-from typing import Any, Literal
+from typing import Any, Literal, NotRequired, TypedDict
 
 from pydantic import BaseModel, ValidationError, field_validator
 
 STATUS_ERROR = 2
 _CHANGED_LINE = re.compile(r"^changed\s+\S+")
 
-REASON_TOKEN_OVER = "This case went over its token budget."
+REASON_TOKEN_OVER = "This case went over its token budget."  # noqa: S105 - user-facing copy, not a credential
 REASON_PATH_OVER = "This case took more steps than its path budget."
 REASON_BOTH_OVER = "This case went over its token and path budgets."
-REASON_TOKEN_CLOSED = "This case has a token budget, but the run did not report tokens."
+REASON_TOKEN_CLOSED = "This case has a token budget, but the run did not report tokens."  # noqa: S105 - user-facing copy, not a credential
 REASON_PATH_CLOSED = "This case has a step budget, but the run did not record a path."
 REASON_MULTI = "{n} cases went over a pinned budget."
 REASON_CLEARED = "This Dataset passed."
 
 MetricsStatus = Literal["info", "ok", "fail"]
+
+
+class PathStats(TypedDict):
+    steps: int
+    errors: int
+    had_path: bool
+
+
+class BudgetSnapshot(TypedDict):
+    tokens_total: int | None
+    max_steps: int | None
+
+
+class TaskMetrics(TypedDict):
+    path: PathStats
+    budgets: BudgetSnapshot | None
+    status: MetricsStatus
+    reasons: list[str]
+    blocking: bool
+
+
+class SuiteMetricsSummary(TypedDict):
+    budget_fails: list[str]
+    status: MetricsStatus
+    path: NotRequired[PathStats]
 
 
 class CaseBudgets(BaseModel):
@@ -127,7 +152,7 @@ def evaluate_task_metrics(
     spans: list[dict[str, Any]] | None,
     transcript: str | None,
     budgets: CaseBudgets | dict[str, Any] | None,
-) -> dict[str, Any]:
+) -> TaskMetrics:
     """Per-case metrics dict for ``TaskReport`` / Gate."""
     effective = _as_budgets(budgets)
     if effective.is_empty():
@@ -170,7 +195,7 @@ def evaluate_task_metrics(
     else:
         status = "ok"
 
-    payload: dict[str, Any] = {
+    payload: TaskMetrics = {
         "path": {"steps": steps, "errors": errors, "had_path": had_path},
         "budgets": (
             None
@@ -217,7 +242,7 @@ def budget_gate_reason(report: dict[str, Any] | None) -> str:
     return REASON_TOKEN_OVER
 
 
-def suite_metrics_summary(tasks: list[dict[str, Any]]) -> dict[str, Any]:
+def suite_metrics_summary(tasks: list[dict[str, Any]]) -> SuiteMetricsSummary:
     fails = [
         str(task.get("id") or task.get("task_id") or "") for task in tasks if _task_blocking(task)
     ]
@@ -248,7 +273,7 @@ def suite_metrics_summary(tasks: list[dict[str, Any]]) -> dict[str, Any]:
             isinstance(raw_steps, (int, float)) and int(raw_steps) > 0
         ):
             had_path = True
-    summary: dict[str, Any] = {"budget_fails": fails, "status": status}
+    summary: SuiteMetricsSummary = {"budget_fails": fails, "status": status}
     if saw_path:
         summary["path"] = {"steps": steps, "errors": errors, "had_path": had_path}
     return summary
@@ -267,7 +292,7 @@ def _as_budgets(raw: CaseBudgets | dict[str, Any] | None) -> CaseBudgets:
     }
     try:
         return CaseBudgets.model_validate(data)
-    except Exception:
+    except ValidationError:
         return CaseBudgets()
 
 

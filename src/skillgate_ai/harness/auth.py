@@ -40,7 +40,7 @@ def _codex_login_status_authenticated(returncode: int, stdout: str, stderr: str)
 def _probe_codex_login_status(binary: str) -> bool:
     """Host `codex login status` only. Never read auth files."""
     try:
-        proc = subprocess.run(
+        proc = subprocess.run(  # noqa: S603 - binary resolved via harness.bins; fixed status subcommand
             [binary, "login", "status"],
             capture_output=True,
             text=True,
@@ -78,7 +78,7 @@ def _cursor_login_status_authenticated(returncode: int, stdout: str, stderr: str
 def _probe_cursor_login_status(binary: str) -> bool:
     """Host `cursor-agent status` / `agent status` only. Never read auth files."""
     try:
-        proc = subprocess.run(
+        proc = subprocess.run(  # noqa: S603 - binary resolved via harness.bins; fixed status subcommand
             [binary, "status"],
             capture_output=True,
             text=True,
@@ -126,7 +126,7 @@ def _claude_login_status_authenticated(returncode: int, stdout: str, stderr: str
 def _probe_claude_login_status(binary: str) -> bool:
     """Host `claude auth status` only. Never read auth files."""
     try:
-        proc = subprocess.run(
+        proc = subprocess.run(  # noqa: S603 - binary resolved via harness.bins; fixed status subcommand
             [binary, "auth", "status"],
             capture_output=True,
             text=True,

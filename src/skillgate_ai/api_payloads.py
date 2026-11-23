@@ -6,7 +6,7 @@ import copy
 import threading
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, NoReturn
+from typing import TYPE_CHECKING, Any, Literal, NoReturn, TypeAlias, TypedDict
 
 if TYPE_CHECKING:
     from fastapi import Request
@@ -96,6 +96,49 @@ _BROWSER_DROP = frozenset({"config_label_raw", "check_kind", "provider", "backen
 
 # Live agent harnesses whose run model is a public id (not a provider secret).
 LIVE_AGENT_HARNESSES = frozenset({"cursor-agent", "codex", "claude", "claude-code"})
+
+
+class DeployRow(TypedDict):
+    id: int
+    target: str
+    status: str
+    created_at: object
+    file_count: object
+    mode: object
+    dest_label: str
+
+
+class SkillVersionRow(TypedDict):
+    id: int
+    semver: str
+    created_at: str | None
+    skill_md_hash: str
+
+
+class RunTimelineRow(TypedDict):
+    kind: Literal["run"]
+    id: object
+    at: object
+    passed: object
+    skill: object
+    harness: object
+    config_label: object
+    gate: object
+    status: object
+    tryout: object
+
+
+class DeployTimelineRow(TypedDict):
+    kind: Literal["deploy"]
+    id: int
+    at: object
+    skill: str
+    target: str
+    status: str
+    label: str
+
+
+TimelineRow: TypeAlias = RunTimelineRow | DeployTimelineRow
 
 
 def _scrub_judge(judge: dict[str, Any]) -> dict[str, Any]:
@@ -249,7 +292,7 @@ def _gate_source_run(
     return None
 
 
-def _deploy_payload(row: dict[str, Any], *, index: int = 0) -> dict[str, Any]:
+def _deploy_payload(row: dict[str, Any], *, index: int = 0) -> DeployRow:
     target = str(row.get("target") or "")
     label = SOURCE_LABELS.get(target, target or "agent")
     dest_label = f"{label}'s skills folder"
@@ -308,11 +351,11 @@ def skill_payload(state: AppState, path: Path) -> dict[str, Any]:
     }
 
 
-def skill_version_rows(path: Path) -> list[dict[str, Any]]:
+def skill_version_rows(path: Path) -> list[SkillVersionRow]:
     """Versions Compare can use for this skill: one row per git ref."""
     from skillgate_ai.compare_git import list_skill_git_versions
 
-    rows: list[dict[str, Any]] = []
+    rows: list[SkillVersionRow] = []
     for index, item in enumerate(list_skill_git_versions(path)):
         rows.append(
             {
@@ -333,7 +376,7 @@ def history_payload(state: AppState, skill_path: Path) -> dict[str, Any]:
     gate, _gate_reason = pack_gate_decision(skill_path)
     deploys = [_deploy_payload(row, index=i) for i, row in enumerate(load_deploys(skill_path))]
     last_deploy = deploys[-1] if deploys else None
-    timeline = [
+    timeline: list[TimelineRow] = [
         {
             "kind": "run",
             "id": item.get("id"),
@@ -352,14 +395,13 @@ def history_payload(state: AppState, skill_path: Path) -> dict[str, Any]:
         timeline.append(
             {
                 "kind": "deploy",
-                "id": item.get("id"),
-                "at": item.get("created_at"),
+                "id": item["id"],
+                "at": item["created_at"],
                 "skill": skill_path.name,
-                "target": item.get("target"),
-                "status": item.get("status"),
+                "target": item["target"],
+                "status": item["status"],
                 "label": (
-                    "Install to "
-                    f"{SOURCE_LABELS.get(item.get('target'), item.get('target') or 'agent')}"
+                    f"Install to {SOURCE_LABELS.get(item['target'], item['target'] or 'agent')}"
                 ),
             }
         )
@@ -378,8 +420,8 @@ def history_payload(state: AppState, skill_path: Path) -> dict[str, Any]:
 
 
 def workspace_history(state: AppState) -> dict[str, Any]:
-    timeline: list[dict[str, Any]] = []
-    deploys: list[dict[str, Any]] = []
+    timeline: list[TimelineRow] = []
+    deploys: list[DeployRow] = []
     last_run = None
     last_deploy = None
     for entry in catalog_entries(state.root):

@@ -37,8 +37,17 @@ def list_skill_git_versions(pack: Path) -> list[dict[str, str]]:
         return []
     spec = "." if str(rel) in {"", "."} else str(rel)
     try:
-        out = subprocess.run(
-            ["git", "-C", str(root), "log", "-5", "--format=%h%x09%cI", "--", spec],
+        out = subprocess.run(  # noqa: S603 - fixed git argv; ref and path are separate argv items
+            [  # noqa: S607 - git resolved from PATH by design
+                "git",
+                "-C",
+                str(root),
+                "log",
+                "-5",
+                "--format=%h%x09%cI",
+                "--",
+                spec,
+            ],
             check=True,
             capture_output=True,
             text=True,
@@ -58,8 +67,8 @@ def list_skill_git_versions(pack: Path) -> list[dict[str, str]]:
 def find_git_root(pack: Path) -> Path:
     pack = pack.resolve()
     try:
-        out = subprocess.run(
-            ["git", "rev-parse", "--show-toplevel"],
+        out = subprocess.run(  # noqa: S603 - fixed git argv; ref and path are separate argv items
+            ["git", "rev-parse", "--show-toplevel"],  # noqa: S607 - git resolved from PATH by design
             cwd=pack,
             check=True,
             capture_output=True,
@@ -85,8 +94,8 @@ def _materialize_ref(pack: Path, git_root: Path, ref: str, dest: Path) -> Path:
     rel = pack.resolve().relative_to(git_root.resolve())
     dest.mkdir(parents=True, exist_ok=True)
     try:
-        proc = subprocess.run(
-            ["git", "archive", ref, str(rel)],
+        proc = subprocess.run(  # noqa: S603 - fixed git argv; ref and path are separate argv items
+            ["git", "archive", ref, str(rel)],  # noqa: S607 - git resolved from PATH by design
             cwd=git_root,
             check=True,
             capture_output=True,

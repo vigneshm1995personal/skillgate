@@ -11,8 +11,9 @@ from __future__ import annotations
 import json
 import secrets
 import time
+from collections.abc import Mapping
 from pathlib import PurePosixPath
-from typing import Any
+from typing import Any, NotRequired, TypeAlias, TypedDict, cast
 
 # OTel status codes: https://opentelemetry.io/docs/specs/otel/trace/api/#set-status
 STATUS_UNSET = 0
@@ -21,6 +22,36 @@ STATUS_ERROR = 2
 
 # SpanKind INTERNAL
 KIND_INTERNAL = 1
+
+AttrValue: TypeAlias = str | int | float | bool
+
+
+class OtlpAnyValue(TypedDict, total=False):
+    stringValue: str
+    intValue: str
+    doubleValue: float
+    boolValue: bool
+
+
+class OtlpKeyValue(TypedDict):
+    key: str
+    value: OtlpAnyValue
+
+
+class OtlpStatus(TypedDict):
+    code: int
+
+
+class OtlpSpan(TypedDict):
+    traceId: str
+    spanId: str
+    name: str
+    kind: int
+    startTimeUnixNano: str
+    endTimeUnixNano: str
+    status: OtlpStatus
+    attributes: list[OtlpKeyValue]
+    parentSpanId: NotRequired[str]
 
 
 def _id(nbytes: int = 8) -> str:
@@ -31,7 +62,7 @@ def _now_ns() -> int:
     return time.time_ns()
 
 
-def _attr(key: str, value: Any) -> dict[str, Any]:
+def _attr(key: str, value: AttrValue) -> OtlpKeyValue:
     if isinstance(value, bool):
         return {"key": key, "value": {"boolValue": value}}
     if isinstance(value, int) and not isinstance(value, bool):
@@ -50,13 +81,13 @@ def make_span(
     start_ns: int | None = None,
     end_ns: int | None = None,
     status: int = STATUS_OK,
-    attributes: dict[str, Any] | None = None,
-) -> dict[str, Any]:
+    attributes: Mapping[str, AttrValue | None] | None = None,
+) -> OtlpSpan:
     """One OTLP JSON span (trimmed — enough for UI + future export)."""
     start = start_ns if start_ns is not None else _now_ns()
     end = end_ns if end_ns is not None else start
     attrs = [_attr(k, v) for k, v in (attributes or {}).items() if v is not None]
-    span: dict[str, Any] = {
+    span: OtlpSpan = {
         "traceId": trace_id,
         "spanId": span_id or _id(8),
         "name": name,
@@ -77,7 +108,7 @@ def _basename(path: str) -> str:
 
 def _cursor_tool_span(
     obj: dict[str, Any], *, trace_id: str, parent: str, t_ns: int
-) -> dict[str, Any] | None:
+) -> OtlpSpan | None:
     if obj.get("subtype") == "completed":
         return None
     call = obj.get("tool_call")
@@ -97,7 +128,7 @@ def _cursor_tool_span(
                 if key in {"path", "file_path"}:
                     path = value.strip()
                 break
-        attrs: dict[str, Any] = {
+        attrs: dict[str, AttrValue] = {
             "gen_ai.operation.name": "execute_tool",
             "gen_ai.tool.name": tool,
         }
@@ -130,7 +161,7 @@ def _cursor_tool_span(
     return None
 
 
-def _codex_item_span(item: Any, *, trace_id: str, parent: str, t_ns: int) -> dict[str, Any] | None:
+def _codex_item_span(item: Any, *, trace_id: str, parent: str, t_ns: int) -> OtlpSpan | None:
     if not isinstance(item, dict):
         return None
     itype = item.get("type")
@@ -161,7 +192,7 @@ def _codex_item_span(item: Any, *, trace_id: str, parent: str, t_ns: int) -> dic
             if path.endswith("selected.json") or "catalog.md" in path
             else "tool.write"
         )
-        attrs: dict[str, Any] = {
+        attrs: dict[str, AttrValue] = {
             "gen_ai.operation.name": "execute_tool",
             "gen_ai.tool.name": "write",
         }
@@ -246,7 +277,7 @@ def _glue_assistant_delta(prev: str, delta: str) -> str:
     return prev + " " + delta
 
 
-def _set_string_attr(span: dict[str, Any], key: str, value: str) -> None:
+def _set_string_attr(span: OtlpSpan, key: str, value: str) -> None:
     attrs = span.setdefault("attributes", [])
     for item in attrs:
         if isinstance(item, dict) and item.get("key") == key:
@@ -257,7 +288,7 @@ def _set_string_attr(span: dict[str, Any], key: str, value: str) -> None:
 
 def _claude_tool_spans(
     obj: dict[str, Any], *, trace_id: str, parent: str, t_ns: int
-) -> list[dict[str, Any]]:
+) -> list[OtlpSpan]:
     """Claude Code stream-json tool_use blocks (Bash and others) as tool spans."""
     parts: list[dict[str, Any]] = []
     if obj.get("type") == "tool_use":
@@ -271,7 +302,7 @@ def _claude_tool_spans(
                 for part in content
                 if isinstance(part, dict) and part.get("type") == "tool_use"
             ]
-    spans: list[dict[str, Any]] = []
+    spans: list[OtlpSpan] = []
     for part in parts:
         name = str(part.get("name") or "tool").strip() or "tool"
         args = part.get("input") if isinstance(part.get("input"), dict) else {}
@@ -299,7 +330,7 @@ def _claude_tool_spans(
             span_name = f"tool.{tool}"
         if tool not in {"bash", "shell", "run"} and summary:
             summary = f"{name} {summary}".strip()
-        attrs: dict[str, Any] = {
+        attrs: dict[str, AttrValue] = {
             "gen_ai.operation.name": "execute_tool",
             "gen_ai.tool.name": tool,
         }
@@ -326,7 +357,7 @@ def spans_from_jsonl(stdout: str, *, trace_id: str | None = None) -> list[dict[s
     tid = trace_id or _id(16)
     root_id = _id(8)
     t0 = _now_ns()
-    spans: list[dict[str, Any]] = [
+    spans: list[OtlpSpan] = [
         make_span(
             name="eval.check",
             trace_id=tid,
@@ -351,9 +382,9 @@ def spans_from_jsonl(stdout: str, *, trace_id: str | None = None) -> list[dict[s
             continue
         tick += 1_000_000  # 1ms separation for ordering when clocks absent
         kind = obj.get("type")
-        span: dict[str, Any] | None = None
+        span: OtlpSpan | None = None
         pending_open_assistant = False
-        extra: list[dict[str, Any]] = []
+        extra: list[OtlpSpan] = []
         if kind == "tool_call":
             span = _cursor_tool_span(obj, trace_id=tid, parent=root_id, t_ns=tick)
         elif kind == "item.completed":
@@ -445,10 +476,11 @@ def spans_from_jsonl(stdout: str, *, trace_id: str | None = None) -> list[dict[s
     # Close root
     if len(spans) > 1:
         spans[0]["endTimeUnixNano"] = spans[-1]["endTimeUnixNano"]
-    return spans
+    # wire boundary: OtlpSpan dict rows match HarnessResult/TaskReport JSON
+    return cast("list[dict[str, Any]]", spans)
 
 
-def attr_map(span: dict[str, Any]) -> dict[str, Any]:
+def attr_map(span: Mapping[str, Any]) -> dict[str, Any]:
     """Flatten OTLP attributes for UI / tests."""
     out: dict[str, Any] = {}
     for item in span.get("attributes") or []:

@@ -20,6 +20,7 @@ import urllib.parse
 import urllib.request
 import zipfile
 from pathlib import Path
+from typing import IO
 
 from skillgate_ai.deploy import get_adapter
 from skillgate_ai.errors import SKILL_CHANGED_MESSAGE, SkillGateError, customer_job_error
@@ -55,7 +56,7 @@ def _http_post(
 ) -> dict:
     data = json.dumps(payload).encode("utf-8")
     hdrs = {"Content-Type": "application/json", **(headers or {})}
-    req = urllib.request.Request(url, data=data, method="POST", headers=hdrs)
+    req = urllib.request.Request(url, data=data, method="POST", headers=hdrs)  # noqa: S310 - URL is the user's paired Skill Gate base (https or loopback, enforced at connect)
     return _read_json(req, timeout=60, retries=retries)
 
 
@@ -66,7 +67,15 @@ def _request_error(exc: BaseException) -> SkillGateError:
 
 
 class _StripAuthRedirectHandler(urllib.request.HTTPRedirectHandler):
-    def redirect_request(self, req, fp, code, msg, headers, newurl):
+    def redirect_request(
+        self,
+        req: urllib.request.Request,
+        fp: IO[bytes],
+        code: int,
+        msg: str,
+        headers: http.client.HTTPMessage,
+        newurl: str,
+    ) -> urllib.request.Request | None:
         new_req = super().redirect_request(req, fp, code, msg, headers, newurl)
         if new_req is None:
             return None
@@ -77,7 +86,7 @@ class _StripAuthRedirectHandler(urllib.request.HTTPRedirectHandler):
         stripped = {
             key: value for key, value in new_req.header_items() if key.lower() != "authorization"
         }
-        return urllib.request.Request(
+        return urllib.request.Request(  # noqa: S310 - redirect target already accepted by the stdlib redirect handler
             newurl,
             data=new_req.data,
             headers=stripped,
@@ -130,7 +139,7 @@ def _urlopen_bytes(req: urllib.request.Request, *, timeout: int, retries: bool =
 
 
 def _http_get(url: str, *, headers: dict | None = None) -> bytes:
-    req = urllib.request.Request(url, method="GET", headers=headers or {})
+    req = urllib.request.Request(url, method="GET", headers=headers or {})  # noqa: S310 - URL is the user's paired Skill Gate base (https or loopback, enforced at connect)
     return _urlopen_bytes(req, timeout=120)
 
 

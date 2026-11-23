@@ -33,7 +33,7 @@ def write_launch_agent(
         plist["KeepAlive"] = keep_alive
     launch_dir.mkdir(parents=True, exist_ok=True)
     try:  # noqa: SIM105
-        os.chmod(launch_dir, 0o755)
+        os.chmod(launch_dir, 0o755)  # noqa: S103 - ~/Library/LaunchAgents must be traversable by launchd (standard macOS mode)
     except OSError:
         pass
     dest = launch_dir / f"{label}.plist"

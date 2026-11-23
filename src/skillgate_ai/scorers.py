@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from skillgate_ai.extras import PDF_SCORING_FEATURE, import_extra
 from skillgate_ai.suite import FileExpect, RubricCheck, ScorerSpec, TaskSpec
+
+_LOG = logging.getLogger(__name__)
 
 
 @dataclass
@@ -339,7 +342,8 @@ def _pdf_pages(path: Path) -> int | None:
     PdfReader = import_extra("pypdf", extra="docs", feature=PDF_SCORING_FEATURE).PdfReader
     try:
         return len(PdfReader(str(path)).pages)
-    except Exception:
+    except Exception:  # noqa: BLE001 - untrusted PDF parser boundary; returns None
+        _LOG.debug("pdf page count failed for %s", path.name, exc_info=True)
         return None
 
 
@@ -348,7 +352,8 @@ def _pdf_text(path: Path) -> str | None:
     try:
         reader = PdfReader(str(path))
         return "\n".join((page.extract_text() or "") for page in reader.pages)
-    except Exception:
+    except Exception:  # noqa: BLE001 - untrusted PDF parser boundary; returns None
+        _LOG.debug("pdf text extraction failed for %s", path.name, exc_info=True)
         return None
 
 

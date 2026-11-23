@@ -6,13 +6,13 @@ import json
 import re
 from collections.abc import Mapping
 from pathlib import Path
-from typing import Any
+from typing import Any, TypedDict
 
 from skillgate_ai.document_text import extract_document_text
 from skillgate_ai.judge_bank import OUTCOME_SCORING_NOTES
 from skillgate_ai.pack_files import GOLDEN_TAIL_CHARS, read_capped_text
 from skillgate_ai.scorers import Score
-from skillgate_ai.spans import attr_map, spans_from_jsonl
+from skillgate_ai.spans import AttrValue, attr_map, spans_from_jsonl
 
 _TEST_LINE_RE = re.compile(
     r"\b(pytest|vitest|pnpm test|npm test|cargo test|go test|unittest)\b",
@@ -24,6 +24,47 @@ _PYTEST_RESULT_RE = re.compile(
 )
 _FILE_CONTENT_CAP = 6000
 _COMMAND_OUTPUT_CAP = 2500
+
+
+class JudgeFileRow(TypedDict):
+    path: str
+    present: bool
+    kind: object
+    content: str | None
+
+
+class CommandRun(TypedDict, total=False):
+    source: str
+    command: str
+    exit_code: object
+    output: str | None
+    tool: str | None
+
+
+class TrajectoryCommand(TypedDict):
+    kind: str
+    tool: AttrValue | None
+    args: str
+    file: AttrValue | None
+
+
+class ScorerRow(TypedDict):
+    scorer: str | None
+    passed: bool | None
+    headline: str | None
+    detail: str | None
+
+
+class AgentTrajectory(TypedDict):
+    had_path: bool | None
+    step_count: int | None
+    error_count: int | None
+    commands: list[TrajectoryCommand]
+    command_runs: list[CommandRun]
+    test_mentions: list[str]
+    scorer_results: list[ScorerRow]
+    transcript_chars: int
+    workspace_file_paths: list[str]
 
 
 def enrich_output_row(row: dict[str, Any], dest: Path) -> dict[str, Any]:
@@ -51,8 +92,8 @@ def skill_instructions_text(skill_root: Path | None, *, fallback: str | None = N
     return f"{OUTCOME_SCORING_NOTES}\n\n--- SKILL.md ---\n{_cap_instructions(cleaned)}"
 
 
-def workspace_files_for_judge(artifacts: list[dict[str, Any]] | None) -> list[dict[str, Any]]:
-    rows: list[dict[str, Any]] = []
+def workspace_files_for_judge(artifacts: list[dict[str, Any]] | None) -> list[JudgeFileRow]:
+    rows: list[JudgeFileRow] = []
     for item in artifacts or []:
         if not isinstance(item, dict):
             continue
@@ -73,9 +114,9 @@ def workspace_files_for_judge(artifacts: list[dict[str, Any]] | None) -> list[di
     return rows
 
 
-def parse_command_runs(transcript: str) -> list[dict[str, Any]]:
-    runs: list[dict[str, Any]] = []
-    pending: dict[str, dict[str, Any]] = {}
+def parse_command_runs(transcript: str) -> list[CommandRun]:
+    runs: list[CommandRun] = []
+    pending: dict[str, CommandRun] = {}
     for line in (transcript or "").splitlines():
         text = line.strip()
         if not text.startswith("{"):
@@ -171,8 +212,8 @@ def _claude_tool_output(part: dict[str, Any]) -> str:
 
 
 def _ingest_claude_stream_event(
-    runs: list[dict[str, Any]],
-    pending: dict[str, dict[str, Any]],
+    runs: list[CommandRun],
+    pending: dict[str, CommandRun],
     obj: dict[str, Any],
 ) -> None:
     for part in _claude_message_parts(obj):
@@ -180,7 +221,7 @@ def _ingest_claude_stream_event(
         if kind == "tool_use":
             command = _claude_tool_command(part)
             call_id = str(part.get("id") or "").strip()
-            row: dict[str, Any] = {
+            row: CommandRun = {
                 "command": command[:500],
                 "output": None,
                 "tool": str(part.get("name") or "").strip() or None,
@@ -205,7 +246,7 @@ def _ingest_claude_stream_event(
         )
 
 
-def _is_shell_evidence(run: dict[str, Any]) -> bool:
+def _is_shell_evidence(run: CommandRun) -> bool:
     tool = str(run.get("tool") or "").strip().lower()
     if tool in {"bash", "shell", "run"}:
         return True
@@ -216,7 +257,7 @@ def _is_shell_evidence(run: dict[str, Any]) -> bool:
     return not tool and bool(command)
 
 
-def _trim_command_runs(runs: list[dict[str, Any]], *, limit: int = 30) -> list[dict[str, Any]]:
+def _trim_command_runs(runs: list[CommandRun], *, limit: int = 30) -> list[CommandRun]:
     """Keep shell/test evidence when a long trajectory would drop the last pytest."""
     if len(runs) <= limit:
         return runs
@@ -232,7 +273,7 @@ def _trim_command_runs(runs: list[dict[str, Any]], *, limit: int = 30) -> list[d
     return kept
 
 
-def _append_command_run(runs: list[dict[str, Any]], item: dict[str, Any]) -> None:
+def _append_command_run(runs: list[CommandRun], item: dict[str, Any]) -> None:
     command = str(item.get("command") or "").strip()
     output = ""
     for key in (
@@ -267,13 +308,13 @@ def build_agent_trajectory(
     scores: list[Score] | list[dict[str, Any]] | None,
     artifacts: list[dict[str, Any]] | None = None,
     command_log: str | None = None,
-) -> dict[str, Any]:
+) -> AgentTrajectory:
     records = list(spans or [])
     if not any(str(span.get("name") or "").startswith(("tool.", "skill.")) for span in records):
         rebuilt = spans_from_jsonl(transcript or "")
         if rebuilt:
             records = rebuilt
-    commands: list[dict[str, Any]] = []
+    commands: list[TrajectoryCommand] = []
     for span in records:
         name = str(span.get("name") or "")
         if not (name.startswith("tool.") or name == "skill.select"):
@@ -298,7 +339,7 @@ def build_agent_trajectory(
         output = str(run.get("output") or "")
         if _PYTEST_RESULT_RE.search(output):
             test_mentions.append(output[:500])
-    scorer_rows: list[dict[str, Any]] = []
+    scorer_rows: list[ScorerRow] = []
     for item in scores or []:
         if isinstance(item, Score):
             scorer_rows.append(

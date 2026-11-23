@@ -446,7 +446,7 @@ def _run_task(
         result, skipped = _harness_result_or_skip(task, harness, sandbox, skills, timeout, control)
         if skipped is not None:
             return skipped
-        assert result is not None
+        assert result is not None  # noqa: S101 - type-narrowing invariant guaranteed by the branch above
         task_usage = _task_usage(control, result)
         scores, spans, passed, failures, judged, review, file_baseline = _score_and_judge_task(
             task,

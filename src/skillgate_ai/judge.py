@@ -3,12 +3,20 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Any, Protocol
+from typing import Any, NotRequired, Protocol, TypedDict
 
 from skillgate_ai.config import LLMConfig
 from skillgate_ai.errors import MissingLLMKeyError, SkillGateError
 from skillgate_ai.harness import is_live_harness
 from skillgate_ai.judge_copy import DEFAULT_NAME
+
+
+class JudgeStamp(TypedDict):
+    provider: str
+    backend: str
+    display_name: str
+    chosen: bool
+    model: NotRequired[str]
 
 
 class Judge(Protocol):
@@ -313,7 +321,7 @@ def ping_judge(cfg: LLMConfig, *, verbose: bool = False) -> dict[str, str | bool
     return {"ok": ok, "message": message}
 
 
-def judge_stamp(judge: Judge | None) -> dict[str, Any]:
+def judge_stamp(judge: Judge | None) -> JudgeStamp:
     if judge is None or isinstance(judge, SkipJudge) or getattr(judge, "name", "") == "skip":
         return {
             "provider": "skip",
