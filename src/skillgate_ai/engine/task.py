@@ -233,7 +233,7 @@ def _judge_task(
         review = bool(passed) and bool(isinstance(judged, dict) and judged.get("review"))
         judged = _maybe_explain_fail(
             judge,
-            passed,
+            passed is True,
             failures,
             judged,
             check=task.prompt,

@@ -351,7 +351,7 @@ def collect_tool_calls(
         for item in records
     )
     if not has_tool_span and transcript:
-        records = spans_from_jsonl(transcript) or []
+        records = list(spans_from_jsonl(transcript) or [])
 
     declared_list = list(declared)
     for span in records:

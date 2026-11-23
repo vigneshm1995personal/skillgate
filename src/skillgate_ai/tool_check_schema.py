@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from typing import Any, Literal
+from typing import Any, Literal, overload
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -197,6 +197,22 @@ def merge_tool_checks(
     )
 
 
+@overload
+def parse_tool_checks_block(
+    raw: object,
+    *,
+    level: Literal["pack"],
+) -> PackToolChecks | None: ...
+
+
+@overload
+def parse_tool_checks_block(
+    raw: object,
+    *,
+    level: Literal["case"],
+) -> CaseToolChecks | None: ...
+
+
 def parse_tool_checks_block(
     raw: object,
     *,
@@ -211,8 +227,8 @@ def parse_tool_checks_block(
     if level == "pack":
         model = PackToolChecks.model_validate(raw)
         return None if model.is_empty() else model
-    model = CaseToolChecks.model_validate(raw)
-    return None if model.is_empty() else model
+    case_model = CaseToolChecks.model_validate(raw)
+    return None if case_model.is_empty() else case_model
 
 
 def declared_patterns(checks: TaskToolChecks) -> list[str]:
