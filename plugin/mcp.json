@@ -1,8 +1,8 @@
 {
   "mcpServers": {
     "skillgate": {
-      "command": "skillgate",
-      "args": ["mcp", "--root", "."]
+      "command": "${CURSOR_PLUGIN_ROOT}/bin/skillgate-mcp",
+      "args": ["--root", "."]
     }
   }
 }

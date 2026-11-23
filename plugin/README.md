@@ -8,13 +8,7 @@ Dual **Cursor** and **Claude Code** plugin that bundles three agent skills plus 
 pip install "skillgate-ai[mcp]"
 ```
 
-Ensure `skillgate` is on your `PATH`. The MCP server runs:
-
-```bash
-skillgate mcp --root .
-```
-
-with `.` as the **workspace project root** (the folder that contains your `skills/` directory). Set `SKILLGATE_ROOT` in the client MCP environment to override.
+Install `skillgate-ai[mcp]` so `skillgate` is available (typically `~/.local/bin` via pipx). The plugin starts MCP through `bin/skillgate-mcp` with `--root .` as the **workspace project root** (the folder that contains your `skills/` directory). Set `SKILLGATE_ROOT` in the client MCP environment to override.
 
 ## Components
 
@@ -27,6 +21,7 @@ with `.` as the **workspace project root** (the folder that contains your `skill
 
 Full install instructions: [docs/plugin.md](../docs/plugin.md) in the repository root.
 
-```text
-/plugin install skillgate --marketplace vigneshm1995personal/skillgate
+```bash
+claude plugin marketplace add https://github.com/vigneshm1995personal/skillgate
+claude plugin install skillgate@skillgate
 ```

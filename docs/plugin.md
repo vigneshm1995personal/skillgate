@@ -48,17 +48,10 @@ For headless `cursor-agent`, pass `--plugin-dir /path/to/skillgate/plugin` when 
 
 ## MCP behavior
 
-Both clients read the same server definition:
+The plugin launches MCP via `plugin/bin/skillgate-mcp` (resolves `skillgate` on `PATH` or under `~/.local/bin`). Override with env `SKILLGATE_BIN` if needed. Server args: `mcp --root .` where `.` is your workspace root.
 
-```json
-{
-  "mcpServers": {
-    "skillgate": {
-      "command": "skillgate",
-      "args": ["mcp", "--root", "."]
-    }
-  }
-}
-```
+Headless Claude (installed plugin) tools are prefixed `mcp__plugin_skillgate_skillgate__*`. Allow with `--allowedTools "mcp__skillgate"` (server-wide) or a specific tool name. The plugin starts MCP via `bin/skillgate-mcp`, which resolves a `skillgate` build with the `mcp` subcommand (`../.venv/bin` when developing from a git checkout, then `~/.local/bin`, optional `SKILLGATE_BIN`).
+
+For scripted runs after connection failures, touch `plugin/.mcp.json` to force a retry and clear stale entries in `~/.claude/mcp-needs-auth-cache.json` if needed.
 
 Do not commit API keys into plugin JSON. `doctor` reports key **presence** only as booleans.

@@ -81,7 +81,14 @@ def test_claude_marketplace_lists_plugin_source() -> None:
 
 
 def test_mcp_json_skillgate_stdio_no_secrets() -> None:
-    for name in ("mcp.json", ".mcp.json"):
+    cases = (
+        ("mcp.json", "${CURSOR_PLUGIN_ROOT}/bin/skillgate-mcp"),
+        (".mcp.json", "${CLAUDE_PLUGIN_ROOT}/bin/skillgate-mcp"),
+    )
+    wrapper = PLUGIN / "bin" / "skillgate-mcp"
+    assert wrapper.is_file()
+    assert wrapper.stat().st_mode & 0o111
+    for name, command in cases:
         path = PLUGIN / name
         text = path.read_text(encoding="utf-8")
         assert "sk-" not in text
@@ -89,8 +96,15 @@ def test_mcp_json_skillgate_stdio_no_secrets() -> None:
         assert "/Users/" not in text
         cfg = json.loads(text)
         server = cfg["mcpServers"]["skillgate"]
-        assert server["command"] == "skillgate"
-        assert server["args"] == ["mcp", "--root", "."]
+        assert server["command"] == command
+        assert server["args"] == ["--root", "."]
+
+
+def test_skillgate_mcp_wrapper_prefers_path_not_secrets() -> None:
+    text = (PLUGIN / "bin" / "skillgate-mcp").read_text(encoding="utf-8")
+    assert "SKILLGATE_BIN" in text
+    assert ".skillgate" not in text
+    assert "sk-" not in text
 
 
 def test_skillgate_setup_skill_frontmatter() -> None:
