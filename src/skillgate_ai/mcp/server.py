@@ -12,6 +12,7 @@ from mcp.server.fastmcp.exceptions import ToolError
 from skillgate_ai.errors import SkillGateError
 from skillgate_ai.mcp import tools as mcp_tools
 from skillgate_ai.mcp.context import McpContext
+from skillgate_ai.mcp.stdio_guard import ProtocolStreams
 
 SERVER_INSTRUCTIONS = (
     "Local Skill Gate. Tools act on skill packs under the project root. "
@@ -186,4 +187,23 @@ def build_server(ctx: McpContext) -> FastMCP:
 
 
 def serve(root: Path) -> None:
-    build_server(McpContext.for_root(root)).run(transport="stdio")
+    import anyio
+
+    from skillgate_ai.mcp.stdio_guard import install
+
+    streams = install()
+    server = build_server(McpContext.for_root(root))
+    anyio.run(_run_stdio, server, streams)
+
+
+async def _run_stdio(server: FastMCP, streams: ProtocolStreams) -> None:
+    import anyio
+    from mcp.server.stdio import stdio_server
+
+    # FastMCP.run(transport="stdio") delegates to _mcp_server; pin checked in tests.
+    low = server._mcp_server  # noqa: SLF001 - intentional mirror of FastMCP.run_stdio_async
+    async with stdio_server(
+        stdin=anyio.wrap_file(streams.stdin),
+        stdout=anyio.wrap_file(streams.stdout),
+    ) as (read_stream, write_stream):
+        await low.run(read_stream, write_stream, low.create_initialization_options())

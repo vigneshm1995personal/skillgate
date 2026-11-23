@@ -6,6 +6,7 @@ import json
 import subprocess
 
 import skillgate_ai.harness.bins as bins
+from skillgate_ai.child_io import isolated_kwargs
 from skillgate_ai.config import (
     LLMConfig,
     agent_label,
@@ -46,6 +47,7 @@ def _probe_codex_login_status(binary: str) -> bool:
             text=True,
             timeout=_CODEX_LOGIN_STATUS_TIMEOUT_SEC,
             check=False,
+            **isolated_kwargs(),
         )
     except (OSError, subprocess.TimeoutExpired):
         return False
@@ -84,6 +86,7 @@ def _probe_cursor_login_status(binary: str) -> bool:
             text=True,
             timeout=_CURSOR_LOGIN_STATUS_TIMEOUT_SEC,
             check=False,
+            **isolated_kwargs(),
         )
     except (OSError, subprocess.TimeoutExpired):
         return False
@@ -132,6 +135,7 @@ def _probe_claude_login_status(binary: str) -> bool:
             text=True,
             timeout=_CLAUDE_LOGIN_STATUS_TIMEOUT_SEC,
             check=False,
+            **isolated_kwargs(),
         )
     except (OSError, subprocess.TimeoutExpired):
         return False

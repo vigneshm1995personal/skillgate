@@ -38,6 +38,15 @@ skillgate mcp --root .
 claude mcp add skillgate -- skillgate mcp --root .
 ```
 
+**Headless (`claude -p`)**: non-interactive runs cannot answer permission prompts, so allow the Skill Gate tools up front:
+
+```bash
+claude -p "Run skillgate check_start on skills/pdf, poll until done, summarize" \
+  --allowedTools "mcp__skillgate"
+```
+
+`mcp__skillgate` allows every tool from the server named `skillgate`. Allow single tools with names like `mcp__skillgate__check_start`. Use `--mcp-config <file>` (plus `--strict-mcp-config` to ignore other configured servers) when the server is not registered via `claude mcp add`. The CLI also accepts `--allowed-tools` as an alias for `--allowedTools`.
+
 ### Codex
 
 Point Codex at the same command and args as Cursor (`skillgate mcp --root <project>`).

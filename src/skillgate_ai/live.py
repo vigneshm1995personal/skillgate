@@ -16,6 +16,7 @@ from collections import deque
 from dataclasses import dataclass
 from typing import Any, Protocol
 
+from skillgate_ai.child_io import kill_group, signal_group
 from skillgate_ai.spans import spans_from_jsonl
 from skillgate_ai.usage import (
     Usage,
@@ -366,10 +367,19 @@ class RunControl:
             return self._usage.to_dict() if self._usage.known else None
 
     def _terminate(self, process: Any) -> None:
-        try:
-            process.terminate()
-        except Exception:  # noqa: BLE001 - best effort
-            return
+        import signal
+
+        pid = getattr(process, "pid", None)
+        if pid is None:
+            try:
+                process.terminate()
+            except Exception:  # noqa: BLE001 - best effort
+                return
+        else:
+            try:
+                signal_group(process, signal.SIGTERM)
+            except Exception:  # noqa: BLE001 - best effort
+                return
         poll = getattr(process, "poll", None)
         if not callable(poll):
             return
@@ -377,7 +387,10 @@ class RunControl:
         def hard_kill() -> None:
             try:
                 if process.poll() is None:
-                    process.kill()
+                    if pid is None:
+                        process.kill()
+                    else:
+                        kill_group(process)
             except Exception:  # noqa: BLE001, S110 - best effort
                 pass
 

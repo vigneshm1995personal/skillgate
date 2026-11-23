@@ -41,7 +41,7 @@ skillgate ui → api.py → api_runs.register_run_routes
 - `mcp/tools.py` and `mcp/context.py` must import cleanly without `fastapi` and without the `mcp` SDK. Only `mcp/server.py` imports the SDK.
 - `run_registry.py` must not import `fastapi`, `api_runs` or `AppState`. It may import `deploy_gate`, `gate`, `live`, `report`, `errors`, `config` and `eval_config`.
 - `api_payloads` does not import FastAPI at module load (FastAPI appears only under `TYPE_CHECKING` and inside `fail`), so `tools.py` can import `scrub_browser_payload` and `history_row_to_run` from it.
-- On the stdio transport, stdout belongs to the protocol. No tool, and no code a tool calls in-process, may write to stdout. All CLI diagnostics in `cmd_mcp` go to stderr.
+- On the stdio transport, stdout belongs to the protocol. No tool, and no code a tool calls in-process, may write to stdout. All CLI diagnostics in `cmd_mcp` go to stderr. Enforced by `mcp/stdio_guard.install()`: the protocol runs on private dup'd fds; fd 1 → stderr, fd 0 → `/dev/null` for the server's lifetime. Every external CLI child (harness, auth probe) is spawned via `child_io.isolated_kwargs()` (stdin DEVNULL, own session on POSIX, `close_fds`).
 - Inside `skillgate_ai/mcp/server.py`, `from mcp.server.fastmcp import FastMCP` resolves to the top-level SDK because Python uses absolute imports. Never use `from . import` names that collide with the SDK.
 
 ---

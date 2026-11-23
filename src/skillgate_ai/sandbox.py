@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import atexit
+import contextlib
 import os
 import shutil
 import subprocess
@@ -12,6 +14,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import IO, Protocol, cast
 
+from skillgate_ai.child_io import isolated_kwargs, kill_group
 from skillgate_ai.errors import SandboxError, agent_timeout_error
 from skillgate_ai.ingest import Skill
 from skillgate_ai.live import CheckAborted, OutputSink
@@ -19,6 +22,18 @@ from skillgate_ai.pack import copy_skill_pack
 from skillgate_ai.suite import DEFAULT_TASK_TIMEOUT_SEC
 
 _PIPE_JOIN_SEC = 5.0
+_LIVE_LOCK = threading.Lock()
+_LIVE: set[subprocess.Popen[str]] = set()
+
+
+def _kill_live_groups() -> None:
+    with _LIVE_LOCK:
+        procs = list(_LIVE)
+    for proc in procs:
+        kill_group(proc)
+
+
+atexit.register(_kill_live_groups)
 
 
 class Sandbox(Protocol):
@@ -103,6 +118,8 @@ class LocalSandbox:
         sink = self.output_sink
         try:
             if sink is None:
+                # Non-streaming: CLI `skillgate check` only (no RunControl). Stay in the
+                # caller's process group so terminal Ctrl-C still reaches the harness.
                 # Close stdin. An inherited pipe makes Codex wait on
                 # "Reading additional input from stdin..." until TimeoutExpired.
                 return subprocess.run(  # noqa: S603 - argv list without shell; running the harness CLI is the sandbox's job
@@ -218,8 +235,10 @@ def _run_streaming(
         bufsize=1,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
-        stdin=subprocess.DEVNULL,
+        **isolated_kwargs(),
     )
+    with _LIVE_LOCK:
+        _LIVE.add(proc)
     sink.attach_process(proc)
     stdout_chunks: list[str] = []
     stderr_chunks: list[str] = []
@@ -240,10 +259,17 @@ def _run_streaming(
     try:
         proc.wait(timeout=timeout)
     except subprocess.TimeoutExpired:
-        proc.kill()
+        kill_group(proc)
         proc.wait()
         raise
+    except BaseException:
+        kill_group(proc)
+        with contextlib.suppress(subprocess.TimeoutExpired):
+            proc.wait(timeout=_PIPE_JOIN_SEC)
+        raise
     finally:
+        with _LIVE_LOCK:
+            _LIVE.discard(proc)
         for reader in readers:
             reader.join(timeout=_PIPE_JOIN_SEC)
         sink.detach_process()
