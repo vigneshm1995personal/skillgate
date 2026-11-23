@@ -78,6 +78,7 @@ BUSY_MESSAGE = "A check or compare is already running."
 
 class RunBusyError(SkillGateError):
     """Another check/compare is running in this process. Cannot run, not a fail."""
+
     exit_code = 2
 
 
@@ -112,8 +113,8 @@ class RunRegistry:
     ) -> None: ...
 
     root: Path
-    runs: dict[str, RunRecord]      # shared by reference when injected
-    lock: threading.Lock            # shared by reference when injected
+    runs: dict[str, RunRecord]  # shared by reference when injected
+    lock: threading.Lock  # shared by reference when injected
 
     def busy(self) -> bool:
         """Injected predicate if given (UI: AppState.gate_busy), else any record
@@ -265,6 +266,7 @@ def build_server(ctx: McpContext) -> FastMCP:
     server = FastMCP("skillgate", instructions=SERVER_INSTRUCTIONS)
     # 13 @server.tool() shims, typed params (Literal for enums), docstring = tool description
     return server
+
 
 def serve(root: Path) -> None:
     build_server(McpContext.for_root(root)).run(transport="stdio")

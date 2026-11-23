@@ -203,9 +203,7 @@ def test_kill_and_skip_return_false_for_unknown_run() -> None:
     assert reg.skip("nope") is False
 
 
-def test_kill_requests_control_on_live_run(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_kill_requests_control_on_live_run(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     from conftest import enable_cursor_agent
 
     from skillgate_ai.live import get_control

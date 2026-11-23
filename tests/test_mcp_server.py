@@ -77,6 +77,7 @@ def test_tool_schemas_have_descriptions(ctx: McpContext) -> None:
 @pytest.mark.timeout(30)
 def test_stdio_roundtrip_list_tools(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     import asyncio
+
     dest = tmp_path / "skills" / "pdf"
     shutil.copytree(ROOT / "skills" / "pdf", dest)
     ensure_demo_pdfs(dest / "evals" / "fixtures")
@@ -92,6 +93,7 @@ def test_stdio_roundtrip_list_tools(tmp_path: Path, monkeypatch: pytest.MonkeyPa
         args=["-m", "skillgate_ai.cli", "mcp", "--root", str(tmp_path)],
         env={**os.environ, "PYTHONPATH": py_path},
     )
+
     async def _roundtrip() -> set[str]:
         async with stdio_client(params) as (read, write), ClientSession(read, write) as session:
             await session.initialize()

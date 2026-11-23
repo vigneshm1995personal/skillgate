@@ -38,6 +38,69 @@ def mcp_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     yield ctx, dest
 
 
+def _exercise_all_thirteen_tools(
+    ctx: McpContext,
+    dest: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> list[object]:
+    """Happy-path call for every MCP tool (used by stdout / no-secret tests)."""
+    import threading
+
+    monkeypatch.setattr("skillgate_ai.gate.run_eval", lambda *_a, **_k: _fake_suite(dest))
+    outputs: list[object] = []
+    outputs.append(mcp_tools.validate_skill(ctx, skill="pdf"))
+    outputs.append(mcp_tools.dataset_scaffold(ctx, name="all-thirteen"))
+    outputs.append(mcp_tools.dataset_get(ctx, skill="pdf"))
+    outputs.append(
+        mcp_tools.case_add(
+            ctx, skill="pdf", prompt="all thirteen tools", case_id="all-thirteen-case"
+        )
+    )
+    outputs.append(
+        mcp_tools.case_edit(ctx, skill="pdf", case_id="all-thirteen-case", prompt="edited")
+    )
+    outputs.append(mcp_tools.case_remove(ctx, skill="pdf", case_id="all-thirteen-case"))
+    outputs.append(
+        mcp_tools.case_import(
+            ctx,
+            skill="pdf",
+            content="id,prompt\nall13-row,hello\n",
+            format="csv",
+            dry_run=True,
+        )
+    )
+    started = mcp_tools.check_start(ctx, skill="pdf", no_judge=True)
+    outputs.append(started)
+    run_id = started["id"]
+    assert ctx.registry.join(run_id, timeout=30.0)
+    outputs.append(mcp_tools.check_poll(ctx, run_id=run_id, include_report=True))
+
+    hold = threading.Event()
+
+    def slow_eval(*_a, **_k):
+        hold.wait(timeout=30.0)
+        return _fake_suite(dest)
+
+    monkeypatch.setattr("skillgate_ai.gate.run_eval", slow_eval)
+    started2 = mcp_tools.check_start(ctx, skill="pdf", no_judge=True)
+    outputs.append(mcp_tools.check_cancel(ctx, run_id=started2["id"], mode="kill"))
+    hold.set()
+    assert ctx.registry.join(started2["id"], timeout=30.0)
+
+    outputs.append(mcp_tools.report_latest(ctx, skill="pdf"))
+    append_eval(
+        dest,
+        run_id="all13-hist",
+        passed=True,
+        report={"passed": True, "suite": "pdf", "skill": "pdf", "task_count": 1},
+        config={"harness": "cursor-agent", "judge": {"provider": "skip"}},
+    )
+    outputs.append(mcp_tools.report_get(ctx, run_id="all13-hist", skill="pdf"))
+    outputs.append(mcp_tools.doctor(ctx))
+    assert len(outputs) == 13
+    return outputs
+
+
 def _fake_suite(dest: Path) -> SuiteReport:
     task = TaskReport(
         task_id="should-trigger-1",
@@ -185,6 +248,7 @@ def test_check_start_refuses_without_key_or_login(
     shutil.copytree(ROOT / "skills" / "pdf", dest)
     ensure_demo_pdfs(dest / "evals" / "fixtures")
     monkeypatch.setenv("SKILLGATE_ROOT", str(tmp_path))
+
     class _NoKey:
         has_any_key = False
 
@@ -336,28 +400,14 @@ def test_no_key_values_in_any_tool_output(mcp_env, monkeypatch: pytest.MonkeyPat
     monkeypatch.setenv("OPENAI_API_KEY", sentinel)
     monkeypatch.setenv("SKILLGATE_OPENAI_API_KEY", sentinel)
     ctx, dest = mcp_env
-    monkeypatch.setattr("skillgate_ai.gate.run_eval", lambda *_a, **_k: _fake_suite(dest))
-    outputs = [
-        mcp_tools.validate_skill(ctx, skill="pdf"),
-        mcp_tools.dataset_get(ctx, skill="pdf"),
-        mcp_tools.report_latest(ctx, skill="pdf"),
-        mcp_tools.doctor(ctx),
-    ]
-    started = mcp_tools.check_start(ctx, skill="pdf", no_judge=True)
-    outputs.append(started)
-    run_id = started["id"]
-    ctx.registry.join(run_id, timeout=30.0)
-    outputs.append(mcp_tools.check_poll(ctx, run_id=run_id, include_report=True))
+    outputs = _exercise_all_thirteen_tools(ctx, dest, monkeypatch)
     blob = json.dumps(outputs)
     assert sentinel not in blob
 
 
 def test_tools_write_nothing_to_stdout(mcp_env, monkeypatch: pytest.MonkeyPatch, capsys) -> None:
     ctx, dest = mcp_env
-    monkeypatch.setattr("skillgate_ai.gate.run_eval", lambda *_a, **_k: _fake_suite(dest))
-    mcp_tools.doctor(ctx)
-    mcp_tools.validate_skill(ctx, skill="pdf")
-    mcp_tools.dataset_get(ctx, skill="pdf")
+    _exercise_all_thirteen_tools(ctx, dest, monkeypatch)
     out, err = capsys.readouterr()
     assert out == ""
     assert err == ""

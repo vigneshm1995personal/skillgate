@@ -47,6 +47,26 @@ def test_mcp_root_option_and_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     assert seen["root"] == (tmp_path / "env-root").resolve()
 
 
+def test_mcp_root_option_beats_skillgate_root_env(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    explicit = tmp_path / "explicit-root"
+    env_root = tmp_path / "env-root"
+    explicit.mkdir()
+    env_root.mkdir()
+    monkeypatch.setenv("SKILLGATE_ROOT", str(env_root))
+    seen: dict = {}
+
+    def fake_serve(root: Path) -> None:
+        seen["root"] = root
+        raise SystemExit(0)
+
+    monkeypatch.setattr("skillgate_ai.mcp.server.serve", fake_serve)
+    result = runner.invoke(app, ["mcp", "--root", str(explicit)])
+    assert result.exit_code == 0
+    assert seen["root"] == explicit.resolve()
+
+
 def test_mcp_bad_root_exits_2(tmp_path: Path) -> None:
     missing = tmp_path / "nope"
     result = runner.invoke(app, ["mcp", "--root", str(missing)])
