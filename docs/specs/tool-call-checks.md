@@ -73,27 +73,34 @@ Models live in their own leaf module, so `suite.py`, `pack_schema.py`, and `case
 
 DEFAULT_CALLS_LOG = "output/calls.log"
 
+
 class ToolCallRule(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    tool: str                                   # name or fnmatch glob, normalized on match
-    args_match: dict[str, Any] | None = None    # §3.2.3
-    min: int = 1                                # must_call only; ignored for must_not_call
-    max: int | None = None                      # must_call only
+    tool: str  # name or fnmatch glob, normalized on match
+    args_match: dict[str, Any] | None = None  # §3.2.3
+    min: int = 1  # must_call only; ignored for must_not_call
+    max: int | None = None  # must_call only
 
     @model_validator(mode="before")
     @classmethod
-    def _shorthand(cls, value): ...             # "stripe_refunds_create" -> {"tool": "stripe_refunds_create"}
+    def _shorthand(cls, value): ...  # "stripe_refunds_create" -> {"tool": "stripe_refunds_create"}
+
     # validators: tool non-empty after strip; min >= 0; max is None or max >= min
+
 
 class PackToolChecks(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    calls_log: str = DEFAULT_CALLS_LOG          # validator: relative, no "..", no leading "/"
+    calls_log: str = DEFAULT_CALLS_LOG  # validator: relative, no "..", no leading "/"
     consequential_tools: list[str] = Field(default_factory=list)
     builtin_consequential: bool = True
     must_not_call: list[ToolCallRule] = Field(default_factory=list)
     skip_consequential_check: bool = False
-    def is_empty(self) -> bool: ...             # every field at default
-    def to_sparse_dict(self) -> dict[str, Any]: ...  # only non-default fields; rules via _rule_sparse
+
+    def is_empty(self) -> bool: ...  # every field at default
+    def to_sparse_dict(
+        self,
+    ) -> dict[str, Any]: ...  # only non-default fields; rules via _rule_sparse
+
 
 class CaseToolChecks(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -101,11 +108,14 @@ class CaseToolChecks(BaseModel):
     must_not_call: list[ToolCallRule] = Field(default_factory=list)
     allow_consequential: list[str] = Field(default_factory=list)
     skip_consequential_check: bool = False
+
     def is_empty(self) -> bool: ...
     def to_sparse_dict(self) -> dict[str, Any]: ...
 
+
 class TaskToolChecks(BaseModel):
     """Effective (pack + case merged) checks carried on TaskSpec."""
+
     model_config = ConfigDict(extra="forbid")
     calls_log: str = DEFAULT_CALLS_LOG
     must_call: list[ToolCallRule] = Field(default_factory=list)
@@ -114,7 +124,9 @@ class TaskToolChecks(BaseModel):
     builtin_consequential: bool = True
     allow_consequential: list[str] = Field(default_factory=list)
     skip_consequential_check: bool = False
+
     def is_default(self) -> bool: ...
+
 
 def merge_tool_checks(
     pack: PackToolChecks | None, case: CaseToolChecks | None, *, should_trigger: bool
@@ -138,17 +150,20 @@ Merge rules (`merge_tool_checks`):
 
 TOOL_CHECK_SCORERS = frozenset({"tool_calls", "consequential_calls"})
 
+
 @dataclass(frozen=True)
 class ToolCall:
-    name: str                 # raw name as recorded (or shell rule id, §3.2.4)
-    aliases: frozenset[str]   # tool_aliases(name)
+    name: str  # raw name as recorded (or shell rule id, §3.2.4)
+    aliases: frozenset[str]  # tool_aliases(name)
     args: dict[str, Any] | str
     source: Literal["calls_log", "span", "shell"]
-    label: str                # for headlines: "output/calls.log" | "tool span" | "shell: <cmd[:80]>"
+    label: str  # for headlines: "output/calls.log" | "tool span" | "shell: <cmd[:80]>"
+
 
 def normalize_tool_name(raw: str) -> str: ...
 def tool_aliases(raw: str) -> frozenset[str]: ...
 def matches_pattern(call: ToolCall, pattern: str) -> bool: ...
+
 
 def collect_tool_calls(
     workspace: Path,
@@ -159,7 +174,9 @@ def collect_tool_calls(
     declared: Iterable[str] = (),
 ) -> list[ToolCall]: ...
 
+
 def is_consequential(call: ToolCall, *, pack_patterns: Sequence[str], builtin: bool) -> bool: ...
+
 
 def score_tool_checks(
     task: TaskSpec,
@@ -168,6 +185,7 @@ def score_tool_checks(
     spans: Sequence[Mapping[str, Any]] | None,
     transcript: str,
 ) -> list[Score]: ...
+
 
 def tool_check_failures(scores: Sequence[Score]) -> list[str]:
     """Headlines of failed TOOL_CHECK_SCORERS rows, in score order."""
@@ -237,15 +255,17 @@ Shell rules (`_SHELL_RULES: tuple[tuple[str, re.Pattern[str]], ...]`). Each rege
 
 ```python
 checks = task.tool_checks or TaskToolChecks()
-declared = [...]   # §3.2.2
-calls = collect_tool_calls(workspace, spans, transcript, calls_log=checks.calls_log, declared=declared)
+declared = [...]  # §3.2.2
+calls = collect_tool_calls(
+    workspace, spans, transcript, calls_log=checks.calls_log, declared=declared
+)
 scores: list[Score] = []
 if checks.must_call or checks.must_not_call:
-    scores.append(_score_assertions(checks, calls))       # scorer="tool_calls"
+    scores.append(_score_assertions(checks, calls))  # scorer="tool_calls"
 if not checks.skip_consequential_check:
-    scores.append(_score_consequential(checks, calls))    # scorer="consequential_calls"
+    scores.append(_score_consequential(checks, calls))  # scorer="consequential_calls"
 for score in scores:
-    score.headline = headline_for(score)   # scorers.headline_for gains the two branches (§3.4)
+    score.headline = headline_for(score)  # scorers.headline_for gains the two branches (§3.4)
 return scores
 ```
 
