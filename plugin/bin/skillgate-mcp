@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+# Launch skillgate MCP when the CLI is not on Claude/Cursor's minimal PATH.
+set -euo pipefail
+
+supports_mcp() {
+  local bin="$1"
+  [[ -x "$bin" ]] || return 1
+  "$bin" mcp --help >/dev/null 2>&1
+}
+
+candidates=()
+plugin_root="${CLAUDE_PLUGIN_ROOT:-${CURSOR_PLUGIN_ROOT:-}}"
+if [[ -n "$plugin_root" ]]; then
+  candidates+=("${plugin_root}/../.venv/bin/skillgate")
+fi
+[[ -n "${SKILLGATE_BIN:-}" ]] && candidates+=("${SKILLGATE_BIN}")
+candidates+=(
+  "${HOME}/.local/bin/skillgate"
+  "/opt/homebrew/bin/skillgate"
+  "/usr/local/bin/skillgate"
+)
+found="$(command -v skillgate 2>/dev/null || true)"
+[[ -n "$found" ]] && candidates+=("$found")
+
+for candidate in "${candidates[@]}"; do
+  if supports_mcp "$candidate"; then
+    exec "$candidate" mcp "$@"
+  fi
+done
+
+uvx_bin=""
+for uvx_candidate in \
+  "$(command -v uvx 2>/dev/null || true)" \
+  "${HOME}/.local/bin/uvx" \
+  "/opt/homebrew/bin/uvx" \
+  "/usr/local/bin/uvx"; do
+  if [[ -n "$uvx_candidate" && -x "$uvx_candidate" ]]; then
+    uvx_bin="$uvx_candidate"
+    break
+  fi
+done
+if [[ -n "$uvx_bin" ]]; then
+  exec "$uvx_bin" --from "skillgate-ai[mcp]" skillgate mcp "$@"
+fi
+
+echo 'No skillgate with MCP support found. Install: pip install "skillgate-ai[mcp]"' >&2
+exit 127

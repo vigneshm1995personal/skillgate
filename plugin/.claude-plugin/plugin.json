@@ -1,0 +1,20 @@
+{
+  "name": "skillgate",
+  "description": "Evaluate agent skills locally via MCP: validate packs, edit datasets, run checks, and read reports.",
+  "version": "0.7.17",
+  "author": {
+    "name": "Skill Gate AI contributors"
+  },
+  "homepage": "https://www.skill-gate-ai.app/",
+  "repository": "https://github.com/vigneshm1995personal/skillgate",
+  "license": "Apache-2.0",
+  "keywords": [
+    "skillgate",
+    "agent-skills",
+    "evals",
+    "mcp",
+    "claude-code"
+  ],
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json"
+}

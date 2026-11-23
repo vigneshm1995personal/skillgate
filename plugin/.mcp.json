@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "skillgate": {
+      "command": "${CLAUDE_PLUGIN_ROOT}/bin/skillgate-mcp",
+      "args": ["--root", "."]
+    }
+  }
+}
