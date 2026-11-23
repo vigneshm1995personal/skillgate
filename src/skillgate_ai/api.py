@@ -87,8 +87,10 @@ def _harness_auth_payload(cfg) -> dict[str, Any]:
 
 
 def create_app(*, root: Path | None = None, pack: Path | None = None) -> FastAPI:
-    del pack
-    workspace = (root or project_root()).expanduser().resolve()
+    if pack is not None:
+        workspace = Path(pack).expanduser().resolve()
+    else:
+        workspace = (root or project_root()).expanduser().resolve()
     load_env(workspace)
     app = FastAPI(title="Skill Gate", version=__version__)
     app.state.ui = AppState(root=workspace)

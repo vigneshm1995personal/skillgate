@@ -95,7 +95,8 @@ USAGE_LIMIT_MESSAGE = "The agent hit a usage limit. This check cannot run."
 MODEL_UNAVAILABLE_MESSAGE = "The agent couldn't use this model. This check cannot run."
 
 _USAGE_LIMIT_RE = re.compile(
-    r"ActionRequiredError|Weekly usage limit reached|usage limit reached",
+    r"ActionRequiredError|Weekly usage limit reached|usage limit reached|"
+    r"You've hit your session limit|hit your session limit|session limit\b",
     re.IGNORECASE,
 )
 
@@ -117,7 +118,7 @@ def usage_limit_message(stdout: str, stderr: str = "", transcript: str = "") -> 
     for line in blob.splitlines():
         text = line.strip()
         if not text.startswith("{"):
-            if _USAGE_LIMIT_RE.search(text) and "usage limit" in text.lower():
+            if _USAGE_LIMIT_RE.search(text):
                 return USAGE_LIMIT_MESSAGE
             continue
         try:
@@ -170,13 +171,15 @@ def model_unavailable_message(stdout: str, stderr: str = "", transcript: str = "
 
 
 def cannot_run_message(stdout: str, stderr: str = "", transcript: str = "") -> str | None:
-    return usage_limit_message(stdout, stderr, transcript) or model_unavailable_message(
-        stdout, stderr, transcript
+    return (
+        usage_limit_message(stdout, stderr, transcript)
+        or auth_failure_message(stdout, stderr, transcript)
+        or model_unavailable_message(stdout, stderr, transcript)
     )
 
 
 def _raise_if_cannot_run(stdout: str, stderr: str, transcript: str = "") -> None:
-    _raise_if_auth_failed(stdout, stderr)
+    _raise_if_auth_failed(stdout, stderr, transcript)
     quota = usage_limit_message(stdout, stderr, transcript)
     if quota:
         raise HarnessError(
@@ -194,10 +197,16 @@ def _raise_if_cannot_run(stdout: str, stderr: str, transcript: str = "") -> None
     )
 
 
-def auth_failure_message(stdout: str, stderr: str) -> str | None:
-    """Auth failure in harness stderr or an error event. Not assistant prose."""
+def auth_failure_message(stdout: str, stderr: str, transcript: str = "") -> str | None:
+    """Auth failure in harness stderr, transcript, or an error event. Not assistant prose."""
     if _AUTH_FAILURE_RE.search(stderr or ""):
         return "The agent is not signed in."
+    sources = (stdout or "", transcript or "")
+    for source in sources:
+        for line in source.splitlines():
+            text = line.strip()
+            if not text.startswith("{") and _AUTH_FAILURE_RE.search(text):
+                return "The agent is not signed in."
     for line in (stdout or "").splitlines():
         text = line.strip()
         if not text.startswith("{"):
@@ -218,8 +227,8 @@ def auth_failure_message(stdout: str, stderr: str) -> str | None:
     return None
 
 
-def _raise_if_auth_failed(stdout: str, stderr: str) -> None:
-    message = auth_failure_message(stdout, stderr)
+def _raise_if_auth_failed(stdout: str, stderr: str, transcript: str = "") -> None:
+    message = auth_failure_message(stdout, stderr, transcript)
     if message is None:
         return
     raise HarnessError(

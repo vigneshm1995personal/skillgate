@@ -10,7 +10,13 @@ import pytest
 from fastapi.testclient import TestClient
 
 from skillgate_ai.api import create_app
-from skillgate_ai.api_payloads import history_row_to_run, local_gate, scrub_config
+from skillgate_ai.api_payloads import (
+    AppState,
+    history_row_to_run,
+    local_gate,
+    scrub_config,
+    workspace_history,
+)
 from skillgate_ai.demo_files import ensure_demo_pdfs
 from skillgate_ai.history import append_eval
 from skillgate_ai.skill_md import write_skill_md
@@ -1080,6 +1086,33 @@ def test_post_run_busy_still_409(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     checks = gen.json()["checks"]
     res = client.post("/api/runs", json={"skill": "pdf", "checks": checks})
     assert res.status_code == 409
+
+
+def test_create_app_pack_sets_root(tmp_path: Path) -> None:
+    pack = tmp_path / "pack"
+    pack.mkdir()
+    (pack / "evals").mkdir()
+    (pack / "SKILL.md").write_text(
+        "---\nname: pack\ndescription: Pack-local UI root.\n---\n",
+        encoding="utf-8",
+    )
+    app = create_app(pack=pack)
+    assert app.state.ui.root == pack.resolve()
+
+
+def test_workspace_history_pack_root(tmp_path: Path) -> None:
+    pack = tmp_path / "pack"
+    pack.mkdir()
+    (pack / "evals" / "history").mkdir(parents=True)
+    (pack / "SKILL.md").write_text(
+        "---\nname: pack\ndescription: Pack with history.\n---\n",
+        encoding="utf-8",
+    )
+    append_eval(pack, run_id="r1", passed=True, tryout=True)
+    state = AppState(root=pack.resolve())
+    hist = workspace_history(state)
+    assert len(hist["timeline"]) == 1
+    assert hist["timeline"][0]["id"]
 
 
 def test_login_start_rejects_unknown_agent(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

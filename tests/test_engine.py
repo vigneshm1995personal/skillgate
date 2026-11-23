@@ -98,12 +98,14 @@ class FakeHarness:
         picks: dict[str, str | None] | None = None,
         raises: BaseException | None = None,
         stderr: str = "",
+        transcript: str = "t",
         on_run: Any = None,
     ) -> None:
         self.name = name
         self.picks = picks or {}
         self.raises = raises
         self.stderr = stderr
+        self.transcript = transcript
         self.on_run = on_run
         self.calls: list[str] = []
 
@@ -118,7 +120,7 @@ class FakeHarness:
         return HarnessResult(
             trigger=TriggerEvidence(selected_skill=pick),
             stderr=self.stderr,
-            transcript="t",
+            transcript=self.transcript,
         )
 
 
@@ -954,6 +956,25 @@ def test_run_task_resets_sink_and_ends_control_on_error(tmp_path: Path, skill_di
     assert sandbox.output_sink is None
     assert control.ended == 1
     assert control.begun == ["a"]
+
+
+def test_run_eval_halts_after_transcript_session_limit(
+    tmp_path: Path, skill_dir: Path, allow_trigger: None
+) -> None:
+    harness = FakeHarness(transcript="You've hit your session limit · resets at noon")
+    spec = _spec(_task("t1"), _task("t2"))
+    with pytest.raises(HarnessError):
+        engine.run_eval(
+            harness=harness,
+            sandbox_kind="local",
+            docker_image="x",
+            project_root=tmp_path,
+            skill_override=str(skill_dir),
+            spec=spec,
+            judge=SkipJudge(),
+            strict_ingest=False,
+        )
+    assert len(harness.calls) == 1
 
 
 def test_run_task_harness_error_propagates(tmp_path: Path, skill_dir: Path) -> None:
