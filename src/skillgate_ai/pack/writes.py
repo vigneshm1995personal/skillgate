@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import re
 from pathlib import Path
 
@@ -82,11 +83,13 @@ def copy_into_pack(
     dest_name: str | None = None,
 ) -> dict[str, str]:
     """Copy an existing file into evals/fixtures/ (promote / attach)."""
-    source = Path(src).expanduser().resolve()
-    if not source.is_file():
+    real = os.path.realpath(os.fspath(src))
+    if not os.path.isfile(real):
         raise FileNotFoundError(str(src))
-    name = _safe_filename(Path(dest_name or source.name).name)
-    return write_pack_file(skill_path, rel=f"{FIXTURE_DIR}/{name}", content=source.read_bytes())
+    name = _safe_filename(Path(dest_name or Path(real).name).name)
+    with open(real, "rb") as handle:
+        content = handle.read()
+    return write_pack_file(skill_path, rel=f"{FIXTURE_DIR}/{name}", content=content)
 
 
 def promote_file_into_pack(

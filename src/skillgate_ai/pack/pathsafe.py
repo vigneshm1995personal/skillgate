@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import re
 from pathlib import Path
 
@@ -13,10 +14,10 @@ from skillgate_ai.pack.constants import (
 
 def resolve_pack_root(skill_path: str | Path) -> Path:
     """Resolved skill pack directory (must exist)."""
-    root = Path(skill_path).expanduser().resolve()
-    if not root.is_dir():
+    real = os.path.realpath(os.path.expanduser(os.fspath(skill_path)))
+    if not os.path.isdir(real):
         raise ValueError("Skill folder not found.")
-    return root
+    return Path(real)
 
 
 def try_resolve_pack_root(skill_path: str | Path) -> Path | None:
