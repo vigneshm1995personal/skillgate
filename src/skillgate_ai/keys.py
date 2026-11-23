@@ -83,6 +83,12 @@ def keys_path(root: str | Path) -> Path:
     return Path(root).expanduser().resolve() / KEYS_DIRNAME / KEYS_FILENAME
 
 
+def home_keys_path() -> Path:
+    from skillgate_ai.paths import user_skillgate_dir
+
+    return user_skillgate_dir() / KEYS_FILENAME
+
+
 def _read_env_file(path: Path) -> dict[str, str]:
     found: dict[str, str] = {}
     if not path.is_file():
@@ -104,6 +110,17 @@ def _read_env_file(path: Path) -> dict[str, str]:
 
 def read_vault(root: str | Path) -> dict[str, str]:
     return _read_env_file(keys_path(root))
+
+
+def read_home_vault(root: str | Path) -> dict[str, str]:
+    try:
+        home = home_keys_path().expanduser().resolve()
+        project = keys_path(root)
+    except OSError:
+        return {}
+    if home == project:
+        return {}
+    return _read_env_file(home_keys_path())
 
 
 def _write_vault(root: str | Path, values: dict[str, str]) -> Path:
@@ -148,9 +165,8 @@ def clear_vault_key(root: str | Path, name: str) -> Path:
     return _write_vault(root, current)
 
 
-def resolve_provider_keys(root: str | Path) -> dict[str, str]:
-    """Vault, then SKILLGATE_* overlay, then --key-env ambient names. Never bare provider env."""
-    found = dict(read_vault(root))
+def _env_overlay() -> dict[str, str]:
+    found: dict[str, str] = {}
     for provider, alias in SKILLGATE_KEY_ENV.items():
         overlay = os.environ.get(alias, "").strip()
         if overlay:
@@ -159,6 +175,17 @@ def resolve_provider_keys(root: str | Path) -> dict[str, str]:
         ambient = os.environ.get(provider, "").strip()
         if ambient:
             found[provider] = ambient
+    return found
+
+
+def resolve_provider_keys(root: str | Path) -> dict[str, str]:
+    """Home vault (gaps only), project vault, SKILLGATE_* overlay, --key-env ambient names.
+
+    Never bare provider env.
+    """
+    found = dict(read_home_vault(root))
+    found.update(read_vault(root))
+    found.update(_env_overlay())
     return found
 
 
@@ -182,15 +209,19 @@ def public_key_presence(root: str | Path) -> dict[str, dict[str, bool]]:
 
 def key_presence(root: str | Path) -> dict[str, dict[str, bool]]:
     vault = read_vault(root)
+    home = read_home_vault(root)
+    overlay = _env_overlay()
     resolved = resolve_provider_keys(root)
     keys: dict[str, dict[str, bool]] = {}
     for name in PROVIDER_KEY_NAMES:
         in_vault = name in vault
-        from_env = bool(resolved.get(name)) and not in_vault
+        from_home = name in home and name not in vault and name not in overlay
+        from_env = bool(resolved.get(name)) and not in_vault and not from_home
         keys[name] = {
             "set": bool(resolved.get(name)),
             "from_vault": in_vault,
             "from_env": from_env,
+            "from_home": from_home,
         }
     return keys
 

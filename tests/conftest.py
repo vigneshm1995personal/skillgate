@@ -91,6 +91,17 @@ def _isolate_codex_home(
     monkeypatch.setenv("CODEX_HOME", str(isolated))
 
 
+@pytest.fixture(autouse=True)
+def _isolate_user_home(
+    tmp_path_factory: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch
+) -> Path:
+    """Never let pytest read the developer's ~/.skillgate judge or keys."""
+    home = tmp_path_factory.mktemp("user-home")
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("USERPROFILE", str(home))
+    return home
+
+
 def enable_cursor_agent(monkeypatch: pytest.MonkeyPatch, root: Path | None = None) -> None:
     if root is not None:
         monkeypatch.setenv("SKILLGATE_ROOT", str(root))

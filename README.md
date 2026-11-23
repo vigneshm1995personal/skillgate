@@ -94,6 +94,8 @@ printf '%s\n' "$CURSOR_API_KEY" | skillgate keys set CURSOR_API_KEY
 
 A decision model scores each live check, and one is required. Each option below takes one key and only the fields listed. `skillgate keys set` prompts, or reads the value from stdin. Do not put the key on the command line.
 
+Skill Gate reads `.skillgate/judge` in this project first, then `~/.skillgate/judge` when the project has no model picked. Keys use the project vault first, then `SKILLGATE_*` / `--key-env`, with `~/.skillgate/keys` filling gaps only. Writes always go to the project. See [Where settings are read from](https://github.com/vigneshm1995personal/skillgate/blob/main/docs/judge.md#where-settings-are-read-from).
+
 ### OpenRouter
 
 An OpenRouter key from <https://openrouter.ai/keys>. Skill Gate stores it as `JEV_API_KEY` because Jev is the OpenRouter decision model that scores the check.
@@ -171,7 +173,7 @@ skillgate judge test
 - `gpt-4o isn't a decision model.` A chat model on a custom endpoint is refused. Scoring errors do not include HTTP codes.
 - `This decision model needs a model.` Pass `--model`, or pick one from the list.
 - `Pick a decision model before running a live check.` Run one `skillgate judge provider set` command above.
-- `skillgate judge provider show` prints the option id, its model, and its base URL. With none selected, it prints `Pick a decision model before running a live check.` and exits 2.
+- `skillgate judge provider show` prints the option id, its model, and its base URL. With none selected **in this project or in `~/.skillgate/judge`**, it prints `Pick a decision model before running a live check.` and exits 2.
 - A scoring outage is **not scored** in `--json` and history, not a red or fail, and still exits 2. `skillgate judge test --verbose` (or `skillgate check --verbose`) prints the sanitized upstream reason. The message never includes HTTP codes, keys, or a provider name. Unstarted or timed-out checks are saved as **not scored**.
 
 ## Features
