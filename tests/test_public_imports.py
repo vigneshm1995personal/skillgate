@@ -455,6 +455,7 @@ TOP_COMMANDS = (
     "new",
     "example",
     "ui",
+    "mcp",
     "import",
     "keys",
     "examples",
@@ -484,7 +485,7 @@ SUB_COMMANDS: dict[str, tuple[str, ...]] = {
     "history": ("show",),
     "compare": ("models", "versions", "show", "cancel", "list"),
 }
-CLI_SURFACE_SHA256 = "130695a069e5de6f6ceb528f0502b7ca701b64135a481f2123140e7cf42483a1"
+CLI_SURFACE_SHA256 = "fef41941cc39083729c70c9dce2d9917e75af399cd38cd99a86e37ebbdf27933"
 
 _ALL = [(m, n) for m, names in REGISTRY.items() for n in names]
 _ALL += [(m, n) for m, names in PASS_THROUGH.items() for n in names]

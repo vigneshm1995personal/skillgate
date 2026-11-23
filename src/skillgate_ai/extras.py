@@ -15,11 +15,13 @@ EXTRA_MESSAGE: Final = (
 UI_FEATURE: Final = "the local UI (skillgate ui)"
 PDF_SCORING_FEATURE: Final = "PDF scoring"
 DEMO_PDF_FEATURE: Final = "demo PDF generation"
+MCP_FEATURE: Final = "the MCP server (skillgate mcp)"
 
 EXTRA_MODULES: Final[dict[str, tuple[str, ...]]] = {
     "ui": ("fastapi", "uvicorn"),
     "docs": ("pypdf", "docx", "openpyxl", "reportlab"),
-    "all": ("fastapi", "uvicorn", "pypdf", "docx", "openpyxl", "reportlab"),
+    "mcp": ("mcp",),
+    "all": ("fastapi", "uvicorn", "pypdf", "docx", "openpyxl", "reportlab", "mcp"),
 }
 
 

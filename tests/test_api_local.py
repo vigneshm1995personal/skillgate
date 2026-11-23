@@ -1008,6 +1008,80 @@ def test_login_start_runs_official_login(tmp_path: Path, monkeypatch: pytest.Mon
     assert list(home.iterdir()) == []
 
 
+def test_post_run_delegates_to_run_registry(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from conftest import enable_cursor_agent
+
+    enable_cursor_agent(monkeypatch, tmp_path)
+    _copy_pack(tmp_path)
+    client = _client(tmp_path, monkeypatch)
+    gen = client.post("/api/evals/generate", json={"skill": "pdf"})
+    checks = gen.json()["checks"]
+
+    def fake_suite(*_a, **_k):
+        from skillgate_ai.engine import SuiteReport, TaskReport
+        from skillgate_ai.scorers import Score
+
+        task = TaskReport(
+            task_id="should-trigger-1",
+            prompt="demo",
+            expect_skill="pdf",
+            passed=True,
+            scores=[
+                Score(
+                    scorer="skill_trigger",
+                    passed=True,
+                    detail="Triggered `pdf`",
+                    expected="pdf",
+                    actual="pdf",
+                )
+            ],
+            selected_skill="pdf",
+            judge={"status": "skip", "provider": "skip", "passed": None},
+        )
+        return SuiteReport(
+            suite="pdf-pack",
+            title="Dataset",
+            skill="pdf",
+            harness="cursor-agent",
+            sandbox="local",
+            passed=True,
+            tasks=[task],
+            skill_path=str(tmp_path / "skills" / "pdf"),
+            config={"judge": {"provider": "skip", "display_name": "Checks"}},
+        )
+
+    monkeypatch.setattr("skillgate_ai.gate.run_eval", fake_suite)
+    started = client.post(
+        "/api/runs",
+        json={"skill": "pdf", "checks": checks, "no_judge": True},
+    )
+    assert started.status_code == 200, started.text
+    body = started.json()
+    assert body["status"] == "running"
+    run_id = body["id"]
+    assert run_id in client.app.state.ui.runs
+    polled = client.get(f"/api/runs/{run_id}")
+    assert polled.status_code == 200
+    payload = polled.json()
+    assert payload["id"] == run_id
+    assert payload["status"] in {"running", "done", "error"}
+
+
+def test_post_run_busy_still_409(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from conftest import enable_cursor_agent
+
+    enable_cursor_agent(monkeypatch, tmp_path)
+    _copy_pack(tmp_path)
+    client = _client(tmp_path, monkeypatch)
+    client.app.state.ui.runs["busy"] = {"id": "busy", "status": "running"}
+    gen = client.post("/api/evals/generate", json={"skill": "pdf"})
+    checks = gen.json()["checks"]
+    res = client.post("/api/runs", json={"skill": "pdf", "checks": checks})
+    assert res.status_code == 409
+
+
 def test_login_start_rejects_unknown_agent(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _isolate_home(monkeypatch, tmp_path)
     client = _client(tmp_path, monkeypatch)
