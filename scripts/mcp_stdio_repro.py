@@ -15,6 +15,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 async def run_once(harness: str, poll_sec: float) -> dict:
+    from anyio import BrokenResourceError, ClosedResourceError
     from mcp import ClientSession, StdioServerParameters
     from mcp.client.stdio import stdio_client
 
@@ -63,7 +64,15 @@ async def run_once(harness: str, poll_sec: float) -> dict:
                     outcome["error"] = "timeout"
                     break
             outcome["last"] = last
-    except BaseException as exc:  # noqa: BLE001 — repro records any client/transport failure
+    except (
+        OSError,
+        json.JSONDecodeError,
+        KeyError,
+        TypeError,
+        ValueError,
+        BrokenResourceError,
+        ClosedResourceError,
+    ) as exc:
         outcome["error"] = f"{type(exc).__name__}: {exc}"
     outcome["duration"] = round(time.monotonic() - t0, 1)
     return outcome

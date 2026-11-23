@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import errno
 import os
 import subprocess
 import sys
@@ -69,16 +70,50 @@ def test_guard_children_see_devnull_stdin_and_protocol_keeps_bytes() -> None:
     assert '{"jsonrpc":"2.0"}' in proc.stderr
 
 
+def test_guard_protocol_fds_not_inherited() -> None:
+    proc = _run_guard_program(
+        """
+        import errno, subprocess, sys
+        s = install()
+        fd = s.stdout.fileno()
+        child = subprocess.run(
+            [
+                sys.executable,
+                "-c",
+                "import os, sys\\n"
+                "try:\\n"
+                "    os.fstat(int(sys.argv[1]))\\n"
+                "    print('inherited')\\n"
+                "except OSError as exc:\\n"
+                "    print(exc.errno)\\n",
+                str(fd),
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        print(child.stdout.strip(), file=sys.stderr)
+        """
+    )
+    assert proc.returncode == 0, proc.stderr
+    assert int(proc.stderr.strip().splitlines()[-1]) == errno.EBADF
+
+
 def test_serve_uses_private_protocol_streams(tmp_path: Path, monkeypatch) -> None:
     import asyncio
     import io
     from contextlib import asynccontextmanager
 
     from skillgate_ai.mcp import stdio_guard
-    from skillgate_ai.mcp.context import McpContext
-    from skillgate_ai.mcp.server import _run_stdio, build_server
+    from skillgate_ai.mcp.server import build_server, serve
 
+    stub_streams = stdio_guard.ProtocolStreams(io.StringIO(), io.StringIO())
     captured: dict[str, object] = {}
+    install_calls: list[stdio_guard.ProtocolStreams] = []
+
+    def fake_install() -> stdio_guard.ProtocolStreams:
+        install_calls.append(stub_streams)
+        return stub_streams
 
     @asynccontextmanager
     async def fake_stdio_server(*, stdin=None, stdout=None):
@@ -89,13 +124,24 @@ def test_serve_uses_private_protocol_streams(tmp_path: Path, monkeypatch) -> Non
     async def noop_run(*_a, **_k) -> None:
         return None
 
-    async def _exercise() -> None:
-        monkeypatch.setattr("mcp.server.stdio.stdio_server", fake_stdio_server)
-        streams = stdio_guard.ProtocolStreams(io.StringIO(), io.StringIO())
-        server = build_server(McpContext.for_root(tmp_path))
-        server._mcp_server.run = noop_run  # noqa: SLF001
-        await _run_stdio(server, streams)
+    def fake_anyio_run(fn, server, streams) -> None:
+        assert streams is stub_streams
+        asyncio.run(fn(server, streams))
 
-    asyncio.run(_exercise())
+    monkeypatch.setattr("skillgate_ai.mcp.stdio_guard.install", fake_install)
+    monkeypatch.setattr("mcp.server.stdio.stdio_server", fake_stdio_server)
+    monkeypatch.setattr("anyio.run", fake_anyio_run)
+
+    _original_build = build_server
+
+    def _build_with_noop_run(ctx):
+        server = _original_build(ctx)
+        server._mcp_server.run = noop_run  # noqa: SLF001
+        return server
+
+    monkeypatch.setattr("skillgate_ai.mcp.server.build_server", _build_with_noop_run)
+
+    serve(tmp_path)
+    assert install_calls == [stub_streams]
     assert captured.get("stdin") is not None
     assert captured.get("stdout") is not None
