@@ -991,9 +991,7 @@ def test_run_eval_halts_after_transcript_session_limit(
     ensure_demo_pdfs(pack / "evals" / "fixtures")
     gate_harness = FakeHarness(transcript=transcript)
     monkeypatch.setattr("skillgate_ai.harness.auth._cursor_ready", lambda _c: True)
-    monkeypatch.setattr(
-        "skillgate_ai.gate.live_harness_or_error", lambda *a, **k: gate_harness
-    )
+    monkeypatch.setattr("skillgate_ai.gate.live_harness_or_error", lambda *a, **k: gate_harness)
     monkeypatch.setenv("SKILLGATE_ROOT", str(tmp_path))
     result = run_check(pack, source="cli", root=tmp_path, harness="cursor-agent", no_judge=True)
     assert result.exit_code == 2, result.error

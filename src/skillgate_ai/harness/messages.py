@@ -128,9 +128,7 @@ def usage_limit_message(stdout: str, stderr: str = "", transcript: str = "") -> 
     blob = "\n".join(part for part in (stdout, stderr, transcript) if part)
     if not blob:
         return None
-    if stderr and (
-        _USAGE_LIMIT_RE.search(stderr) or _CLAUDE_SESSION_LIMIT.search(stderr)
-    ):
+    if stderr and (_USAGE_LIMIT_RE.search(stderr) or _CLAUDE_SESSION_LIMIT.search(stderr)):
         return USAGE_LIMIT_MESSAGE
     if "ActionRequiredError" in blob:
         return USAGE_LIMIT_MESSAGE
