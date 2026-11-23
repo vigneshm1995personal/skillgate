@@ -55,6 +55,11 @@ def project_root() -> Path:
     return cwd
 
 
+def user_skillgate_dir() -> Path:
+    """Per-user fallback folder `~/.skillgate` (read-only fallback; never written)."""
+    return Path.home() / ".skillgate"
+
+
 def config_root_for(path: str | Path | None = None) -> Path:
     """Folder that holds `.skillgate/keys`, walking up from a pack if given.
 

@@ -77,7 +77,12 @@ def keys_list() -> None:
         if not meta["set"]:
             continue
         found = True
-        source = "Settings" if meta["from_vault"] else "SKILLGATE_* / --key-env"
+        if meta["from_vault"]:
+            source = "Settings"
+        elif meta.get("from_home"):
+            source = "~/.skillgate/keys"
+        else:
+            source = "SKILLGATE_* / --key-env"
         base.console.print(f"{public_key_name(name)}  ({source})")
     if not found:
         base.console.print("No keys set. Use `skillgate keys set` or Settings in `skillgate ui`.")

@@ -1,4 +1,4 @@
-"""Gitignored scoring-provider file: `{project}/.skillgate/judge`."""
+"""Scoring provider file: `{project}/.skillgate/judge`, falling back to `~/.skillgate/judge`."""
 
 from __future__ import annotations
 
@@ -92,18 +92,45 @@ def judge_settings_path(root: str | Path | None = None) -> Path:
     return base / KEYS_DIRNAME / JUDGE_FILENAME
 
 
-def load_judge_settings(root: str | Path | None = None) -> JudgeProviderSettings:
-    path = judge_settings_path(root)
+def home_judge_settings_path() -> Path:
+    from skillgate_ai.paths import user_skillgate_dir
+
+    return user_skillgate_dir() / JUDGE_FILENAME
+
+
+def _selects_provider(settings: JudgeProviderSettings | None) -> bool:
+    return settings is not None and settings.provider not in {"", "auto", "skip"}
+
+
+def _same_judge_path(left: Path, right: Path) -> bool:
+    try:
+        return left.expanduser().resolve() == right.expanduser().resolve()
+    except OSError:
+        return False
+
+
+def _read_judge_file(
+    path: Path,
+    *,
+    migrate: bool,
+    ignore_account_errors: bool = False,
+) -> JudgeProviderSettings | None:
     if not path.is_file():
-        return JudgeProviderSettings()
+        return None
     try:
         raw = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
-        return JudgeProviderSettings()
+        return None
     if not isinstance(raw, dict):
-        return JudgeProviderSettings()
+        return None
     provider = str(raw.get("provider") or "auto").strip().lower() or "auto"
     decisions_path = _blank(raw.get("decisions_path"))
+    try:
+        account_id = _account_id(raw.get("account_id"), required=False)
+    except SkillGateError:
+        if ignore_account_errors:
+            return None
+        raise
     settings = JudgeProviderSettings(
         provider=provider,
         region=_blank(raw.get("region")),
@@ -111,11 +138,32 @@ def load_judge_settings(root: str | Path | None = None) -> JudgeProviderSettings
         base_url=_blank(raw.get("base_url")),
         decisions_path=decisions_path,
         key_env=_stored_key_env(raw.get("key_env")),
-        account_id=_account_id(raw.get("account_id"), required=False),
+        account_id=account_id,
     )
-    if "decisions_path" in raw:
+    if migrate and "decisions_path" in raw:
         _rewrite_judge_file(path, settings)
     return settings
+
+
+def load_project_judge_settings(root: str | Path | None = None) -> JudgeProviderSettings:
+    """Project `.skillgate/judge` only (no home fallback)."""
+    return _read_judge_file(judge_settings_path(root), migrate=True) or JudgeProviderSettings()
+
+
+def load_judge_settings(root: str | Path | None = None) -> JudgeProviderSettings:
+    project_path = judge_settings_path(root)
+    project = _read_judge_file(project_path, migrate=True)
+    if _selects_provider(project):
+        assert project is not None
+        return project
+    home_path = home_judge_settings_path()
+    if _same_judge_path(home_path, project_path):
+        return project or JudgeProviderSettings()
+    home = _read_judge_file(home_path, migrate=False, ignore_account_errors=True)
+    if _selects_provider(home):
+        assert home is not None
+        return home
+    return project or JudgeProviderSettings()
 
 
 def _rewrite_judge_file(path: Path, settings: JudgeProviderSettings) -> None:

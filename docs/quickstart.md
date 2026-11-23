@@ -68,7 +68,9 @@ printf '%s\n' "$CODEX_API_KEY" | skillgate keys set CODEX_API_KEY
 skillgate judge provider set <endpoint>
 ```
 
-A decision-model key is not an agent login. Pick a decision model before a live check. With none selected, `skillgate check` exits 2 and asks you to pick one. Commands for each option are in [Set up a decision model](judge.md#set-up-a-decision-model). Every check is a live agent run. Without `skillgate login` or a key, `skillgate check` exits 2. Default results say "Scored by the judge" when a decision model scored the run.
+Already picked a decision model in another project? Put it in `~/.skillgate/judge` (and its key in `~/.skillgate/keys`). Every project without its own pick uses it. A project's own `.skillgate/judge` and `.skillgate/keys` always win. See [Where settings are read from](judge.md#where-settings-are-read-from).
+
+A decision-model key is not an agent login. Pick a decision model before a live check. With none selected here or in `~/.skillgate/judge`, `skillgate check` exits 2 and asks you to pick one. Commands for each option are in [Set up a decision model](judge.md#set-up-a-decision-model). Every check is a live agent run. Without `skillgate login` or a key, `skillgate check` exits 2. Default results say "Scored by the judge" when a decision model scored the run.
 
 ## A pass and a fail
 

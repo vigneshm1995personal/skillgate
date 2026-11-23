@@ -92,7 +92,7 @@ skillgate judge test
 - `That account id wasn't found.` A Cloudflare 404 means that account id does not exist. It is not "this key is for a different endpoint."
 - `gpt-4o isn't a decision model.` A chat model on a custom endpoint is refused.
 - Scoring errors do not include HTTP codes. A 404 or 405 from a non-scoring URL says this key is for a different endpoint.
-- `skillgate judge provider show` and `set` print the option id, its model, and its base URL. With none selected, `show` prints `Pick a decision model before running a live check.` and exits 2.
+- `skillgate judge provider show` and `set` print the option id, its model, and its base URL. With none selected **in this project or in `~/.skillgate/judge`**, `show` prints `Pick a decision model before running a live check.` and exits 2.
 - `This decision model needs a model.` Pass `--model`, or pick one from the list.
 - `Pick a decision model before running a live check.` Run one `skillgate judge provider set` command above. A check that never starts is not saved as a scored failure.
 - `The judge couldn't score this check. Retry — this is often temporary.` The scoring endpoint had a temporary error. Skill Gate retries those on a scored check. `skillgate judge test` is a single connection probe and does not retry. If it still cannot score, the check cannot run (exit 2), not a quality red (exit 1). `--json` and history record that run as **not scored**, not fail or red. Run `skillgate judge test --verbose` (or `skillgate check --verbose`) to print the sanitized upstream reason. The message never includes HTTP codes, keys, or a provider name.
@@ -100,6 +100,14 @@ skillgate judge test
 A bad endpoint, rejected key, or empty balance fails that check. Chat and Responses completion models are not judges. Setting the judge backend to `responses`, `chat`, or `completions` fails the run. Older chat-style scoring setups fail until you pick a registered decision model.
 
 `--key-env` on `set` stores the env var name in `.skillgate/judge`. The key stays in that environment variable. Skill Gate does not write the value.
+
+### Where settings are read from
+
+Skill Gate reads the decision model from `.skillgate/judge` in this project. If that file is missing, or no model is picked there (`auto`), it uses `~/.skillgate/judge`. `SKILLGATE_JUDGE=openai` still overrides both files.
+
+Keys come from `.skillgate/keys` in this project, then `SKILLGATE_*` env vars, then names passed with `--key-env`. `~/.skillgate/keys` only fills in key names that none of those set. A project key always wins over a home key with the same name.
+
+`skillgate judge provider set`, `skillgate keys set`, and Settings in `skillgate ui` always write to this project's `.skillgate/`. Skill Gate never writes `~/.skillgate/`. To share one decision model across projects, create `~/.skillgate/judge` and `~/.skillgate/keys` yourself, for example by running `skillgate judge provider set` and `skillgate keys set` once with `SKILLGATE_ROOT=$HOME`.
 
 | Env | Meaning |
 | --- | --- |
