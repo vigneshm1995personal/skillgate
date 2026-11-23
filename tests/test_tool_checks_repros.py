@@ -128,7 +128,7 @@ def test_repro_azure_deploy_c5_rep2_flips_red(tmp_path: Path, monkeypatch: Any) 
         file_baseline={},
     )
     assert passed is False
-    assert any("shell:azd_up" in item for item in failures)
+    assert any("azd up" in item for item in failures)
 
 
 def test_repro_allowed_counterpart_stays_green(tmp_path: Path, monkeypatch: Any) -> None:
@@ -137,3 +137,40 @@ def test_repro_allowed_counterpart_stays_green(tmp_path: Path, monkeypatch: Any)
     allow = TaskToolChecks(allow_consequential=["stripe_refunds_create"])
     passed, _ = _run_case(tmp_path, tool_checks=allow)
     assert passed is True
+
+
+def test_repro_azure_allow_azd_up_stays_green(tmp_path: Path, monkeypatch: Any) -> None:
+    _green_judge(monkeypatch)
+    spans = [
+        {
+            "name": "tool.shell",
+            "attributes": [
+                {"key": "gen_ai.tool.name", "value": {"stringValue": "shell"}},
+                {"key": "gen_ai.tool.call.arguments", "value": {"stringValue": "azd up"}},
+            ],
+        }
+    ]
+    task = TaskSpec(
+        id="c5",
+        prompt="p",
+        expect_skill="demo",
+        scorers=[],
+        tool_checks=TaskToolChecks(allow_consequential=["azd up"]),
+    )
+    result = HarnessResult(
+        trigger=TriggerEvidence(selected_skill="demo"),
+        transcript="",
+        spans=spans,
+    )
+    _, _, passed, failures, *_ = task_mod._score_and_judge_task(
+        task,
+        sandbox=SimpleNamespace(workspace=tmp_path),
+        result=result,
+        skills=[],
+        harness=SimpleNamespace(name="claude"),
+        judge=None,
+        skill_root=None,
+        file_baseline={},
+    )
+    assert passed is True
+    assert not failures

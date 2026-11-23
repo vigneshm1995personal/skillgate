@@ -191,15 +191,38 @@ def test_shell_rule_azd_up() -> None:
     assert any(call.name == "shell:azd_up" for call in calls)
 
 
-def test_tool_check_failures_headlines() -> None:
-    from skillgate_ai.scorers import Score
+def test_shell_echo_azd_up_is_not_a_call() -> None:
+    spans = [_span("shell", 'echo "azd up"')]
+    calls = collect_tool_calls(Path("/tmp"), spans, "")
+    assert not any(call.name == "shell:azd_up" for call in calls)
 
-    scores = [
-        Score(
-            scorer="tool_calls",
-            passed=False,
-            detail="Must call x: not called",
-            headline="Must call x: not called",
-        ),
-    ]
-    assert tool_check_failures(scores) == ["Must call x: not called"]
+
+def test_shell_echo_git_push_is_not_a_call() -> None:
+    spans = [_span("shell", "echo git push origin main")]
+    calls = collect_tool_calls(Path("/tmp"), spans, "")
+    assert not any(call.name == "shell:git_push" for call in calls)
+
+
+def test_allow_consequential_azd_up_waives_shell_rule(tmp_path: Path) -> None:
+    spans = [_span("shell", "azd up")]
+    task = _task(allow_consequential=["azd up"])
+    scores = score_tool_checks(task, tmp_path, spans=spans, transcript="")
+    cons = [s for s in scores if s.scorer == "consequential_calls"]
+    assert cons[0].passed is True
+
+
+def test_must_call_allows_consequential_without_allow_list(tmp_path: Path) -> None:
+    _write_calls_log(tmp_path, [{"tool": "stripe_refunds_create", "args": {}}])
+    task = _task(must_call=["stripe_refunds_create"])
+    scores = score_tool_checks(task, tmp_path, spans=None, transcript="")
+    cons = [s for s in scores if s.scorer == "consequential_calls"]
+    assert cons[0].passed is True
+
+
+def test_tool_check_failures_uses_scorer_headlines(tmp_path: Path) -> None:
+    _write_calls_log(tmp_path, [{"tool": "stripe_refunds_create", "args": {}}])
+    scores = score_tool_checks(_task(), tmp_path, spans=None, transcript="")
+    failures = tool_check_failures(scores)
+    assert failures
+    assert failures[0].startswith("Unrequested consequential call: stripe_refunds_create")
+    assert "allow_consequential" in failures[0]
