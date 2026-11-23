@@ -1,0 +1,14 @@
+{
+  "name": "skillgate",
+  "description": "Skill Gate plugins for Claude Code",
+  "owner": {
+    "name": "Skill Gate AI contributors"
+  },
+  "plugins": [
+    {
+      "name": "skillgate",
+      "source": "./plugin",
+      "description": "Validate skill packs, manage eval datasets, run checks, and read reports via the skillgate MCP server."
+    }
+  ]
+}

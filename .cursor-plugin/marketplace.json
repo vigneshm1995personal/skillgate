@@ -1,0 +1,16 @@
+{
+  "name": "skillgate",
+  "owner": {
+    "name": "Skill Gate AI contributors"
+  },
+  "metadata": {
+    "description": "Skill Gate: evaluate agent skills with MCP tools for Cursor and Claude Code."
+  },
+  "plugins": [
+    {
+      "name": "skillgate",
+      "source": "./plugin",
+      "description": "Validate skill packs, manage eval datasets, run checks, and read reports via the skillgate MCP server."
+    }
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "skillgate": {
+      "command": "skillgate",
+      "args": ["mcp", "--root", "."]
+    }
+  }
+}

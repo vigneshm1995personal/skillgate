@@ -274,7 +274,7 @@ Exit 0 passes, exit 1 fails, and exit 2 means the check cannot run. The job summ
 
 ## Documentation
 
-[Documentation](https://www.skill-gate-ai.app/docs)
+[Documentation](https://www.skill-gate-ai.app/docs) · [Plugin install (skills + MCP)](https://github.com/vigneshm1995personal/skillgate/blob/main/docs/plugin.md)
 
 ## Contributing
 
