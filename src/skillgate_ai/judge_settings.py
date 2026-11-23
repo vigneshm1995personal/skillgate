@@ -7,7 +7,7 @@ import os
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, TypeGuard
 
 from skillgate_ai.errors import SkillGateError
 from skillgate_ai.judge_setup import option_for, prepare_option_fields
@@ -98,7 +98,7 @@ def home_judge_settings_path() -> Path:
     return user_skillgate_dir() / JUDGE_FILENAME
 
 
-def _selects_provider(settings: JudgeProviderSettings | None) -> bool:
+def _selects_provider(settings: JudgeProviderSettings | None) -> TypeGuard[JudgeProviderSettings]:
     return settings is not None and settings.provider not in {"", "auto", "skip"}
 
 
@@ -154,14 +154,12 @@ def load_judge_settings(root: str | Path | None = None) -> JudgeProviderSettings
     project_path = judge_settings_path(root)
     project = _read_judge_file(project_path, migrate=True)
     if _selects_provider(project):
-        assert project is not None
         return project
     home_path = home_judge_settings_path()
     if _same_judge_path(home_path, project_path):
         return project or JudgeProviderSettings()
     home = _read_judge_file(home_path, migrate=False, ignore_account_errors=True)
     if _selects_provider(home):
-        assert home is not None
         return home
     return project or JudgeProviderSettings()
 
