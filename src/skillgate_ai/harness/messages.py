@@ -95,8 +95,13 @@ USAGE_LIMIT_MESSAGE = "The agent hit a usage limit. This check cannot run."
 MODEL_UNAVAILABLE_MESSAGE = "The agent couldn't use this model. This check cannot run."
 
 _USAGE_LIMIT_RE = re.compile(
-    r"ActionRequiredError|Weekly usage limit reached|usage limit reached|"
-    r"You've hit your session limit|hit your session limit|session limit\b",
+    r"ActionRequiredError|Weekly usage limit reached|usage limit reached",
+    re.IGNORECASE,
+)
+
+# Claude Code provider banner (not generic "session limit" skill prose).
+_CLAUDE_SESSION_LIMIT = re.compile(
+    r"You've hit your session limit · resets",
     re.IGNORECASE,
 )
 
@@ -106,32 +111,49 @@ _MODEL_UNAVAILABLE_RE = re.compile(
 )
 
 
+def _usage_limit_payload(payload: str) -> bool:
+    if _CLAUDE_SESSION_LIMIT.search(payload):
+        return True
+    return bool(_USAGE_LIMIT_RE.search(payload))
+
+
+def _usage_limit_plaintext(text: str) -> bool:
+    if _CLAUDE_SESSION_LIMIT.search(text):
+        return True
+    return bool(_USAGE_LIMIT_RE.search(text) and "usage limit" in text.lower())
+
+
 def usage_limit_message(stdout: str, stderr: str = "", transcript: str = "") -> str | None:
     """Agent quota / usage-limit text is cannot-run, not a quality red."""
     blob = "\n".join(part for part in (stdout, stderr, transcript) if part)
-    if not blob or not _USAGE_LIMIT_RE.search(blob):
+    if not blob:
         return None
-    if _USAGE_LIMIT_RE.search(stderr or ""):
+    if stderr and (
+        _USAGE_LIMIT_RE.search(stderr) or _CLAUDE_SESSION_LIMIT.search(stderr)
+    ):
         return USAGE_LIMIT_MESSAGE
     if "ActionRequiredError" in blob:
         return USAGE_LIMIT_MESSAGE
-    for line in blob.splitlines():
-        text = line.strip()
-        if not text.startswith("{"):
-            if _USAGE_LIMIT_RE.search(text):
+    if _CLAUDE_SESSION_LIMIT.search(blob) or _USAGE_LIMIT_RE.search(blob):
+        for line in blob.splitlines():
+            text = line.strip()
+            if not text.startswith("{"):
+                if _usage_limit_plaintext(text):
+                    return USAGE_LIMIT_MESSAGE
+                continue
+            try:
+                obj = json.loads(text)
+            except json.JSONDecodeError:
+                continue
+            if not isinstance(obj, dict):
+                continue
+            kind = str(obj.get("type") or "")
+            errored = kind == "error" or (kind == "result" and obj.get("is_error") is True)
+            if not errored and kind != "error":
+                continue
+            payload = " ".join(str(obj.get(key) or "") for key in ("message", "error", "result"))
+            if _usage_limit_payload(payload):
                 return USAGE_LIMIT_MESSAGE
-            continue
-        try:
-            obj = json.loads(text)
-        except json.JSONDecodeError:
-            continue
-        if not isinstance(obj, dict):
-            continue
-        kind = str(obj.get("type") or "")
-        errored = kind == "error" or (kind == "result" and obj.get("is_error") is True)
-        payload = " ".join(str(obj.get(key) or "") for key in ("message", "error", "result"))
-        if (errored or kind == "error") and _USAGE_LIMIT_RE.search(payload):
-            return USAGE_LIMIT_MESSAGE
     if re.search(r"Weekly usage limit reached", blob, re.IGNORECASE):
         return USAGE_LIMIT_MESSAGE
     return None
@@ -198,32 +220,27 @@ def _raise_if_cannot_run(stdout: str, stderr: str, transcript: str = "") -> None
 
 
 def auth_failure_message(stdout: str, stderr: str, transcript: str = "") -> str | None:
-    """Auth failure in harness stderr, transcript, or an error event. Not assistant prose."""
+    """Auth failure in harness stderr or JSONL error events only — not assistant prose."""
     if _AUTH_FAILURE_RE.search(stderr or ""):
         return "The agent is not signed in."
-    sources = (stdout or "", transcript or "")
-    for source in sources:
+    for source in (stdout or "", transcript or ""):
         for line in source.splitlines():
             text = line.strip()
-            if not text.startswith("{") and _AUTH_FAILURE_RE.search(text):
+            if not text.startswith("{"):
+                continue
+            try:
+                obj = json.loads(text)
+            except json.JSONDecodeError:
+                continue
+            if not isinstance(obj, dict):
+                continue
+            kind = str(obj.get("type") or "")
+            errored = kind == "error" or (kind == "result" and obj.get("is_error") is True)
+            if not errored:
+                continue
+            blob = " ".join(str(obj.get(key) or "") for key in ("message", "error", "result"))
+            if _AUTH_FAILURE_RE.search(blob):
                 return "The agent is not signed in."
-    for line in (stdout or "").splitlines():
-        text = line.strip()
-        if not text.startswith("{"):
-            continue
-        try:
-            obj = json.loads(text)
-        except json.JSONDecodeError:
-            continue
-        if not isinstance(obj, dict):
-            continue
-        kind = str(obj.get("type") or "")
-        errored = kind == "error" or (kind == "result" and obj.get("is_error") is True)
-        if not errored:
-            continue
-        blob = " ".join(str(obj.get(key) or "") for key in ("message", "error", "result"))
-        if _AUTH_FAILURE_RE.search(blob):
-            return "The agent is not signed in."
     return None
 
 

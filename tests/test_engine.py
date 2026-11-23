@@ -959,9 +959,19 @@ def test_run_task_resets_sink_and_ends_control_on_error(tmp_path: Path, skill_di
 
 
 def test_run_eval_halts_after_transcript_session_limit(
-    tmp_path: Path, skill_dir: Path, allow_trigger: None
+    tmp_path: Path,
+    skill_dir: Path,
+    allow_trigger: None,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    harness = FakeHarness(transcript="You've hit your session limit · resets at noon")
+    import shutil
+
+    from skillgate_ai.demo_files import ensure_demo_pdfs
+    from skillgate_ai.gate import run_check
+    from skillgate_ai.history import load_history
+
+    transcript = "You've hit your session limit · resets at noon"
+    harness = FakeHarness(transcript=transcript)
     spec = _spec(_task("t1"), _task("t2"))
     with pytest.raises(HarnessError):
         engine.run_eval(
@@ -975,6 +985,22 @@ def test_run_eval_halts_after_transcript_session_limit(
             strict_ingest=False,
         )
     assert len(harness.calls) == 1
+
+    pack = tmp_path / "pdf"
+    shutil.copytree(Path(__file__).resolve().parents[1] / "skills" / "pdf", pack)
+    ensure_demo_pdfs(pack / "evals" / "fixtures")
+    gate_harness = FakeHarness(transcript=transcript)
+    monkeypatch.setattr("skillgate_ai.harness.auth._cursor_ready", lambda _c: True)
+    monkeypatch.setattr(
+        "skillgate_ai.gate.live_harness_or_error", lambda *a, **k: gate_harness
+    )
+    monkeypatch.setenv("SKILLGATE_ROOT", str(tmp_path))
+    result = run_check(pack, source="cli", root=tmp_path, harness="cursor-agent", no_judge=True)
+    assert result.exit_code == 2, result.error
+    assert len(gate_harness.calls) == 1
+    row = load_history(pack, limit=1)[-1]
+    assert row["passed"] is None
+    assert row.get("gate") is None
 
 
 def test_run_task_harness_error_propagates(tmp_path: Path, skill_dir: Path) -> None:
