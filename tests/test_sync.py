@@ -127,7 +127,7 @@ def test_sync_failed_copy_leaves_existing_install(
     def boom(*_args, **_kwargs):
         raise PermissionError(13, "Permission denied")
 
-    monkeypatch.setattr("skillgate_ai.pack.shutil.copytree", boom)
+    monkeypatch.setattr("skillgate_ai.pack.tree.shutil.copytree", boom)
     with pytest.raises(PermissionError):
         sync_once(str(repo), targets=["cursor"])
     assert marker.is_file()

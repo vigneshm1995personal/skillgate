@@ -175,7 +175,7 @@ def test_helper_failed_copy_leaves_existing_install(
     def boom(*_args, **_kwargs):
         raise PermissionError(13, "Permission denied")
 
-    monkeypatch.setattr("skillgate_ai.pack.shutil.copytree", boom)
+    monkeypatch.setattr("skillgate_ai.pack.tree.shutil.copytree", boom)
     result = process_job(
         "https://host.example",
         {"url": "https://host.example", "token": "tok"},

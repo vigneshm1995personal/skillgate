@@ -341,10 +341,11 @@ def test_api_get_judge_returns_home(tmp_path: Path, monkeypatch: pytest.MonkeyPa
     monkeypatch.setenv("SKILLGATE_CODEX_SKILLS", str(proj / "codex-skills"))
     monkeypatch.setenv("SKILLGATE_CLAUDE_SKILLS", str(proj / "claude-skills"))
     home_path = _write_home_judge(home, {"provider": "openai"})
+    home_before = home_path.read_bytes()
     client = TestClient(create_app(root=proj), base_url="http://127.0.0.1:8765")
     data = client.get("/api/settings/judge").json()["judge"]
     assert data["provider"] == "openai"
     assert data["chosen"] is True
     client.put("/api/settings/judge", json={"provider": "jev", "base_url": "https://jev.example"})
     assert (proj / ".skillgate" / "judge").is_file()
-    assert home_path.read_bytes() == home_path.read_bytes()
+    assert home_path.read_bytes() == home_before
