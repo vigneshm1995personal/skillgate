@@ -87,6 +87,10 @@ def headline_for(score: Score) -> str:
             return "Rubric passed"
         if score.scorer == "answer_contains":
             return "Answer matched"
+        if score.scorer == "tool_calls":
+            return "Tool calls matched"
+        if score.scorer == "consequential_calls":
+            return "No unrequested consequential calls"
         return "Passed"
     if score.scorer == "skill_trigger":
         if (score.actual or "none") == "none":
@@ -98,6 +102,13 @@ def headline_for(score: Score) -> str:
         return f"Rubric missed: {score.detail}"
     if score.scorer == "answer_contains":
         return f"Answer mismatch: {score.detail}"
+    if score.scorer in {"tool_calls", "consequential_calls"}:
+        parts = [segment.strip() for segment in (score.detail or "").split(";") if segment.strip()]
+        if not parts:
+            return score.detail
+        headline = parts[0]
+        extra = len(parts) - 1
+        return f"{headline} (+{extra} more)" if extra > 0 else headline
     return score.detail
 
 

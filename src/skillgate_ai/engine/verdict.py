@@ -155,6 +155,21 @@ def _run_outcome_judge(
     return judged, mismatch, golden_payload, actual_payload
 
 
+def _apply_tool_failures(
+    passed: bool | None,
+    failures: list[str],
+    judged: dict[str, Any] | None,
+    tool_failures: list[str],
+) -> tuple[bool | None, list[str], dict[str, Any] | None]:
+    """Deterministic tool-call failures outrank the judge. Judge cells are left as judged."""
+    if not tool_failures:
+        return passed, failures, judged
+    merged = [*tool_failures, *(item for item in failures if item not in tool_failures)]
+    if isinstance(judged, dict):
+        judged = {**judged, "review": False, "tool_checks_failed": True}
+    return False, merged, judged
+
+
 def _apply_mismatch(
     passed: bool,
     failures: list[str],

@@ -159,6 +159,10 @@ def _dump_pack(pack: CasePack) -> str:
         payload.pop("judge", None)
     else:
         payload["judge"] = pack.judge.to_sparse_dict()
+    if pack.tool_checks is None or pack.tool_checks.is_empty():
+        payload.pop("tool_checks", None)
+    else:
+        payload["tool_checks"] = pack.tool_checks.to_sparse_dict()
     dumped_cases = payload.get("cases") or []
     for item, case in zip(dumped_cases, pack.cases):  # noqa: B905
         if not isinstance(item, dict):
@@ -171,6 +175,10 @@ def _dump_pack(pack: CasePack) -> str:
             item.pop("judge", None)
         else:
             item["judge"] = case.judge.to_sparse_dict()
+        if case.tool_checks is None or case.tool_checks.is_empty():
+            item.pop("tool_checks", None)
+        else:
+            item["tool_checks"] = case.tool_checks.to_sparse_dict()
         if not case.trigger_mode:
             item.pop("trigger_mode", None)
         if not case.output_optional:
