@@ -105,5 +105,3 @@ def _count_is_yes(ask: str, count: int) -> bool:
     if re.search(r"more than once", text, re.IGNORECASE):
         return count > 1
     return count <= 1
-
-

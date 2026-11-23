@@ -157,5 +157,3 @@ def _compute_question(
             return _predicate(any(token in blob for token in wanted), source="log")
         return _predicate(present, source="log")
     return _compute_reply_fact(ask, spans, trajectory=trajectory, outputs=outputs)
-
-

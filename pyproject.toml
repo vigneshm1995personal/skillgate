@@ -65,10 +65,12 @@ all = [
 dev = [
   "skillgate-ai[all]",
   "pytest>=8.2",
+  "pytest-cov>=5.0",
   "pytest-timeout>=2.3",
   "ruff>=0.5",
   "mypy>=1.10",
   "pre-commit>=4.0",
+  "pip-audit>=2.7",
 ]
 
 [project.urls]
@@ -149,4 +151,12 @@ explicit_package_bases = true
 exclude = [
   '(?x)(src/skillgate_ai/examples/)',
 ]
+
+[tool.coverage.run]
+source = ["skillgate_ai"]
+
+[tool.coverage.report]
+fail_under = 77
+precision = 2
+skip_covered = true
 

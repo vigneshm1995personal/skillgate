@@ -2,6 +2,7 @@
 
 Re-export shim; patch submodules, not this package.
 """
+
 from __future__ import annotations
 
 from skillgate_ai.span_facts.asks import _count_is_yes as _count_is_yes

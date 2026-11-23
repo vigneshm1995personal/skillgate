@@ -24,6 +24,7 @@ python3 -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
 pre-commit install
 pytest -q
+pytest -q -m "not integration" --cov   # coverage floor from pyproject
 skillgate check skills/pdf
 skillgate check skills/pdf-sabotaged --expect-fail
 ruff check

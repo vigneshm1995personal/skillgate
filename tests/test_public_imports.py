@@ -499,6 +499,7 @@ REGISTRY: dict[str, tuple[str, ...]] = {
         "spec_decisions_questions",
         "spec_structured_schema",
         "spec_verdict",
+        "extra_block_failure_map",
         "extra_block_failures",
         "_NOT_APPLICABLE",
         "_is_not_applicable",

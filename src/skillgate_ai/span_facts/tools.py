@@ -127,5 +127,3 @@ def count_file_reads(
             continue
         count += 1
     return count
-
-
