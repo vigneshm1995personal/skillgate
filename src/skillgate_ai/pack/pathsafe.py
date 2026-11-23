@@ -11,6 +11,22 @@ from skillgate_ai.pack.constants import (
 )
 
 
+def resolve_pack_root(skill_path: str | Path) -> Path:
+    """Resolved skill pack directory (must exist)."""
+    root = Path(skill_path).expanduser().resolve()
+    if not root.is_dir():
+        raise ValueError("Skill folder not found.")
+    return root
+
+
+def try_resolve_pack_root(skill_path: str | Path) -> Path | None:
+    """Like ``resolve_pack_root`` but returns None when the path is missing or not a directory."""
+    try:
+        return resolve_pack_root(skill_path)
+    except (OSError, ValueError):
+        return None
+
+
 def safe_relpath(rel: str, *, default_dir: str = FIXTURE_DIR) -> str:
     """Keep a path inside the skill folder. Default to evals/fixtures/<name>."""
     cleaned = (rel or "").replace("\\", "/").strip()
@@ -66,9 +82,10 @@ def _path_under_skill(skill_root: Path, rel: str) -> Path | None:
     parts = [p for p in cleaned.split("/") if p and p not in {".", ""}]
     if not parts or any(p == ".." for p in parts):
         return None
-    candidate = (skill_root / "/".join(parts)).resolve()
+    base = skill_root.resolve()
+    candidate = base.joinpath(*parts).resolve()
     try:
-        candidate.relative_to(skill_root.resolve())
+        candidate.relative_to(base)
     except ValueError:
         return None
     return candidate

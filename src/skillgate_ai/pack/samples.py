@@ -11,7 +11,7 @@ from skillgate_ai.pack.constants import (
     _UNSYNTHESIZABLE,
     IMAGE_SUFFIXES,
 )
-from skillgate_ai.pack.pathsafe import implied_fixture_name
+from skillgate_ai.pack.pathsafe import _safe_filename, implied_fixture_name
 
 
 class CannotSynthesizeFixture(ValueError):
@@ -69,7 +69,7 @@ def generate_sample_bytes(*, dest: str, prompt: str = "") -> bytes:
         from tempfile import TemporaryDirectory
 
         with TemporaryDirectory() as tmp:
-            path = Path(tmp) / name
+            path = Path(tmp) / _safe_filename(name)
             write_pdf(path, f"Sample input: {hint[:80]}")
             return path.read_bytes()
     if suffix == ".json":
