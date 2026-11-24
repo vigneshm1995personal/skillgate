@@ -92,11 +92,34 @@ class CursorAgentHarness:
             agent_prompt,
             model=(self.cfg.cursor_model or "").strip() or None,
         )
+        from skillgate_ai.harness.cursor_env import _cursor_harness_extra, cursor_runner_child_env
+        from skillgate_ai.harness.diagnostics import AuthFailureCapture
+
         env: dict[str, str] = {"SKILLGATE_TASK": prompt}
-        if self.cfg.cursor_api_key:
-            env["CURSOR_API_KEY"] = self.cfg.cursor_api_key
+        env.update(_cursor_harness_extra(self.cfg))
+        child_env = cursor_runner_child_env(self.cfg, task=prompt)
+        auth_before: bool | None = None
+        if not (self.cfg.cursor_api_key or "").strip():
+            from skillgate_ai.harness.auth import _probe_cursor_login_status
+
+            auth_before = _probe_cursor_login_status(binary, env=child_env)
         proc = _sandbox_run(sandbox, command, env=env, timeout=timeout_sec)
-        _raise_if_cannot_run(proc.stdout or "", proc.stderr or "")
+        capture = AuthFailureCapture(
+            harness=self.name,
+            returncode=proc.returncode,
+            command=command,
+            child_env=child_env,
+            prompt=agent_prompt,
+            auth_before=auth_before,
+            cursor_binary=binary,
+            cfg=self.cfg,
+            known_secret=(self.cfg.cursor_api_key or "").strip() or None,
+        )
+        _raise_if_cannot_run(
+            proc.stdout or "",
+            proc.stderr or "",
+            capture=capture,
+        )
         transcript = _cursor_transcript(proc.stdout or "", proc.stderr or "")
         selected = selection._parse_selected(sandbox.workspace, transcript, skills)
         read_paths = _collect_read_paths(transcript, _jsonl_spans(proc.stdout or ""))

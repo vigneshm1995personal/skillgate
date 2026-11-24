@@ -16,7 +16,7 @@ from typing import Any
 from skillgate_ai.config import LLMConfig, get_llm_config, load_env
 from skillgate_ai.demo_files import ensure_demo_pdfs
 from skillgate_ai.engine import EvalProgress, SuiteReport, run_eval
-from skillgate_ai.errors import SkillGateError, timeout_harness_error
+from skillgate_ai.errors import SkillGateError, error_payload, timeout_harness_error
 from skillgate_ai.eval_config import (
     EvalRunConfig,
     apply_eval_config,
@@ -161,7 +161,7 @@ def run_check(
         return CheckResult(
             report=None,
             exit_code=exc.exit_code,
-            error={"message": exc.message, "hint": exc.hint},
+            error=error_payload(exc),
         )
 
     from skillgate_ai.run_lock import project_run_lock
@@ -173,7 +173,7 @@ def run_check(
         return CheckResult(
             report=None,
             exit_code=exc.exit_code,
-            error={"message": exc.message, "hint": exc.hint},
+            error=error_payload(exc),
         )
 
     try:
@@ -290,11 +290,11 @@ def _execute_check(
             if not isinstance(exc, SkillGateError):
                 raise
             persist_root = skill_path or pack_root
-            err = {"message": exc.message, "hint": exc.hint}
+            err = error_payload(exc)
         else:
             persist_root = skill_path or pack_root
             exc = blocked
-            err = {"message": blocked.message, "hint": blocked.hint}
+            err = error_payload(blocked)
         if persist_root and run_cfg is not None:
             if getattr(exc, "exit_code", None) == 2:
                 if started:

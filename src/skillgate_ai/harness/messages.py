@@ -11,6 +11,7 @@ from skillgate_ai.harness.base import (
     _CODEX_SUPPORTED_MODELS,
     CODEX_CHATGPT_DEFAULT,
 )
+from skillgate_ai.harness.diagnostics import AuthFailureCapture, build_auth_diagnostics
 
 _MODEL_ACCESS_ERROR = re.compile(
     r"(?:"
@@ -198,8 +199,14 @@ def cannot_run_message(stdout: str, stderr: str = "", transcript: str = "") -> s
     )
 
 
-def _raise_if_cannot_run(stdout: str, stderr: str, transcript: str = "") -> None:
-    _raise_if_auth_failed(stdout, stderr, transcript)
+def _raise_if_cannot_run(
+    stdout: str,
+    stderr: str,
+    transcript: str = "",
+    *,
+    capture: AuthFailureCapture | None = None,
+) -> None:
+    _raise_if_auth_failed(stdout, stderr, transcript, capture=capture)
     quota = usage_limit_message(stdout, stderr, transcript)
     if quota:
         raise HarnessError(
@@ -242,12 +249,25 @@ def auth_failure_message(stdout: str, stderr: str, transcript: str = "") -> str 
     return None
 
 
-def _raise_if_auth_failed(stdout: str, stderr: str, transcript: str = "") -> None:
+def _raise_if_auth_failed(
+    stdout: str,
+    stderr: str,
+    transcript: str = "",
+    *,
+    capture: AuthFailureCapture | None = None,
+) -> None:
     message = auth_failure_message(stdout, stderr, transcript)
     if message is None:
         return
+    diagnostics = None
+    if capture is not None:
+        capture.stdout = stdout
+        capture.stderr = stderr
+        capture.transcript = transcript
+        diagnostics = build_auth_diagnostics(capture)
     raise HarnessError(
         message,
         hint="Run `skillgate login`.",
         exit_code=2,
+        diagnostics=diagnostics,
     )

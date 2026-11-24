@@ -21,11 +21,43 @@ def _present_check(result, *, verbose: bool = False) -> None:
         hint = result.error.get("hint")
         if hint:
             base.console.print(hint, markup=False)
+        if verbose:
+            diag = result.error.get("auth_diagnostics")
+            if isinstance(diag, dict):
+                _print_auth_diagnostics(diag)
     elif result.report is not None:
         base.console.print(format_cli(result.report))
         if verbose:
             for line in _verbose_scoring_lines(result.report):
                 base.console.print(line)
+
+
+def _print_auth_diagnostics(diag: dict) -> None:
+    base.console.print("Auth diagnostics:", markup=False)
+    for key in (
+        "harness",
+        "exit_code",
+        "auth_status_before",
+        "auth_status_after_runner_env",
+        "auth_status_after_host_env",
+        "auth_flipped",
+    ):
+        if key in diag:
+            base.console.print(f"  {key}: {diag[key]}", markup=False)
+    summary = diag.get("command_summary")
+    if summary:
+        base.console.print(f"  command: {' '.join(str(x) for x in summary)}", markup=False)
+    env_flags = diag.get("env_presence")
+    if isinstance(env_flags, dict):
+        present = [name for name, ok in env_flags.items() if ok]
+        if present:
+            base.console.print(f"  env present: {', '.join(present)}", markup=False)
+    tail = (diag.get("stderr_tail") or "").strip()
+    if not tail:
+        tail = (diag.get("stdout_tail") or "").strip()
+    if tail:
+        base.console.print("  tail:", markup=False)
+        base.console.print(tail, markup=False)
 
 
 def _verbose_scoring_lines(report) -> list[str]:
@@ -62,13 +94,14 @@ def _finish_gate(result, *, machine: bool, summary: str, verbose: bool) -> NoRet
         raise typer.Exit(result.exit_code)
     if result.error:
         if machine:
-            base._emit_json(
-                {
-                    "error": result.error["message"],
-                    "hint": result.error.get("hint"),
-                    "exit_code": result.exit_code,
-                }
-            )
+            payload: dict = {
+                "error": result.error["message"],
+                "hint": result.error.get("hint"),
+                "exit_code": result.exit_code,
+            }
+            if result.error.get("auth_diagnostics"):
+                payload["auth_diagnostics"] = result.error["auth_diagnostics"]
+            base._emit_json(payload)
         else:
             base.console.print(result.error["message"], markup=False)
             hint = result.error.get("hint")

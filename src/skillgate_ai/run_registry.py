@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from skillgate_ai.deploy_gate import local_gate
-from skillgate_ai.errors import SkillGateError, timeout_harness_error
+from skillgate_ai.errors import SkillGateError, error_payload, timeout_harness_error
 from skillgate_ai.gate import run_check
 from skillgate_ai.live import create_control, drop_control, get_control
 from skillgate_ai.report import progress_to_dict, report_to_dict
@@ -231,7 +231,9 @@ class RunRegistry:
                     "gate": None,
                     "gate_decision": decision,
                     "gate_reason": reason,
-                    "error": {"message": message, "hint": hint},
+                    "error": error_payload(exc)
+                    if isinstance(exc, SkillGateError)
+                    else {"message": message, "hint": hint},
                     "tryout": tryout,
                     "exit_code": exit_code,
                 }
