@@ -15,15 +15,23 @@ Work against skill packs under the workspace `skills/` tree (or `SKILLGATE_ROOT`
 
 ### `dataset_get`
 
-Arguments: `skill`. Returns the eval dataset view for that pack (cases, metadata). Call before mutating.
+Arguments: `skill`, optional `include_files` (default `false`). Compact view lists paths, sizes, and `tool_checks`; pass `include_files: true` for file text bodies.
+
+### `case_get`
+
+One case in full: `skill`, `case_id`. Use after compact `dataset_get` when editing a specific check.
 
 ### `case_add`
 
-Add one check: `skill`, `prompt`, optional `case_id`, `expected`, `output_path`, `should_trigger`, `inputs`, `output_optional`, `force`.
+Add one check: `skill`, `prompt`, optional `case_id`, `expected`, `output_path`, `should_trigger`, `inputs`, `output_optional`, `force`, `tool_checks`.
 
 ### `case_edit`
 
-Edit fields on an existing case: `skill`, `case_id`, and any of `prompt`, `expected`, `output_path`, `output_optional`.
+Edit fields on an existing case: `skill`, `case_id`, and any of `prompt`, `expected`, `output_path`, `output_optional`, `tool_checks` (omit/null = unchanged, `{}` = clear, object = replace whole block).
+
+### `pack_tool_checks_set`
+
+Replace pack-level `tool_checks`: `skill`, `tool_checks` (`null` or `{}` clears).
 
 ### `case_remove`
 
@@ -35,26 +43,28 @@ Bulk import: `skill`, `content`, optional `format` (`csv` | `jsonl` | `yaml`), `
 
 ## Workflow
 
-1. `dataset_get` to inspect current cases.
+1. `dataset_get` (compact) → `case_get` for the case you will edit.
 2. Use `case_add` / `case_edit` / `case_remove` for incremental edits.
 3. Use `case_import` for spreadsheets or generated fixtures; run with `dry_run: true` first when unsure.
 
 Validate after large edits with `validate_skill` (skillgate-setup skill).
 
-## All thirteen MCP tools
+## All fifteen MCP tools
 
 | Tool | Purpose |
 | --- | --- |
-| `doctor` | Agents, keys (booleans), version |
-| `validate_skill` | Strict SKILL.md + cases |
-| `dataset_scaffold` | New skill or starter cases |
-| `dataset_get` | Eval dataset view |
-| `case_add` | Add one check |
-| `case_edit` | Edit a check |
+| `validate_skill` | Strict SKILL.md + cases validation |
+| `dataset_scaffold` | Create a new skill or starter cases |
+| `dataset_get` | Compact dataset view (paths, sizes, tool_checks); `include_files: true` for file text |
+| `case_get` | One case in full (file text, expected output, tool_checks) |
+| `case_add` | Add one check (optional `tool_checks`) |
+| `case_edit` | Edit a check; `tool_checks`: omit = unchanged, `{}` = clear, object = replace |
 | `case_remove` | Remove a check |
-| `case_import` | Bulk CSV / JSONL / YAML |
-| `check_start` | Start a check |
-| `check_poll` | Poll run status |
+| `case_import` | Bulk import CSV / JSONL / YAML |
+| `pack_tool_checks_set` | Replace pack-level `tool_checks` (`{}` clears) |
+| `check_start` | Start a check (one at a time) |
+| `check_poll` | Poll run status (includes `run_gate`) |
 | `check_cancel` | Kill or skip a running check |
 | `report_latest` | Latest saved run for a skill |
-| `report_get` | One history run by id |
+| `report_get` | One history run (`history show --json` shape) |
+| `doctor` | Agents, key presence (booleans), version |

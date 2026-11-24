@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from skillgate_ai.deploy import deploy_allowed, require_passing_check
-from skillgate_ai.deploy_gate import pack_gate_decision, run_gate_decision
+from skillgate_ai.deploy_gate import pack_gate_decision, run_gate_decision, run_gate_summary
 from skillgate_ai.history import append_eval, load_history
 
 # append_eval used directly in failure-block test
@@ -88,3 +88,23 @@ def test_cli_deploy_matches_pack_gate_after_tryout_sequence(tmp_path: Path) -> N
     )
     assert pack_gate_decision(pack)[0] == "cleared"
     assert deploy_allowed(pack) is True
+
+
+def test_run_gate_summary_running_record() -> None:
+    assert run_gate_summary({"status": "running", "tryout": False}) == {
+        "kind": "official",
+        "moves_gate": True,
+        "decision": "pending",
+        "reason": "Check is still running.",
+        "tryout_reason": None,
+    }
+
+
+def test_run_gate_summary_drops_reason_for_official() -> None:
+    assert run_gate_summary({"passed": True}, tryout_reason="subset")["tryout_reason"] is None
+
+
+def test_run_gate_summary_error_row() -> None:
+    out = run_gate_summary({"passed": None, "error": {"message": "x"}})
+    assert out["moves_gate"] is False
+    assert out["decision"] == "pending"

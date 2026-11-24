@@ -48,6 +48,28 @@ def row_gate_moved(row: dict[str, Any]) -> bool:
     )
 
 
+RUNNING_GATE_REASON = "Check is still running."
+
+
+def run_gate_summary(row: dict[str, Any], *, tryout_reason: str | None = None) -> dict[str, Any]:
+    """Uniform gate block for a history row or a live run record."""
+    report = row.get("report") if isinstance(row.get("report"), dict) else None
+    tryout = row_is_tryout(row, report)
+    if row.get("status") == "running":
+        decision, reason = "pending", RUNNING_GATE_REASON
+    elif isinstance(row.get("gate_decision"), str) and row.get("gate_reason"):
+        decision, reason = str(row["gate_decision"]), str(row["gate_reason"])
+    else:
+        decision, reason = run_gate_decision(row)
+    return {
+        "kind": "tryout" if tryout else "official",
+        "moves_gate": row_gate_moved(row),
+        "decision": decision,
+        "reason": reason,
+        "tryout_reason": tryout_reason if tryout else None,
+    }
+
+
 def run_gate_decision(row: dict[str, Any]) -> tuple[str, str]:
     """Per-run gate_decision for history/UI (not always the pack-level gate)."""
     report = row.get("report") if isinstance(row.get("report"), dict) else None

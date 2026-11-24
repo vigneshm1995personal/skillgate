@@ -16,8 +16,10 @@ from skillgate_ai.mcp.stdio_guard import ProtocolStreams
 
 SERVER_INSTRUCTIONS = (
     "Local Skill Gate. Tools act on skill packs under the project root. "
+    "dataset_get is compact; use case_get for one case in full. "
     "Start a check with check_start, then poll check_poll until status is not 'running'. "
-    "Then use report_get for the full report. One check at a time."
+    "Then use report_get for the full report. One check at a time. "
+    "Partial case_ids run as tryouts and never move the Deploy gate."
 )
 
 _F = TypeVar("_F", bound=Callable[..., dict[str, Any]])
@@ -54,9 +56,17 @@ def build_server(ctx: McpContext) -> FastMCP:
         return _call(ctx, mcp_tools.dataset_scaffold, skill=skill, name=name, force=force)
 
     @server.tool()
-    def dataset_get(skill: str) -> dict[str, Any]:
-        """Return the eval dataset view for a skill pack."""
-        return _call(ctx, mcp_tools.dataset_get, skill=skill)
+    def dataset_get(skill: str, include_files: bool = False) -> dict[str, Any]:
+        """Return the eval dataset for a skill (compact by default).
+
+        Pass include_files=true for file text, or use case_get for one case.
+        """
+        return _call(ctx, mcp_tools.dataset_get, skill=skill, include_files=include_files)
+
+    @server.tool()
+    def case_get(skill: str, case_id: str) -> dict[str, Any]:
+        """Return one check case in full (prompt, fixtures, golden, tool_checks)."""
+        return _call(ctx, mcp_tools.case_get, skill=skill, case_id=case_id)
 
     @server.tool()
     def case_add(
@@ -69,8 +79,9 @@ def build_server(ctx: McpContext) -> FastMCP:
         inputs: list[str] | None = None,
         output_optional: bool = False,
         force: bool = False,
+        tool_checks: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        """Add one check case to a skill pack."""
+        """Add one check case. Optional tool_checks (must_call needs should_trigger)."""
         return _call(
             ctx,
             mcp_tools.case_add,
@@ -83,6 +94,7 @@ def build_server(ctx: McpContext) -> FastMCP:
             inputs=inputs,
             output_optional=output_optional,
             force=force,
+            tool_checks=tool_checks,
         )
 
     @server.tool()
@@ -93,8 +105,9 @@ def build_server(ctx: McpContext) -> FastMCP:
         expected: str | None = None,
         output_path: str | None = None,
         output_optional: bool | None = None,
+        tool_checks: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        """Edit fields on an existing check case."""
+        """Edit a check. tool_checks: omit/null unchanged, {} clears, object replaces block."""
         return _call(
             ctx,
             mcp_tools.case_edit,
@@ -104,7 +117,16 @@ def build_server(ctx: McpContext) -> FastMCP:
             expected=expected,
             output_path=output_path,
             output_optional=output_optional,
+            tool_checks=tool_checks,
         )
+
+    @server.tool()
+    def pack_tool_checks_set(
+        skill: str,
+        tool_checks: dict[str, Any] | None,
+    ) -> dict[str, Any]:
+        """Replace pack-level tool_checks. Pass null or {} to clear."""
+        return _call(ctx, mcp_tools.pack_tool_checks_set, skill=skill, tool_checks=tool_checks)
 
     @server.tool()
     def case_remove(skill: str, case_id: str) -> dict[str, Any]:
@@ -142,7 +164,7 @@ def build_server(ctx: McpContext) -> FastMCP:
         model: str | None = None,
         timeout_sec: int | None = None,
     ) -> dict[str, Any]:
-        """Start a skill check run (one at a time). Requires login or an API key."""
+        """Start a check (one at a time). Official vs tryout semantics; see docs/mcp.md."""
         return _call(
             ctx,
             mcp_tools.check_start,

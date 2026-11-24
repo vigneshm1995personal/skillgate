@@ -11,6 +11,15 @@ def is_skill_pack(path: str | Path) -> bool:
     return (root / "SKILL.md").is_file() and (root / "evals").is_dir()
 
 
+def nearest_skill_pack(start: str | Path | None = None) -> Path | None:
+    """First folder from start (default cwd) upward that is a skill pack."""
+    origin = Path(start).expanduser().resolve() if start is not None else Path.cwd().resolve()
+    for candidate in (origin, *origin.parents):
+        if is_skill_pack(candidate):
+            return candidate
+    return None
+
+
 def resolve_user_path(target: str | Path, root: Path | None = None) -> Path:
     """Resolve a CLI path against the current folder first, then the project root.
 

@@ -38,15 +38,16 @@ def register_history_callback(history_app: typer.Typer) -> None:
         from skillgate_ai.history import load_history
 
         try:
-            dest = _cli._resolve_pack_arg(pack)
+            dest = _cli._resolve_pack_arg(pack, prefer_cwd_pack=True)
             rows = load_history(dest, limit=20)
         except SkillGateError as exc:
             _cli.console.print(exc.render())
             raise typer.Exit(exc.exit_code) from None
         if json_out:
             from skillgate_ai.cli import _emit_json
+            from skillgate_ai.deploy_gate import run_gate_summary
 
-            _emit_json(rows)
+            _emit_json([{**row, "run_gate": run_gate_summary(row)} for row in rows])
             return
         _print_history_rows(rows)
         _print_skill_versions(dest)
@@ -79,7 +80,7 @@ def _find_history_row(run_id: str, pack: Path | None) -> tuple[dict, Path | None
             if row is not None:
                 break
         if row is None:
-            dest = _cli._resolve_pack_arg(None)
+            dest = _cli._resolve_pack_arg(None, prefer_cwd_pack=True)
             skill_path = dest
             for item in load_history(dest, limit=0):
                 if str(item.get("run_id") or "") == run_id:

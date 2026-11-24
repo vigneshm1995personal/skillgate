@@ -11,6 +11,7 @@ from skillgate_ai.case_pack.dataset import MISSING_GOLDEN_REASON as MISSING_GOLD
 from skillgate_ai.case_pack.dataset import _preview_file as _preview_file
 from skillgate_ai.case_pack.dataset import actual_output_state as actual_output_state
 from skillgate_ai.case_pack.dataset import case_for_task as case_for_task
+from skillgate_ai.case_pack.dataset import case_view as case_view
 from skillgate_ai.case_pack.dataset import dataset_view as dataset_view
 from skillgate_ai.case_pack.dataset import golden_state as golden_state
 from skillgate_ai.case_pack.dataset import no_trigger_output_warning as no_trigger_output_warning

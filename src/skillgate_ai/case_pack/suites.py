@@ -280,6 +280,7 @@ def suite_from_checks(
         skill=skill_name,
         cases=cases,
         judge=existing.judge if existing else None,
+        tool_checks=existing.tool_checks if existing else None,
     )
     return suite_from_pack(pack, str(root))
 

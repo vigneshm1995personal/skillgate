@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import Any
+from typing import Any, Final
 
 from skillgate_ai.case_pack import (
     expected_without_target_warning,
@@ -32,6 +32,52 @@ from skillgate_ai.pack_schema import (
     parse_judge_block,
     parse_judge_patch,
 )
+from skillgate_ai.tool_check_schema import (
+    CaseToolChecks,
+    PackToolChecks,
+    parse_tool_checks_block,
+)
+
+_UNSET: Final = object()
+
+
+def _parse_case_tool_checks(raw: object, *, should_trigger: bool) -> CaseToolChecks | None:
+    from pydantic import ValidationError
+
+    from skillgate_ai.errors import friendly_validation_error
+
+    if raw is None:
+        return None
+    if isinstance(raw, dict) and not raw:
+        return None
+    try:
+        parsed = parse_tool_checks_block(raw, level="case")
+    except ValidationError as exc:
+        raise SuiteError(friendly_validation_error(exc, kind="tool_checks")) from None
+    except ValueError as exc:
+        raise SuiteError(str(exc)) from None
+    if parsed is not None and parsed.must_call and not should_trigger:
+        raise SuiteError(
+            "must_call on a no-trigger check never runs. Move it to a should_trigger case."
+        )
+    return parsed
+
+
+def _parse_pack_tool_checks(raw: object) -> PackToolChecks | None:
+    from pydantic import ValidationError
+
+    from skillgate_ai.errors import friendly_validation_error
+
+    if raw is None:
+        return None
+    if isinstance(raw, dict) and not raw:
+        return None
+    try:
+        return parse_tool_checks_block(raw, level="pack")
+    except ValidationError as exc:
+        raise SuiteError(friendly_validation_error(exc, kind="tool_checks")) from None
+    except ValueError as exc:
+        raise SuiteError(str(exc)) from None
 
 
 def validate_pin_judge(
@@ -123,6 +169,7 @@ def edit_pack_case(
     expected: str | None = None,
     output_path: str | None = None,
     output_optional: bool | None = None,
+    tool_checks: dict[str, Any] | None | object = _UNSET,
 ):
     root = Path(skill_path).expanduser().resolve()
     pack = load_case_pack(root)
@@ -148,10 +195,29 @@ def edit_pack_case(
             updates["golden"] = case.golden.model_copy(update={"output_path": output_path})
         if output_optional is not None:
             updates["output_optional"] = bool(output_optional)
+        if tool_checks is not _UNSET:
+            if tool_checks is None or (isinstance(tool_checks, dict) and not tool_checks):
+                updates["tool_checks"] = None
+            else:
+                updates["tool_checks"] = _parse_case_tool_checks(
+                    tool_checks, should_trigger=case.should_trigger
+                )
         cases.append(case.model_copy(update=updates) if updates else case)
     if not found:
         raise SuiteError(f"No check named {case_id}.")
     updated = pack.model_copy(update={"cases": cases})
+    save_case_pack(root, updated)
+    return updated
+
+
+def set_pack_tool_checks(skill_path: str | Path, tool_checks: dict[str, Any] | None):
+    """Replace pack-level tool_checks. None or {} clears the block."""
+    root = Path(skill_path).expanduser().resolve()
+    pack = load_case_pack(root)
+    if pack is None:
+        raise SuiteError("This skill has no case pack yet.")
+    parsed = _parse_pack_tool_checks(tool_checks)
+    updated = pack.model_copy(update={"tool_checks": parsed})
     save_case_pack(root, updated)
     return updated
 
@@ -269,6 +335,7 @@ def add_pack_case(
     inputs: list[str] | None = None,
     force: bool = False,
     output_optional: bool = False,
+    tool_checks: dict[str, Any] | None = None,
 ):
     if not str(prompt or "").strip():
         raise SuiteError("Add a prompt for this check.")
@@ -300,6 +367,9 @@ def add_pack_case(
         check["output_path"] = output_path
     if output_optional:
         check["output_optional"] = True
+    parsed = _parse_case_tool_checks(tool_checks, should_trigger=should_trigger)
+    if parsed is not None:
+        check["tool_checks"] = parsed.to_sparse_dict()
     return pin_checks(skill_path, [check]), None
 
 

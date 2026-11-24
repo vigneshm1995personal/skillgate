@@ -38,7 +38,7 @@ def mcp_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     yield ctx, dest
 
 
-def _exercise_all_thirteen_tools(
+def _exercise_all_tools(
     ctx: McpContext,
     dest: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -51,6 +51,8 @@ def _exercise_all_thirteen_tools(
     outputs.append(mcp_tools.validate_skill(ctx, skill="pdf"))
     outputs.append(mcp_tools.dataset_scaffold(ctx, name="all-thirteen"))
     outputs.append(mcp_tools.dataset_get(ctx, skill="pdf"))
+    outputs.append(mcp_tools.case_get(ctx, skill="pdf", case_id="extract-hello"))
+    outputs.append(mcp_tools.pack_tool_checks_set(ctx, skill="pdf", tool_checks={}))
     outputs.append(
         mcp_tools.case_add(
             ctx, skill="pdf", prompt="all thirteen tools", case_id="all-thirteen-case"
@@ -97,7 +99,7 @@ def _exercise_all_thirteen_tools(
     )
     outputs.append(mcp_tools.report_get(ctx, run_id="all13-hist", skill="pdf"))
     outputs.append(mcp_tools.doctor(ctx))
-    assert len(outputs) == 13
+    assert len(outputs) == 15
     return outputs
 
 
@@ -297,6 +299,8 @@ def test_check_start_case_ids_forces_tryout(mcp_env, monkeypatch: pytest.MonkeyP
     assert seen["tryout"] is True
     assert seen["checks"]
     assert out["tryout"] is True
+    assert out["tryout_reason"] == "subset"
+    assert out["run_gate"]["kind"] == "tryout"
 
 
 def test_check_start_poll_until_done_with_mocked_run_eval(
@@ -400,17 +404,229 @@ def test_no_key_values_in_any_tool_output(mcp_env, monkeypatch: pytest.MonkeyPat
     monkeypatch.setenv("OPENAI_API_KEY", sentinel)
     monkeypatch.setenv("SKILLGATE_OPENAI_API_KEY", sentinel)
     ctx, dest = mcp_env
-    outputs = _exercise_all_thirteen_tools(ctx, dest, monkeypatch)
+    outputs = _exercise_all_tools(ctx, dest, monkeypatch)
     blob = json.dumps(outputs)
     assert sentinel not in blob
 
 
 def test_tools_write_nothing_to_stdout(mcp_env, monkeypatch: pytest.MonkeyPatch, capsys) -> None:
     ctx, dest = mcp_env
-    _exercise_all_thirteen_tools(ctx, dest, monkeypatch)
+    _exercise_all_tools(ctx, dest, monkeypatch)
     out, err = capsys.readouterr()
     assert out == ""
     assert err == ""
+
+
+def _pinned_case_ids(dest: Path) -> list[str]:
+    from skillgate_ai.case_pack import load_case_pack
+
+    pack = load_case_pack(dest)
+    assert pack is not None
+    return [c.id for c in pack.cases if c.status == "pinned"]
+
+
+def test_check_start_full_pinned_set_runs_official(
+    mcp_env, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from skillgate_ai.run_registry import RunRegistry, RunRequest
+
+    ctx, dest = mcp_env
+    pinned = _pinned_case_ids(dest)
+    seen: dict = {}
+
+    def capture_start(self: RunRegistry, request: RunRequest) -> dict[str, str]:
+        seen["tryout"] = request.tryout
+        seen["checks"] = request.checks
+        return {"id": "off1", "status": "running"}
+
+    monkeypatch.setattr(RunRegistry, "start", capture_start)
+    out = mcp_tools.check_start(
+        ctx,
+        skill="pdf",
+        case_ids=list(reversed(pinned)) + [pinned[0], pinned[-1].upper()],
+        no_judge=True,
+    )
+    assert seen["tryout"] is False
+    assert seen["checks"] is None
+    assert out["tryout"] is False
+    assert out["tryout_reason"] is None
+    assert out["run_gate"]["kind"] == "official"
+    assert out["run_gate"]["moves_gate"] is True
+
+
+def test_check_start_subset_forces_tryout_no_gate_move(
+    mcp_env, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from skillgate_ai.run_registry import RunRegistry, RunRequest
+
+    ctx, dest = mcp_env
+    pinned = _pinned_case_ids(dest)
+    seen: dict = {}
+
+    def capture_start(self: RunRegistry, request: RunRequest) -> dict[str, str]:
+        seen["tryout"] = request.tryout
+        seen["checks"] = request.checks
+        return {"id": "sub1", "status": "running"}
+
+    monkeypatch.setattr(RunRegistry, "start", capture_start)
+    out = mcp_tools.check_start(ctx, skill="pdf", case_ids=[pinned[0]], tryout=False, no_judge=True)
+    assert seen["tryout"] is True
+    assert seen["checks"]
+    assert out["tryout"] is True
+    assert out["tryout_reason"] == "subset"
+    assert out["run_gate"]["kind"] == "tryout"
+    assert out["run_gate"]["moves_gate"] is False
+
+
+def test_check_start_explicit_tryout_full_pinned(mcp_env, monkeypatch: pytest.MonkeyPatch) -> None:
+    from skillgate_ai.run_registry import RunRegistry, RunRequest
+
+    ctx, dest = mcp_env
+    pinned = _pinned_case_ids(dest)
+    seen: dict = {}
+
+    def capture_start(self: RunRegistry, request: RunRequest) -> dict[str, str]:
+        seen["tryout"] = request.tryout
+        seen["checks"] = request.checks
+        return {"id": "exp1", "status": "running"}
+
+    monkeypatch.setattr(RunRegistry, "start", capture_start)
+    out = mcp_tools.check_start(ctx, skill="pdf", case_ids=pinned, tryout=True, no_judge=True)
+    assert seen["tryout"] is True
+    assert seen["checks"]
+    assert out["tryout_reason"] == "explicit"
+    assert out["run_gate"]["kind"] == "tryout"
+
+
+def test_check_start_including_draft_is_tryout(mcp_env, monkeypatch: pytest.MonkeyPatch) -> None:
+    from skillgate_ai.case_pack import load_case_pack, save_case_pack
+    from skillgate_ai.case_pack.models import PackCase
+    from skillgate_ai.run_registry import RunRegistry, RunRequest
+
+    ctx, dest = mcp_env
+    pack = load_case_pack(dest)
+    assert pack is not None
+    draft = PackCase(id="draft-1", status="draft", prompt="draft row")
+    save_case_pack(dest, pack.model_copy(update={"cases": [*pack.cases, draft]}))
+    pinned = _pinned_case_ids(dest)
+    seen: dict = {}
+
+    def capture_start(self: RunRegistry, request: RunRequest) -> dict[str, str]:
+        seen["tryout"] = request.tryout
+        return {"id": "dr1", "status": "running"}
+
+    monkeypatch.setattr(RunRegistry, "start", capture_start)
+    out = mcp_tools.check_start(ctx, skill="pdf", case_ids=[*pinned[:1], "draft-1"], no_judge=True)
+    assert seen["tryout"] is True
+    assert out["tryout_reason"] == "includes_drafts"
+    assert out["run_gate"]["kind"] == "tryout"
+
+
+def test_case_edit_tool_checks_preserve_clear_and_reject_bad_key(mcp_env) -> None:
+    ctx, dest = mcp_env
+    cases_yaml = dest / "evals" / "cases.yaml"
+    mcp_tools.case_add(
+        ctx,
+        skill="pdf",
+        case_id="tc-matrix",
+        prompt="matrix",
+        tool_checks={"must_call": ["ls"]},
+    )
+    unchanged = mcp_tools.case_get(ctx, skill="pdf", case_id="tc-matrix")
+    before_bad = cases_yaml.read_text(encoding="utf-8")
+    with pytest.raises(SkillGateError):
+        mcp_tools.case_edit(ctx, skill="pdf", case_id="tc-matrix", tool_checks={"bad_key": []})
+    assert cases_yaml.read_text(encoding="utf-8") == before_bad
+    mcp_tools.case_edit(ctx, skill="pdf", case_id="tc-matrix", prompt="x")
+    after_omit = mcp_tools.case_get(ctx, skill="pdf", case_id="tc-matrix")
+    assert after_omit["case"]["tool_checks"] == unchanged["case"]["tool_checks"]
+    mcp_tools.case_edit(ctx, skill="pdf", case_id="tc-matrix", prompt="y", tool_checks=None)
+    after_none = mcp_tools.case_get(ctx, skill="pdf", case_id="tc-matrix")
+    assert after_none["case"]["tool_checks"] == unchanged["case"]["tool_checks"]
+    mcp_tools.case_edit(ctx, skill="pdf", case_id="tc-matrix", tool_checks={})
+    cleared = mcp_tools.case_get(ctx, skill="pdf", case_id="tc-matrix")
+    assert cleared["case"]["tool_checks"] is None
+
+
+def test_pack_tool_checks_set_valid_clear_and_reject(mcp_env) -> None:
+    ctx, dest = mcp_env
+    cases_yaml = dest / "evals" / "cases.yaml"
+    set_out = mcp_tools.pack_tool_checks_set(
+        ctx, skill="pdf", tool_checks={"must_not_call": ["rm"]}
+    )
+    assert set_out["tool_checks"] == {"must_not_call": [{"tool": "rm"}]}
+    clear_out = mcp_tools.pack_tool_checks_set(ctx, skill="pdf", tool_checks={})
+    assert clear_out["tool_checks"] is None
+    before = cases_yaml.read_text(encoding="utf-8")
+    with pytest.raises(SkillGateError):
+        mcp_tools.pack_tool_checks_set(ctx, skill="pdf", tool_checks={"bogus": 1})
+    assert cases_yaml.read_text(encoding="utf-8") == before
+
+
+def test_dataset_get_default_compact_no_file_bodies(mcp_env) -> None:
+    ctx, _ = mcp_env
+    out = mcp_tools.dataset_get(ctx, skill="pdf")
+    assert out["include_files"] is False
+    ds = out["dataset"]
+    assert ds["files_included"] is False
+    assert "tool_checks" in ds
+    for case in ds.get("cases") or []:
+        for fx in case.get("fixtures") or []:
+            if not fx.get("missing"):
+                assert "bytes" in fx
+            assert "text" not in fx
+        golden = case.get("golden")
+        if golden and not golden.get("missing"):
+            assert "text" not in golden
+            assert "body" not in golden
+
+
+def test_dataset_get_include_files_has_bodies(mcp_env) -> None:
+    ctx, dest = mcp_env
+    from skillgate_ai.case_pack import dataset_view
+
+    full = mcp_tools.dataset_get(ctx, skill="pdf", include_files=True)
+    assert full["include_files"] is True
+    assert full["dataset"]["files_included"] is True
+    assert full["dataset"] == dataset_view(dest, include_files=True)
+    goldens = [c.get("golden") for c in full["dataset"]["cases"] if c.get("golden")]
+    assert any(g and g.get("body") for g in goldens)
+
+
+def test_case_get_full_case_and_unknown_errors(mcp_env) -> None:
+    ctx, _ = mcp_env
+    full = mcp_tools.case_get(ctx, skill="pdf", case_id="extract-hello")
+    assert full["case"]["id"] == "extract-hello"
+    assert "tool_checks" in full["case"]
+    assert "effective_tool_checks" in full["case"]
+    golden = full["case"].get("golden") or {}
+    assert isinstance(golden.get("body"), str) and golden["body"]
+    fixtures = full["case"].get("fixtures") or []
+    assert fixtures and all("path" in f for f in fixtures)
+    assert any(
+        isinstance(f.get("text"), str) or f.get("kind") == "pdf"
+        for f in fixtures
+        if not f.get("missing")
+    )
+    with pytest.raises(SkillGateError, match="No check named nope"):
+        mcp_tools.case_get(ctx, skill="pdf", case_id="nope")
+
+
+def test_report_latest_overlays_tryout_reason_from_run_meta(mcp_env) -> None:
+    ctx, dest = mcp_env
+    append_eval(
+        dest,
+        run_id="lat1",
+        passed=True,
+        tryout=True,
+        report={"skill": "pdf", "passed": True, "tryout": True},
+    )
+    ctx.run_meta["lat1"] = {"tryout_reason": "subset", "case_ids": ["extract-hello"]}
+    latest = mcp_tools.report_latest(ctx, skill="pdf")
+    run = latest["run"]
+    assert run is not None
+    assert run["run_gate"]["tryout_reason"] == "subset"
+    assert run["tryout_reason"] == "subset"
 
 
 def test_tools_import_without_fastapi_or_mcp_sdk(tmp_path: Path) -> None:
