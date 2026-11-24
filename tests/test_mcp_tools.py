@@ -469,9 +469,7 @@ def test_check_start_subset_forces_tryout_no_gate_move(
         return {"id": "sub1", "status": "running"}
 
     monkeypatch.setattr(RunRegistry, "start", capture_start)
-    out = mcp_tools.check_start(
-        ctx, skill="pdf", case_ids=[pinned[0]], tryout=False, no_judge=True
-    )
+    out = mcp_tools.check_start(ctx, skill="pdf", case_ids=[pinned[0]], tryout=False, no_judge=True)
     assert seen["tryout"] is True
     assert seen["checks"]
     assert out["tryout"] is True
@@ -493,9 +491,7 @@ def test_check_start_explicit_tryout_full_pinned(mcp_env, monkeypatch: pytest.Mo
         return {"id": "exp1", "status": "running"}
 
     monkeypatch.setattr(RunRegistry, "start", capture_start)
-    out = mcp_tools.check_start(
-        ctx, skill="pdf", case_ids=pinned, tryout=True, no_judge=True
-    )
+    out = mcp_tools.check_start(ctx, skill="pdf", case_ids=pinned, tryout=True, no_judge=True)
     assert seen["tryout"] is True
     assert seen["checks"]
     assert out["tryout_reason"] == "explicit"
@@ -520,9 +516,7 @@ def test_check_start_including_draft_is_tryout(mcp_env, monkeypatch: pytest.Monk
         return {"id": "dr1", "status": "running"}
 
     monkeypatch.setattr(RunRegistry, "start", capture_start)
-    out = mcp_tools.check_start(
-        ctx, skill="pdf", case_ids=[*pinned[:1], "draft-1"], no_judge=True
-    )
+    out = mcp_tools.check_start(ctx, skill="pdf", case_ids=[*pinned[:1], "draft-1"], no_judge=True)
     assert seen["tryout"] is True
     assert out["tryout_reason"] == "includes_drafts"
     assert out["run_gate"]["kind"] == "tryout"
@@ -541,9 +535,7 @@ def test_case_edit_tool_checks_preserve_clear_and_reject_bad_key(mcp_env) -> Non
     unchanged = mcp_tools.case_get(ctx, skill="pdf", case_id="tc-matrix")
     before_bad = cases_yaml.read_text(encoding="utf-8")
     with pytest.raises(SkillGateError):
-        mcp_tools.case_edit(
-            ctx, skill="pdf", case_id="tc-matrix", tool_checks={"bad_key": []}
-        )
+        mcp_tools.case_edit(ctx, skill="pdf", case_id="tc-matrix", tool_checks={"bad_key": []})
     assert cases_yaml.read_text(encoding="utf-8") == before_bad
     mcp_tools.case_edit(ctx, skill="pdf", case_id="tc-matrix", prompt="x")
     after_omit = mcp_tools.case_get(ctx, skill="pdf", case_id="tc-matrix")
