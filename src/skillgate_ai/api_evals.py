@@ -159,8 +159,8 @@ def register_eval_routes(app: FastAPI) -> None:
     @app.get("/api/evals/dataset")
     def dataset(skill: str, request: Request) -> dict[str, Any]:
         path = find_skill(state_of(request).root, skill)
-        view = dataset_view(path)
-        return view or {"skill": path.name, "cases": []}
+        view = dataset_view(path, include_files=True)
+        return view or {"skill": path.name, "cases": [], "tool_checks": None}
 
     @app.post("/api/evals/fixture-bind")
     async def fixture_bind(request: Request) -> dict[str, Any]:

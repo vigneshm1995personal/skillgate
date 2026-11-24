@@ -15,7 +15,7 @@ Install `skillgate-ai[mcp]` so `skillgate` is available (typically `~/.local/bin
 | Path | Role |
 | --- | --- |
 | `skills/skillgate-setup` | `doctor`, `validate_skill`, `dataset_scaffold` |
-| `skills/skillgate-dataset` | `dataset_get`, case tools, `case_import` |
+| `skills/skillgate-dataset` | `dataset_get`, `case_get`, case tools, `case_import`, `pack_tool_checks_set` |
 | `skills/skillgate-check` | `check_*`, `report_*` |
 | `mcp.json` / `.mcp.json` | stdio MCP `skillgate` server |
 

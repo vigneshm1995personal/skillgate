@@ -40,6 +40,20 @@ def _client(tmp: Path, monkeypatch) -> TestClient:
     return TestClient(app, base_url="http://127.0.0.1:8765")
 
 
+def test_api_dataset_keeps_full_file_bodies(tmp_path: Path, monkeypatch) -> None:
+    _copy_pack(tmp_path)
+    client = _client(tmp_path, monkeypatch)
+    body = client.get("/api/evals/dataset", params={"skill": "pdf"}).json()
+    assert body["files_included"] is True
+    assert "tool_checks" in body
+    cases = body.get("cases") or []
+    golden_with_body = next(
+        (c for c in cases if c.get("golden") and c["golden"].get("body")),
+        None,
+    )
+    assert golden_with_body is not None
+
+
 def test_status_missing_key_hint_is_ui_wording(tmp_path: Path, monkeypatch) -> None:
     client = _client(tmp_path, monkeypatch)
     data = client.get("/api/status").json()

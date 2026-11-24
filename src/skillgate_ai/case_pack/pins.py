@@ -71,6 +71,7 @@ def pin_checks(skill_path: str | Path, checks: list[dict[str, Any]]) -> CasePack
         cases=list(by_id.values()),
         budgets=existing.budgets if existing else None,
         judge=existing.judge if existing else None,
+        tool_checks=existing.tool_checks if existing else None,
     )
     _reject_missing_seed_cases(pack, root)
     save_case_pack(root, pack)
@@ -108,6 +109,7 @@ def pin_case_ids(skill_path: str | Path, case_ids: list[str]) -> CasePack:
         cases=updated,
         budgets=pack.budgets,
         judge=pack.judge,
+        tool_checks=pack.tool_checks,
     )
     save_case_pack(root, out)
     return out

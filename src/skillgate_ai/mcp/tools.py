@@ -9,15 +9,23 @@ from typing import Any, Literal
 from skillgate_ai import __version__
 from skillgate_ai.api_payloads import history_row_to_run, scrub_browser_payload
 from skillgate_ai.case_import import apply_case_import
-from skillgate_ai.case_pack import dataset_view, skill_has_dataset
+from skillgate_ai.case_pack import case_view, dataset_view, skill_has_dataset
 from skillgate_ai.catalog import catalog_entries
 from skillgate_ai.config import get_llm_config, load_env, missing_key_error
+from skillgate_ai.deploy_gate import run_gate_summary
 from skillgate_ai.errors import SkillGateError
 from skillgate_ai.history import latest_eval, load_history
 from skillgate_ai.ingest import ingest_skill
 from skillgate_ai.keys import key_presence
 from skillgate_ai.mcp.context import McpContext, resolve_pack, tool_error_payload
-from skillgate_ai.pack_edit import add_pack_case, edit_pack_case, remove_pack_case, tryout_checks
+from skillgate_ai.pack_edit import (
+    _UNSET,
+    add_pack_case,
+    edit_pack_case,
+    remove_pack_case,
+    set_pack_tool_checks,
+    tryout_checks,
+)
 from skillgate_ai.paths import is_skill_pack
 from skillgate_ai.run_lock import BUSY_HINT, project_run_lock
 from skillgate_ai.run_registry import BUSY_MESSAGE, RunBusyError, RunRequest
@@ -25,6 +33,33 @@ from skillgate_ai.scaffold import scaffold_trigger_cases
 from skillgate_ai.workspace import new_skill
 
 _MAX_IMPORT_BYTES = 2 * 1024 * 1024
+
+
+def _compact(pack: Path) -> dict[str, Any] | None:
+    return dataset_view(pack, include_files=False)
+
+
+def _requested_case_ids(case_ids: list[str] | None) -> list[str] | None:
+    if case_ids is None:
+        return None
+    from skillgate_ai.pack_schema import case_id_slug
+
+    seen: set[str] = set()
+    out: list[str] = []
+    for raw in case_ids:
+        slug = case_id_slug(str(raw))
+        if slug and slug not in seen:
+            seen.add(slug)
+            out.append(slug)
+    return out if out else None
+
+
+def _meta_reason(ctx: McpContext, run_id: str) -> str | None:
+    meta = ctx.run_meta.get(run_id)
+    if not meta:
+        return None
+    reason = meta.get("tryout_reason")
+    return str(reason) if reason else None
 
 
 def _history_row(ctx: McpContext, run_id: str, skill: str | None) -> tuple[dict[str, Any], Path]:
@@ -91,7 +126,7 @@ def dataset_scaffold(
         raise SkillGateError("Pass one of skill or name.")
     if name:
         path = new_skill(ctx.root, name)
-        view = dataset_view(path)
+        view = _compact(path)
         return {
             "ok": True,
             "path": str(path),
@@ -109,16 +144,35 @@ def dataset_scaffold(
         "ok": True,
         "path": str(pack),
         "created": False,
-        "dataset": dataset_view(pack),
+        "dataset": _compact(pack),
     }
 
 
-def dataset_get(ctx: McpContext, *, skill: str) -> dict[str, Any]:
+def dataset_get(ctx: McpContext, *, skill: str, include_files: bool = False) -> dict[str, Any]:
     pack = resolve_pack(ctx, skill)
-    view = dataset_view(pack)
+    view = dataset_view(pack, include_files=include_files)
     if view is None:
         raise SkillGateError("Not a skill folder.")
-    return {"path": str(pack), "dataset": view}
+    return {"path": str(pack), "include_files": include_files, "dataset": view}
+
+
+def case_get(ctx: McpContext, *, skill: str, case_id: str) -> dict[str, Any]:
+    from skillgate_ai.pack_schema import case_id_slug
+
+    pack = resolve_pack(ctx, skill)
+    view = case_view(pack, case_id)
+    if view is None:
+        raise SkillGateError(f"No check named {case_id_slug(case_id)}.")
+    return {"path": str(pack), **view}
+
+
+def pack_tool_checks_set(
+    ctx: McpContext, *, skill: str, tool_checks: dict[str, Any] | None
+) -> dict[str, Any]:
+    pack = resolve_pack(ctx, skill)
+    updated = set_pack_tool_checks(pack, tool_checks)
+    sparse = updated.tool_checks.to_sparse_dict() if updated.tool_checks else None
+    return {"ok": True, "tool_checks": sparse, "dataset": _compact(pack)}
 
 
 def case_add(
@@ -133,6 +187,7 @@ def case_add(
     inputs: list[str] | None = None,
     output_optional: bool = False,
     force: bool = False,
+    tool_checks: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     pack = resolve_pack(ctx, skill)
     from skillgate_ai.case_pack import load_case_pack
@@ -149,6 +204,7 @@ def case_add(
         inputs=inputs,
         force=force,
         output_optional=output_optional,
+        tool_checks=tool_checks,
     )
     loaded_after = load_case_pack(pack)
     after = {c.id for c in loaded_after.cases} if loaded_after is not None else set()
@@ -160,7 +216,7 @@ def case_add(
         resolved_id = case_id_slug(case_id)
     if resolved_id is None:
         raise SkillGateError("Could not determine new case id.")
-    return {"ok": True, "case_id": resolved_id, "dataset": dataset_view(pack)}
+    return {"ok": True, "case_id": resolved_id, "dataset": _compact(pack)}
 
 
 def case_edit(
@@ -172,8 +228,9 @@ def case_edit(
     expected: str | None = None,
     output_path: str | None = None,
     output_optional: bool | None = None,
+    tool_checks: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    if all(v is None for v in (prompt, expected, output_path, output_optional)):
+    if all(v is None for v in (prompt, expected, output_path, output_optional, tool_checks)):
         raise SkillGateError("Nothing to change.")
     from skillgate_ai.pack_schema import case_id_slug
 
@@ -186,8 +243,9 @@ def case_edit(
         expected=expected,
         output_path=output_path,
         output_optional=output_optional,
+        tool_checks=_UNSET if tool_checks is None else tool_checks,
     )
-    return {"ok": True, "case_id": slug, "dataset": dataset_view(pack)}
+    return {"ok": True, "case_id": slug, "dataset": _compact(pack)}
 
 
 def case_remove(ctx: McpContext, *, skill: str, case_id: str) -> dict[str, Any]:
@@ -196,7 +254,7 @@ def case_remove(ctx: McpContext, *, skill: str, case_id: str) -> dict[str, Any]:
     pack = resolve_pack(ctx, skill)
     slug = case_id_slug(case_id)
     remove_pack_case(pack, case_id)
-    return {"ok": True, "removed": slug, "dataset": dataset_view(pack)}
+    return {"ok": True, "removed": slug, "dataset": _compact(pack)}
 
 
 def case_import(
@@ -229,7 +287,7 @@ def case_import(
         "rows": [asdict(r) for r in plan.rows],
         "warnings": plan.warnings,
         "applied": applied,
-        "dataset": dataset_view(pack),
+        "dataset": _compact(pack),
     }
 
 
@@ -252,10 +310,28 @@ def check_start(
         raise RunBusyError(BUSY_MESSAGE, hint=BUSY_HINT)
     with project_run_lock(ctx.root):
         pass
+    requested = _requested_case_ids(case_ids)
     checks: list[dict[str, Any]] | None = None
-    if case_ids:
-        checks = [c for cid in case_ids for c in tryout_checks(pack, cid)]
-        tryout = True
+    tryout_reason: str | None = "explicit" if tryout else None
+    if requested:
+        from skillgate_ai.case_pack import load_case_pack
+
+        loaded = load_case_pack(pack)
+        if loaded is None:
+            raise SkillGateError("This skill has no checks yet.")
+        known = {c.id for c in loaded.cases}
+        unknown = [cid for cid in requested if cid not in known]
+        if unknown:
+            raise SkillGateError(f"No check named {unknown[0]}.")
+        pinned = {c.id for c in loaded.cases if c.status == "pinned"}
+        wanted = set(requested)
+        if not tryout and wanted == pinned:
+            checks = None
+        else:
+            checks = [c for cid in requested for c in tryout_checks(pack, cid)]
+            if not tryout:
+                tryout_reason = "includes_drafts" if wanted - pinned else "subset"
+            tryout = True
     overrides = {"model": model, "timeout_sec": timeout_sec}
     config = {k: v for k, v in overrides.items() if v is not None}
     started = ctx.registry.start(
@@ -269,11 +345,18 @@ def check_start(
             source="mcp",
         )
     )
+    run_id = started["id"]
+    ctx.run_meta[run_id] = {"tryout_reason": tryout_reason, "case_ids": requested}
+    row = {"status": "running", "tryout": tryout}
+    gate = run_gate_summary(row, tryout_reason=tryout_reason)
     return {
-        "id": started["id"],
+        "id": run_id,
         "status": started["status"],
         "skill": pack.name,
         "tryout": tryout,
+        "tryout_reason": tryout_reason,
+        "case_ids": requested,
+        "run_gate": gate,
     }
 
 
@@ -290,9 +373,13 @@ def check_poll(
             record = history_row_to_run(row, pack)
         except SkillGateError:
             raise SkillGateError(f"Unknown run {run_id}") from None
-    out = scrub_browser_payload(record)
+    out = dict(scrub_browser_payload(record))
+    reason = _meta_reason(ctx, run_id)
+    out["run_gate"] = run_gate_summary(out, tryout_reason=reason)
+    if reason is not None:
+        out["run_gate"] = {**out["run_gate"], "tryout_reason": reason}
+    out["tryout_reason"] = out["run_gate"].get("tryout_reason")
     if not include_report and out.get("status") != "running":
-        out = dict(out)
         out["report"] = None
         out["report_omitted"] = True
     return out
@@ -324,7 +411,13 @@ def report_get(
     skill: str | None = None,
 ) -> dict[str, Any]:
     row, skill_path = _history_row(ctx, run_id, skill)
-    return history_row_to_run(row, skill_path)
+    out = history_row_to_run(row, skill_path)
+    reason = _meta_reason(ctx, run_id)
+    if reason is not None:
+        out = dict(out)
+        out["run_gate"] = {**out["run_gate"], "tryout_reason": reason}
+        out["tryout_reason"] = reason
+    return out
 
 
 def doctor(ctx: McpContext) -> dict[str, Any]:

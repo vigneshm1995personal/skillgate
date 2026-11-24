@@ -169,3 +169,44 @@ def test_judge_set_and_remove_question(tmp_path: Path, monkeypatch) -> None:
     pack = load_case_pack(dest)
     ids = [q.id for q in (pack.judge.extra_questions if pack and pack.judge else [])]
     assert "stamps" not in ids
+
+
+def _two_pack_workspace(tmp_path: Path) -> tuple[Path, Path, Path]:
+    pdf = _skill(tmp_path)
+    alpha = tmp_path / "skills" / "alpha"
+    shutil.copytree(ROOT / "skills" / "pdf", alpha)
+    for pack in (pdf, alpha):
+        hist = pack / "evals" / "history"
+        if hist.is_dir():
+            for path in hist.glob("*.jsonl"):
+                path.unlink()
+    return tmp_path, pdf, alpha
+
+
+def test_history_without_pack_uses_cwd_pack(tmp_path: Path, monkeypatch) -> None:
+    workspace, pdf, alpha = _two_pack_workspace(tmp_path)
+    append_eval(alpha, run_id="alpha-run", passed=True, report={"skill": "alpha", "passed": True})
+    append_eval(pdf, run_id="pdf-run", passed=True, report={"skill": "pdf", "passed": True})
+    monkeypatch.setenv("SKILLGATE_ROOT", str(workspace))
+    monkeypatch.chdir(alpha)
+    result = runner.invoke(app, ["history", "--json"])
+    assert result.exit_code == 0, result.output
+    import json
+
+    rows = json.loads(result.stdout)
+    ids = [row["run_id"] for row in rows]
+    assert ids == ["alpha-run"]
+
+
+def test_history_explicit_pack_wins_over_cwd(tmp_path: Path, monkeypatch) -> None:
+    workspace, pdf, alpha = _two_pack_workspace(tmp_path)
+    append_eval(pdf, run_id="pdf-run", passed=True, report={"skill": "pdf", "passed": True})
+    append_eval(alpha, run_id="alpha-run", passed=True, report={"skill": "alpha", "passed": True})
+    monkeypatch.setenv("SKILLGATE_ROOT", str(workspace))
+    monkeypatch.chdir(alpha)
+    result = runner.invoke(app, ["history", "--pack", str(pdf), "--json"])
+    assert result.exit_code == 0, result.output
+    import json
+
+    ids = [row["run_id"] for row in json.loads(result.stdout)]
+    assert ids == ["pdf-run"]

@@ -103,10 +103,16 @@ def _read_omitted_key() -> str:
     return sys.stdin.read()
 
 
-def _resolve_pack_arg(pack: Path | None, *, default_pdf: bool = True) -> Path:
+def _resolve_pack_arg(
+    pack: Path | None, *, default_pdf: bool = True, prefer_cwd_pack: bool = False
+) -> Path:
+    from skillgate_ai.paths import nearest_skill_pack
+
     root = _boot()
     if pack is not None:
         dest = resolve_user_path(pack, root)
+    elif prefer_cwd_pack and (found := nearest_skill_pack()) is not None:
+        dest = found
     elif is_skill_pack(root):
         dest = root
     elif default_pdf:

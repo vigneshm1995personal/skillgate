@@ -420,3 +420,43 @@ def test_readme_links_are_absolute() -> None:
         for part in match.group(1).split(","):
             url = part.strip().split()[0]
             assert _ok(url), url
+
+
+def test_mcp_docs_explain_ui_extra() -> None:
+    text = (ROOT / "docs" / "mcp.md").read_text(encoding="utf-8")
+    assert "skillgate-ai[mcp,ui]" in text
+    assert "skillgate-ai[all]" in text
+    assert "skillgate ui" in text
+    assert "[mcp]" in text
+
+
+MCP_DOC_TOOLS = (
+    "validate_skill",
+    "dataset_scaffold",
+    "dataset_get",
+    "case_get",
+    "case_add",
+    "case_edit",
+    "case_remove",
+    "case_import",
+    "pack_tool_checks_set",
+    "check_start",
+    "check_poll",
+    "check_cancel",
+    "report_latest",
+    "report_get",
+    "doctor",
+)
+
+
+def test_mcp_docs_list_all_tools() -> None:
+    text = (ROOT / "docs" / "mcp.md").read_text(encoding="utf-8")
+    for name in MCP_DOC_TOOLS:
+        assert f"`{name}`" in text
+
+
+def test_mcp_docs_explain_tryout_vs_official() -> None:
+    text = (ROOT / "docs" / "mcp.md").read_text(encoding="utf-8")
+    assert "## Official runs vs tryouts" in text
+    assert "run_gate" in text
+    assert "tryout_reason" in text

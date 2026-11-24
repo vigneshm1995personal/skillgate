@@ -52,7 +52,10 @@ def _print_history_rows(rows: list) -> None:
         ts = str(row.get("ts") or "")
         date = ts[:10] if ts else ""
         date_bit = f"  {date}" if date else ""
-        _cli.console.print(f"{row.get('run_id')}  {gate}{counts}{date_bit}  {who}")
+        from skillgate_ai.deploy_gate import row_is_tryout
+
+        tryout_suffix = "  tryout" if row_is_tryout(row, report if report else None) else ""
+        _cli.console.print(f"{row.get('run_id')}  {gate}{counts}{date_bit}  {who}{tryout_suffix}")
 
 
 def _print_skill_versions(pack: Path) -> None:

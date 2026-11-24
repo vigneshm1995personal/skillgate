@@ -21,6 +21,7 @@ from skillgate_ai.deploy_gate import (
     pack_gate_decision,
     row_is_tryout,
     run_gate_decision,
+    run_gate_summary,
 )
 from skillgate_ai.eval_config import customer_config_label
 from skillgate_ai.history import load_deploys, load_history
@@ -276,6 +277,7 @@ def history_row_to_run(row: dict[str, Any], skill_path: Path) -> dict[str, Any]:
             "completed_count": (report or {}).get("task_count"),
             "task_count": (report or {}).get("task_count"),
             "tryout": tryout,
+            "run_gate": run_gate_summary(row),
         }
     )
 

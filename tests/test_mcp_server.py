@@ -19,10 +19,12 @@ EXPECTED_TOOLS = frozenset(
         "validate_skill",
         "dataset_scaffold",
         "dataset_get",
+        "case_get",
         "case_add",
         "case_edit",
         "case_remove",
         "case_import",
+        "pack_tool_checks_set",
         "check_start",
         "check_poll",
         "check_cancel",
@@ -41,10 +43,24 @@ def ctx(tmp_path: Path) -> McpContext:
     return McpContext.for_root(tmp_path)
 
 
-def test_build_server_registers_thirteen_tools(ctx: McpContext) -> None:
+def test_build_server_registers_fifteen_tools(ctx: McpContext) -> None:
     server = build_server(ctx)
     names = {tool.name for tool in server._tool_manager.list_tools()}
     assert names == EXPECTED_TOOLS
+
+
+def test_dataset_get_schema_defaults_compact(ctx: McpContext) -> None:
+    server = build_server(ctx)
+    tools = {t.name: t for t in server._tool_manager.list_tools()}
+    props = tools["dataset_get"].parameters.get("properties") or {}
+    assert props["include_files"]["default"] is False
+
+
+def test_case_edit_schema_has_tool_checks(ctx: McpContext) -> None:
+    server = build_server(ctx)
+    tools = {t.name: t for t in server._tool_manager.list_tools()}
+    props = tools["case_edit"].parameters.get("properties") or {}
+    assert "tool_checks" in props
 
 
 def test_tool_error_maps_skillgate_error_to_is_error(ctx: McpContext) -> None:

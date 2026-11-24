@@ -38,7 +38,7 @@ def mcp_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     yield ctx, dest
 
 
-def _exercise_all_thirteen_tools(
+def _exercise_all_tools(
     ctx: McpContext,
     dest: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -51,6 +51,8 @@ def _exercise_all_thirteen_tools(
     outputs.append(mcp_tools.validate_skill(ctx, skill="pdf"))
     outputs.append(mcp_tools.dataset_scaffold(ctx, name="all-thirteen"))
     outputs.append(mcp_tools.dataset_get(ctx, skill="pdf"))
+    outputs.append(mcp_tools.case_get(ctx, skill="pdf", case_id="extract-hello"))
+    outputs.append(mcp_tools.pack_tool_checks_set(ctx, skill="pdf", tool_checks={}))
     outputs.append(
         mcp_tools.case_add(
             ctx, skill="pdf", prompt="all thirteen tools", case_id="all-thirteen-case"
@@ -97,7 +99,7 @@ def _exercise_all_thirteen_tools(
     )
     outputs.append(mcp_tools.report_get(ctx, run_id="all13-hist", skill="pdf"))
     outputs.append(mcp_tools.doctor(ctx))
-    assert len(outputs) == 13
+    assert len(outputs) == 15
     return outputs
 
 
@@ -297,6 +299,8 @@ def test_check_start_case_ids_forces_tryout(mcp_env, monkeypatch: pytest.MonkeyP
     assert seen["tryout"] is True
     assert seen["checks"]
     assert out["tryout"] is True
+    assert out["tryout_reason"] == "subset"
+    assert out["run_gate"]["kind"] == "tryout"
 
 
 def test_check_start_poll_until_done_with_mocked_run_eval(
@@ -400,14 +404,14 @@ def test_no_key_values_in_any_tool_output(mcp_env, monkeypatch: pytest.MonkeyPat
     monkeypatch.setenv("OPENAI_API_KEY", sentinel)
     monkeypatch.setenv("SKILLGATE_OPENAI_API_KEY", sentinel)
     ctx, dest = mcp_env
-    outputs = _exercise_all_thirteen_tools(ctx, dest, monkeypatch)
+    outputs = _exercise_all_tools(ctx, dest, monkeypatch)
     blob = json.dumps(outputs)
     assert sentinel not in blob
 
 
 def test_tools_write_nothing_to_stdout(mcp_env, monkeypatch: pytest.MonkeyPatch, capsys) -> None:
     ctx, dest = mcp_env
-    _exercise_all_thirteen_tools(ctx, dest, monkeypatch)
+    _exercise_all_tools(ctx, dest, monkeypatch)
     out, err = capsys.readouterr()
     assert out == ""
     assert err == ""

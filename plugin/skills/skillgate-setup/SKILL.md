@@ -37,22 +37,24 @@ Arguments: `skill` (existing) or `name` (new skill under `skills/`), optional `f
 2. `validate_skill` on the target pack.
 3. `dataset_scaffold` when adding a new skill or empty dataset.
 
-## All thirteen MCP tools
+## All fifteen MCP tools
 
 | Tool | Purpose |
 | --- | --- |
-| `doctor` | Agents, keys (booleans), version |
-| `validate_skill` | Strict SKILL.md + cases |
-| `dataset_scaffold` | New skill or starter cases |
-| `dataset_get` | Eval dataset view (see skillgate-dataset) |
-| `case_add` | Add one check |
-| `case_edit` | Edit a check |
+| `validate_skill` | Strict SKILL.md + cases validation |
+| `dataset_scaffold` | Create a new skill or starter cases |
+| `dataset_get` | Compact dataset view (paths, sizes, tool_checks); `include_files: true` for file text |
+| `case_get` | One case in full (file text, expected output, tool_checks) |
+| `case_add` | Add one check (optional `tool_checks`) |
+| `case_edit` | Edit a check; `tool_checks`: omit = unchanged, `{}` = clear, object = replace |
 | `case_remove` | Remove a check |
-| `case_import` | Bulk CSV / JSONL / YAML |
-| `check_start` | Start a check (see skillgate-check) |
-| `check_poll` | Poll run status |
+| `case_import` | Bulk import CSV / JSONL / YAML |
+| `pack_tool_checks_set` | Replace pack-level `tool_checks` (`{}` clears) |
+| `check_start` | Start a check (one at a time) |
+| `check_poll` | Poll run status (includes `run_gate`) |
 | `check_cancel` | Kill or skip a running check |
 | `report_latest` | Latest saved run for a skill |
-| `report_get` | One history run by id |
+| `report_get` | One history run (`history show --json` shape) |
+| `doctor` | Agents, key presence (booleans), version |
 
 Headless Claude Code: `claude -p "..." --allowedTools mcp__skillgate` (or per-tool `mcp__skillgate__doctor`).
