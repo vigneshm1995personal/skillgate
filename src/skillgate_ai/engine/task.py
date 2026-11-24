@@ -161,10 +161,27 @@ def _raise_if_run_blocked(result: HarnessResult, *, timeout: int) -> HarnessResu
             hint = "Wait until the agent quota resets, then retry."
         else:
             hint = "Pick an available model, then retry."
+        diagnostics = None
+        if auth_failure_message(stdout, stderr, transcript):
+            from skillgate_ai.harness.diagnostics import AuthFailureCapture, build_auth_diagnostics
+            from skillgate_ai.sandbox import _sandbox_env
+
+            capture = AuthFailureCapture(
+                harness="unknown",
+                returncode=result.returncode,
+                command=[],
+                child_env=_sandbox_env(None),
+                prompt="",
+                stdout=stdout,
+                stderr=stderr,
+                transcript=transcript,
+            )
+            diagnostics = build_auth_diagnostics(capture)
         raise HarnessError(
             run_block_msg,
             hint=hint,
             exit_code=2,
+            diagnostics=diagnostics,
         )
     return result
 

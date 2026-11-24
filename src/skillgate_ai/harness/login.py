@@ -6,6 +6,7 @@ import os
 import signal
 import subprocess
 import threading
+from collections.abc import Callable
 from typing import Any
 
 import skillgate_ai.harness.auth as auth
@@ -92,6 +93,7 @@ def run_official_login(agent: str, cfg: LLMConfig) -> dict[str, str | bool]:
             "command": "skillgate login",
             "message": "Pass an agent id: cursor, claude, or codex.",
         }
+    probe: Callable[..., bool]
     if kind == "cursor":
         binary = bins._resolve_agent_bin(cfg.cursor_agent_bin)
         argv = [binary, "login"] if binary else []

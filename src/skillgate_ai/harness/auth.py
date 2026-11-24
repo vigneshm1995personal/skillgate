@@ -77,8 +77,14 @@ def _cursor_login_status_authenticated(returncode: int, stdout: str, stderr: str
     return "account:" in text
 
 
-def _probe_cursor_login_status(binary: str) -> bool:
-    """Host `cursor-agent status` / `agent status` only. Never read auth files."""
+def _probe_cursor_login_status(binary: str, *, env: dict[str, str] | None = None) -> bool:
+    """`cursor-agent status` only.
+
+    ``env=None`` uses host env (isolated session); else use the exact child env dict.
+    """
+    run_kwargs = isolated_kwargs()
+    if env is not None:
+        run_kwargs["env"] = env
     try:
         proc = subprocess.run(  # noqa: S603 - binary resolved via harness.bins; fixed status subcommand
             [binary, "status"],
@@ -86,7 +92,7 @@ def _probe_cursor_login_status(binary: str) -> bool:
             text=True,
             timeout=_CURSOR_LOGIN_STATUS_TIMEOUT_SEC,
             check=False,
-            **isolated_kwargs(),
+            **run_kwargs,
         )
     except (OSError, subprocess.TimeoutExpired):
         return False
@@ -97,7 +103,9 @@ def _cursor_session_ok(cfg: LLMConfig) -> bool:
     binary = bins._resolve_agent_bin(cfg.cursor_agent_bin)
     if binary is None:
         return False
-    return _probe_cursor_login_status(binary)
+    from skillgate_ai.harness.cursor_env import cursor_runner_child_env
+
+    return _probe_cursor_login_status(binary, env=cursor_runner_child_env(cfg))
 
 
 def _cursor_ready(cfg: LLMConfig) -> bool:

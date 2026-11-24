@@ -8,10 +8,44 @@ import pytest
 
 from skillgate_ai.config import get_llm_config
 from skillgate_ai.demo_files import ensure_demo_pdfs
+from skillgate_ai.errors import HarnessError, error_payload
 from skillgate_ai.gate import run_check
 from skillgate_ai.harness import CursorAgentHarness, live_harness_or_error
 from skillgate_ai.keys import set_vault_key
 from skillgate_ai.paths import resolve_user_path
+
+
+def test_exit_with_error_json_includes_auth_diagnostics(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    import typer
+
+    from skillgate_ai.cli.gate_output import _exit_with_error
+
+    diag = {"kind": "auth_failure", "exit_code": 2}
+    exc = HarnessError(
+        "The agent is not signed in.",
+        hint="Run `skillgate login`.",
+        exit_code=2,
+        diagnostics=diag,
+    )
+    with pytest.raises(typer.Exit) as caught:
+        _exit_with_error(exc, machine=True)
+    assert caught.value.exit_code == 2
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["auth_diagnostics"]["kind"] == "auth_failure"
+
+
+def test_error_payload_includes_auth_diagnostics() -> None:
+    exc = HarnessError(
+        "The agent is not signed in.",
+        hint="Run `skillgate login`.",
+        exit_code=2,
+        diagnostics={"kind": "auth_failure", "exit_code": 2},
+    )
+    payload = error_payload(exc)
+    assert payload["auth_diagnostics"]["kind"] == "auth_failure"
+    assert "message" in payload
 
 
 def test_gate_without_key_exits_2(project_root: Path) -> None:

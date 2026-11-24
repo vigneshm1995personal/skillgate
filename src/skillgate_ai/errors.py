@@ -77,6 +77,26 @@ class AuthorError(SkillGateError):
 class HarnessError(SkillGateError):
     """Cursor Agent / Codex CLI / LLM / sandbox failed to start or finish."""
 
+    def __init__(
+        self,
+        message: str,
+        hint: str | None = None,
+        *,
+        exit_code: int | None = None,
+        diagnostics: dict[str, Any] | None = None,
+    ) -> None:
+        super().__init__(message, hint, exit_code=exit_code)
+        self.diagnostics = diagnostics
+
+
+def error_payload(exc: SkillGateError) -> dict[str, Any]:
+    """CLI / MCP error dict. Includes sanitized auth diagnostics when present."""
+    payload: dict[str, Any] = {"message": exc.message, "hint": exc.hint}
+    diagnostics = getattr(exc, "diagnostics", None)
+    if isinstance(diagnostics, dict) and diagnostics:
+        payload["auth_diagnostics"] = diagnostics
+    return payload
+
 
 AGENT_TIMEOUT_MESSAGE = "The agent timed out. This check cannot run."
 
