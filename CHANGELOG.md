@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.7.19
+
+- MCP: compact `dataset_get` and `case_get` responses; `case_add` and `case_edit` accept pack/case `tool_checks`; pack history shows cwd; clearer `run_gate` / tryout messaging. (#93)
+- Harness: Cursor CLI auth diagnostics and sandbox environment parity with local runs. (#94)
+- Gate: deterministic tool checks that satisfy overlapping judge checks now yield pass or needs-review instead of a false red; `check_poll` uses disk-backed run status with heartbeat and orphan detection. (#95)
+- Docs: `docs/mcp.md` — full MCP server guide (15 tools, client setup, workflows). (#96)
+
 ## 0.7.18
 
 - Tool-call checks: pack and case `tool_checks` declare `must_call`, `must_not_call`, and consequential-tool policies, scored from `calls.log` and spans. A failed tool check makes the gate red even when the judge passes. Shell rules match on the command name, so an echoed command does not count as a call; `azd up`, `azd_up`, and `shell:azd_up` are treated as the same tool. (#91)

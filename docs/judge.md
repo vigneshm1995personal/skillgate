@@ -141,20 +141,20 @@ A red names the failing check and includes the judge's reason. Example: `Got the
 - uses: vigneshm1995personal/skillgate@v1
   with:
     path: skills/pdf
-    version: "0.7.18"
+    version: "0.7.19"
     judge: jev
   env:
     SKILLGATE_JEV_API_KEY: ${{ secrets.SKILLGATE_JEV_API_KEY }}
 ```
 
-Pin `version: "0.7.18"` (same behavior as 0.7.12; do not use 0.7.13 or 0.7.14). Unset `version` only if you accept whatever PyPI lists as latest. The action reads `SKILLGATE_*` variables and does not print them. It does not switch to another decision model. Do not add a required scoring secret to merge CI.
+Pin `version: "0.7.19"` (same behavior as 0.7.12; do not use 0.7.13 or 0.7.14). Unset `version` only if you accept whatever PyPI lists as latest. The action reads `SKILLGATE_*` variables and does not print them. It does not switch to another decision model. Do not add a required scoring secret to merge CI.
 
 A manual install still works:
 
 ```yaml
 - uses: actions/setup-python@v5
   with: { python-version: "3.12" }
-- run: pip install skillgate-ai==0.7.18
+- run: pip install skillgate-ai==0.7.19
 - run: skillgate check . --key-env DECISION_MODEL_API_KEY
   env:
     DECISION_MODEL_API_KEY: ${{ secrets.DECISION_MODEL_API_KEY }}
