@@ -29,6 +29,7 @@ from skillgate_ai.pack_edit import (
 from skillgate_ai.paths import is_skill_pack
 from skillgate_ai.run_lock import BUSY_HINT, project_run_lock
 from skillgate_ai.run_registry import BUSY_MESSAGE, RunBusyError, RunRequest
+from skillgate_ai.run_status import assert_valid_run_id, find_status_file, record_from_status
 from skillgate_ai.scaffold import scaffold_trigger_cases
 from skillgate_ai.workspace import new_skill
 
@@ -56,10 +57,37 @@ def _requested_case_ids(case_ids: list[str] | None) -> list[str] | None:
 
 def _meta_reason(ctx: McpContext, run_id: str) -> str | None:
     meta = ctx.run_meta.get(run_id)
-    if not meta:
+    if meta:
+        reason = meta.get("tryout_reason")
+        return str(reason) if reason else None
+    found = find_status_file(ctx.root, run_id)
+    if found is None:
         return None
-    reason = meta.get("tryout_reason")
-    return str(reason) if reason else None
+    payload, _pack = found
+    disk = payload.get("meta")
+    if isinstance(disk, dict):
+        reason = disk.get("tryout_reason")
+        return str(reason) if reason else None
+    return None
+
+
+def _resolve_run_record(ctx: McpContext, run_id: str) -> dict[str, Any]:
+    assert_valid_run_id(run_id)
+    record = ctx.registry.get(run_id)
+    if record is not None:
+        return record
+    try:
+        row, pack = _history_row(ctx, run_id, None)
+        return history_row_to_run(row, pack)
+    except SkillGateError:
+        found = find_status_file(ctx.root, run_id)
+        if found is None:
+            raise SkillGateError(f"Unknown run {run_id}") from None
+        payload, _pack = found
+        record = record_from_status(payload)
+        if record is None:
+            raise SkillGateError(f"Unknown run {run_id}") from None
+        return record
 
 
 def _history_row(ctx: McpContext, run_id: str, skill: str | None) -> tuple[dict[str, Any], Path]:
@@ -346,7 +374,9 @@ def check_start(
         )
     )
     run_id = started["id"]
-    ctx.run_meta[run_id] = {"tryout_reason": tryout_reason, "case_ids": requested}
+    meta = {"tryout_reason": tryout_reason, "case_ids": requested}
+    ctx.run_meta[run_id] = meta
+    ctx.registry.set_run_meta(run_id, meta)
     row = {"status": "running", "tryout": tryout}
     gate = run_gate_summary(row, tryout_reason=tryout_reason)
     return {
@@ -366,13 +396,7 @@ def check_poll(
     run_id: str,
     include_report: bool = False,
 ) -> dict[str, Any]:
-    record = ctx.registry.get(run_id)
-    if record is None:
-        try:
-            row, pack = _history_row(ctx, run_id, None)
-            record = history_row_to_run(row, pack)
-        except SkillGateError:
-            raise SkillGateError(f"Unknown run {run_id}") from None
+    record = _resolve_run_record(ctx, run_id)
     out = dict(scrub_browser_payload(record))
     reason = _meta_reason(ctx, run_id)
     out["run_gate"] = run_gate_summary(out, tryout_reason=reason)

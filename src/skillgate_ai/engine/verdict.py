@@ -55,15 +55,18 @@ def _resolve_task_spec(skill_root: Path, pack: Any, case: Any):
 
 
 def _score_rows(scores: list[Score]) -> list[ScorerRow]:
-    return [
-        {
+    rows: list[ScorerRow] = []
+    for item in scores:
+        row: ScorerRow = {
             "scorer": item.scorer,
             "passed": item.passed,
             "headline": item.headline,
             "detail": item.detail,
         }
-        for item in scores
-    ]
+        if item.facts:
+            row["facts"] = item.facts
+        rows.append(row)
+    return rows
 
 
 def _run_outcome_judge(

@@ -18,6 +18,7 @@ from skillgate_ai.errors import SkillGateError, error_payload, timeout_harness_e
 from skillgate_ai.gate import run_check
 from skillgate_ai.live import create_control, drop_control, get_control
 from skillgate_ai.report import progress_to_dict, report_to_dict
+from skillgate_ai.run_status import persist_run_status, start_heartbeat
 
 RunRecord = dict[str, Any]
 
@@ -78,12 +79,20 @@ class RunRegistry:
         self.lock = lock if lock is not None else threading.Lock()
         self._busy_pred = busy
         self._threads: dict[str, threading.Thread] = {}
+        self._heartbeat_stop: dict[str, threading.Event] = {}
+        self._run_meta: dict[str, dict[str, Any]] = {}
 
     def busy(self) -> bool:
         if self._busy_pred is not None:
             return self._busy_pred()
         with self.lock:
             return any(record.get("status") == "running" for record in self.runs.values())
+
+    def set_run_meta(self, run_id: str, meta: dict[str, Any]) -> None:
+        self._run_meta[run_id] = dict(meta)
+        record = self.runs.get(run_id)
+        if record is not None:
+            persist_run_status(record["skill_path"], run_id, record, meta=meta)
 
     def start(self, request: RunRequest) -> dict[str, str]:
         if self.busy():
@@ -115,6 +124,10 @@ class RunRegistry:
         }
         with self.lock:
             self.runs[run_id] = seed
+        persist_run_status(request.skill_path, run_id, seed)
+        stop = threading.Event()
+        self._heartbeat_stop[run_id] = stop
+        start_heartbeat(request.skill_path, run_id, stop=stop)
         create_control(run_id)
         thread = threading.Thread(
             target=self._work,
@@ -169,6 +182,12 @@ class RunRegistry:
                 record["task_count"] = payload.get("task_count")
                 record["current_task_id"] = payload.get("current_task_id")
                 record["harness"] = payload.get("harness") or record.get("harness")
+                persist_run_status(
+                    request.skill_path,
+                    run_id,
+                    record,
+                    meta=self._run_meta.get(run_id),
+                )
 
             harness = resolve_harness(config, request.harness)
             result = run_check(
@@ -212,6 +231,12 @@ class RunRegistry:
                 }
             )
             attach_stamped_config(record, report)
+            persist_run_status(
+                request.skill_path,
+                run_id,
+                record,
+                meta=self._run_meta.get(run_id),
+            )
         except Exception as exc:  # noqa: BLE001 — surface to the poller
             exit_code: int | None
             blocked = timeout_harness_error(exc)
@@ -238,5 +263,15 @@ class RunRegistry:
                     "exit_code": exit_code,
                 }
             )
+            persist_run_status(
+                request.skill_path,
+                run_id,
+                record,
+                meta=self._run_meta.get(run_id),
+            )
         finally:
+            stop = self._heartbeat_stop.pop(run_id, None)
+            if stop is not None:
+                stop.set()
+            self._run_meta.pop(run_id, None)
             drop_control(run_id)

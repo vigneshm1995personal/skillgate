@@ -6,7 +6,7 @@ from collections.abc import Mapping
 from typing import Any
 from urllib.parse import urlparse
 
-from skillgate_ai.judge_context import attach_adherence_context
+from skillgate_ai.judge_context import attach_adherence_context, attach_tool_check_evidence
 from skillgate_ai.judge_openai import (
     DEFAULT_TIMEOUT_SEC,
     _answers_from_decisions_list,
@@ -57,8 +57,11 @@ class JevBackend:
                 self.base_url,
                 model=self.model,
                 text=_state_text(state),
-                questions=attach_adherence_context(
-                    spec_decisions_questions(resolved, include_path=include_path),
+                questions=attach_tool_check_evidence(
+                    attach_adherence_context(
+                        spec_decisions_questions(resolved, include_path=include_path),
+                        state,
+                    ),
                     state,
                 ),
             ),
