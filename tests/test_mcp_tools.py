@@ -425,7 +425,9 @@ def _pinned_case_ids(dest: Path) -> list[str]:
     return [c.id for c in pack.cases if c.status == "pinned"]
 
 
-def test_check_start_full_pinned_set_runs_official(mcp_env, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_check_start_full_pinned_set_runs_official(
+    mcp_env, monkeypatch: pytest.MonkeyPatch
+) -> None:
     from skillgate_ai.run_registry import RunRegistry, RunRequest
 
     ctx, dest = mcp_env
@@ -452,7 +454,9 @@ def test_check_start_full_pinned_set_runs_official(mcp_env, monkeypatch: pytest.
     assert out["run_gate"]["moves_gate"] is True
 
 
-def test_check_start_subset_forces_tryout_no_gate_move(mcp_env, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_check_start_subset_forces_tryout_no_gate_move(
+    mcp_env, monkeypatch: pytest.MonkeyPatch
+) -> None:
     from skillgate_ai.run_registry import RunRegistry, RunRequest
 
     ctx, dest = mcp_env
