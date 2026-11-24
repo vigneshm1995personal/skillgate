@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "skillgate-ai"
-version = "0.7.18"
+version = "0.7.19"
 description = "Evaluate agent skills before you ship them: catch regressions, pick the best model on cost vs quality, and deploy to Cursor, Claude and Codex."
 readme = "README.md"
 requires-python = ">=3.11"

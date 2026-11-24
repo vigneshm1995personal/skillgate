@@ -1,7 +1,7 @@
 {
   "name": "skillgate",
   "description": "Evaluate agent skills locally via MCP: validate packs, edit datasets, run checks, and read reports.",
-  "version": "0.7.18",
+  "version": "0.7.19",
   "author": {
     "name": "Skill Gate AI contributors"
   },
