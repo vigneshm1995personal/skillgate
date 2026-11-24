@@ -55,7 +55,9 @@ At startup the server calls `load_env(workspace)` so `.env` and keys under that 
 
 ## Client configuration
 
-### Cursor (`.cursor/mcp.json` or project `mcp.json`)
+### Cursor (`.cursor/mcp.json`)
+
+In your **project** (the folder you open in Cursor), create or edit `.cursor/mcp.json`:
 
 Prefer an **absolute** project root so the server does not depend on the client's cwd:
 
@@ -88,7 +90,7 @@ Alternatively, set only `SKILLGATE_ROOT` and omit `--root`:
 
 If both are set, **`--root` wins** over `SKILLGATE_ROOT`.
 
-**Cursor plugin:** install the repo plugin (see [plugin.md](plugin.md)). MCP is declared in [`plugin/mcp.json`](../plugin/mcp.json) as `${CURSOR_PLUGIN_ROOT}/bin/skillgate-mcp` with `args: ["--root", "."]`. Override the binary with `SKILLGATE_BIN` if needed.
+**Cursor plugin:** install the repo plugin (see [plugin.md](plugin.md)). The plugin ships [`plugin/mcp.json`](../plugin/mcp.json) with `"command": "${CURSOR_PLUGIN_ROOT}/bin/skillgate-mcp"` and `"args": ["--root", "."]` (workspace root = project with `skills/`). The wrapper [`plugin/bin/skillgate-mcp`](../plugin/bin/skillgate-mcp) resolves `skillgate` on PATH, optional `SKILLGATE_BIN`, repo `../.venv/bin`, or `uvx --from "skillgate-ai[mcp]"`. Override the binary with `SKILLGATE_BIN` if needed.
 
 ### Claude Code
 
@@ -96,7 +98,14 @@ If both are set, **`--root` wins** over `SKILLGATE_ROOT`.
 claude mcp add skillgate -- skillgate mcp --root /absolute/path/to/your/project
 ```
 
-**Marketplace / plugin:** `claude plugin install skillgate@skillgate` loads [`plugin/.mcp.json`](../plugin/.mcp.json) (same wrapper, `CLAUDE_PLUGIN_ROOT`).
+**Marketplace / plugin** (from a clone of this repo, matching [plugin.md](plugin.md)):
+
+```bash
+claude plugin marketplace add /path/to/skillgate
+claude plugin install skillgate@skillgate
+```
+
+That loads [`plugin/.mcp.json`](../plugin/.mcp.json) (`${CLAUDE_PLUGIN_ROOT}/bin/skillgate-mcp`, `args: ["--root", "."]`).
 
 #### Headless (`claude -p`)
 
@@ -111,7 +120,18 @@ claude -p "Run skillgate check_start on skills/pdf, poll until done, summarize" 
 
 ### Claude Desktop
 
-Add a server entry with the same `command` / `args` as Cursor (`skillgate` + `mcp` + `--root`). Consult Claude Desktop's MCP settings format (stdio server block); do not put API keys in `env`.
+Add a stdio server in Claude Desktop's config file (`claude_desktop_config.json` on macOS, typically under `~/Library/Application Support/Claude/`). Use an **absolute** project root; do not put API keys in `env`:
+
+```json
+{
+  "mcpServers": {
+    "skillgate": {
+      "command": "skillgate",
+      "args": ["mcp", "--root", "/absolute/path/to/your/project"]
+    }
+  }
+}
+```
 
 ### Codex
 
@@ -297,9 +317,9 @@ Errors: missing API key (from `missing_key_error()`), busy when another run hold
 | `run_id` | string | (required) | `[A-Za-z0-9_-]{1,128}` |
 | `include_report` | boolean | false | Full report when run finished |
 
-Resolves runs from the in-memory registry, on-disk status under the pack, or history. Errors: `Invalid run id.`, `Unknown run …`
+Resolves a run in order: in-memory registry → pack **history** (`evals/history/*.jsonl`) → on-disk **run status** at `<pack>/evals/history/runs/<run_id>.json`. Errors: `Invalid run id.`, `Unknown run …`
 
-When the run is finished and `include_report` is false, response includes `report: null` and `report_omitted: true`. Always includes `run_gate` and `tryout_reason` when known.
+When the run is finished and `include_report` is false, response includes `report: null` and `report_omitted: true`. Finished rows include top-level **`gate`** (`green` / `red` / `needs review` — eval outcome), **`gate_decision`** (`pending` / `blocked` / `cleared` — whether this run changes Deploy), plus **`run_gate`** and **`tryout_reason`** when known (see [Gate fields](#gate-fields-run_gate-vs-gate)).
 
 #### `check_cancel`
 
@@ -327,7 +347,7 @@ Async: returns `{ok: true, id, mode, status: "running"}`; keep polling. Error: `
 | `run_id` | string | (required) | |
 | `skill` | string \| null | null | Narrow search to one pack |
 
-Same JSON shape as `skillgate history show --json`. Error: `No run named <id>.`
+Same JSON shape as `skillgate history show --json` (history rows only — **no** on-disk run-status fallback). A run that is still in flight after an MCP server restart is **not** visible here until it is appended to history; use **`check_poll`** for in-flight or disk-backed status. Error: `No run named <id>.`
 
 ### Diagnostics
 
@@ -339,7 +359,20 @@ No parameters.
 
 ## Official runs vs tryouts
 
-Deploy gate semantics match the CLI and UI. Every poll/report includes **`run_gate`**:
+Deploy gate semantics match the CLI and UI.
+
+### Gate fields: `run_gate` vs `gate`
+
+Poll and report payloads carry **two layers**:
+
+| Layer | Fields | Meaning |
+| --- | --- | --- |
+| **Eval outcome** | `gate`, `gate_decision`, `gate_reason` | Per-run scoring: `gate` is `green`, `red`, or `needs review` from the check/judge. `gate_decision` is `pending`, `blocked`, or `cleared` — whether **this run** may unlock or block Deploy. |
+| **Tryout / deploy summary** | `tryout`, `tryout_reason`, **`run_gate`** | Whether the run counts as official or tryout and a uniform deploy summary: `run_gate.kind`, `run_gate.moves_gate`, `run_gate.decision`, `run_gate.reason`, and optional `run_gate.tryout_reason`. |
+
+`run_gate.decision` reuses the same `pending` / `blocked` / `cleared` vocabulary but is computed for agents via `run_gate_summary` (includes running-state `pending`, tryout rules, and `moves_gate`). Use **`gate`** / **`gate_decision`** for pass-fail and deploy copy; use **`run_gate`** + **`tryout`** when deciding if a run may move the pack gate.
+
+Every poll/report on a saved or resolved run includes **`run_gate`**:
 
 | Field | Meaning |
 | --- | --- |
@@ -367,7 +400,10 @@ Partial `case_ids` runs are always tryouts and never move the deploy gate.
 ## Concurrency and disk-backed status
 
 - One active check per MCP server and per project root (registry + `project_run_lock`).
-- After a client reconnects, `check_poll` / `report_get` can still find runs via `.skillgate` status files and pack history (“orphaned” runs relative to a fresh server process).
+- **Live run status on disk** is written under each pack at  
+  **`<pack>/evals/history/runs/<run_id>.json`** (`history_dir` → `evals/history`, then `runs/`; see `run_status.status_path`). This is **not** under `.skillgate/`.
+- After an MCP **server restart**, **`check_poll`** can still resolve an in-flight run via that file (and then history if the run finished). **`report_get`** and **`report_latest`** read **history only** — they do **not** read `evals/history/runs/*.json`. For a restarted server watching a still-running check, keep calling **`check_poll`**, not `report_get`.
+- **Orphan detection:** while status is `running` or `started`, a disk snapshot is treated as **orphaned** when, on the **same host** as the recorded owner, the owner **pid is dead**, **or** `heartbeat_at` is older than **60 seconds** (`ORPHAN_HEARTBEAT_SEC`). The owning process refreshes the heartbeat every **10 seconds** (`HEARTBEAT_INTERVAL_SEC`). Orphaned runs get `status: "orphaned"` and an error message that the Skill Gate process exited without saving a result.
 - `run_id` must match `^[A-Za-z0-9_-]{1,128}$`.
 
 ## Security
