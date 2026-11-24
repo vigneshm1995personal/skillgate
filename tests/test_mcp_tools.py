@@ -340,6 +340,35 @@ def test_check_poll_unknown_run_errors(mcp_env) -> None:
         mcp_tools.check_poll(ctx, run_id="missing-run")
 
 
+def test_check_poll_invalid_run_id_errors(mcp_env) -> None:
+    ctx, _ = mcp_env
+    for bad in ("/etc/passwd", "../secret"):
+        with pytest.raises(SkillGateError, match="Invalid run id"):
+            mcp_tools.check_poll(ctx, run_id=bad)
+
+
+def test_check_poll_disk_fallback_fresh_registry(mcp_env, monkeypatch: pytest.MonkeyPatch) -> None:
+    import threading
+
+    ctx, dest = mcp_env
+    gate = threading.Event()
+
+    def slow_eval(*_a, **_k):
+        gate.wait(timeout=30.0)
+        return _fake_suite(dest)
+
+    monkeypatch.setattr("skillgate_ai.gate.run_eval", slow_eval)
+    started = mcp_tools.check_start(ctx, skill="pdf", no_judge=True)
+    run_id = started["id"]
+    fresh = McpContext.for_root(ctx.root)
+    assert fresh.registry.get(run_id) is None
+    polled = mcp_tools.check_poll(fresh, run_id=run_id)
+    assert polled["status"] == "running"
+    assert polled["id"] == run_id
+    gate.set()
+    ctx.registry.join(run_id, timeout=30.0)
+
+
 def test_check_poll_forwards_sanitized_auth_diagnostics(mcp_env) -> None:
     ctx, _ = mcp_env
     run_id = "authfail01"

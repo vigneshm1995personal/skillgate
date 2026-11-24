@@ -29,7 +29,7 @@ from skillgate_ai.pack_edit import (
 from skillgate_ai.paths import is_skill_pack
 from skillgate_ai.run_lock import BUSY_HINT, project_run_lock
 from skillgate_ai.run_registry import BUSY_MESSAGE, RunBusyError, RunRequest
-from skillgate_ai.run_status import find_status_file, record_from_status
+from skillgate_ai.run_status import assert_valid_run_id, find_status_file, record_from_status
 from skillgate_ai.scaffold import scaffold_trigger_cases
 from skillgate_ai.workspace import new_skill
 
@@ -72,6 +72,7 @@ def _meta_reason(ctx: McpContext, run_id: str) -> str | None:
 
 
 def _resolve_run_record(ctx: McpContext, run_id: str) -> dict[str, Any]:
+    assert_valid_run_id(run_id)
     record = ctx.registry.get(run_id)
     if record is not None:
         return record

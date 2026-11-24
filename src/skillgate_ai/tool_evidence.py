@@ -35,9 +35,44 @@ _GENERIC_WORDS = frozenset(
         "used",
         "call",
         "called",
+        "create",
+        "get",
+        "list",
+        "update",
+        "delete",
+        "make",
+        "tool",
+        "stripe",
+        "mcp",
     }
 )
 _NEGATION_TOKENS = frozenset({"not", "never", "twice", "avoid", "without", "skip", "bypass"})
+_PROPERTY_TOKENS = frozenset(
+    {
+        "amount",
+        "correct",
+        "right",
+        "exact",
+        "only",
+        "twice",
+        "once",
+        "without",
+        "before",
+        "after",
+        "value",
+        "id",
+        "number",
+        "issued",
+        "invoice",
+        "fee",
+        "total",
+        "equal",
+        "match",
+        "matching",
+        "precise",
+        "duplicate",
+    }
+)
 
 
 def _tokens(text: str) -> set[str]:
@@ -75,14 +110,25 @@ def tool_check_rule_results(scores: Sequence[Score]) -> list[dict[str, Any]]:
     return []
 
 
+def _question_segments(qid: str) -> list[str]:
+    return [seg for seg in qid.lower().split("_") if seg]
+
+
+def _asserts_beyond_action_taken(qid: str) -> bool:
+    segments = _question_segments(qid)
+    return bool(_PROPERTY_TOKENS & set(segments) or _NEGATION_TOKENS & set(segments))
+
+
 def question_overlaps_rule(
     question: JudgeQuestion,
     rule: ToolCallRule | Mapping[str, Any],
+    *,
+    rule_row: Mapping[str, Any] | None = None,
 ) -> bool:
     if question.type != "predicate" or question.on_fail != "block":
         return False
     qid = question.id.lower()
-    if any(token in qid.split("_") for token in _NEGATION_TOKENS):
+    if any(token in _question_segments(qid) for token in _NEGATION_TOKENS):
         return False
     tool = str(rule.get("tool") if isinstance(rule, Mapping) else rule.tool)
     if any(ch in tool for ch in "*?[]"):
@@ -92,7 +138,14 @@ def question_overlaps_rule(
         if not explicit:
             return False
         tool_l = tool.lower()
-        return any(pat.strip().lower() == tool_l for pat in explicit)
+        if not any(pat.strip().lower() == tool_l for pat in explicit):
+            return False
+        if _asserts_beyond_action_taken(qid):
+            pinned = rule_row.get("args_pinned") if isinstance(rule_row, Mapping) else None
+            return bool(pinned)
+        return True
+    if _asserts_beyond_action_taken(qid):
+        return False
     q_words = _tokens(question.id)
     t_words = _tokens(tool)
     return bool(q_words & t_words)
@@ -150,7 +203,7 @@ def reconcile_tool_covered_extras(
                 continue
             tool = str(row.get("tool") or "")
             rule: ToolCallRule | Mapping[str, Any] = rules_by_tool.get(tool) or {"tool": tool}
-            if question_overlaps_rule(question, rule):
+            if question_overlaps_rule(question, rule, rule_row=row):
                 matched_rule = row
                 break
         if matched_rule is None:

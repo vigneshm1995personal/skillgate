@@ -5,6 +5,7 @@ from __future__ import annotations
 import contextlib
 import json
 import os
+import re
 import socket
 import tempfile
 import threading
@@ -12,7 +13,10 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from skillgate_ai.errors import SkillGateError
 from skillgate_ai.history import history_dir
+
+RUN_ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,128}$")
 
 STATUS_VERSION = 1
 RUNS_DIRNAME = "runs"
@@ -35,8 +39,24 @@ def runs_dir(pack_root: str | Path) -> Path:
     return dest
 
 
+def assert_valid_run_id(run_id: str) -> str:
+    text = (run_id or "").strip()
+    if not RUN_ID_RE.fullmatch(text):
+        raise SkillGateError("Invalid run id.")
+    return text
+
+
 def status_path(pack_root: str | Path, run_id: str) -> Path:
-    return runs_dir(pack_root) / f"{run_id}.json"
+    safe = assert_valid_run_id(run_id)
+    base = runs_dir(pack_root).resolve()
+    path = (base / f"{safe}.json").resolve()
+    if path.parent != base:
+        raise SkillGateError("Invalid run id.")
+    try:
+        path.relative_to(base)
+    except ValueError as exc:
+        raise SkillGateError("Invalid run id.") from exc
+    return path
 
 
 def _iso_now() -> str:
@@ -214,6 +234,10 @@ def find_status_file(root: Path, run_id: str) -> tuple[dict[str, Any], Path] | N
     from skillgate_ai.catalog import catalog_entries
     from skillgate_ai.paths import is_skill_pack
 
+    try:
+        assert_valid_run_id(run_id)
+    except SkillGateError:
+        return None
     candidates: list[Path] = []
     for entry in catalog_entries(root):
         candidates.append(Path(entry["absolute"]))

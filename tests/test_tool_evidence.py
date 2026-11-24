@@ -136,3 +136,31 @@ def test_failing_must_call_and_predicate_still_red() -> None:
     passed, failures, _ = _live_verdict(out, "billing", det_passed=False, det_failures=["tool"])
     assert passed is False
     assert failures
+
+
+def _assert_reconcile_red(question_id: str, detail: str) -> None:
+    judged = _green_judge(extra_map={question_id: detail})
+    extra = (JudgeQuestion(id=question_id, type="predicate", ask=detail, on_fail="block"),)
+    out = reconcile_tool_covered_extras(
+        judged,
+        _tool_passing_scores(),
+        tool_checks=TaskToolChecks(
+            must_call=[ToolCallRule(tool="stripe_refunds_create", min=1)],
+        ),
+        extras=extra,
+    )
+    passed, failures, _ = _live_verdict(out, "billing", det_passed=True, det_failures=[])
+    assert passed is False
+    assert failures
+
+
+def test_q_refund_amount_correct_stays_red_when_must_call_passed() -> None:
+    _assert_reconcile_red("q_refund_amount_correct", "Was the refund amount correct? No")
+
+
+def test_q_create_invoice_stays_red_when_must_call_passed() -> None:
+    _assert_reconcile_red("q_create_invoice", "Did create an invoice? No")
+
+
+def test_q_refund_not_issued_twice_stays_red() -> None:
+    _assert_reconcile_red("q_refund_not_issued_twice", "Was refund issued twice? No")
