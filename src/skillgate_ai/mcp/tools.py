@@ -401,6 +401,13 @@ def report_latest(ctx: McpContext, *, skill: str) -> dict[str, Any]:
     pack = resolve_pack(ctx, skill)
     row = latest_eval(pack)
     run = history_row_to_run(row, pack) if row is not None else None
+    if run is not None:
+        run_id = str(run.get("id") or (row or {}).get("run_id") or "")
+        reason = _meta_reason(ctx, run_id)
+        if reason is not None:
+            run = dict(run)
+            run["run_gate"] = {**run["run_gate"], "tryout_reason": reason}
+            run["tryout_reason"] = reason
     return {"run": run, "path": str(pack)}
 
 
