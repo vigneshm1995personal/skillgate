@@ -60,6 +60,8 @@ skillgate check skills/json-response-sabotaged
 | `pip install 'skillgate-ai[mcp]'` | mcp | `skillgate mcp` (stdio MCP tools; [MCP setup](https://github.com/vigneshm1995personal/skillgate/blob/main/docs/mcp.md)) |
 | `pip install 'skillgate-ai[all]'` | ui, docs, mcp | everything |
 
+**MCP for agents:** install `[mcp]`, run `skillgate mcp`, wire your editor — full tool reference and client snippets in [MCP setup](https://github.com/vigneshm1995personal/skillgate/blob/main/docs/mcp.md) ([plugin install](https://github.com/vigneshm1995personal/skillgate/blob/main/docs/plugin.md)).
+
 When a feature needs an extra that is not installed, Skill Gate exits **2** with:
 
 `Missing optional dependency for {feature}. Install with: pip install 'skillgate-ai[{extra}]'`
