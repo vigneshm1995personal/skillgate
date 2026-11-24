@@ -5,11 +5,10 @@ import os
 from pathlib import Path
 
 import pytest
+from test_run_registry import UI_SEED_KEYS, _fake_suite, _pdf_pack
 
 from skillgate_ai.run_registry import RunRegistry, RunRequest
 from skillgate_ai.run_status import read_run_status, record_from_status, runs_dir, status_path
-
-from test_run_registry import UI_SEED_KEYS, _fake_suite, _pdf_pack
 
 
 def test_status_json_written_on_start_and_finish(
