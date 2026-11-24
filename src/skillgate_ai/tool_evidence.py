@@ -149,9 +149,7 @@ def reconcile_tool_covered_extras(
             if not row.get("passed"):
                 continue
             tool = str(row.get("tool") or "")
-            rule: ToolCallRule | Mapping[str, Any] = rules_by_tool.get(tool) or {
-                "tool": tool
-            }
+            rule: ToolCallRule | Mapping[str, Any] = rules_by_tool.get(tool) or {"tool": tool}
             if question_overlaps_rule(question, rule):
                 matched_rule = row
                 break
