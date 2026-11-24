@@ -7,6 +7,7 @@ import logging
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 from skillgate_ai.extras import PDF_SCORING_FEATURE, import_extra
 from skillgate_ai.suite import FileExpect, RubricCheck, ScorerSpec, TaskSpec
@@ -23,6 +24,7 @@ class Score:
     actual: str | None = None
     weight: float = 1.0
     headline: str = ""
+    facts: dict[str, Any] | None = None
 
 
 @dataclass

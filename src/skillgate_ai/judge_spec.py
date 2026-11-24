@@ -58,6 +58,7 @@ class JudgeQuestion:
     levels: tuple[str, ...] = ()
     pass_if: dict[str, Any] | None = None
     include_when: str | None = None
+    covered_by: tuple[str, ...] | None = None
 
     @property
     def label(self) -> str:
@@ -230,6 +231,13 @@ def parse_extra_question(raw: Mapping[str, Any] | Any) -> JudgeQuestion:
     levels = _parse_levels(raw.get("levels"), qid=qid, kind=kind)
     pass_if = raw.get("pass_if") if isinstance(raw.get("pass_if"), Mapping) else None
     include_when = str(raw.get("include_when") or "").strip() or None
+    raw_covered = raw.get("covered_by")
+    covered_by: tuple[str, ...] | None = None
+    if raw_covered is not None:
+        if isinstance(raw_covered, list):
+            covered_by = tuple(str(item).strip() for item in raw_covered if str(item).strip())
+        else:
+            covered_by = ()
     return JudgeQuestion(
         id=qid,
         type=kind,
@@ -240,6 +248,7 @@ def parse_extra_question(raw: Mapping[str, Any] | Any) -> JudgeQuestion:
         levels=levels,
         pass_if=dict(pass_if) if pass_if else None,
         include_when=include_when,
+        covered_by=covered_by,
     )
 
 
@@ -326,22 +335,31 @@ def spec_verdict(
     return (not failed), reasons, warnings
 
 
+def extra_block_failure_map(
+    spec: JudgeSpec,
+    answers: Mapping[str, Any] | None,
+    *,
+    skipped: Sequence[str] | None = None,
+) -> dict[str, str]:
+    blob = answers if isinstance(answers, Mapping) else {}
+    skip = {str(item) for item in (skipped or []) if str(item).strip()}
+    failures: dict[str, str] = {}
+    for question in spec.extras:
+        if question.id in skip or question.on_fail != "block":
+            continue
+        ok, detail = extra_question_passed(question, blob.get(question.id))
+        if not ok and detail:
+            failures[question.id] = detail
+    return failures
+
+
 def extra_block_failures(
     spec: JudgeSpec,
     answers: Mapping[str, Any] | None,
     *,
     skipped: Sequence[str] | None = None,
 ) -> list[str]:
-    blob = answers if isinstance(answers, Mapping) else {}
-    skip = {str(item) for item in (skipped or []) if str(item).strip()}
-    failures: list[str] = []
-    for question in spec.extras:
-        if question.id in skip or question.on_fail != "block":
-            continue
-        ok, detail = extra_question_passed(question, blob.get(question.id))
-        if not ok and detail:
-            failures.append(detail)
-    return failures
+    return list(extra_block_failure_map(spec, answers, skipped=skipped).values())
 
 
 _NOT_APPLICABLE = frozenset({"not applicable", "n/a", "na", "not_applicable"})

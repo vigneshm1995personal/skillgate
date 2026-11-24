@@ -499,11 +499,14 @@ def _fmt_args(spec: dict[str, Any] | None) -> str:
 
 def _score_assertions(checks: TaskToolChecks, calls: Sequence[ToolCall]) -> Score:
     failures: list[str] = []
+    rule_rows: list[dict[str, Any]] = []
     for rule in checks.must_call:
         matching = _matching_calls(calls, rule)
         pattern_hits = [call for call in calls if matches_pattern(call, rule.tool)]
         count = _count_matching(calls, rule)
+        rule_failed = False
         if count < rule.min:
+            rule_failed = True
             if count == 0:
                 if rule.args_match and pattern_hits:
                     failures.append(
@@ -516,15 +519,25 @@ def _score_assertions(checks: TaskToolChecks, calls: Sequence[ToolCall]) -> Scor
                 failures.append(
                     f"Must call {rule.tool} at least {rule.min} time(s): called {count}"
                 )
-            continue
-        if rule.max is not None and count > rule.max:
+        elif rule.max is not None and count > rule.max:
+            rule_failed = True
             failures.append(f"Must call {rule.tool} at most {rule.max} time(s): called {count}")
-            continue
-        if rule.args_match and not matching:
+        elif rule.args_match and not matching:
+            rule_failed = True
             failures.append(
                 f"Must call {rule.tool} with {_fmt_args(rule.args_match)}: "
                 f"called {count}, no call matched"
             )
+        rule_rows.append(
+            {
+                "tool": rule.tool,
+                "passed": not rule_failed,
+                "min": rule.min,
+                "count": count,
+                "args_match": dict(rule.args_match) if rule.args_match else None,
+                "args_pinned": bool(rule.args_match and not rule_failed),
+            }
+        )
     for rule in checks.must_not_call:
         matches = _matching_calls(calls, rule)
         if matches:
@@ -539,6 +552,7 @@ def _score_assertions(checks: TaskToolChecks, calls: Sequence[ToolCall]) -> Scor
         detail=detail,
         expected="tool call rules",
         actual=", ".join(actual_names) if actual_names else "none",
+        facts={"must_call_rules": rule_rows},
     )
 
 

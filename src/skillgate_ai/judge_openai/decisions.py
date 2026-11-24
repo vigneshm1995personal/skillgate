@@ -8,7 +8,7 @@ from typing import Any
 from skillgate_ai.judge_bank import (
     DEFAULT_MIN_CONFIDENCE,
 )
-from skillgate_ai.judge_context import attach_adherence_context
+from skillgate_ai.judge_context import attach_adherence_context, attach_tool_check_evidence
 from skillgate_ai.judge_openai.backend import (
     DEFAULT_MODEL,
     DEFAULT_TIMEOUT_SEC,
@@ -83,8 +83,11 @@ class DecisionsBackend(_OpenAIPosted):
             {
                 "model": self.model,
                 "input": payload_input,
-                "questions": attach_adherence_context(
-                    spec_decisions_questions(resolved, include_path=include_path),
+                "questions": attach_tool_check_evidence(
+                    attach_adherence_context(
+                        spec_decisions_questions(resolved, include_path=include_path),
+                        state,
+                    ),
                     state,
                 ),
             },

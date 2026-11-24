@@ -48,11 +48,12 @@ class TrajectoryCommand(TypedDict):
     file: AttrValue | None
 
 
-class ScorerRow(TypedDict):
+class ScorerRow(TypedDict, total=False):
     scorer: str | None
     passed: bool | None
     headline: str | None
     detail: str | None
+    facts: dict[str, Any]
 
 
 class AgentTrajectory(TypedDict):
@@ -397,6 +398,51 @@ _ADHERENCE_NOTE = (
     "broken. Style, tool choice, or extra steps that are not listed rules are not a "
     "deviation and must not lower confidence."
 )
+
+
+def attach_tool_check_evidence(
+    questions: list[dict[str, Any]],
+    state: Mapping[str, Any] | None,
+) -> list[dict[str, Any]]:
+    """Append verified tool-check results to blocking yes/no extras."""
+    if not questions or not isinstance(state, Mapping):
+        return questions
+    from skillgate_ai.scorers import Score
+    from skillgate_ai.tool_evidence import format_verified_tool_checks
+
+    raw = state.get("scorer_results")
+    if not isinstance(raw, list):
+        return questions
+    scores: list[Score] = []
+    for item in raw:
+        if not isinstance(item, Mapping):
+            continue
+        scores.append(
+            Score(
+                scorer=str(item.get("scorer") or ""),
+                passed=bool(item.get("passed")),
+                detail=str(item.get("detail") or ""),
+                headline=str(item.get("headline") or ""),
+                facts=item.get("facts") if isinstance(item.get("facts"), dict) else None,
+            )
+        )
+    block = format_verified_tool_checks(scores)
+    if not block:
+        return questions
+    out: list[dict[str, Any]] = []
+    for question in questions:
+        if not isinstance(question, dict) or question.get("type") != "predicate":
+            out.append(question)
+            continue
+        name = str(question.get("name") or "")
+        if not name or name.startswith(("task_", "instruction_", "result_")):
+            out.append(question)
+            continue
+        item = dict(question)
+        instructions = str(item.get("instructions") or "").rstrip()
+        item["instructions"] = f"{instructions}\n\n{block}"
+        out.append(item)
+    return out
 
 
 def attach_adherence_context(

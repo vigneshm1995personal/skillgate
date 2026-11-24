@@ -14,6 +14,7 @@ from skillgate_ai.engine.verdict import (
     _live_verdict,
     _maybe_explain_fail,
     _no_trigger_skipped_judge,
+    _resolve_task_spec,
     _run_outcome_judge,
     _why_expected_output,
 )
@@ -238,6 +239,20 @@ def _judge_task(
         )
         if isinstance(judged, dict):
             judged = stabilize_adherence_review(judged, scores)
+            from skillgate_ai.case_pack import case_for_task, load_case_pack
+            from skillgate_ai.tool_evidence import reconcile_tool_covered_extras
+
+            spec = None
+            if skill_root is not None:
+                pack = load_case_pack(skill_root)
+                case = case_for_task(pack, task.id)
+                spec = _resolve_task_spec(skill_root, pack, case)
+            judged = reconcile_tool_covered_extras(
+                judged,
+                scores,
+                tool_checks=task.tool_checks,
+                extras=spec.extras if spec is not None else None,
+            )
         passed, failures, judged = _live_verdict(
             judged,
             task.expect_skill,

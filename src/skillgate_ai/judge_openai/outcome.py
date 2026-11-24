@@ -34,7 +34,7 @@ from skillgate_ai.judge_providers.decision import DecisionModel, require_decisio
 from skillgate_ai.judge_spec import (
     JudgeSpec,
     builtin_spec,
-    extra_block_failures,
+    extra_block_failure_map,
     spec_verdict,
 )
 from skillgate_ai.span_facts import resolve_log_facts
@@ -415,7 +415,8 @@ class OutcomeJudge:
                 extra_answers[question.id] = cleaned
         merged_answers = {**pass_answers, **extra_answers}
         extra_questions = {q.id: {"instructions": q.ask, "type": q.type} for q in resolved.extras}
-        extra_failures = extra_block_failures(resolved, answers, skipped=skipped)
+        extra_map = extra_block_failure_map(resolved, answers, skipped=skipped)
+        extra_failures = list(extra_map.values())
         payload = self._finish_payload(
             self._payload(
                 status="completed",
@@ -437,6 +438,7 @@ class OutcomeJudge:
             confidence=confidence,
             extra_failures=extra_failures,
         )
+        payload["extra_failure_ids"] = dict(extra_map)
         payload["review"] = bool(passed) and any(
             isinstance(cell, dict) and cell.get("status") == "unsure" for cell in cells.values()
         )
