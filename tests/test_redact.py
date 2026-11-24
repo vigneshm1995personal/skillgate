@@ -40,3 +40,21 @@ def test_tail_text_redacts_before_truncation() -> None:
     line = f"not logged in {SECRET}"
     tail = tail_text("\n".join([line] * 30), known=SECRET, max_lines=5)
     assert SECRET not in tail
+
+
+def test_redact_crsr_underscore_token() -> None:
+    secret = "deadbeef1234567890"
+    token = f"crsr_{secret}"
+    cleaned = redact_harness_text(f"login failed: {token}")
+    assert secret not in cleaned
+    assert token not in cleaned
+    assert "crsr_***" in cleaned
+
+
+def test_redact_key_underscore_token() -> None:
+    secret = "deadbeef1234567890"
+    token = f"key_{secret}"
+    cleaned = redact_harness_text(f"bad {token}")
+    assert secret not in cleaned
+    assert token not in cleaned
+    assert "key_***" in cleaned

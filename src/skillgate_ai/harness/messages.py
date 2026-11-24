@@ -264,7 +264,10 @@ def _raise_if_auth_failed(
         capture.stdout = stdout
         capture.stderr = stderr
         capture.transcript = transcript
-        diagnostics = build_auth_diagnostics(capture)
+        try:
+            diagnostics = build_auth_diagnostics(capture)
+        except Exception:  # noqa: BLE001 — diagnostics must not mask auth HarnessError
+            diagnostics = {"kind": "auth_failure", "diagnostics_error": True}
     raise HarnessError(
         message,
         hint="Run `skillgate login`.",

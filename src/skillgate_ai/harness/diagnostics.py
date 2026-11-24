@@ -107,7 +107,14 @@ def _attach_cursor_auth_flip(diag: dict[str, Any], capture: AuthFailureCapture) 
         return diag
     before = auth_status_label(capture.auth_before)
     diag["auth_status_before"] = before
-    after_runner, after_host = _cursor_post_auth(capture)
+    try:
+        after_runner, after_host = _cursor_post_auth(capture)
+    except Exception:  # noqa: BLE001 — probe failure must not break diagnostics
+        diag["auth_status_after_runner_env"] = "error"
+        diag["auth_status_after_host_env"] = "error"
+        diag["diagnostics_error"] = True
+        diag["auth_flipped"] = False
+        return diag
     diag["auth_status_after_runner_env"] = auth_status_label(after_runner)
     diag["auth_status_after_host_env"] = auth_status_label(after_host)
     diag["auth_flipped"] = capture.auth_before is True and after_host is False

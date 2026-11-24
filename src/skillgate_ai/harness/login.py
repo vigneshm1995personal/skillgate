@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import os
-from collections.abc import Callable
 import signal
 import subprocess
 import threading
+from collections.abc import Callable
 from typing import Any
 
 import skillgate_ai.harness.auth as auth

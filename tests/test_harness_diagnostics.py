@@ -8,6 +8,7 @@ from test_judge import _cfg
 
 from skillgate_ai.errors import HarnessError
 from skillgate_ai.harness.agents import CursorAgentHarness
+from skillgate_ai.harness.cursor_env import cursor_runner_child_env
 from skillgate_ai.harness.diagnostics import (
     AuthFailureCapture,
     build_auth_diagnostics,
@@ -132,3 +133,88 @@ def test_cursor_run_passes_xdg_in_child_env(
         CursorAgentHarness(cfg).run(sandbox, "task", [], timeout_sec=5)
     assert caught.value.diagnostics is not None
     assert caught.value.diagnostics["env_presence"]["XDG_CONFIG_HOME"] is True
+
+
+def test_cursor_child_env_blocks_secret_cursor_vars(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg"))
+    monkeypatch.setenv("DBUS_SESSION_BUS_ADDRESS", "unix:path=/tmp/bus")
+    for name in (
+        "CURSOR_AUTH_TOKEN",
+        "CURSOR_ACCESS_TOKEN",
+        "CURSOR_SESSION_TOKEN",
+        "CURSOR_SECRET",
+        "CURSOR_COOKIE",
+    ):
+        monkeypatch.setenv(name, f"leak-{name}")
+    cfg = _cfg(cursor_api_key=None)
+    env = cursor_runner_child_env(cfg, task="probe")
+    for name in (
+        "CURSOR_AUTH_TOKEN",
+        "CURSOR_ACCESS_TOKEN",
+        "CURSOR_SESSION_TOKEN",
+        "CURSOR_SECRET",
+        "CURSOR_COOKIE",
+    ):
+        assert name not in env
+    assert env.get("XDG_CONFIG_HOME") == str(tmp_path / "xdg")
+    assert env.get("DBUS_SESSION_BUS_ADDRESS") == "unix:path=/tmp/bus"
+
+
+def test_cursor_session_ok_uses_runner_child_env(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from skillgate_ai.harness import auth as auth_mod
+    from skillgate_ai.harness.cursor_env import cursor_runner_child_env
+
+    seen: dict[str, object] = {}
+
+    def fake_probe(_binary: str, *, env=None) -> bool:
+        seen["env"] = env
+        return True
+
+    def real_session_ok(cfg):
+        from skillgate_ai.harness import bins
+
+        binary = bins._resolve_agent_bin(cfg.cursor_agent_bin)
+        if binary is None:
+            return False
+        return auth_mod._probe_cursor_login_status(binary, env=cursor_runner_child_env(cfg))
+
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "xdg-data"))
+    monkeypatch.setenv("CURSOR_AUTH_TOKEN", "must-not-leak")
+    monkeypatch.setattr("skillgate_ai.harness.auth._probe_cursor_login_status", fake_probe)
+    monkeypatch.setattr("skillgate_ai.harness.bins._resolve_agent_bin", lambda _p: "/bin/agent")
+    monkeypatch.setattr("skillgate_ai.harness.auth._cursor_session_ok", real_session_ok)
+    cfg = _cfg(cursor_api_key=None)
+    assert real_session_ok(cfg) is True
+    child = seen.get("env")
+    assert isinstance(child, dict)
+    assert child.get("XDG_DATA_HOME") == str(tmp_path / "xdg-data")
+    assert "CURSOR_AUTH_TOKEN" not in child
+
+
+def test_raise_if_auth_failed_survives_diagnostics_probe_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def boom(_binary: str, *, env=None) -> bool:
+        raise RuntimeError("probe blew up")
+
+    monkeypatch.setattr("skillgate_ai.harness.auth._probe_cursor_login_status", boom)
+    capture = AuthFailureCapture(
+        harness="cursor-agent",
+        returncode=2,
+        command=["/bin/agent"],
+        child_env=_sandbox_env(None),
+        prompt="p",
+        stderr="not logged in",
+        auth_before=True,
+        cursor_binary="/bin/agent",
+        cfg=_cfg(cursor_api_key=None),
+    )
+    with pytest.raises(HarnessError) as caught:
+        _raise_if_auth_failed("", "not logged in", capture=capture)
+    assert "not signed in" in caught.value.message
+    assert caught.value.diagnostics is not None
+    assert caught.value.diagnostics.get("diagnostics_error") is True

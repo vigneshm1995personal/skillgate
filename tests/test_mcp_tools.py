@@ -340,6 +340,38 @@ def test_check_poll_unknown_run_errors(mcp_env) -> None:
         mcp_tools.check_poll(ctx, run_id="missing-run")
 
 
+def test_check_poll_forwards_sanitized_auth_diagnostics(mcp_env) -> None:
+    ctx, _ = mcp_env
+    run_id = "authfail01"
+    diag = {
+        "kind": "auth_failure",
+        "exit_code": 2,
+        "env_presence": {"CURSOR_API_KEY": False},
+        "stderr_tail": "not logged in",
+    }
+    ctx.registry.runs[run_id] = {
+        "id": run_id,
+        "status": "error",
+        "passed": None,
+        "gate": None,
+        "gate_decision": "fail",
+        "gate_reason": "error",
+        "error": {
+            "message": "The agent is not signed in.",
+            "hint": "Run `skillgate login`.",
+            "auth_diagnostics": diag,
+        },
+        "tryout": False,
+        "exit_code": 2,
+    }
+    polled = mcp_tools.check_poll(ctx, run_id=run_id, include_report=False)
+    assert polled["status"] == "error"
+    err = polled.get("error")
+    assert isinstance(err, dict)
+    assert err["auth_diagnostics"]["kind"] == "auth_failure"
+    assert "secret" not in json.dumps(err).lower()
+
+
 def test_check_cancel_unknown_run_errors(mcp_env) -> None:
     ctx, _ = mcp_env
     with pytest.raises(SkillGateError, match="not running"):

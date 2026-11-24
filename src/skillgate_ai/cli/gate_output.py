@@ -11,7 +11,7 @@ import typer
 
 import skillgate_ai.cli.base as base
 from skillgate_ai.api_payloads import scrub_browser_payload
-from skillgate_ai.errors import SkillGateError
+from skillgate_ai.errors import SkillGateError, error_payload
 from skillgate_ai.report import format_cli, format_github, report_to_dict
 
 
@@ -72,13 +72,15 @@ def _verbose_scoring_lines(report) -> list[str]:
 
 def _exit_with_error(exc: SkillGateError, *, machine: bool) -> NoReturn:
     if machine:
-        base._emit_json(
-            {
-                "error": exc.message,
-                "hint": exc.hint,
-                "exit_code": exc.exit_code,
-            }
-        )
+        payload: dict = {
+            "error": exc.message,
+            "hint": exc.hint,
+            "exit_code": exc.exit_code,
+        }
+        extra = error_payload(exc)
+        if extra.get("auth_diagnostics"):
+            payload["auth_diagnostics"] = extra["auth_diagnostics"]
+        base._emit_json(payload)
     else:
         base.console.print(exc.render())
     raise typer.Exit(exc.exit_code) from None

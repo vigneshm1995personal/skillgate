@@ -11,8 +11,19 @@ _AUTH_HEADER = re.compile(r"(?i)\b(authorization|x-api-key|api-key|cookie)\s*:\s
 _CRED_PAIR = re.compile(r"(?i)\b(password|passwd|token|secret|api[_-]?key)\s*[=:]\s*\S+")
 _URL_USERINFO = re.compile(r"(?://)[^/\s:@]+:[^@\s/]+@")
 _PREFIXED_KEY = re.compile(
-    r"\b(?:sk|pk|rk|key|crsr|ghp|gho|ghu|ghs|ghr|AKIA|ASIA|xox[baprs]-)[-_A-Za-z0-9]{8,}\b"
+    r"\b(?:sk|pk|rk|crsr|key|ghp|gho|ghu|ghs|ghr|github_pat|AKIA|ASIA|xox[baprs])"
+    r"[-_][A-Za-z0-9._-]{8,}\b"
 )
+
+
+def _redact_prefixed_key(match: re.Match[str]) -> str:
+    token = match.group(0)
+    for sep in ("-", "_"):
+        if sep in token:
+            return f"{token.split(sep, 1)[0]}{sep}***"
+    return "***"
+
+
 _HIGH_ENTROPY = re.compile(r"\b[A-Za-z0-9+/=_-]{32,}\b")
 
 
@@ -29,7 +40,7 @@ def redact_harness_text(text: str, *, known: str | None = None) -> str:
     out = _JWT.sub("eyJ***", out)
     out = _BASIC.sub("Basic ***", out)
     out = _CRED_PAIR.sub(lambda m: f"{m.group(1)}=***", out)
-    out = _PREFIXED_KEY.sub(lambda m: m.group(0).split("-", 1)[0] + "-***", out)
+    out = _PREFIXED_KEY.sub(_redact_prefixed_key, out)
     out = _HIGH_ENTROPY.sub("***", out)
     return out
 
