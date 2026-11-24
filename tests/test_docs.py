@@ -455,6 +455,17 @@ def test_mcp_docs_list_all_tools() -> None:
         assert f"`{name}`" in text
 
 
+def test_mcp_doc_tools_match_registered_server() -> None:
+    pytest = __import__("pytest")
+    pytest.importorskip("mcp")
+    from skillgate_ai.mcp.context import McpContext
+    from skillgate_ai.mcp.server import build_server
+
+    ctx = McpContext.for_root(ROOT)
+    registered = {tool.name for tool in build_server(ctx)._tool_manager.list_tools()}
+    assert set(MCP_DOC_TOOLS) == registered
+
+
 def test_mcp_docs_explain_tryout_vs_official() -> None:
     text = (ROOT / "docs" / "mcp.md").read_text(encoding="utf-8")
     assert "## Official runs vs tryouts" in text
