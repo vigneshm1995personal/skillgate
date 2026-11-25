@@ -41,8 +41,10 @@ def require_under(root: str | Path, path: str | Path) -> Path:
 
 
 def is_skill_pack(path: str | Path) -> bool:
-    root = Path(path)
-    return (root / "SKILL.md").is_file() and (root / "evals").is_dir()
+    base = os.path.realpath(os.path.expanduser(str(path)))
+    return os.path.isfile(os.path.join(base, "SKILL.md")) and os.path.isdir(
+        os.path.join(base, "evals")
+    )
 
 
 def nearest_skill_pack(start: str | Path | None = None) -> Path | None:
@@ -112,13 +114,13 @@ def skill_pack_root(skill_path: str | Path) -> Path:
 
         if _immediate_agent_skill(resolved):
             return resolved
-        cases_file = resolved / "evals" / "cases.yaml"
+        base = str(resolved)
         if (
             is_skill_pack(resolved)
-            or (resolved / "SKILL.md").is_file()
-            or cases_file.is_file()
-            or (resolved / "evals").is_dir()
-            or resolved.is_dir()
+            or os.path.isfile(os.path.join(base, "SKILL.md"))
+            or os.path.isfile(os.path.join(base, "evals", "cases.yaml"))
+            or os.path.isdir(os.path.join(base, "evals"))
+            or os.path.isdir(base)
         ):
             return resolved
         raise
@@ -153,6 +155,15 @@ def config_root_for(path: str | Path | None = None) -> Path:
     if pack is not None:
         return pack
     return project_root()
+
+
+def pack_file_at(root: str | Path, rel: str) -> Path:
+    """Pack-relative file path under ``root`` (e.g. ``evals/cases.yaml``)."""
+    cleaned = rel.replace("\\", "/").strip().lstrip("/")
+    parts = [piece for piece in cleaned.split("/") if piece and piece not in {".", ""}]
+    if not parts or any(piece == ".." for piece in parts):
+        raise PathTraversalError("Path escapes the allowed root.")
+    return contained_path(root, *parts)
 
 
 def is_under_root(path: str | Path, root: str | Path) -> bool:

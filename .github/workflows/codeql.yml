@@ -64,12 +64,19 @@ jobs:
           else
             scan_ref="${{ github.ref }}"
           fi
-          if ! count="$(gh api "repos/${repo}/code-scanning/alerts" -f state=open -f ref="${scan_ref}" -F per_page=100 --paginate --jq '[.[] | select(.rule.security_severity_level == "high" or .rule.security_severity_level == "critical")] | length')"; then
-            echo "CodeQL alerts API query failed"
-            exit 1
-          fi
-          echo "Open high/critical CodeQL alerts on ${scan_ref}: ${count}"
-          if [ "${count}" -gt 0 ]; then
-            echo "Resolve open CodeQL alerts on this ref before merge."
-            exit 1
-          fi
+          count=""
+          for attempt in 1 2 3 4 5 6; do
+            if ! count="$(gh api "repos/${repo}/code-scanning/alerts" -f state=open -f ref="${scan_ref}" -F per_page=100 --paginate --jq '[.[] | select(.rule.security_severity_level == "high" or .rule.security_severity_level == "critical")] | length')"; then
+              echo "CodeQL alerts API query failed"
+              exit 1
+            fi
+            echo "Open high/critical CodeQL alerts on ${scan_ref} (attempt ${attempt}): ${count}"
+            if [ "${count}" -eq 0 ]; then
+              exit 0
+            fi
+            if [ "${attempt}" -lt 6 ]; then
+              sleep 30
+            fi
+          done
+          echo "Resolve open CodeQL alerts on this ref before merge."
+          exit 1

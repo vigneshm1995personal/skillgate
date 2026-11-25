@@ -19,6 +19,7 @@ from skillgate_ai.pack.constants import (
 )
 from skillgate_ai.pack.pathsafe import _path_under_skill, _rel_to_skill, try_resolve_pack_root
 from skillgate_ai.pack.samples import is_authentic_fixture_bytes
+from skillgate_ai.paths import PathTraversalError, pack_file_at, require_under
 
 
 def list_pack_files(skill_path: str | Path) -> list[dict[str, Any]]:
@@ -28,16 +29,20 @@ def list_pack_files(skill_path: str | Path) -> list[dict[str, Any]]:
         return []
     found: list[dict[str, Any]] = []
     for path in sorted(root.rglob("*")):
-        if not path.is_file():
+        try:
+            safe = require_under(root, path)
+        except PathTraversalError:
             continue
-        rel = _rel_to_skill(root, path)
+        if not safe.is_file():
+            continue
+        rel = _rel_to_skill(root, safe)
         if rel is None:
             continue
         if rel == "SKILL.md" or rel.lower() in _SKIP_FILE_NAMES:
             continue
         if any(part.lower() in _SKIP_DIR_NAMES for part in Path(rel).parts):
             continue
-        found.append({"path": rel, "bytes": path.stat().st_size})
+        found.append({"path": rel, "bytes": safe.stat().st_size})
     return found
 
 
@@ -104,10 +109,8 @@ def skill_pack_hash(skill_path: str | Path | None) -> str:
     """Stable hash of the skill directory so fixtures version with the skill."""
     if not skill_path:
         return ""
-    root = Path(skill_path).expanduser().resolve()
-    if root.is_file():
-        return hashlib.sha256(root.read_bytes()).hexdigest()
-    if not root.is_dir():
+    root = try_resolve_pack_root(skill_path)
+    if root is None:
         return ""
     digest = hashlib.sha256()
     for item in list_pack_files(root):
@@ -119,7 +122,7 @@ def skill_pack_hash(skill_path: str | Path | None) -> str:
             continue
         digest.update(under.read_bytes())
         digest.update(b"\0")
-    skill_md = root / "SKILL.md"
+    skill_md = pack_file_at(root, "SKILL.md")
     if skill_md.is_file():
         digest.update(b"SKILL.md\0")
         digest.update(skill_md.read_bytes())
@@ -148,7 +151,7 @@ def browser_files(skill_path: str | Path) -> list[dict[str, Any]]:
     if root is None:
         return []
     items: list[dict[str, Any]] = []
-    skill_md = root / "SKILL.md"
+    skill_md = pack_file_at(root, "SKILL.md")
     if skill_md.is_file():
         items.append({"path": "SKILL.md", "bytes": skill_md.stat().st_size})
     items.extend(list_pack_files(root))

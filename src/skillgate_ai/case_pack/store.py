@@ -31,7 +31,7 @@ from skillgate_ai.pack_schema import (
     merge_judge_block,
     parse_judge_patch,
 )
-from skillgate_ai.paths import contained_path, skill_pack_root
+from skillgate_ai.paths import pack_file_at, skill_pack_root
 
 
 def pack_judge_dict(pack: CasePack | None) -> dict[str, Any] | None:
@@ -81,7 +81,7 @@ def expected_without_target_warning(
 
 
 def cases_path(skill_path: str | Path) -> Path:
-    return contained_path(skill_pack_root(skill_path), CASES_REL)
+    return pack_file_at(skill_pack_root(skill_path), CASES_REL)
 
 
 def load_case_pack(skill_path: str | Path) -> CasePack | None:
@@ -192,7 +192,7 @@ def _validate_pack_on_disk(root: Path, pack: CasePack) -> None:
         if case.input.needs_upload:
             continue
         for item in case.input.files:
-            src = root / item.src
+            src = pack_file_at(root, item.src)
             if not src.is_file():
                 raise SuiteError(
                     f"Couldn't find {item.src} (listed as an input file for {case.id}).",
@@ -203,7 +203,7 @@ def _validate_pack_on_disk(root: Path, pack: CasePack) -> None:
             and case.should_trigger
             and case.golden is not None
             and not case.output_optional
-            and not (root / case.golden.path).is_file()
+            and not pack_file_at(root, case.golden.path).is_file()
         ):
             from skillgate_ai.case_pack.dataset import MISSING_GOLDEN_REASON
 

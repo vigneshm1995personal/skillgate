@@ -4,6 +4,7 @@ extensions:
       extensible: barrierModel
     data:
       - ["skillgate_ai.paths", "Member[contained_path].ReturnValue", "path-injection"]
+      - ["skillgate_ai.paths", "Member[pack_file_at].ReturnValue", "path-injection"]
       - ["skillgate_ai.paths", "Member[require_under].ReturnValue", "path-injection"]
       - ["skillgate_ai.paths", "Member[skill_pack_root].ReturnValue", "path-injection"]
       - ["skillgate_ai.catalog", "Member[find_skill].ReturnValue", "path-injection"]
