@@ -16,10 +16,8 @@ def resolve_pack_root(skill_path: str | Path) -> Path:
     """Resolved skill pack directory (must exist)."""
     try:
         root = skill_pack_root(skill_path)
-    except PathTraversalError:
-        import os
-
-        root = Path(os.path.realpath(os.path.expanduser(str(skill_path))))
+    except PathTraversalError as exc:
+        raise ValueError("Skill folder not found.") from exc
     if not root.is_dir():
         raise ValueError("Skill folder not found.")
     return root

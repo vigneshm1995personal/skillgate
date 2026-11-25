@@ -50,6 +50,7 @@ from skillgate_ai.pack import (
     write_pack_file,
     write_sample_fixture,
 )
+from skillgate_ai.paths import require_under
 
 _PICKER_SOURCE_LABELS = {
     "workspace": "This project",
@@ -267,7 +268,7 @@ def register_skill_routes(app: FastAPI) -> None:
     @app.post("/api/skills/apply-fix")
     async def apply_fix(request: Request, payload: ApplyFixBody = Body()) -> dict[str, Any]:
         state = state_of(request)
-        skill_path = find_skill(state.root, payload.skill)
+        skill_path = require_under(state.root, find_skill(state.root, payload.skill))
         paste = payload.paste.strip()
         if not paste:
             fail(400, "Pass a SKILL.md paste block.")
@@ -276,14 +277,14 @@ def register_skill_routes(app: FastAPI) -> None:
         restore = payload.restore_scripts_from.strip()
         if restore:
             try:
-                source = find_skill(state.root, restore)
+                source = require_under(state.root, find_skill(state.root, restore))
             except SkillGateError:
                 source = None
             if source is not None:
                 from skillgate_ai.paths import contained_path
 
-                src_scripts = contained_path(source, "scripts")
-                dest_scripts = contained_path(skill_path, "scripts")
+                src_scripts = require_under(source, contained_path(source, "scripts"))
+                dest_scripts = require_under(skill_path, contained_path(skill_path, "scripts"))
                 if src_scripts.is_dir():
                     import shutil
 
