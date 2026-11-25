@@ -9,11 +9,17 @@ from skillgate_ai.pack.constants import (
     _SAFE_NAME,
     FIXTURE_DIR,
 )
+from skillgate_ai.paths import PathTraversalError, contained_path, skill_pack_root
 
 
 def resolve_pack_root(skill_path: str | Path) -> Path:
     """Resolved skill pack directory (must exist)."""
-    root = Path(skill_path).expanduser().resolve()
+    try:
+        root = skill_pack_root(skill_path)
+    except PathTraversalError:
+        import os
+
+        root = Path(os.path.realpath(os.path.expanduser(str(skill_path))))
     if not root.is_dir():
         raise ValueError("Skill folder not found.")
     return root
@@ -82,13 +88,10 @@ def _path_under_skill(skill_root: Path, rel: str) -> Path | None:
     parts = [p for p in cleaned.split("/") if p and p not in {".", ""}]
     if not parts or any(p == ".." for p in parts):
         return None
-    base = skill_root.resolve()
-    candidate = base.joinpath(*parts).resolve()
     try:
-        candidate.relative_to(base)
-    except ValueError:
+        return contained_path(skill_root, *parts)
+    except PathTraversalError:
         return None
-    return candidate
 
 
 def _rel_to_skill(root: Path, path: Path) -> str | None:

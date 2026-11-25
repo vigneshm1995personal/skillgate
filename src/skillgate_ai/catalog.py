@@ -196,12 +196,17 @@ def find_skill(root: Path, name: str) -> Path:
     if looks_like_path:
         expanded = Path(text).expanduser()
         if expanded.is_absolute():
-            resolved = expanded.resolve()
-            if _immediate_agent_skill(resolved):
-                return resolved
             try:
-                resolved = require_under(root, resolved)
+                resolved = require_under(root, expanded)
             except PathTraversalError as exc:
+                from skillgate_ai.paths import skill_pack_root
+
+                try:
+                    agent_path = skill_pack_root(expanded)
+                except PathTraversalError:
+                    raise SkillGateError("That path is outside this project.") from exc
+                if _immediate_agent_skill(agent_path):
+                    return agent_path
                 raise SkillGateError("That path is outside this project.") from exc
         else:
             normalized = text.replace("\\", "/")

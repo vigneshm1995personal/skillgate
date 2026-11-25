@@ -58,10 +58,11 @@ def golden_kind(path: str | Path) -> Literal["json", "text", "bytes"]:
 
 
 def file_inside_skill(root: Path, path: Path) -> Path | None:
+    from skillgate_ai.paths import PathTraversalError, require_under
+
     try:
-        resolved = path.expanduser().resolve()
-        resolved.relative_to(root.resolve())
-    except (OSError, ValueError):
+        resolved = require_under(root, path)
+    except PathTraversalError:
         return None
     return resolved if resolved.is_file() else None
 

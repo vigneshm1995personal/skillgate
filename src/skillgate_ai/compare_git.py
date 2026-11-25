@@ -31,9 +31,11 @@ def list_skill_git_versions(pack: Path) -> list[dict[str, str]]:
         root = find_git_root(pack)
     except CompareError:
         return []
+    from skillgate_ai.paths import PathTraversalError, require_under
+
     try:
-        rel = pack.resolve().relative_to(root.resolve())
-    except ValueError:
+        rel = require_under(root, pack).relative_to(root)
+    except (PathTraversalError, ValueError, OSError):
         return []
     spec = "." if str(rel) in {"", "."} else str(rel)
     try:
@@ -65,9 +67,9 @@ def list_skill_git_versions(pack: Path) -> list[dict[str, str]]:
 
 
 def find_git_root(pack: Path) -> Path:
-    from skillgate_ai.paths import contained_path
+    from skillgate_ai.paths import skill_pack_root
 
-    pack = contained_path(pack.resolve())
+    pack = skill_pack_root(pack)
     try:
         out = subprocess.run(  # noqa: S603 - fixed git argv; ref and path are separate argv items
             ["git", "rev-parse", "--show-toplevel"],  # noqa: S607 - git resolved from PATH by design

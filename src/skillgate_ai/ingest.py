@@ -91,9 +91,9 @@ def folder_slug(folder: Path) -> str:
 
 
 def ingest_skill(path: str | Path, *, strict: bool = True) -> Skill:
-    from skillgate_ai.paths import contained_path
+    from skillgate_ai.paths import skill_pack_root
 
-    folder = contained_path(Path(path).expanduser().resolve())
+    folder = skill_pack_root(path)
     if not strict:
         return _ingest_lenient(folder)
     if not folder.exists():

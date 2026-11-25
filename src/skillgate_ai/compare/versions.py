@@ -28,7 +28,7 @@ from skillgate_ai.compare.payload import (
     _usage_from_report,
 )
 from skillgate_ai.history import append_compare, load_history
-from skillgate_ai.paths import contained_path
+from skillgate_ai.paths import skill_pack_root
 
 
 def _history_report(pack: Path, run_id: str) -> dict[str, Any]:
@@ -49,7 +49,7 @@ def preflight_versions_compare(
     dry_run: bool = False,
 ) -> None:
     """Validate versions compare inputs before printing started or spawning work."""
-    pack = contained_path(pack.expanduser().resolve())
+    pack = skill_pack_root(pack)
     if git_refs and len(git_refs) >= 2:
         if len(git_refs) != 2:
             raise CompareError("Pick exactly two git refs.", hint="Use --git twice.")
@@ -208,7 +208,7 @@ def run_versions_compare(
     dry_run: bool = False,
     harness: str | None = None,
 ) -> CompareResult:
-    pack = contained_path(pack.expanduser().resolve())
+    pack = skill_pack_root(pack)
     compare_id = compare_id or uuid.uuid4().hex[:12]
     preflight_versions_compare(pack, run_ids=run_ids, git_refs=git_refs, dry_run=dry_run)
     if dry_run:

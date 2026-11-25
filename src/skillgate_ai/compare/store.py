@@ -41,8 +41,9 @@ def list_compares_merged(
     limit: int = 20,
 ) -> list[dict[str, Any]]:
     """In-flight compares first, then persisted rows (newest first), deduped by id."""
-    root = root.expanduser().resolve()
-    pack = pack.expanduser().resolve()
+    from skillgate_ai.paths import require_under
+
+    pack = require_under(root, pack)
     inflight = [
         {**row, "list_source": "inflight"}
         for row in list_inflight_compares(root)

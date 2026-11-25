@@ -24,13 +24,14 @@ from skillgate_ai.case_pack import (
 from skillgate_ai.catalog import find_skill
 from skillgate_ai.errors import SuiteError
 from skillgate_ai.fixture_bind import apply_inherit, expand_from_folder
+from skillgate_ai.paths import require_under
 
 
 def register_eval_routes(app: FastAPI) -> None:
     @app.post("/api/evals/generate")
     async def generate(request: Request, payload: EvalGenerateBody = Body()) -> dict[str, Any]:
         state = state_of(request)
-        skill_path = find_skill(state.root, payload.skill)
+        skill_path = require_under(state.root, find_skill(state.root, payload.skill))
         yaml_text = str(payload.yaml or "").strip()
         pack = load_case_pack(skill_path)
         if yaml_text:
@@ -67,7 +68,7 @@ def register_eval_routes(app: FastAPI) -> None:
     @app.post("/api/evals/pin")
     async def pin(request: Request, payload: EvalPinBody = Body()) -> dict[str, Any]:
         state = state_of(request)
-        skill_path = find_skill(state.root, payload.skill)
+        skill_path = require_under(state.root, find_skill(state.root, payload.skill))
         checks = payload.checks
         case_ids = payload.case_ids
         dumped = payload.model_dump(exclude_unset=True)
@@ -111,7 +112,7 @@ def register_eval_routes(app: FastAPI) -> None:
         confirm: bool = Form(False),
     ) -> dict[str, Any]:
         state = state_of(request)
-        skill_path = find_skill(state.root, skill)
+        skill_path = require_under(state.root, find_skill(state.root, skill))
         conflict = str(on_conflict or "fail").strip().lower()
         if conflict not in {"fail", "skip", "replace"}:
             fail(400, "on_conflict must be fail, skip, or replace.")
@@ -156,7 +157,8 @@ def register_eval_routes(app: FastAPI) -> None:
 
     @app.get("/api/evals/dataset")
     def dataset(skill: str, request: Request) -> dict[str, Any]:
-        path = find_skill(state_of(request).root, skill)
+        state = state_of(request)
+        path = require_under(state.root, find_skill(state.root, skill))
         view = dataset_view(path, include_files=True)
         return view or {"skill": path.name, "cases": [], "tool_checks": None}
 
@@ -166,7 +168,7 @@ def register_eval_routes(app: FastAPI) -> None:
         payload: EvalFixtureBindBody = Body(),
     ) -> dict[str, Any]:
         state = state_of(request)
-        skill_path = find_skill(state.root, payload.skill)
+        skill_path = require_under(state.root, find_skill(state.root, payload.skill))
         checks = [dict(item) for item in payload.checks]
         inherit = payload.inherit
         glob_pat = payload.glob

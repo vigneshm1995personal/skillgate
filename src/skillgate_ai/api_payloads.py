@@ -308,6 +308,9 @@ def _deploy_payload(row: Mapping[str, Any], *, index: int = 0) -> DeployRow:
 
 
 def skill_payload(state: AppState, path: Path) -> dict[str, Any]:
+    from skillgate_ai.paths import require_under
+
+    path = require_under(state.root, path)
     loaded = ingest_skill(path, strict=False)
     files = browser_files(path)
     hist = load_history(path, limit=50)
@@ -330,7 +333,7 @@ def skill_payload(state: AppState, path: Path) -> dict[str, Any]:
         "body": loaded.body,
         "warning": loaded.warning,
         "path": rel,
-        "absolute": str(path.resolve()),
+        "absolute": str(path),
         "uploaded": False,
         "seed": slug == "pdf",
         "sabotaged": slug == "pdf-sabotaged",

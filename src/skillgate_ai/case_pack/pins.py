@@ -237,9 +237,9 @@ def _persist_input_files(root: Path, files: object, *, case_id: str) -> list[Cas
         if not src:
             continue
         if os.path.isabs(src):
-            if not os.path.isfile(src):
-                raise ValueError(f"Pin could not find input file {src}.")
             safe_src = require_under(root, src)
+            if not safe_src.is_file():
+                raise ValueError(f"Pin could not find input file {src}.")
             written = copy_into_pack(root, src=safe_src, dest_name=dest_name)
             out.append(CaseFileCopy(src=written["src"], dest=written["dest"]))
             continue

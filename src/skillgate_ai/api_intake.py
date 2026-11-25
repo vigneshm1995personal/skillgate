@@ -14,7 +14,7 @@ from skillgate_ai.catalog import safe_skill_folder_name, workspace_skills_root
 from skillgate_ai.errors import SkillGateError
 from skillgate_ai.ingest import FRONTMATTER_RE, ingest_skill
 from skillgate_ai.pack import copy_skill_pack
-from skillgate_ai.paths import require_under
+from skillgate_ai.paths import PathTraversalError, require_under
 from skillgate_ai.scaffold import scaffold_trigger_cases
 
 _GIT_URL_RE = re.compile(r"^(https?://|git@|ssh://).+", re.IGNORECASE)
@@ -48,9 +48,9 @@ def write_pasted_skill(root: Path, markdown: str) -> Path:
         raise SkillGateError("SKILL.md frontmatter must be a mapping of fields.")
     display = str(parsed.get("name") or "").strip()
     name = safe_skill_folder_name(display)
-    parent = workspace_skills_root(root)
+    parent = require_under(root, workspace_skills_root(root))
     parent.mkdir(parents=True, exist_ok=True)
-    dest = _inside(parent, parent / name)
+    dest = require_under(parent, parent / name)
     dest.mkdir(parents=True, exist_ok=True)
     (dest / "SKILL.md").write_text(text, encoding="utf-8")
     ingest_skill(dest, strict=False)
@@ -76,7 +76,7 @@ def _zip_rel(name: str, prefix: str) -> str | None:
 
 
 def extract_uploaded_skill(root: Path, data: bytes, *, filename: str) -> Path:
-    parent = workspace_skills_root(root)
+    parent = require_under(root, workspace_skills_root(root))
     parent.mkdir(parents=True, exist_ok=True)
     if filename.endswith(".md") or data.lstrip().startswith(b"---"):
         return write_pasted_skill(root, data.decode("utf-8"))
@@ -98,13 +98,12 @@ def extract_uploaded_skill(root: Path, data: bytes, *, filename: str) -> Path:
     prefix = "/".join(parts[:-1])
     raw_folder = Path(parts[-2]).name if len(parts) >= 2 else Path(filename).stem
     folder_name = safe_skill_folder_name(raw_folder)
-    dest = _inside(parent, parent / folder_name)
+    dest = require_under(parent, parent / folder_name)
     if dest.exists():
         import shutil
 
         shutil.rmtree(dest)
     dest.mkdir(parents=True)
-    dest_root = dest.resolve()
     for info in archive.infolist():
         name = info.filename.replace("\\", "/")
         if info.is_dir():
@@ -112,10 +111,9 @@ def extract_uploaded_skill(root: Path, data: bytes, *, filename: str) -> Path:
         rel = _zip_rel(name, prefix)
         if not rel:
             continue
-        target = dest / rel
         try:
-            target.resolve().relative_to(dest_root)
-        except ValueError:
+            target = require_under(dest, dest / rel)
+        except PathTraversalError:
             continue
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(archive.read(info))
@@ -125,7 +123,9 @@ def extract_uploaded_skill(root: Path, data: bytes, *, filename: str) -> Path:
 
 def import_skill_folder(root: Path, source: str | Path) -> Path:
     """Copy a local skill folder into ``<root>/skills/<slug>``."""
-    src = Path(source).expanduser().resolve()
+    from skillgate_ai.paths import skill_pack_root
+
+    src = skill_pack_root(source)
     if not src.is_dir() or not (src / "SKILL.md").is_file():
         raise SkillGateError(
             "Pass a skill folder that contains SKILL.md.",
@@ -133,9 +133,9 @@ def import_skill_folder(root: Path, source: str | Path) -> Path:
         )
     loaded = ingest_skill(src, strict=False)
     slug = safe_skill_folder_name(loaded.name or src.name)
-    parent = workspace_skills_root(root)
+    parent = require_under(root, workspace_skills_root(root))
     parent.mkdir(parents=True, exist_ok=True)
-    dest = _inside(parent, parent / slug)
+    dest = require_under(parent, parent / slug)
     if dest.exists():
         raise SkillGateError(
             f"{slug} is already in this project.",

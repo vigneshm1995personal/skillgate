@@ -12,16 +12,19 @@ class PathTraversalError(ValueError):
 
 def contained_path(root: str | Path, *parts: str | Path) -> Path:
     """Join ``parts`` under ``root`` and return the resolved path when it stays inside ``root``."""
-    base = Path(root).expanduser().resolve()
+    base = os.path.realpath(os.path.expanduser(str(root)))
     if any(str(part) in {".", ".."} or ".." in Path(str(part)).parts for part in parts):
         raise PathTraversalError("Path escapes the allowed root.")
-    candidate = base.joinpath(*parts) if parts else base
-    resolved = candidate.resolve()
+    pieces = [str(part) for part in parts]
+    joined = os.path.join(base, *pieces) if pieces else base
+    target = os.path.realpath(os.path.expanduser(joined))
     try:
-        resolved.relative_to(base)
+        common = os.path.commonpath([base, target])
     except ValueError as exc:
         raise PathTraversalError("Path escapes the allowed root.") from exc
-    return resolved
+    if common != base:
+        raise PathTraversalError("Path escapes the allowed root.")
+    return Path(target)
 
 
 def require_under(root: str | Path, path: str | Path) -> Path:
@@ -100,8 +103,8 @@ def skill_pack_root(skill_path: str | Path) -> Path:
     raw = Path(skill_path).expanduser()
     if ".." in raw.parts:
         raise PathTraversalError("Path escapes the allowed root.")
-    resolved = raw.resolve()
-    bound = config_root_for(resolved).resolve()
+    resolved = Path(os.path.realpath(str(raw)))
+    bound = Path(os.path.realpath(str(config_root_for(resolved))))
     try:
         return require_under(bound, resolved)
     except PathTraversalError:
@@ -114,6 +117,8 @@ def skill_pack_root(skill_path: str | Path) -> Path:
             is_skill_pack(resolved)
             or (resolved / "SKILL.md").is_file()
             or cases_file.is_file()
+            or (resolved / "evals").is_dir()
+            or resolved.is_dir()
         ):
             return resolved
         raise
@@ -152,7 +157,8 @@ def config_root_for(path: str | Path | None = None) -> Path:
 
 def is_under_root(path: str | Path, root: str | Path) -> bool:
     try:
-        Path(path).expanduser().resolve().relative_to(Path(root).expanduser().resolve())
-        return True
+        base = os.path.realpath(os.path.expanduser(str(root)))
+        target = os.path.realpath(os.path.expanduser(str(path)))
+        return os.path.commonpath([base, target]) == base
     except (ValueError, OSError):
         return False
