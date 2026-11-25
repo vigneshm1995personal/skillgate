@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import copy
 import threading
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, NoReturn, TypeAlias, TypedDict
@@ -213,7 +214,7 @@ def _scrub_browser(value: Any) -> Any:
     return out
 
 
-def _neutral_scored_by(text: str, stamp: dict[str, Any] | None) -> str:
+def _neutral_scored_by(text: str, stamp: Mapping[str, Any] | None) -> str:
     from skillgate_ai.judge_copy import SCORED_BY_JUDGE, scored_by_phrase
 
     lower = text.lower()
@@ -242,7 +243,7 @@ def scrub_browser_payload(value: Any) -> Any:
     return _scrub_browser(copy.deepcopy(value))
 
 
-def history_row_to_run(row: dict[str, Any], skill_path: Path) -> dict[str, Any]:
+def history_row_to_run(row: Mapping[str, Any], skill_path: Path) -> dict[str, Any]:
     report = row.get("report") if isinstance(row.get("report"), dict) else None
     passed = row.get("passed")
     error = row.get("error") if isinstance(row.get("error"), dict) else None
@@ -283,8 +284,8 @@ def history_row_to_run(row: dict[str, Any], skill_path: Path) -> dict[str, Any]:
 
 
 def _gate_source_run(
-    runs: list[dict[str, Any]], hist: list[dict[str, Any]]
-) -> dict[str, Any] | None:
+    runs: Sequence[Mapping[str, Any]], hist: Sequence[Mapping[str, Any]]
+) -> Mapping[str, Any] | None:
     row = newest_gate_moving_row(hist)
     if row is None:
         return None
@@ -295,7 +296,7 @@ def _gate_source_run(
     return None
 
 
-def _deploy_payload(row: dict[str, Any], *, index: int = 0) -> DeployRow:
+def _deploy_payload(row: Mapping[str, Any], *, index: int = 0) -> DeployRow:
     target = str(row.get("target") or "")
     label = SOURCE_LABELS.get(target, target or "agent")
     dest_label = f"{label}'s skills folder"

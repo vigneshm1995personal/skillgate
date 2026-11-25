@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -19,7 +20,7 @@ def history_dir(pack_root: str | Path) -> Path:
     return Path(pack_root).expanduser().resolve() / HISTORY_DIR
 
 
-def _append_jsonl(dest: Path, row: dict[str, Any]) -> Path | None:
+def _append_jsonl(dest: Path, row: Mapping[str, Any]) -> Path | None:
     payload = json.dumps(row, ensure_ascii=True) + "\n"
     try:
         dest.parent.mkdir(parents=True, exist_ok=True)
@@ -62,9 +63,9 @@ def append_eval(
     *,
     run_id: str,
     passed: bool | None,
-    report: dict[str, Any] | None = None,
-    error: dict[str, Any] | None = None,
-    config: dict[str, Any] | None = None,
+    report: Mapping[str, Any] | None = None,
+    error: Mapping[str, Any] | None = None,
+    config: Mapping[str, Any] | None = None,
     tryout: bool = False,
     gate_moved: bool | None = None,
 ) -> Path | None:
@@ -107,7 +108,7 @@ def append_eval(
     )
 
 
-def _row_ts(item: dict[str, Any]) -> datetime:
+def _row_ts(item: Mapping[str, Any]) -> datetime:
     raw = item.get("ts")
     if isinstance(raw, str) and raw.strip():
         try:

@@ -6,9 +6,33 @@ from pathlib import Path
 import yaml
 
 from skillgate_ai.ingest import FRONTMATTER_RE
+from skillgate_ai.pack.pathsafe import _path_under_skill, resolve_pack_root
+
+
+def _resolved_skill_md(skill_md: Path) -> Path:
+    """SKILL.md under a resolved pack root (same containment rules as pack writes)."""
+    path = Path(skill_md).expanduser()
+    if path.name != "SKILL.md":
+        raise ValueError("Expected SKILL.md")
+    root = resolve_pack_root(path.parent)
+    resolved = _path_under_skill(root, "SKILL.md")
+    if resolved is None or not resolved.is_file():
+        raise ValueError("SKILL.md not found in skill folder.")
+    return resolved
+
+
+def _path_under_root(root: Path, target: Path) -> Path:
+    base = root.resolve()
+    resolved = target.resolve()
+    try:
+        resolved.relative_to(base)
+    except ValueError as exc:
+        raise ValueError("Path must stay inside the working folder.") from exc
+    return resolved
 
 
 def rewrite_skill_description(skill_md: Path, new_description: str) -> None:
+    skill_md = _resolved_skill_md(skill_md)
     text = skill_md.read_text(encoding="utf-8")
     match = FRONTMATTER_RE.match(text)
     if not match:
@@ -46,17 +70,19 @@ def apply_description_fix(
     restore_scripts_from: Path | None = None,
 ) -> Path:
     """Copy the skill to a working folder, write the corrected description, keep the same name."""
-    dest = dest_root / source.name
-    source = source.resolve()
+    source_dir = resolve_pack_root(source)
+    dest_root = dest_root.expanduser().resolve()
     dest_root.mkdir(parents=True, exist_ok=True)
-    if dest.exists() and dest.resolve() == source:
+    dest = _path_under_root(dest_root, dest_root / source_dir.name)
+    if dest.exists() and dest.resolve() == source_dir.resolve():
         rewrite_skill_description(dest / "SKILL.md", new_description)
     else:
         if dest.exists():
             shutil.rmtree(dest)
-        shutil.copytree(source, dest)
+        shutil.copytree(source_dir, dest)
         rewrite_skill_description(dest / "SKILL.md", new_description)
     if restore_scripts_from and restore_scripts_from.is_dir():
+        restore_scripts_from = resolve_pack_root(restore_scripts_from)
         src_scripts = restore_scripts_from / "scripts"
         if src_scripts.is_dir():
             dest_scripts = dest / "scripts"

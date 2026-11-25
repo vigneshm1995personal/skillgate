@@ -39,7 +39,7 @@ def test_dict_any_line_budget() -> None:
         count += sum(
             1 for line in path.read_text(encoding="utf-8").splitlines() if "dict[str, Any]" in line
         )
-    assert count <= 550, f"{count} dict[str, Any] lines (baseline 583; plan ≤520)"
+    assert count <= 520, f"{count} dict[str, Any] lines (baseline 583; plan ≤520)"
     outcome = SRC / "judge_openai" / "outcome.py"
     outcome_lines = sum(
         1 for line in outcome.read_text(encoding="utf-8").splitlines() if "dict[str, Any]" in line

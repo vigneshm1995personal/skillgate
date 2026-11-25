@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import re
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any, TypedDict
 
@@ -68,17 +68,18 @@ class AgentTrajectory(TypedDict):
     workspace_file_paths: list[str]
 
 
-def enrich_output_row(row: dict[str, Any], dest: Path) -> dict[str, Any]:
+def enrich_output_row(row: Mapping[str, Any], dest: Path) -> dict[str, Any]:
     """Attach extracted text for binary office/PDF outputs."""
-    if not row.get("present"):
-        return row
+    item = dict(row)
+    if not item.get("present"):
+        return item
     extracted = extract_document_text(dest)
     if not extracted:
-        return row
-    row["extracted_text"] = extracted
-    if row.get("body") is None or row.get("kind") == "bytes":
-        row["body"] = extracted
-    return row
+        return item
+    item["extracted_text"] = extracted
+    if item.get("body") is None or item.get("kind") == "bytes":
+        item["body"] = extracted
+    return item
 
 
 def skill_instructions_text(skill_root: Path | None, *, fallback: str | None = None) -> str | None:
@@ -93,7 +94,9 @@ def skill_instructions_text(skill_root: Path | None, *, fallback: str | None = N
     return f"{OUTCOME_SCORING_NOTES}\n\n--- SKILL.md ---\n{_cap_instructions(cleaned)}"
 
 
-def workspace_files_for_judge(artifacts: list[dict[str, Any]] | None) -> list[JudgeFileRow]:
+def workspace_files_for_judge(
+    artifacts: Sequence[Mapping[str, Any]] | None,
+) -> list[JudgeFileRow]:
     rows: list[JudgeFileRow] = []
     for item in artifacts or []:
         if not isinstance(item, dict):
@@ -163,9 +166,9 @@ def parse_command_runs(transcript: str) -> list[CommandRun]:
     return _trim_command_runs(runs)
 
 
-def _claude_message_parts(obj: dict[str, Any]) -> list[dict[str, Any]]:
+def _claude_message_parts(obj: Mapping[str, Any]) -> list[dict[str, Any]]:
     if obj.get("type") in {"tool_use", "tool_result"}:
-        return [obj]
+        return [dict(obj)]
     message = obj.get("message")
     if not isinstance(message, dict):
         return []
@@ -175,7 +178,7 @@ def _claude_message_parts(obj: dict[str, Any]) -> list[dict[str, Any]]:
     return []
 
 
-def _claude_tool_command(part: dict[str, Any]) -> str:
+def _claude_tool_command(part: Mapping[str, Any]) -> str:
     name = str(part.get("name") or "tool").strip() or "tool"
     args = part.get("input") or part.get("args") or part.get("arguments")
     if not isinstance(args, dict):
@@ -191,7 +194,7 @@ def _claude_tool_command(part: dict[str, Any]) -> str:
     return f"{name} {detail}".strip()
 
 
-def _claude_tool_output(part: dict[str, Any]) -> str:
+def _claude_tool_output(part: Mapping[str, Any]) -> str:
     raw = part.get("content")
     if isinstance(raw, str):
         return raw.strip()
@@ -215,7 +218,7 @@ def _claude_tool_output(part: dict[str, Any]) -> str:
 def _ingest_claude_stream_event(
     runs: list[CommandRun],
     pending: dict[str, CommandRun],
-    obj: dict[str, Any],
+    obj: Mapping[str, Any],
 ) -> None:
     for part in _claude_message_parts(obj):
         kind = part.get("type")
@@ -274,7 +277,7 @@ def _trim_command_runs(runs: list[CommandRun], *, limit: int = 30) -> list[Comma
     return kept
 
 
-def _append_command_run(runs: list[CommandRun], item: dict[str, Any]) -> None:
+def _append_command_run(runs: list[CommandRun], item: Mapping[str, Any]) -> None:
     command = str(item.get("command") or "").strip()
     output = ""
     for key in (
@@ -520,10 +523,10 @@ def _excerpt(raw: Any, cap: int) -> str:
     return text if len(text) <= cap else text[:cap]
 
 
-def _enrich_adherence_choice(choice: dict[str, Any]) -> dict[str, Any]:
+def _enrich_adherence_choice(choice: Mapping[str, Any]) -> dict[str, Any]:
     value = str(choice.get("value") or "")
     if value != "Fully followed":
-        return choice
+        return dict(choice)
     item = dict(choice)
     description = str(item.get("description") or "").rstrip()
     note = "When listed rules show no violation, pick this with high confidence."

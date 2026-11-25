@@ -156,7 +156,7 @@ exclude = [
 source = ["skillgate_ai"]
 
 [tool.coverage.report]
-fail_under = 80.5
+fail_under = 82.0
 precision = 2
 skip_covered = true
 
