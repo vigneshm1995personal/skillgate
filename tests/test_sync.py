@@ -10,7 +10,7 @@ from conftest import plain_text
 from typer.testing import CliRunner
 
 from skillgate_ai.cli import app
-from skillgate_ai.sync import install_launchd_plist, sync_once
+from skillgate_ai.sync import _redact_repo_url, _validate_repo_url, install_launchd_plist, sync_once
 
 runner = CliRunner()
 
@@ -46,6 +46,12 @@ def _init_repo(path: Path, skills: list[str]) -> Path:
         capture_output=True,
     )
     return path
+
+
+def test_validate_repo_url_and_redact() -> None:
+    url = _validate_repo_url("https://github.com/example/skills.git")
+    assert url.startswith("https://")
+    assert "@" not in _redact_repo_url("https://user:secret@github.com/x/y.git")
 
 
 def test_sync_copies_skills_into_targets(project_root: Path, tmp_path: Path) -> None:

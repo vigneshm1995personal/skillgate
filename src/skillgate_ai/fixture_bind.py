@@ -169,7 +169,7 @@ def decide_gate(
     passed: bool | None,
     status: str | None = "done",
     skill_path: str | Path | None = None,
-    report: dict[str, Any] | None = None,
+    report: Mapping[str, Any] | None = None,
     checks: Sequence[Mapping[str, Any]] | None = None,
 ) -> str:
     return decide_gate_result(
@@ -188,7 +188,7 @@ def decide_gate_result(
     passed: bool | None,
     status: str | None = "done",
     skill_path: str | Path | None = None,
-    report: dict[str, Any] | None = None,
+    report: Mapping[str, Any] | None = None,
     checks: Sequence[Mapping[str, Any]] | None = None,
 ) -> GateVerdict:
     from skillgate_ai.harness import is_live_harness
@@ -210,7 +210,7 @@ def decide_gate_result(
 
 def _pass_warnings(
     skill_path: str | Path | None,
-    report: dict[str, Any] | None,
+    report: Mapping[str, Any] | None,
     checks: Sequence[Mapping[str, Any]] | None,
 ) -> tuple[str, ...]:
     from skillgate_ai.case_pack import trust_suite_for_skill
@@ -243,7 +243,7 @@ def _report_covers_pinned_ids(report: Mapping[str, Any] | None, case_ids: tuple[
     return all(case_id in seen for case_id in case_ids)
 
 
-def _template_check(checks: Sequence[Mapping[str, Any]], description: str) -> dict[str, Any]:
+def _template_check(checks: Sequence[Mapping[str, Any]], description: str) -> Mapping[str, Any]:
     for item in checks:
         if is_completion_check(item):
             return dict(item)

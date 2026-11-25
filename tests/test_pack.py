@@ -2,7 +2,15 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from skillgate_ai.pack import copy_skill_pack, list_pack_files, skill_pack_hash
+from skillgate_ai.pack import (
+    copy_skill_pack,
+    fixture_files,
+    list_pack_files,
+    relevant_eval_fixtures,
+    skill_pack_hash,
+)
+
+ROOT = Path(__file__).resolve().parents[1]
 
 
 def _write_skill(folder: Path, name: str) -> Path:
@@ -51,3 +59,17 @@ def test_copy_skill_pack_include_goldens_matches_recorded_pass_hash(tmp_path: Pa
     copy_skill_pack(skill, dest, include_goldens=True)
     assert (dest / "evals" / "goldens" / "complete.json").is_file()
     assert skill_pack_hash(dest) == recorded
+
+
+def test_fixture_files_and_relevant_eval_fixtures_seeded_pdf() -> None:
+    pack = ROOT / "skills" / "pdf"
+    fixtures = relevant_eval_fixtures(pack)
+    assert fixtures
+    names = {item["dest"] for item in fixtures}
+    assert "hello.pdf" in names
+    files = fixture_files(pack)
+    assert any(item["path"].startswith("evals/") for item in files)
+
+
+def test_list_pack_files_skips_missing_pack(tmp_path: Path) -> None:
+    assert list_pack_files(tmp_path / "missing") == []

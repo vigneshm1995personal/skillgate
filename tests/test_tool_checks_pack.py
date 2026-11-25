@@ -174,6 +174,42 @@ def test_pin_case_ids_preserves_pack_tool_checks(tmp_path: Path) -> None:
     assert loaded.tool_checks.to_sparse_dict() == {"must_not_call": [{"tool": "rm"}]}
 
 
+def test_pin_checks_rejects_empty_check_list(tmp_path: Path) -> None:
+    dest = tmp_path / "pdf"
+    shutil.copytree(ROOT / "skills" / "pdf", dest)
+    with pytest.raises(ValueError, match="at least one check"):
+        pin_checks(dest, [])
+
+
+def test_pin_case_ids_rejects_empty_id_list(tmp_path: Path) -> None:
+    dest = tmp_path / "pdf"
+    shutil.copytree(ROOT / "skills" / "pdf", dest)
+    with pytest.raises(ValueError, match="at least one case id"):
+        pin_case_ids(dest, [])
+
+
+def test_pin_case_ids_unknown_raises(tmp_path: Path) -> None:
+    dest = tmp_path / "pdf"
+    shutil.copytree(ROOT / "skills" / "pdf", dest)
+    with pytest.raises(ValueError, match="Unknown case ids"):
+        pin_case_ids(dest, ["not-a-real-case"])
+
+
+def test_case_from_check_persists_golden_output(tmp_path: Path) -> None:
+    skill = tmp_path / "skills" / "demo"
+    skill.mkdir(parents=True)
+    (skill / "SKILL.md").write_text("---\nname: demo\ndescription: d\n---\n", encoding="utf-8")
+    raw = {
+        "id": "finish",
+        "prompt": "Write output",
+        "output_path": "output/result.txt",
+        "contains": "done",
+    }
+    case = _case_from_check(skill, raw, "demo")
+    assert case.golden is not None
+    assert case.golden.output_path == "output/result.txt"
+
+
 def test_suite_from_checks_applies_pack_must_not_call(tmp_path: Path) -> None:
     dest = tmp_path / "pdf"
     shutil.copytree(ROOT / "skills" / "pdf", dest)

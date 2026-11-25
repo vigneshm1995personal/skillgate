@@ -107,7 +107,7 @@ def _basename(path: str) -> str:
 
 
 def _cursor_tool_span(
-    obj: dict[str, Any], *, trace_id: str, parent: str, t_ns: int
+    obj: Mapping[str, Any], *, trace_id: str, parent: str, t_ns: int
 ) -> OtlpSpan | None:
     if obj.get("subtype") == "completed":
         return None
@@ -230,7 +230,7 @@ def _codex_item_span(item: Any, *, trace_id: str, parent: str, t_ns: int) -> Otl
 ASSISTANT_MSG_MAX = 2000
 
 
-def _assistant_text(obj: dict[str, Any]) -> str:
+def _assistant_text(obj: Mapping[str, Any]) -> str:
     msg = obj.get("message")
     bits: list[str] = []
     if isinstance(msg, dict) and isinstance(msg.get("content"), list):
@@ -242,7 +242,7 @@ def _assistant_text(obj: dict[str, Any]) -> str:
     return "".join(bits) if bits else ""
 
 
-def _is_cursor_partial_assistant(obj: dict[str, Any]) -> bool:
+def _is_cursor_partial_assistant(obj: Mapping[str, Any]) -> bool:
     """Cursor --stream-partial-output delta (append; do not open a new step).
 
     Docs: timestamp_ms present + no model_call_id → streaming delta.
@@ -252,7 +252,7 @@ def _is_cursor_partial_assistant(obj: dict[str, Any]) -> bool:
     return "timestamp_ms" in obj and "model_call_id" not in obj
 
 
-def _is_cursor_assistant_dup_flush(obj: dict[str, Any], *, had_partial: bool) -> bool:
+def _is_cursor_assistant_dup_flush(obj: Mapping[str, Any], *, had_partial: bool) -> bool:
     if "model_call_id" in obj:
         return True
     # Final flush at end of a streamed message (no timestamp_ms).
@@ -287,12 +287,12 @@ def _set_string_attr(span: OtlpSpan, key: str, value: str) -> None:
 
 
 def _claude_tool_spans(
-    obj: dict[str, Any], *, trace_id: str, parent: str, t_ns: int
+    obj: Mapping[str, Any], *, trace_id: str, parent: str, t_ns: int
 ) -> list[OtlpSpan]:
     """Claude Code stream-json tool_use blocks (Bash and others) as tool spans."""
     parts: list[dict[str, Any]] = []
     if obj.get("type") == "tool_use":
-        parts = [obj]
+        parts = [dict(obj)]
     else:
         message = obj.get("message")
         content = message.get("content") if isinstance(message, dict) else None

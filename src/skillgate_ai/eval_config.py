@@ -76,7 +76,7 @@ class EvalRunConfig:
         }
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any] | None) -> EvalRunConfig | None:
+    def from_dict(cls, data: Mapping[str, Any] | None) -> EvalRunConfig | None:
         if not data:
             return None
         applied = data.get("applied") or {}
@@ -174,7 +174,7 @@ def applied_knobs(harness: str, *, model: str | None) -> dict[str, bool]:
 def resolve_eval_config(
     *,
     harness_pref: str,
-    incoming: dict[str, Any] | None,
+    incoming: Mapping[str, Any] | None,
     cfg: LLMConfig,
     source: str,
     resolved_harness: str = "",
@@ -298,7 +298,7 @@ OLDER_RUN_LABEL = "Older run (before live-only checks)"
 
 
 def is_legacy_run_config(
-    run: EvalRunConfig | dict[str, Any] | None, harness: str | None = None
+    run: EvalRunConfig | Mapping[str, Any] | None, harness: str | None = None
 ) -> bool:
     cfg = coerce_eval_config(run)
     key = (harness or (cfg.harness if cfg else "") or "").strip().lower()
@@ -358,7 +358,7 @@ def _is_openai_scorer(cfg: EvalRunConfig, extra: str = "") -> bool:
 
 
 def customer_config_label(
-    run: EvalRunConfig | dict[str, Any] | None, harness: str | None = None
+    run: EvalRunConfig | Mapping[str, Any] | None, harness: str | None = None
 ) -> str:
     if is_legacy_run_config(run, harness):
         return OLDER_RUN_LABEL
@@ -389,7 +389,7 @@ def customer_config_label(
 
 
 def customer_run_details(
-    run: EvalRunConfig | dict[str, Any] | None, harness: str | None = None
+    run: EvalRunConfig | Mapping[str, Any] | None, harness: str | None = None
 ) -> str:
     if is_legacy_run_config(run, harness):
         return OLDER_RUN_LABEL
@@ -414,7 +414,7 @@ def customer_run_details(
     return " · ".join(parts)
 
 
-def config_label(run: EvalRunConfig | dict[str, Any] | None) -> str:
+def config_label(run: EvalRunConfig | Mapping[str, Any] | None) -> str:
     cfg = coerce_eval_config(run)
     if cfg is None:
         return ""
@@ -434,8 +434,8 @@ def config_label(run: EvalRunConfig | dict[str, Any] | None) -> str:
 
 
 def diff_eval_config(
-    current: EvalRunConfig | dict[str, Any] | None,
-    previous: EvalRunConfig | dict[str, Any] | None,
+    current: EvalRunConfig | Mapping[str, Any] | None,
+    previous: EvalRunConfig | Mapping[str, Any] | None,
 ) -> list[dict[str, Any]]:
     now = coerce_eval_config(current)
     then = coerce_eval_config(previous)
@@ -452,7 +452,7 @@ def diff_eval_config(
     return entries
 
 
-def coerce_eval_config(value: EvalRunConfig | dict[str, Any] | None) -> EvalRunConfig | None:
+def coerce_eval_config(value: EvalRunConfig | Mapping[str, Any] | None) -> EvalRunConfig | None:
     if value is None:
         return None
     if isinstance(value, EvalRunConfig):

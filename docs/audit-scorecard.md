@@ -50,3 +50,24 @@ Behavior-preserving refactor: five module splits, deeper typing in four hot file
 - 20 broad `except Exception` handlers
 - CodeQL alert triage and branch ruleset enablement (admin)
 - Raise coverage floor after further tests land
+
+_Footnote:_ PR C row `dict[str, Any]` "After 480" was re-measured on `cc8919a` as 583; see PR D.
+
+## PR D/4 — excepts, typing, last splits, coverage
+
+| Metric | Before (cc8919a) | After | Command |
+|---|---|---|---|
+| Broad `except Exception` | 23 (16 files) | 15 (documented boundaries) | `grep -rnE 'except Exception\b' src/skillgate_ai \| wc -l` |
+| `dict[str, Any]` lines (all src) | 583 | 550 | `grep -rn 'dict\[str, Any\]' src/skillgate_ai \| wc -l` |
+| `judge_openai/outcome.py` | 12 | 6 (cap ≤ 11) | `grep -c` |
+| `fixture_bind.py` / `api_skills.py` / `compare/payload.py` | 7 / 17 / 10 | 3 / 14 / 4 (planned) | `grep -c` |
+| Largest module | 715 (`tool_checks.py`) | 560 (`engine/task.py`) | `wc -l … \| sort -n` |
+| Modules > 600 lines | 3 | 0 | |
+| Unit coverage | 77.39% | 80.77% | `pytest -m "not integration" --cov` |
+| `fail_under` | 77 | 80.5 | `pyproject.toml` |
+| Unit tests passed | 1671 | 1855 | |
+
+### Open items (post D)
+
+- Coverage target ~85% / `dict[str, Any]` ≤ 520 needs more B2 + D3 tests (FastAPI routes and `mcp/` frozen)
+- `judge_settings` S101, CodeQL triage

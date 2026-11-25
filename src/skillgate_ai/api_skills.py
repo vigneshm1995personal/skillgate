@@ -86,21 +86,21 @@ def _broken_skill_row(item: Mapping[str, Any]) -> BrokenSkillRow:
     }
 
 
-def _listed_skill(state: AppState, item: Mapping[str, Any]) -> dict[str, Any] | BrokenSkillRow:
-    payload: dict[str, Any] | BrokenSkillRow
+def _listed_skill(state: AppState, item: Mapping[str, Any]) -> Mapping[str, Any]:
+    payload: Mapping[str, Any]
     try:
         payload = skill_payload(state, Path(item["absolute"]))
     except (SkillGateError, OSError, ValueError):
         payload = _broken_skill_row(item)
     source = str(item.get("source") or "")
-    payload["source"] = source
-    payload["source_label"] = _PICKER_SOURCE_LABELS.get(
-        source, str(item.get("source_label") or source)
-    )
-    return payload
+    return {
+        **payload,
+        "source": source,
+        "source_label": _PICKER_SOURCE_LABELS.get(source, str(item.get("source_label") or source)),
+    }
 
 
-def _listed_skills(state: AppState) -> list[dict[str, Any] | BrokenSkillRow]:
+def _listed_skills(state: AppState) -> list[Mapping[str, Any]]:
     return [_listed_skill(state, item) for item in catalog_entries(state.root, include_agents=True)]
 
 

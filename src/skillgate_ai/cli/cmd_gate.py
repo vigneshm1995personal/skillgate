@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import subprocess
 import sys
 from pathlib import Path
 
@@ -76,7 +77,7 @@ def _run_gate(
             tryout=tryout,
             no_judge=no_judge,
         )
-    except Exception as exc:  # noqa: BLE001 — TimeoutExpired must not dump the prompt
+    except subprocess.TimeoutExpired as exc:
         blocked = timeout_harness_error(exc)
         if blocked is None:
             raise

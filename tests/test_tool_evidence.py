@@ -4,7 +4,12 @@ from skillgate_ai.engine import _live_verdict
 from skillgate_ai.judge_spec import JudgeQuestion
 from skillgate_ai.scorers import Score
 from skillgate_ai.tool_check_schema import TaskToolChecks, ToolCallRule
-from skillgate_ai.tool_evidence import reconcile_tool_covered_extras
+from skillgate_ai.tool_evidence import (
+    format_verified_tool_checks,
+    question_overlaps_rule,
+    reconcile_tool_covered_extras,
+    tool_check_rule_results,
+)
 
 
 def _green_judge(*, extra_map: dict[str, str]) -> dict:
@@ -164,3 +169,28 @@ def test_q_create_invoice_stays_red_when_must_call_passed() -> None:
 
 def test_q_refund_not_issued_twice_stays_red() -> None:
     _assert_reconcile_red("q_refund_not_issued_twice", "Was refund issued twice? No")
+
+
+def test_tool_check_rule_results_flattens_must_call_rules() -> None:
+    scores = _tool_passing_scores()
+    rows = tool_check_rule_results(scores)
+    assert rows and rows[0]["tool"] == "stripe_refunds_create"
+
+
+def test_format_verified_tool_checks_lists_passing_rules() -> None:
+    block = format_verified_tool_checks(_tool_passing_scores())
+    assert "stripe_refunds_create" in block
+    assert format_verified_tool_checks([]) == ""
+
+
+def test_question_overlaps_rule_on_refund_wording() -> None:
+    rule = ToolCallRule(tool="stripe_refunds_create", min=1)
+    refund_q = JudgeQuestion(
+        id="q_did_refund_when_asked",
+        type="predicate",
+        ask="Did refund?",
+        on_fail="block",
+    )
+    fee_q = JudgeQuestion(id="q_disclosed_fee", type="predicate", ask="Fee?", on_fail="block")
+    assert question_overlaps_rule(refund_q, rule) is True
+    assert question_overlaps_rule(fee_q, rule) is False

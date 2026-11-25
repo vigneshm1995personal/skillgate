@@ -5,7 +5,11 @@ from pathlib import Path
 from reportlab.pdfgen import canvas
 
 from skillgate_ai.document_text import extract_document_text
-from skillgate_ai.judge_context import build_agent_trajectory, enrich_output_row
+from skillgate_ai.judge_context import (
+    build_agent_trajectory,
+    enrich_output_row,
+    workspace_files_for_judge,
+)
 from skillgate_ai.judge_openai import _artifacts_without_bodies, _state_text
 from skillgate_ai.scorers import Score
 from skillgate_ai.spans import make_span
@@ -80,3 +84,13 @@ def test_artifacts_without_bodies_includes_extracted_text() -> None:
         [{"path": "output/a.pdf", "present": True, "extracted_text": "hello pdf"}]
     )
     assert rows[0]["extracted_text"] == "hello pdf"
+
+
+def test_workspace_files_for_judge_caps_long_bodies() -> None:
+    long_body = "x" * 7000
+    rows = workspace_files_for_judge([{"path": "a.txt", "present": True, "body": long_body}])
+    assert len(rows) == 1
+    content = rows[0]["content"]
+    assert isinstance(content, str)
+    assert len(content) == 6000
+    assert content.endswith("x" * 100)

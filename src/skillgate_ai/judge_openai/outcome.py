@@ -58,7 +58,36 @@ class JudgeUsageSum(TypedDict):
     cost_usd: float | None
 
 
-def _extra_cell(question: JudgeQuestion, raw: Any) -> tuple[ExtraCell, dict[str, Any] | None]:
+class JudgePayload(TypedDict):
+    status: str
+    provider: str
+    backend: str
+    display_name: str
+    chosen: bool
+    score_no_trigger: bool
+    extra_failures: list[str]
+    model: str
+    passed: bool
+    reasons: list[str]
+    why: str | None
+    answers: Any
+    soft_answers: Mapping[str, Any]
+    questions: Mapping[str, Any]
+    soft_questions: Mapping[str, Any]
+    cells: Mapping[str, Any]
+    citations: Mapping[str, Any]
+    usage: Any
+    warnings: list[str]
+    min_confidence: float
+    supports_confidence: bool
+    review: bool
+    scoring_endpoint: NotRequired[str]
+    upstream: NotRequired[str]
+    extra_failure_ids: NotRequired[dict[str, str]]
+    votes: NotRequired[list[Any]]
+
+
+def _extra_cell(question: JudgeQuestion, raw: Any) -> tuple[ExtraCell, Mapping[str, Any] | None]:
     cell: ExtraCell = {
         "label": question.ask,
         "choice": extract_choice(raw),
@@ -229,12 +258,14 @@ class OutcomeJudge:
             answers.update(facts)
             evaluated = dict(evaluated)
             evaluated["answers"] = answers
-        return self._stamp(
-            evaluated,
-            artifacts=artifacts,
-            omitted=omitted,
-            include_path=_path_is_recorded(path),
-            spec=resolved,
+        return dict(
+            self._stamp(
+                evaluated,
+                artifacts=artifacts,
+                omitted=omitted,
+                include_path=_path_is_recorded(path),
+                spec=resolved,
+            )
         )
 
     def _majority_reask(
@@ -293,8 +324,8 @@ class OutcomeJudge:
         questions: Mapping[str, Any],
         soft_questions: Mapping[str, Any],
         scoring_endpoint: str | None = None,
-    ) -> dict[str, Any]:
-        payload = {
+    ) -> JudgePayload:
+        payload: JudgePayload = {
             "status": status,
             "provider": self.name,
             "backend": self.backend.name,
@@ -331,7 +362,7 @@ class OutcomeJudge:
         citations: Mapping[str, Any],
         soft_questions: Mapping[str, Any],
         extra_warnings: list[str],
-    ) -> dict[str, Any]:
+    ) -> JudgePayload:
         reason = str(evaluated.get("reason") or "The judge couldn't score this check.")
         payload = self._finish_payload(
             self._payload(
@@ -388,7 +419,7 @@ class OutcomeJudge:
         omitted: Sequence[Mapping[str, Any]],
         include_path: bool,
         spec: JudgeSpec | None = None,
-    ) -> dict[str, Any]:
+    ) -> JudgePayload:
         resolved = spec or builtin_spec()
         model = str(evaluated.get("model") or self.backend.model)
         citations = {"artifacts": list(artifacts), "omitted_images": omitted}
@@ -467,12 +498,12 @@ class OutcomeJudge:
 
     def _finish_payload(
         self,
-        payload: dict[str, Any],
+        payload: JudgePayload,
         *,
         spec: JudgeSpec,
         confidence: bool,
         extra_failures: list[str] | None = None,
-    ) -> dict[str, Any]:
+    ) -> JudgePayload:
         payload["supports_confidence"] = confidence
         payload["score_no_trigger"] = spec.score_no_trigger
         payload["extra_failures"] = list(extra_failures or [])

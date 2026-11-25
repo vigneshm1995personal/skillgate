@@ -35,7 +35,7 @@ class ComparePlanArm(TypedDict):
     duration_sec: float | None
 
 
-def _usage_for_task_ids(report: Mapping[str, Any], task_ids: list[str]) -> dict[str, Any] | None:
+def _usage_for_task_ids(report: Mapping[str, Any], task_ids: list[str]) -> Mapping[str, Any] | None:
     tasks = _task_map(report)
     tokens = 0
     cost = 0.0
@@ -52,7 +52,7 @@ def _usage_for_task_ids(report: Mapping[str, Any], task_ids: list[str]) -> dict[
             found = True
     if not found:
         return _usage_from_report(report)
-    out: dict[str, Any] = {}
+    out: dict[str, int | float] = {}
     if tokens:
         out["tokens_total"] = tokens
     if cost:
@@ -120,20 +120,20 @@ def _skill_pack_hash_from_report(report: Mapping[str, Any]) -> str | None:
     return None
 
 
-def _usage_from_report(report: Mapping[str, Any] | None) -> dict[str, Any] | None:
+def _usage_from_report(report: Mapping[str, Any] | None) -> Mapping[str, Any] | None:
     if not isinstance(report, dict):
         return None
     usage = report.get("usage")
     return usage if isinstance(usage, dict) else None
 
 
-def _task_map(report: Mapping[str, Any] | None) -> dict[str, dict[str, Any]]:
+def _task_map(report: Mapping[str, Any] | None) -> dict[str, Mapping[str, Any]]:
     if not isinstance(report, dict):
         return {}
     tasks = report.get("tasks")
     if not isinstance(tasks, list):
         return {}
-    out: dict[str, dict[str, Any]] = {}
+    out: dict[str, Mapping[str, Any]] = {}
     for task in tasks:
         if isinstance(task, dict) and task.get("id"):
             out[str(task["id"])] = task
@@ -242,7 +242,7 @@ def _case_ids_from_report(report: Mapping[str, Any]) -> list[str]:
 
 def _arm_stats_from_report(
     report: Mapping[str, Any], case_ids: list[str]
-) -> tuple[int, int, dict[str, dict[str, Any]]]:
+) -> tuple[int, int, dict[str, Mapping[str, Any]]]:
     tasks = _task_map(report)
     active = case_ids or _case_ids_from_report(report)
     subset = {key: tasks[key] for key in active if key in tasks}

@@ -13,7 +13,7 @@ from pathlib import Path
 import pytest
 
 from skillgate_ai import helper as helper_mod
-from skillgate_ai.errors import SKILL_CHANGED_MESSAGE, customer_job_error
+from skillgate_ai.errors import SKILL_CHANGED_MESSAGE, SkillGateError, customer_job_error
 from skillgate_ai.helper import connect, install_launchd_plist, process_job, run_helper
 from skillgate_ai.http_retry import RetryableStatus
 from skillgate_ai.pack import copy_skill_pack, skill_pack_hash
@@ -50,6 +50,22 @@ def _bundle(skill_dir: Path, name: str, manifest_hash: str) -> bytes:
                 zf.write(path, arcname=f"{name}/{path.relative_to(skill_dir).as_posix()}")
         zf.writestr("manifest.json", json.dumps(manifest))
     return buffer.getvalue()
+
+
+def test_connect_rejects_insecure_remote_url() -> None:
+    with pytest.raises(SkillGateError, match="https"):
+        connect("http://evil.example", "CODE1234")
+
+
+def test_load_helper_config_invalid_json(tmp_path: Path) -> None:
+    path = tmp_path / "helper.json"
+    path.write_text("not-json", encoding="utf-8")
+    assert helper_mod.load_helper_config(path) is None
+
+
+def test_friendly_reason_maps_skill_gate_error() -> None:
+    msg = helper_mod._friendly_reason(SkillGateError("skill_md hash mismatch"))
+    assert "changed" in msg.lower()
 
 
 def test_connect_writes_0600_helper_json(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:

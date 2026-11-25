@@ -44,6 +44,7 @@ def create_pack(
             description=(description or default_description(slug)).strip(),
             body=default_body(slug),
         )
+    # Cleanup-and-reraise: any failure must not leave a half-written pack.
     except Exception:
         shutil.rmtree(dest, ignore_errors=True)
         raise
