@@ -15,7 +15,7 @@ from skillgate_ai.pack.constants import (
     TEXT_SUFFIXES,
 )
 from skillgate_ai.pack.listing import browser_files
-from skillgate_ai.pack.pathsafe import _path_under_skill, resolve_pack_root
+from skillgate_ai.pack.pathsafe import resolve_pack_root
 
 
 def copy_skill_pack(
@@ -81,13 +81,14 @@ def copy_skill_pack(
 
 
 def pack_file_path(skill_path: str | Path, rel: str) -> Path:
-    from skillgate_ai.paths import require_under
 
     root = resolve_pack_root(skill_path)
-    candidate = _path_under_skill(root, rel)
-    if candidate is None or not candidate.is_file():
+    from skillgate_ai.pack_io import is_pack_file
+    from skillgate_ai.paths import pack_file_at
+
+    if not is_pack_file(root, rel):
         raise FileNotFoundError(rel)
-    return require_under(root, candidate)
+    return pack_file_at(root, rel)
 
 
 def pack_preview(skill_path: str | Path, rel: str) -> dict[str, Any]:

@@ -115,15 +115,15 @@ def skill_pack_root(skill_path: str | Path) -> Path:
 
         if _immediate_agent_skill(resolved):
             return resolved
-        base = str(resolved)
+        resolved_str = os.path.realpath(text)
         if (
             is_skill_pack(resolved)
-            or os.path.isfile(os.path.join(base, "SKILL.md"))
-            or os.path.isfile(os.path.join(base, "evals", "cases.yaml"))
-            or os.path.isdir(os.path.join(base, "evals"))
-            or os.path.isdir(base)
+            or os.path.isfile(os.path.join(resolved_str, "SKILL.md"))
+            or os.path.isfile(os.path.join(resolved_str, "evals", "cases.yaml"))
+            or os.path.isdir(os.path.join(resolved_str, "evals"))
+            or os.path.isdir(resolved_str)
         ):
-            return resolved
+            return Path(resolved_str)
         raise
 
 
@@ -138,7 +138,10 @@ def config_root_for(path: str | Path | None = None) -> Path:
     Docker ``check /pack`` has no workspace `skills/` and no keys file; the pack
     itself is the config/lock root so `.skillgate/` lands on the mount.
     """
-    start = Path(path).expanduser().resolve() if path is not None else Path.cwd()
+    if path is not None:
+        start = Path(os.path.realpath(os.path.expanduser(str(path))))
+    else:
+        start = Path.cwd()
     pack = None
     nearest_workspace: Path | None = None
     nearest_keys: Path | None = None
@@ -163,11 +166,25 @@ def config_root_for(path: str | Path | None = None) -> Path:
 
 def pack_file_at(root: str | Path, rel: str) -> Path:
     """Pack-relative file path under ``root`` (e.g. ``evals/cases.yaml``)."""
+    return Path(pack_path_string(root, rel))
+
+
+def pack_path_string(root: str | Path, rel: str) -> str:
+    """Validated pack-relative path as a filesystem string."""
     cleaned = rel.replace("\\", "/").strip().lstrip("/")
     parts = [piece for piece in cleaned.split("/") if piece and piece not in {".", ""}]
     if not parts or any(piece == ".." for piece in parts):
         raise PathTraversalError("Path escapes the allowed root.")
-    return contained_path(root, *parts)
+    base = os.path.realpath(os.path.expanduser(str(root)))
+    joined = os.path.join(base, *parts)
+    target = os.path.realpath(joined)
+    try:
+        common = os.path.commonpath([base, target])
+    except ValueError as exc:
+        raise PathTraversalError("Path escapes the allowed root.") from exc
+    if common != base:
+        raise PathTraversalError("Path escapes the allowed root.")
+    return target
 
 
 def is_under_root(path: str | Path, root: str | Path) -> bool:

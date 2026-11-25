@@ -17,10 +17,9 @@ from skillgate_ai.pack.constants import (
     IMAGE_SUFFIXES,
     PDF_DEMO_FIXTURE_NAMES,
 )
-from skillgate_ai.pack.pathsafe import _rel_to_skill, try_resolve_pack_root
+from skillgate_ai.pack.pathsafe import try_resolve_pack_root
 from skillgate_ai.pack.samples import is_authentic_fixture_bytes
 from skillgate_ai.pack_io import is_pack_file, read_pack_bytes
-from skillgate_ai.paths import PathTraversalError, pack_file_at, require_under
 
 
 def list_pack_files(skill_path: str | Path) -> list[dict[str, Any]]:
@@ -28,22 +27,28 @@ def list_pack_files(skill_path: str | Path) -> list[dict[str, Any]]:
     root = try_resolve_pack_root(skill_path)
     if root is None:
         return []
+    import os
+
+    base = os.path.realpath(os.path.expanduser(str(root)))
     found: list[dict[str, Any]] = []
-    for path in sorted(root.rglob("*")):
-        try:
-            safe = require_under(root, path)
-        except PathTraversalError:
-            continue
-        if not safe.is_file():
-            continue
-        rel = _rel_to_skill(root, safe)
-        if rel is None:
-            continue
-        if rel == "SKILL.md" or rel.lower() in _SKIP_FILE_NAMES:
-            continue
-        if any(part.lower() in _SKIP_DIR_NAMES for part in Path(rel).parts):
-            continue
-        found.append({"path": rel, "bytes": safe.stat().st_size})
+    for dirpath, dirnames, filenames in os.walk(base, topdown=True, followlinks=False):
+        dirnames[:] = [name for name in dirnames if name.lower() not in _SKIP_DIR_NAMES]
+        for filename in sorted(filenames):
+            full = os.path.join(dirpath, filename)
+            try:
+                resolved = os.path.realpath(full)
+                if os.path.commonpath([base, resolved]) != base:
+                    continue
+            except (OSError, ValueError):
+                continue
+            if not os.path.isfile(resolved):
+                continue
+            rel = os.path.relpath(resolved, base).replace("\\", "/")
+            if rel == "SKILL.md" or rel.lower() in _SKIP_FILE_NAMES:
+                continue
+            if any(part.lower() in _SKIP_DIR_NAMES for part in Path(rel).parts):
+                continue
+            found.append({"path": rel, "bytes": os.path.getsize(resolved)})
     return found
 
 
@@ -152,7 +157,9 @@ def browser_files(skill_path: str | Path) -> list[dict[str, Any]]:
     if is_pack_file(root, "SKILL.md"):
         import os
 
-        skill_md = pack_file_at(root, "SKILL.md")
-        items.append({"path": "SKILL.md", "bytes": os.path.getsize(os.fsdecode(skill_md))})
+        from skillgate_ai.paths import pack_path_string
+
+        skill_md = pack_path_string(root, "SKILL.md")
+        items.append({"path": "SKILL.md", "bytes": os.path.getsize(skill_md)})
     items.extend(list_pack_files(root))
     return items

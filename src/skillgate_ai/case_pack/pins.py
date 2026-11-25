@@ -237,8 +237,12 @@ def _persist_input_files(root: Path, files: object, *, case_id: str) -> list[Cas
         if not src:
             continue
         if os.path.isabs(src):
+            from skillgate_ai.pack.pathsafe import _rel_to_skill
+            from skillgate_ai.pack_io import is_pack_file
+
             safe_src = require_under(root, src)
-            if not safe_src.is_file():
+            src_rel = _rel_to_skill(root, safe_src)
+            if src_rel is None or not is_pack_file(root, src_rel):
                 raise ValueError(f"Pin could not find input file {src}.")
             written = copy_into_pack(root, src=safe_src, dest_name=dest_name)
             out.append(CaseFileCopy(src=written["src"], dest=written["dest"]))
