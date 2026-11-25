@@ -6,6 +6,34 @@ import os
 from pathlib import Path
 
 
+class PathTraversalError(ValueError):
+    """Resolved path escapes the allowed root."""
+
+
+def contained_path(root: str | Path, *parts: str | Path) -> Path:
+    """Join ``parts`` under ``root`` and return the resolved path when it stays inside ``root``."""
+    base = Path(root).expanduser().resolve()
+    if any(str(part) in {".", ".."} or ".." in Path(str(part)).parts for part in parts):
+        raise PathTraversalError("Path escapes the allowed root.")
+    candidate = base.joinpath(*parts) if parts else base
+    try:
+        candidate.relative_to(base)
+    except ValueError as exc:
+        raise PathTraversalError("Path escapes the allowed root.") from exc
+    return candidate.resolve()
+
+
+def require_under(root: str | Path, path: str | Path) -> Path:
+    """Resolve ``path`` and return it when it lies under ``root``."""
+    base = Path(root).expanduser().resolve()
+    resolved = Path(path).expanduser().resolve()
+    try:
+        resolved.relative_to(base)
+    except ValueError as exc:
+        raise PathTraversalError("Path is outside the allowed root.") from exc
+    return resolved
+
+
 def is_skill_pack(path: str | Path) -> bool:
     root = Path(path)
     return (root / "SKILL.md").is_file() and (root / "evals").is_dir()
@@ -33,9 +61,9 @@ def resolve_user_path(target: str | Path, root: Path | None = None) -> Path:
     if cwd_hit.exists():
         return cwd_hit.resolve()
     if root is not None:
-        rooted = Path(root) / path
+        rooted = contained_path(root, path)
         if rooted.exists():
-            return rooted.resolve()
+            return rooted
     return cwd_hit.resolve()
 
 

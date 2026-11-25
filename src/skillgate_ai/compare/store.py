@@ -9,6 +9,7 @@ from skillgate_ai.compare_control import (
     list_inflight_compares,
 )
 from skillgate_ai.history import load_compares
+from skillgate_ai.paths import require_under
 
 
 def find_compare(pack: Path, compare_id: str) -> dict[str, Any] | None:
@@ -22,7 +23,7 @@ def find_compare_anywhere(root: Path, compare_id: str) -> tuple[Path, dict[str, 
     from skillgate_ai.catalog import catalog_entries
 
     for entry in catalog_entries(root):
-        path = Path(entry["absolute"])
+        path = require_under(root, entry["absolute"])
         row = find_compare(path, compare_id)
         if row:
             return path, row

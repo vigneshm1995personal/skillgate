@@ -56,6 +56,11 @@ runs:
       uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
       with:
         python-version: "3.11"
+    - name: Set action script path
+      shell: bash
+      env:
+        ACTION_PATH: ${{ github.action_path }}
+      run: echo "SKILLGATE_ACTION_SCRIPT=${ACTION_PATH}/scripts/skillgate_action.py" >> "$GITHUB_ENV"
     - name: Check the skill pack
       id: check
       shell: bash
@@ -68,4 +73,4 @@ runs:
         INPUT_ACCOUNT_ID: ${{ inputs.account-id }}
         INPUT_HARNESS: ${{ inputs.harness }}
         INPUT_ARGS: ${{ inputs.args }}
-      run: python "${{ github.action_path }}/scripts/skillgate_action.py"
+      run: python "$SKILLGATE_ACTION_SCRIPT"

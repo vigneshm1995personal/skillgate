@@ -7,10 +7,11 @@ from typing import Any
 from skillgate_ai.extras import UI_FEATURE, MissingExtraError
 
 try:
-    from fastapi import FastAPI, File, Form, Request, UploadFile
+    from fastapi import Body, FastAPI, File, Form, Request, UploadFile
 except ModuleNotFoundError as exc:
     raise MissingExtraError(UI_FEATURE, "ui") from exc
 
+from skillgate_ai.api_models import EvalFixtureBindBody, EvalGenerateBody, EvalPinBody
 from skillgate_ai.api_payloads import fail, skill_payload, state_of
 from skillgate_ai.case_pack import (
     CASES_REL,
@@ -27,11 +28,10 @@ from skillgate_ai.fixture_bind import apply_inherit, expand_from_folder
 
 def register_eval_routes(app: FastAPI) -> None:
     @app.post("/api/evals/generate")
-    async def generate(request: Request) -> dict[str, Any]:
+    async def generate(request: Request, payload: EvalGenerateBody = Body()) -> dict[str, Any]:
         state = state_of(request)
-        body = await request.json()
-        skill_path = find_skill(state.root, str(body.get("skill") or ""))
-        yaml_text = str(body.get("yaml") or "").strip()
+        skill_path = find_skill(state.root, payload.skill)
+        yaml_text = str(payload.yaml or "").strip()
         pack = load_case_pack(skill_path)
         if yaml_text:
             import yaml as yaml_mod
@@ -65,12 +65,12 @@ def register_eval_routes(app: FastAPI) -> None:
         }
 
     @app.post("/api/evals/pin")
-    async def pin(request: Request) -> dict[str, Any]:
+    async def pin(request: Request, payload: EvalPinBody = Body()) -> dict[str, Any]:
         state = state_of(request)
-        body = await request.json()
-        skill_path = find_skill(state.root, str(body.get("skill") or ""))
-        checks = body.get("checks")
-        case_ids = body.get("case_ids")
+        skill_path = find_skill(state.root, payload.skill)
+        checks = payload.checks
+        case_ids = payload.case_ids
+        dumped = payload.model_dump(exclude_unset=True)
         warnings: list[str] = []
         try:
             from skillgate_ai.pack_edit import apply_pin
@@ -79,10 +79,8 @@ def register_eval_routes(app: FastAPI) -> None:
                 skill_path,
                 checks=checks if isinstance(checks, list) else None,
                 case_ids=case_ids if isinstance(case_ids, list) else None,
-                pack_judge=body.get("pack_judge")
-                if isinstance(body.get("pack_judge"), dict)
-                else None,
-                has_pack_judge="pack_judge" in body,
+                pack_judge=payload.pack_judge if isinstance(payload.pack_judge, dict) else None,
+                has_pack_judge="pack_judge" in dumped,
             )
         except ValueError as exc:
             fail(400, str(exc), hint=PIN_NEEDS_EXPECTED_HINT)
@@ -163,14 +161,13 @@ def register_eval_routes(app: FastAPI) -> None:
         return view or {"skill": path.name, "cases": [], "tool_checks": None}
 
     @app.post("/api/evals/fixture-bind")
-    async def fixture_bind(request: Request) -> dict[str, Any]:
+    async def fixture_bind(request: Request, payload: EvalFixtureBindBody = Body()) -> dict[str, Any]:
         state = state_of(request)
-        body = await request.json()
-        skill_path = find_skill(state.root, str(body.get("skill") or ""))
-        checks = [dict(item) for item in (body.get("checks") or [])]
-        inherit = bool(body.get("inherit", True))
-        glob_pat = body.get("glob")
-        action = str(body.get("action") or "inherit")
+        skill_path = find_skill(state.root, payload.skill)
+        checks = [dict(item) for item in payload.checks]
+        inherit = payload.inherit
+        glob_pat = payload.glob
+        action = payload.action or "inherit"
         if action == "expand":
             bound = expand_from_folder(skill_path, checks, glob_pat=glob_pat)
         else:

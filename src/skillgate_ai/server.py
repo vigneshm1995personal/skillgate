@@ -73,9 +73,10 @@ def attach_static(app: FastAPI, dist: Path | None = None) -> None:
         def spa(full_path: str) -> Response:
             if full_path.startswith("api/"):
                 return HTMLResponse("not found", status_code=404)
-            candidate = (root / full_path).resolve()
+            from skillgate_ai.paths import contained_path
+
             try:
-                candidate.relative_to(root.resolve())
+                candidate = contained_path(root, full_path)
             except ValueError:
                 return HTMLResponse("not found", status_code=404)
             if candidate.is_file():

@@ -8,6 +8,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from skillgate_ai.paths import contained_path
+
 HISTORY_DIR = "evals/history"
 DEPLOY_REL = "evals/deploys.jsonl"
 
@@ -17,7 +19,8 @@ def _local_now() -> datetime:
 
 
 def history_dir(pack_root: str | Path) -> Path:
-    return Path(pack_root).expanduser().resolve() / HISTORY_DIR
+    base = Path(pack_root).expanduser().resolve()
+    return contained_path(base, HISTORY_DIR)
 
 
 def _append_jsonl(dest: Path, row: Mapping[str, Any]) -> Path | None:
@@ -192,7 +195,8 @@ def append_deploy(
     file_count: int | None = None,
     mode: str = "local",
 ) -> Path | None:
-    dest = Path(pack_root).expanduser().resolve() / DEPLOY_REL
+    base = Path(pack_root).expanduser().resolve()
+    dest = contained_path(base, DEPLOY_REL)
     return _append_jsonl(
         dest,
         {
@@ -207,7 +211,8 @@ def append_deploy(
 
 
 def load_deploys(pack_root: str | Path, *, limit: int = 50) -> list[dict[str, Any]]:
-    rows = _read_jsonl(Path(pack_root).expanduser().resolve() / DEPLOY_REL)
+    base = Path(pack_root).expanduser().resolve()
+    rows = _read_jsonl(contained_path(base, DEPLOY_REL))
     rows.sort(key=_row_ts)
     if limit > 0:
         return rows[-limit:]

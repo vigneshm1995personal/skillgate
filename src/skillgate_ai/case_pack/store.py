@@ -31,6 +31,7 @@ from skillgate_ai.pack_schema import (
     merge_judge_block,
     parse_judge_patch,
 )
+from skillgate_ai.paths import contained_path
 
 
 def pack_judge_dict(pack: CasePack | None) -> dict[str, Any] | None:
@@ -40,7 +41,7 @@ def pack_judge_dict(pack: CasePack | None) -> dict[str, Any] | None:
 
 
 def save_pack_judge(skill_path: str | Path, raw: dict[str, Any] | None) -> CasePack:
-    root = Path(skill_path).expanduser().resolve()
+    root = contained_path(Path(skill_path).expanduser().resolve())
     pack = load_case_pack(root)
     if pack is None:
         raise SuiteError("This skill has no case pack yet.")
@@ -52,7 +53,7 @@ def save_pack_judge(skill_path: str | Path, raw: dict[str, Any] | None) -> CaseP
 
 
 def reset_pack_judge(skill_path: str | Path) -> CasePack:
-    root = Path(skill_path).expanduser().resolve()
+    root = contained_path(Path(skill_path).expanduser().resolve())
     pack = load_case_pack(root)
     if pack is None:
         raise SuiteError("This skill has no case pack yet.")
@@ -80,12 +81,13 @@ def expected_without_target_warning(
 
 
 def cases_path(skill_path: str | Path) -> Path:
-    return Path(skill_path).expanduser().resolve() / CASES_REL
+    base = Path(skill_path).expanduser().resolve()
+    return contained_path(base, CASES_REL)
 
 
 def load_case_pack(skill_path: str | Path) -> CasePack | None:
     """Load evals/cases.yaml, or None when the file is absent."""
-    root = Path(skill_path).expanduser().resolve()
+    root = contained_path(Path(skill_path).expanduser().resolve())
     path = cases_path(root)
     if not path.is_file():
         return None
@@ -127,7 +129,7 @@ def load_case_pack(skill_path: str | Path) -> CasePack | None:
 
 
 def save_case_pack(skill_path: str | Path, pack: CasePack) -> Path:
-    root = Path(skill_path).expanduser().resolve()
+    root = contained_path(Path(skill_path).expanduser().resolve())
     try:
         CasePack.model_validate(pack.model_dump())
     except ValidationError as exc:

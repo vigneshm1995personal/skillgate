@@ -239,7 +239,7 @@ def test_helper_install_launchd_plist(monkeypatch: pytest.MonkeyPatch, tmp_path:
     plist = plistlib.loads(dest.read_bytes())
     assert plist["RunAtLoad"] is True
     assert plist["ProgramArguments"][-1] == "helper"
-    assert os.stat(dest).st_mode & 0o777 == 0o644
+    assert os.stat(dest).st_mode & 0o777 == 0o600
 
 
 def test_helper_install_launchd_plist_non_mac(

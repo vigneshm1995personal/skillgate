@@ -29,7 +29,7 @@ from skillgate_ai.history import load_deploys, load_history
 from skillgate_ai.ingest import ingest_skill
 from skillgate_ai.judge_copy import customer_scorer_name
 from skillgate_ai.pack import browser_files, relevant_eval_fixtures
-from skillgate_ai.paths import is_skill_pack
+from skillgate_ai.paths import is_skill_pack, is_under_root, require_under
 
 SETTINGS_KEYS = (
     "CURSOR_API_KEY",
@@ -88,11 +88,7 @@ def keys_payload(state: AppState) -> dict[str, Any]:
 
 
 def is_relative(path: Path, root: Path) -> bool:
-    try:
-        path.resolve().relative_to(root.resolve())
-        return True
-    except ValueError:
-        return False
+    return is_under_root(path, root)
 
 
 _BROWSER_DROP = frozenset({"config_label_raw", "check_kind", "provider", "backend", "via_gateway"})
@@ -432,7 +428,7 @@ def workspace_history(state: AppState) -> dict[str, Any]:
     if not entries and is_skill_pack(state.root):
         return history_payload(state, state.root.resolve())
     for entry in entries:
-        hist = history_payload(state, Path(entry["absolute"]))
+        hist = history_payload(state, require_under(state.root, entry["absolute"]))
         timeline.extend(hist["timeline"])
         deploys.extend(hist.get("deploys") or [])
         if hist["last_run"] and (
@@ -464,7 +460,7 @@ def workspace_history(state: AppState) -> dict[str, Any]:
 
 def run_from_history(state: AppState, run_id: str) -> dict[str, Any] | None:
     for entry in catalog_entries(state.root):
-        path = Path(entry["absolute"])
+        path = require_under(state.root, entry["absolute"])
         for row in load_history(path, limit=0):
             if str(row.get("run_id") or "") == run_id:
                 return history_row_to_run(row, path)

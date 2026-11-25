@@ -44,11 +44,12 @@ from skillgate_ai.pack_schema import (
     keep_locked_case,
     parse_judge_block,
 )
+from skillgate_ai.paths import contained_path
 
 
 def pin_checks(skill_path: str | Path, checks: list[dict[str, Any]]) -> CasePack:
     """Upsert checks into evals/cases.yaml as pinned cases."""
-    root = Path(skill_path).expanduser().resolve()
+    root = contained_path(Path(skill_path).expanduser().resolve())
     skill_name = _skill_name(root)
     existing = None
     path = cases_path(root)
@@ -239,7 +240,10 @@ def _persist_input_files(root: Path, files: object, *, case_id: str) -> list[Cas
             written = copy_into_pack(root, src=src_path, dest_name=dest_name)
             out.append(CaseFileCopy(src=written["src"], dest=written["dest"]))
             continue
-        candidate = root / src
+        try:
+            candidate = contained_path(root, src)
+        except ValueError:
+            candidate = root / "__missing__"
         if candidate.is_file():
             out.append(CaseFileCopy(src=safe_relpath(src), dest=dest_name))
             continue

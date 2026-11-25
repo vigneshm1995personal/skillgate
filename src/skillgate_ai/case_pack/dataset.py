@@ -34,6 +34,7 @@ from skillgate_ai.pack_schema import (
     case_id_slug,
     case_is_locked,
 )
+from skillgate_ai.paths import contained_path
 from skillgate_ai.tool_check_schema import merge_tool_checks
 
 
@@ -92,7 +93,7 @@ def _case_entry(
 
 def dataset_view(skill_path: str | Path, *, include_files: bool = True) -> dict[str, Any] | None:
     """Dataset listing: examples with input and expected-output previews."""
-    root = Path(skill_path).expanduser().resolve()
+    root = contained_path(Path(skill_path).expanduser().resolve())
     if not root.is_dir():
         return None
     pack = load_case_pack(root)

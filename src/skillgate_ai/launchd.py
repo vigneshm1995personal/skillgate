@@ -23,7 +23,7 @@ def write_launch_agent(
     program_arguments: list[str],
     keep_alive: bool | None = None,
 ) -> Path:
-    """Write ``<launch_dir>/<label>.plist`` (0644) with RunAtLoad; dir is 0755."""
+    """Write ``<launch_dir>/<label>.plist`` (0600) with RunAtLoad."""
     plist: dict[str, object] = {
         "Label": label,
         "RunAtLoad": True,
@@ -31,13 +31,9 @@ def write_launch_agent(
     }
     if keep_alive is not None:
         plist["KeepAlive"] = keep_alive
-    launch_dir.mkdir(parents=True, exist_ok=True)
-    try:  # noqa: SIM105
-        os.chmod(launch_dir, 0o755)  # noqa: S103 - ~/Library/LaunchAgents must be traversable by launchd (standard macOS mode)
-    except OSError:
-        pass
+    launch_dir.mkdir(parents=True, exist_ok=True, mode=0o755)
     dest = launch_dir / f"{label}.plist"
     with open(dest, "wb") as handle:
         plistlib.dump(plist, handle)
-    os.chmod(dest, 0o644)
+    os.chmod(dest, 0o600)
     return dest

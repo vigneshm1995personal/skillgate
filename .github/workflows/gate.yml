@@ -24,6 +24,22 @@ env:
   UV_VERSION: "0.12.13"
 
 jobs:
+  codeql:
+    uses: ./.github/workflows/codeql.yml
+    secrets: inherit
+
+  all-gates:
+    runs-on: ubuntu-latest
+    needs: [lint, test, integration, audit, gate, oss-surface, codeql]
+    if: always()
+    steps:
+      - name: Require all gate jobs
+        run: |
+          case "${{ needs.lint.result }}${{ needs.test.result }}${{ needs.integration.result }}${{ needs.audit.result }}${{ needs.gate.result }}${{ needs.oss-surface.result }}${{ needs.codeql.result }}" in
+            successsuccesssuccesssuccesssuccesssuccess) exit 0 ;;
+            *) echo "One or more required jobs failed"; exit 1 ;;
+          esac
+
   lint:
     runs-on: ubuntu-latest
     timeout-minutes: 10

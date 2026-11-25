@@ -212,7 +212,7 @@ def test_sync_install_launchd_plist(monkeypatch: pytest.MonkeyPatch, tmp_path: P
     plist = plistlib.loads(dest.read_bytes())
     assert plist["RunAtLoad"] is True
     assert "https://github.com/acme/skills.git" in plist["ProgramArguments"]
-    assert os.stat(dest).st_mode & 0o777 == 0o644
+    assert os.stat(dest).st_mode & 0o777 == 0o600
 
 
 def test_clone_uses_double_dash_and_timeout(

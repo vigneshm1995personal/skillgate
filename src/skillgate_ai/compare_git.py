@@ -65,7 +65,9 @@ def list_skill_git_versions(pack: Path) -> list[dict[str, str]]:
 
 
 def find_git_root(pack: Path) -> Path:
-    pack = pack.resolve()
+    from skillgate_ai.paths import contained_path
+
+    pack = contained_path(pack.resolve())
     try:
         out = subprocess.run(  # noqa: S603 - fixed git argv; ref and path are separate argv items
             ["git", "rev-parse", "--show-toplevel"],  # noqa: S607 - git resolved from PATH by design

@@ -1,0 +1,22 @@
+extensions:
+  - addsTo:
+      pack: codeql/python-all
+      extensible: summaryModel
+    data:
+      - ["skillgate_ai.paths", "contained_path", "ReturnValue", "path-injection", "sanitized"]
+      - ["skillgate_ai.paths", "require_under", "ReturnValue", "path-injection", "sanitized"]
+      - ["skillgate_ai.pack.pathsafe", "_path_under_skill", "ReturnValue", "path-injection", "sanitized"]
+      - ["skillgate_ai.api_intake", "_inside", "ReturnValue", "path-injection", "sanitized"]
+  - addsTo:
+      pack: codeql/python-all
+      extensible: barrierModel
+    data:
+      - ["skillgate_ai.paths", "contained_path", "ReturnValue"]
+      - ["skillgate_ai.paths", "require_under", "ReturnValue"]
+      - ["skillgate_ai.pack.pathsafe", "_path_under_skill", "ReturnValue"]
+      - ["skillgate_ai.api_intake", "_inside", "ReturnValue"]
+  - addsTo:
+      pack: codeql/python-all
+      extensible: barrierGuardModel
+    data:
+      - ["skillgate_ai.paths", "is_under_root", "ReturnValue"]

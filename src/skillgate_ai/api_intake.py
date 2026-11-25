@@ -14,6 +14,7 @@ from skillgate_ai.catalog import safe_skill_folder_name, workspace_skills_root
 from skillgate_ai.errors import SkillGateError
 from skillgate_ai.ingest import FRONTMATTER_RE, ingest_skill
 from skillgate_ai.pack import copy_skill_pack
+from skillgate_ai.paths import require_under
 from skillgate_ai.scaffold import scaffold_trigger_cases
 
 _GIT_URL_RE = re.compile(r"^(https?://|git@|ssh://).+", re.IGNORECASE)
@@ -29,9 +30,7 @@ def looks_like_git_url(text: str) -> bool:
 
 
 def _inside(root: Path, candidate: Path) -> Path:
-    resolved = candidate.resolve()
-    resolved.relative_to(root.resolve())
-    return resolved
+    return require_under(root, candidate)
 
 
 def write_pasted_skill(root: Path, markdown: str) -> Path:

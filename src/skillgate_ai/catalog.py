@@ -9,7 +9,13 @@ from skillgate_ai.deploy import claude_skills_root, codex_skills_root, cursor_sk
 from skillgate_ai.errors import SkillGateError
 from skillgate_ai.ingest import NAME_RE, folder_slug, ingest_skill
 from skillgate_ai.pack import copy_skill_pack as copy_pack
-from skillgate_ai.paths import is_skill_pack, is_under_root
+from skillgate_ai.paths import (
+    PathTraversalError,
+    contained_path,
+    is_skill_pack,
+    is_under_root,
+    require_under,
+)
 
 SOURCE_ROOTS = (
     ("workspace", None),
@@ -60,9 +66,9 @@ def _iter_skill_dirs(parent: Path) -> list[Path]:
 def _workspace_skill_dir(path: Path, root: Path) -> Path | None:
     """Resolved skill folder when it and its SKILL.md stay inside ``root``; else None."""
     try:
-        resolved = path.resolve()
-        skill_md = (resolved / "SKILL.md").resolve()
-    except OSError:
+        resolved = require_under(root, path)
+        skill_md = contained_path(resolved, "SKILL.md")
+    except (OSError, ValueError, PathTraversalError):
         return None
     if not is_under_root(resolved, root) or not is_under_root(skill_md, root):
         return None
@@ -189,7 +195,10 @@ def find_skill(root: Path, name: str) -> Path:
     supplied = Path(text).expanduser()
     looks_like_path = supplied.is_absolute() or "/" in text or "\\" in text or ".." in text
     if looks_like_path:
-        resolved = supplied.resolve() if supplied.is_absolute() else (root / text).resolve()
+        if supplied.is_absolute():
+            resolved = supplied.resolve()
+        else:
+            resolved = contained_path(root, *Path(text).parts)
         if _immediate_agent_skill(resolved):
             return resolved
         if not is_under_root(resolved, root):
@@ -238,7 +247,7 @@ def import_from_agent_folders(
             slug = folder_slug(skill_dir)
             if slugs and slug not in slugs and skill_dir.name not in slugs:
                 continue
-            dest = dest_parent / slug
+            dest = contained_path(dest_parent, slug)
             if dest.exists():
                 skipped.append(
                     {
