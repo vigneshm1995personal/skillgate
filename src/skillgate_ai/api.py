@@ -249,9 +249,7 @@ def _register_core_routes(app: FastAPI) -> None:
 
         state = state_of(request)
         dumped = payload.model_dump(exclude_unset=True)
-        key_env: dict[str, Any] = (
-            {"key_env": dumped["key_env"]} if "key_env" in dumped else {}
-        )
+        key_env: dict[str, Any] = {"key_env": dumped["key_env"]} if "key_env" in dumped else {}
         try:
             settings = save_judge_settings(
                 state.root,
