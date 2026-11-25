@@ -12,7 +12,7 @@ try:
     from fastapi import Body, Request
 except ModuleNotFoundError:
     Request = Any  # type: ignore[assignment,misc]  # core checks show needs no web stack
-    Body = Any  # type: ignore[assignment,misc]  # optional ui extra
+    Body = Any  # type: ignore[assignment]  # optional ui extra
 
 from skillgate_ai.errors import SkillGateError
 from skillgate_ai.judge_spec import (

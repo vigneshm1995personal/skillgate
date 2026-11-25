@@ -59,7 +59,7 @@ jobs:
             echo "gh CLI missing; skipping CodeQL alert gate"
             exit 0
           fi
-          count="$(gh api "repos/${repo}/code-scanning/alerts?state=open&per_page=100" --jq '[.[] | select(.rule.security_severity_level == "high" or .rule.security_severity_level == "critical")] | length' 2>/dev/null || echo 0)"
+          count="$(gh api "repos/${repo}/code-scanning/alerts?state=open&per_page=100" --paginate --jq '[.[] | select(.rule.security_severity_level == "high" or .rule.security_severity_level == "critical")] | length' 2>/dev/null || echo 0)"
           echo "Open high/critical CodeQL alerts: ${count}"
           if [ "${count}" -gt 0 ]; then
             echo "Resolve open CodeQL alerts before merge."

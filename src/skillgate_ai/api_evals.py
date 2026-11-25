@@ -161,7 +161,10 @@ def register_eval_routes(app: FastAPI) -> None:
         return view or {"skill": path.name, "cases": [], "tool_checks": None}
 
     @app.post("/api/evals/fixture-bind")
-    async def fixture_bind(request: Request, payload: EvalFixtureBindBody = Body()) -> dict[str, Any]:
+    async def fixture_bind(
+        request: Request,
+        payload: EvalFixtureBindBody = Body(),
+    ) -> dict[str, Any]:
         state = state_of(request)
         skill_path = find_skill(state.root, payload.skill)
         checks = [dict(item) for item in payload.checks]
