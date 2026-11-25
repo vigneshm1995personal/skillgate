@@ -14,6 +14,7 @@ except ModuleNotFoundError as exc:
 from skillgate_ai.api_models import EvalFixtureBindBody, EvalGenerateBody, EvalPinBody
 from skillgate_ai.api_payloads import fail, skill_payload, state_of
 from skillgate_ai.case_pack import (
+    CASES_REL,
     PIN_NEEDS_EXPECTED_HINT,
     checks_from_pack,
     dataset_view,
