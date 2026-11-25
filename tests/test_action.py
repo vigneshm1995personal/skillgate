@@ -60,9 +60,42 @@ def test_action_metadata_is_marketplace_ready() -> None:
     setup = next(step for step in steps if step.get("uses", "").startswith("actions/setup-python@"))
     assert setup["with"]["python-version"] == "3.11"
     check = next(step for step in steps if step.get("id") == "check")
-    assert check["run"] == "python scripts/skillgate_action.py"
-    assert check["working-directory"] == "${{ github.action_path }}"
+    assert check["run"] == 'python "$SKILLGATE_ACTION_SCRIPT"'
+    assert "working-directory" not in check
+    script_env = check["env"]["SKILLGATE_ACTION_SCRIPT"]
+    assert script_env == "${{ github.action_path }}/scripts/skillgate_action.py"
     assert meta["outputs"]["exit-code"]["value"] == "${{ steps.check.outputs.exit-code }}"
+
+
+def test_check_command_relative_path_uses_consumer_cwd(monkeypatch, tmp_path: Path) -> None:
+    mod = _load_action_module()
+    repo = tmp_path / "consumer-repo"
+    (repo / "skills" / "pdf").mkdir(parents=True)
+    (repo / "skills" / "pdf" / "SKILL.md").write_text(
+        "---\nname: pdf\ndescription: x\n---\n# PDF\n",
+        encoding="utf-8",
+    )
+    action_dir = tmp_path / "skillgate-action"
+    action_dir.mkdir()
+    monkeypatch.chdir(action_dir)
+    monkeypatch.setenv("INPUT_PATH", "skills/pdf")
+    cmd = mod.check_command()
+    assert cmd[2] == "skills/pdf"
+    executed: list[list[str]] = []
+
+    def fake_run(command, **kwargs):
+        executed.append(list(command))
+        return (2, "No agent is available to run checks.")
+
+    monkeypatch.chdir(repo)
+    monkeypatch.setattr(mod, "run_command", fake_run)
+    monkeypatch.setattr(mod, "install_release", lambda _v: None)
+    monkeypatch.setenv("INPUT_VERSION", "0.7.9")
+    monkeypatch.setenv("INPUT_ARGS", "--no-judge")
+    mod.main()
+    assert executed
+    assert executed[0][2] == "skills/pdf"
+    assert (repo / "skills" / "pdf").is_dir()
 
 
 def test_action_inputs_match_the_check_command() -> None:

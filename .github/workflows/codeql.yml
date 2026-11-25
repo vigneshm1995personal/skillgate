@@ -56,15 +56,18 @@ jobs:
           set -euo pipefail
           repo="${{ github.repository }}"
           if ! command -v gh >/dev/null 2>&1; then
-            echo "gh CLI missing; skipping CodeQL alert gate"
-            exit 0
+            echo "gh CLI missing; CodeQL alert gate cannot run"
+            exit 1
           fi
           if [ "${{ github.event_name }}" = "pull_request" ]; then
-            scan_ref="refs/pull/${{ github.event.pull_request.number }}/head"
+            scan_ref="refs/pull/${{ github.event.pull_request.number }}/merge"
           else
             scan_ref="${{ github.ref }}"
           fi
-          count="$(gh api "repos/${repo}/code-scanning/alerts?state=open&ref=${scan_ref}&per_page=100" --paginate --jq '[.[] | select(.rule.security_severity_level == "high" or .rule.security_severity_level == "critical")] | length' 2>/dev/null || echo 0)"
+          if ! count="$(gh api "repos/${repo}/code-scanning/alerts" -f state=open -f ref="${scan_ref}" -F per_page=100 --paginate --jq '[.[] | select(.rule.security_severity_level == "high" or .rule.security_severity_level == "critical")] | length')"; then
+            echo "CodeQL alerts API query failed"
+            exit 1
+          fi
           echo "Open high/critical CodeQL alerts on ${scan_ref}: ${count}"
           if [ "${count}" -gt 0 ]; then
             echo "Resolve open CodeQL alerts on this ref before merge."

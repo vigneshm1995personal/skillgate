@@ -115,10 +115,10 @@ def plan_case_import(
     format_hint: str | None = None,
     on_conflict: OnConflict = "fail",
 ) -> ImportPlan:
-    from skillgate_ai.paths import contained_path
+    from skillgate_ai.paths import skill_pack_root
 
     fmt, raw_rows = parse_import_bytes(content, filename=filename, format_hint=format_hint)
-    root = contained_path(Path(skill_path).expanduser().resolve())
+    root = skill_pack_root(skill_path)
     skill_name = _skill_name(root)
     existing = load_case_pack(root) if cases_path(root).is_file() else None
     taken = {case.id for case in (existing.cases if existing else [])}

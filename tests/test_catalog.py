@@ -136,3 +136,13 @@ def test_find_skill_agent_skill_unaffected(tmp_path: Path, monkeypatch: pytest.M
     write_skill_md(agentonly, name="agentonly", description="Agent.", body="# Agent\n")
     root = _workspace(tmp_path)
     assert find_skill(root, "agentonly") == agentonly.resolve()
+
+
+def test_find_skill_absolute_agent_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    cursor_root = tmp_path / "cursor-skills"
+    cursor_root.mkdir(parents=True)
+    agentonly = cursor_root / "agentonly"
+    write_skill_md(agentonly, name="agentonly", description="Agent.", body="# Agent\n")
+    monkeypatch.setenv("SKILLGATE_CURSOR_SKILLS", str(cursor_root))
+    root = _workspace(tmp_path)
+    assert find_skill(root, str(agentonly.resolve())) == agentonly.resolve()

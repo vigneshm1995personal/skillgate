@@ -59,8 +59,8 @@ runs:
     - name: Check the skill pack
       id: check
       shell: bash
-      working-directory: ${{ github.action_path }}
       env:
+        SKILLGATE_ACTION_SCRIPT: ${{ github.action_path }}/scripts/skillgate_action.py
         INPUT_PATH: ${{ inputs.path }}
         INPUT_VERSION: ${{ inputs.version }}
         INPUT_JUDGE: ${{ inputs.judge }}
@@ -69,4 +69,4 @@ runs:
         INPUT_ACCOUNT_ID: ${{ inputs.account-id }}
         INPUT_HARNESS: ${{ inputs.harness }}
         INPUT_ARGS: ${{ inputs.args }}
-      run: python scripts/skillgate_action.py
+      run: python "$SKILLGATE_ACTION_SCRIPT"

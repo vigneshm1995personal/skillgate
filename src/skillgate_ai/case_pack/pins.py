@@ -6,6 +6,7 @@ path; drafts and suggest-from-skill checks are not.
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Any, Literal
 
@@ -44,12 +45,12 @@ from skillgate_ai.pack_schema import (
     keep_locked_case,
     parse_judge_block,
 )
-from skillgate_ai.paths import PathTraversalError, contained_path, require_under
+from skillgate_ai.paths import PathTraversalError, contained_path, require_under, skill_pack_root
 
 
 def pin_checks(skill_path: str | Path, checks: list[dict[str, Any]]) -> CasePack:
     """Upsert checks into evals/cases.yaml as pinned cases."""
-    root = contained_path(Path(skill_path).expanduser().resolve())
+    root = skill_pack_root(skill_path)
     skill_name = _skill_name(root)
     existing = None
     path = cases_path(root)
@@ -226,7 +227,7 @@ def _persist_input_files(root: Path, files: object, *, case_id: str) -> list[Cas
         content = _file_content(item)
         if content is not None:
             name = dest_name or f"{case_id}.txt"
-            if src and not Path(src).is_absolute():
+            if src and not os.path.isabs(src):
                 rel = safe_relpath(src)
             else:
                 rel = f"{FIXTURE_DIR}/{Path(name).name}"
@@ -235,23 +236,20 @@ def _persist_input_files(root: Path, files: object, *, case_id: str) -> list[Cas
             continue
         if not src:
             continue
-        src_path = Path(src)
-        if src_path.is_absolute() and src_path.is_file():
-            safe_src = require_under(root, src_path)
+        if os.path.isabs(src):
+            abs_src = Path(src).expanduser().resolve()
+            if not abs_src.is_file():
+                raise ValueError(f"Pin could not find input file {src}.")
+            safe_src = require_under(root, abs_src)
             written = copy_into_pack(root, src=safe_src, dest_name=dest_name)
             out.append(CaseFileCopy(src=written["src"], dest=written["dest"]))
             continue
         try:
             candidate = contained_path(root, src)
-        except (ValueError, PathTraversalError):
-            candidate = root / "__missing__"
+        except PathTraversalError:
+            raise ValueError(f"Pin could not find input file {src}.") from None
         if candidate.is_file():
             out.append(CaseFileCopy(src=safe_relpath(src), dest=dest_name))
-            continue
-        if src_path.is_file():
-            safe_src = require_under(root, src_path)
-            written = copy_into_pack(root, src=safe_src, dest_name=dest_name)
-            out.append(CaseFileCopy(src=written["src"], dest=written["dest"]))
             continue
         raise ValueError(f"Pin could not find input file {src}.")
     return out

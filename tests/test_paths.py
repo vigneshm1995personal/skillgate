@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import shutil
 from pathlib import Path
 
@@ -41,3 +42,19 @@ def test_require_under_rejects_outside(tmp_path: Path) -> None:
     outside.mkdir()
     with pytest.raises(PathTraversalError):
         require_under(root, outside)
+
+
+def test_contained_path_rejects_symlink_escape(tmp_path: Path) -> None:
+    root = (tmp_path / "ws").resolve()
+    root.mkdir()
+    outside = (tmp_path / "outside").resolve()
+    outside.mkdir()
+    secret = outside / "leak.txt"
+    secret.write_text("secret", encoding="utf-8")
+    link = root / "escape"
+    try:
+        os.symlink(outside, link)
+    except (OSError, NotImplementedError):
+        pytest.skip("symlinks not supported here")
+    with pytest.raises(PathTraversalError):
+        contained_path(root, "escape", "leak.txt")

@@ -16,11 +16,12 @@ def contained_path(root: str | Path, *parts: str | Path) -> Path:
     if any(str(part) in {".", ".."} or ".." in Path(str(part)).parts for part in parts):
         raise PathTraversalError("Path escapes the allowed root.")
     candidate = base.joinpath(*parts) if parts else base
+    resolved = candidate.resolve()
     try:
-        candidate.relative_to(base)
+        resolved.relative_to(base)
     except ValueError as exc:
         raise PathTraversalError("Path escapes the allowed root.") from exc
-    return candidate.resolve()
+    return resolved
 
 
 def require_under(root: str | Path, path: str | Path) -> Path:
@@ -90,6 +91,30 @@ def project_root() -> Path:
     if pack is not None:
         return pack
     return cwd
+
+
+def skill_pack_root(skill_path: str | Path) -> Path:
+    """Resolved skill pack folder under its config root, or a direct agent-skill install."""
+    raw = Path(skill_path).expanduser()
+    if ".." in raw.parts:
+        raise PathTraversalError("Path escapes the allowed root.")
+    resolved = raw.resolve()
+    bound = config_root_for(resolved).resolve()
+    try:
+        return require_under(bound, resolved)
+    except PathTraversalError:
+        from skillgate_ai.catalog import _immediate_agent_skill
+
+        if _immediate_agent_skill(resolved):
+            return resolved
+        cases_file = resolved / "evals" / "cases.yaml"
+        if (
+            is_skill_pack(resolved)
+            or (resolved / "SKILL.md").is_file()
+            or cases_file.is_file()
+        ):
+            return resolved
+        raise
 
 
 def user_skillgate_dir() -> Path:
