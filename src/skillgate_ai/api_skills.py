@@ -297,8 +297,8 @@ def register_skill_routes(app: FastAPI) -> None:
                             rel_src = f"scripts/{rel}"
                             src_path = pack_path_string(source, rel_src)
                             with open(src_path, "rb") as handle:
-                                payload = handle.read()
-                            write_pack_bytes(skill_path, dest_rel, payload)
+                                file_bytes = handle.read()
+                            write_pack_bytes(skill_path, dest_rel, file_bytes)
         return skill_payload(state, skill_path)
 
     @app.get("/api/history")
