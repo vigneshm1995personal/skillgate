@@ -11,8 +11,6 @@ from skillgate_ai.pack.tree import pack_file_path
 
 
 def rewrite_skill_description(skill_md: Path, new_description: str) -> None:
-    if skill_md.name != "SKILL.md":
-        raise ValueError("Expected SKILL.md")
     try:
         skill_md = pack_file_path(skill_md.parent, "SKILL.md")
     except FileNotFoundError as exc:

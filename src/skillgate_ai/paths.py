@@ -175,17 +175,3 @@ def is_under_root(path: str | Path, root: str | Path) -> bool:
         return False
 
 
-def copy_skill_subtree(src_root: Path, dest_root: Path, rel: str) -> None:
-    """Replace ``rel`` under dest_root with a tree copied from src_root."""
-    import shutil
-
-    cleaned = rel.replace("\\", "/").strip().strip("/")
-    parts = [piece for piece in cleaned.split("/") if piece and piece not in {".", ""}]
-    if not parts or any(piece == ".." for piece in parts):
-        raise PathTraversalError("Path escapes the allowed root.")
-    src = contained_path(src_root, *parts)
-    dest = contained_path(dest_root, *parts)
-    if dest.exists():
-        shutil.rmtree(dest)
-    if src.is_dir():
-        shutil.copytree(src, dest)
