@@ -13,6 +13,7 @@ from skillgate_ai.catalog import safe_skill_folder_name, workspace_skills_root
 from skillgate_ai.errors import SkillGateError
 from skillgate_ai.ingest import FRONTMATTER_RE, ingest_skill
 from skillgate_ai.pack import copy_skill_pack
+from skillgate_ai.pack_io import is_pack_file, write_pack_bytes, write_pack_text
 from skillgate_ai.paths import PathTraversalError, contained_path, require_under
 from skillgate_ai.scaffold import scaffold_trigger_cases
 
@@ -51,11 +52,13 @@ def write_pasted_skill(root: Path, markdown: str) -> Path:
     parent.mkdir(parents=True, exist_ok=True)
     dest = contained_path(parent, name)
     dest.mkdir(parents=True, exist_ok=True)
-    contained_path(dest, "SKILL.md").write_text(text, encoding="utf-8")
+    write_pack_text(dest, "SKILL.md", text)
     ingest_skill(dest, strict=False)
-    if not dest.exists():
+    import os
+
+    if not os.path.isdir(os.fsdecode(dest)):
         return dest
-    if not contained_path(dest, "evals", "cases.yaml").is_file():
+    if not is_pack_file(dest, "evals/cases.yaml"):
         scaffold_trigger_cases(dest)
     return dest
 
@@ -111,21 +114,21 @@ def extract_uploaded_skill(root: Path, data: bytes, *, filename: str) -> Path:
         if not rel:
             continue
         try:
-            target = require_under(dest, dest / rel)
+            write_pack_bytes(dest, rel, archive.read(info))
         except PathTraversalError:
             continue
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_bytes(archive.read(info))
     ingest_skill(dest, strict=False)
     return dest
 
 
 def import_skill_folder(root: Path, source: str | Path) -> Path:
     """Copy a local skill folder into ``<root>/skills/<slug>``."""
+    import os
+
     from skillgate_ai.paths import skill_pack_root
 
     src = skill_pack_root(source)
-    if not src.is_dir() or not (src / "SKILL.md").is_file():
+    if not os.path.isdir(os.fsdecode(src)) or not is_pack_file(src, "SKILL.md"):
         raise SkillGateError(
             "Pass a skill folder that contains SKILL.md.",
             hint="Example: skillgate import ./my-skill",
@@ -135,7 +138,7 @@ def import_skill_folder(root: Path, source: str | Path) -> Path:
     parent = require_under(root, workspace_skills_root(root))
     parent.mkdir(parents=True, exist_ok=True)
     dest = require_under(parent, parent / slug)
-    if dest.exists():
+    if os.path.exists(os.fsdecode(dest)):
         raise SkillGateError(
             f"{slug} is already in this project.",
             hint="Leave that folder as it is, or import a different skill.",
@@ -159,7 +162,7 @@ def import_skills_from_git(root: Path, repo_url: str) -> list[Path]:
     with tempfile.TemporaryDirectory(prefix="sg-import-") as td:
         work = Path(td)
         _clone(url, work)
-        if (work / "SKILL.md").is_file():
+        if is_pack_file(work, "SKILL.md"):
             _reject_symlinks(work)
             return [import_skill_folder(root, work)]
         names = _skill_names(work, "skills")

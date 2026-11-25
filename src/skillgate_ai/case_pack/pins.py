@@ -289,15 +289,18 @@ def _persist_golden(
         except PathTraversalError:
             found = None
         else:
-            rel = _rel_to_skill(root, safe_found)
-            if rel is not None:
-                if rel.startswith(f"{GOLDEN_DIR}/"):
+            rel_src = _rel_to_skill(root, safe_found)
+            if rel_src is not None:
+                if rel_src.startswith(f"{GOLDEN_DIR}/"):
                     return CaseGolden(
-                        output_path=dest_output, path=rel, kind=golden_kind(safe_found)
+                        output_path=dest_output, path=rel_src, kind=golden_kind(safe_found)
                     )
+                from skillgate_ai.pack_io import read_pack_bytes
+
                 suffix = safe_found.suffix or ".txt"
                 rel = f"{GOLDEN_DIR}/{case_id}{suffix}"
-                write_pack_file(root, rel=rel, content=safe_found.read_bytes())
+                payload = read_pack_bytes(root, rel_src)
+                write_pack_file(root, rel=rel, content=payload)
                 return CaseGolden(output_path=dest_output, path=rel, kind=golden_kind(safe_found))
     if not contains_list:
         raise ValueError(PIN_NEEDS_EXPECTED)

@@ -91,9 +91,13 @@ def pack_file_path(skill_path: str | Path, rel: str) -> Path:
 
 
 def pack_preview(skill_path: str | Path, rel: str) -> dict[str, Any]:
-    path = pack_file_path(skill_path, rel)
-    data = path.read_bytes()
-    suffix = path.suffix.lower()
+    from skillgate_ai.pack_io import is_pack_file, read_pack_bytes
+
+    root = resolve_pack_root(skill_path)
+    if not is_pack_file(root, rel):
+        raise FileNotFoundError(rel)
+    data = read_pack_bytes(root, rel)
+    suffix = Path(rel).suffix.lower()
     if suffix in IMAGE_SUFFIXES:
         kind = "image"
     elif suffix == ".pdf":

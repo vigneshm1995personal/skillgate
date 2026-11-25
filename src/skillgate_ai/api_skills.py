@@ -287,10 +287,14 @@ def register_skill_routes(app: FastAPI) -> None:
 
                 src = require_under(source, contained_path(source, "scripts"))
                 dest = require_under(skill_path, contained_path(skill_path, "scripts"))
-                if src.is_dir():
-                    if dest.exists():
-                        shutil.rmtree(dest)
-                    shutil.copytree(src, dest)
+                import os
+
+                src_name = os.fsdecode(src)
+                dest_name = os.fsdecode(dest)
+                if os.path.isdir(src_name):
+                    if os.path.exists(dest_name):
+                        shutil.rmtree(dest_name)
+                    shutil.copytree(src_name, dest_name)
         return skill_payload(state, skill_path)
 
     @app.get("/api/history")

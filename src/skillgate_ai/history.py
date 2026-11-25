@@ -8,7 +8,13 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from skillgate_ai.paths import PathTraversalError, contained_path, require_under
+from skillgate_ai.pack_io import (
+    append_pack_line,
+    glob_pack_files,
+    is_pack_file,
+    read_pack_text,
+)
+from skillgate_ai.paths import contained_path
 
 HISTORY_DIR = "evals/history"
 DEPLOY_REL = "evals/deploys.jsonl"
@@ -20,25 +26,14 @@ def _local_now() -> datetime:
 
 def history_dir(pack_root: str | Path) -> Path:
     base = contained_path(pack_root)
-    return contained_path(base, HISTORY_DIR)
+    return contained_path(base, *HISTORY_DIR.split("/"))
 
 
-def _append_jsonl(dest: Path, row: Mapping[str, Any]) -> Path | None:
-    payload = json.dumps(row, ensure_ascii=True) + "\n"
-    try:
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        with dest.open("a", encoding="utf-8") as handle:
-            handle.write(payload)
-    except OSError:
-        return None
-    return dest
-
-
-def _read_jsonl(path: Path) -> list[dict[str, Any]]:
-    if not path.is_file():
+def _read_jsonl_rel(pack_root: str | Path, rel: str) -> list[dict[str, Any]]:
+    if not is_pack_file(pack_root, rel):
         return []
     try:
-        text = path.read_text(encoding="utf-8")
+        text = read_pack_text(pack_root, rel)
     except OSError:
         return []
     rows: list[dict[str, Any]] = []
@@ -74,7 +69,7 @@ def append_eval(
 ) -> Path | None:
     """Append one JSONL row. Returns the file path, or None on EACCES/EROFS."""
     now = _local_now()
-    dest = contained_path(history_dir(pack_root), f"{now.strftime('%Y%m%d')}.jsonl")
+    rel = f"{HISTORY_DIR}/{now.strftime('%Y%m%d')}.jsonl"
     from skillgate_ai.deploy_gate import infer_gate_moved
 
     is_tryout = tryout or bool((report or {}).get("tryout"))
@@ -94,8 +89,7 @@ def append_eval(
         gate = "red"
     else:
         gate = None
-    return _append_jsonl(
-        dest,
+    payload = json.dumps(
         {
             "ts": now.isoformat(),
             "kind": "run",
@@ -108,7 +102,9 @@ def append_eval(
             "tryout": is_tryout,
             "gate_moved": moved,
         },
+        ensure_ascii=True,
     )
+    return append_pack_line(pack_root, rel, f"{payload}\n")
 
 
 def _row_ts(item: Mapping[str, Any]) -> datetime:
@@ -127,16 +123,11 @@ def _row_ts(item: Mapping[str, Any]) -> datetime:
 
 def load_history(pack_root: str | Path, *, limit: int = 50) -> list[dict[str, Any]]:
     """Newest-last eval rows by ``ts``. Missing dir → empty list. Never reads the deploy log."""
-    dest_dir = history_dir(pack_root)
-    if not dest_dir.is_dir():
-        return []
+    root = contained_path(pack_root)
     rows: list[dict[str, Any]] = []
-    for path in dest_dir.glob("*.jsonl"):
-        try:
-            safe = require_under(dest_dir, path)
-        except PathTraversalError:
-            continue
-        for item in _read_jsonl(safe):
+    for path in glob_pack_files(root, HISTORY_DIR, "*.jsonl"):
+        rel = f"{HISTORY_DIR}/{path.name}"
+        for item in _read_jsonl_rel(root, rel):
             if item.get("kind") in {"deploy", "compare"}:
                 continue
             if not item.get("run_id"):
@@ -161,25 +152,21 @@ def _scrub_compare_row(row: dict[str, Any]) -> dict[str, Any]:
 def append_compare(pack_root: str | Path, *, row: dict[str, Any]) -> Path | None:
     """Append one compare job row to pack history JSONL."""
     now = _local_now()
-    dest = contained_path(history_dir(pack_root), f"{now.strftime('%Y%m%d')}.jsonl")
+    rel = f"{HISTORY_DIR}/{now.strftime('%Y%m%d')}.jsonl"
     payload = dict(row)
     payload.setdefault("ts", now.isoformat())
     payload.setdefault("kind", "compare")
-    return _append_jsonl(dest, _scrub_compare_row(payload))
+    line = json.dumps(_scrub_compare_row(payload), ensure_ascii=True)
+    return append_pack_line(pack_root, rel, f"{line}\n")
 
 
 def load_compares(pack_root: str | Path, *, limit: int = 50) -> list[dict[str, Any]]:
     """Newest-last compare rows. Does not include eval runs or deploy log."""
-    dest_dir = history_dir(pack_root)
-    if not dest_dir.is_dir():
-        return []
+    root = contained_path(pack_root)
     rows: list[dict[str, Any]] = []
-    for path in dest_dir.glob("*.jsonl"):
-        try:
-            safe = require_under(dest_dir, path)
-        except PathTraversalError:
-            continue
-        for item in _read_jsonl(safe):
+    for path in glob_pack_files(root, HISTORY_DIR, "*.jsonl"):
+        rel = f"{HISTORY_DIR}/{path.name}"
+        for item in _read_jsonl_rel(root, rel):
             if item.get("kind") != "compare" or not item.get("compare_id"):
                 continue
             rows.append(_scrub_compare_row(item))
@@ -203,10 +190,7 @@ def append_deploy(
     file_count: int | None = None,
     mode: str = "local",
 ) -> Path | None:
-    base = contained_path(pack_root)
-    dest = contained_path(base, DEPLOY_REL)
-    return _append_jsonl(
-        dest,
+    payload = json.dumps(
         {
             "ts": _local_now().isoformat(),
             "kind": "deploy",
@@ -215,12 +199,13 @@ def append_deploy(
             "file_count": file_count,
             "mode": mode,
         },
+        ensure_ascii=True,
     )
+    return append_pack_line(pack_root, DEPLOY_REL, f"{payload}\n")
 
 
 def load_deploys(pack_root: str | Path, *, limit: int = 50) -> list[dict[str, Any]]:
-    base = contained_path(pack_root)
-    rows = _read_jsonl(contained_path(base, DEPLOY_REL))
+    rows = _read_jsonl_rel(pack_root, DEPLOY_REL)
     rows.sort(key=_row_ts)
     if limit > 0:
         return rows[-limit:]

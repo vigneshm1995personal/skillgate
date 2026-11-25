@@ -1,6 +1,6 @@
 name: skillgate
 dependency-packs:
-  - skillgate-ai/skillgate-sanitizers@0.0.2
+  - skillgate-ai/skillgate-sanitizers@0.0.3
 queries:
   - uses: security-extended
 packs:

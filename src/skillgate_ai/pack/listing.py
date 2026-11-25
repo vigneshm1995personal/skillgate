@@ -17,8 +17,9 @@ from skillgate_ai.pack.constants import (
     IMAGE_SUFFIXES,
     PDF_DEMO_FIXTURE_NAMES,
 )
-from skillgate_ai.pack.pathsafe import _path_under_skill, _rel_to_skill, try_resolve_pack_root
+from skillgate_ai.pack.pathsafe import _rel_to_skill, try_resolve_pack_root
 from skillgate_ai.pack.samples import is_authentic_fixture_bytes
+from skillgate_ai.pack_io import is_pack_file, read_pack_bytes
 from skillgate_ai.paths import PathTraversalError, pack_file_at, require_under
 
 
@@ -80,10 +81,9 @@ def relevant_eval_fixtures(
         suffix = Path(rel).suffix.lower()
         if suffix in CASE_SUFFIXES:
             continue
-        path = _path_under_skill(root, rel)
-        if path is None or not path.is_file():
+        if not is_pack_file(root, rel):
             continue
-        data = path.read_bytes()
+        data = read_pack_bytes(root, rel)
         if suffix in IMAGE_SUFFIXES or suffix == ".pdf":
             if not is_authentic_fixture_bytes(rel, data):
                 continue
@@ -117,15 +117,13 @@ def skill_pack_hash(skill_path: str | Path | None) -> str:
         rel = item["path"]
         digest.update(rel.encode("utf-8"))
         digest.update(b"\0")
-        under = _path_under_skill(root, rel)
-        if under is None:
+        if not is_pack_file(root, rel):
             continue
-        digest.update(under.read_bytes())
+        digest.update(read_pack_bytes(root, rel))
         digest.update(b"\0")
-    skill_md = pack_file_at(root, "SKILL.md")
-    if skill_md.is_file():
+    if is_pack_file(root, "SKILL.md"):
         digest.update(b"SKILL.md\0")
-        digest.update(skill_md.read_bytes())
+        digest.update(read_pack_bytes(root, "SKILL.md"))
     return digest.hexdigest()
 
 
@@ -151,8 +149,10 @@ def browser_files(skill_path: str | Path) -> list[dict[str, Any]]:
     if root is None:
         return []
     items: list[dict[str, Any]] = []
-    skill_md = pack_file_at(root, "SKILL.md")
-    if skill_md.is_file():
-        items.append({"path": "SKILL.md", "bytes": skill_md.stat().st_size})
+    if is_pack_file(root, "SKILL.md"):
+        import os
+
+        skill_md = pack_file_at(root, "SKILL.md")
+        items.append({"path": "SKILL.md", "bytes": os.path.getsize(os.fsdecode(skill_md))})
     items.extend(list_pack_files(root))
     return items

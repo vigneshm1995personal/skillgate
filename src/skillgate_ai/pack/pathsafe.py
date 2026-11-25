@@ -93,10 +93,20 @@ def _path_under_skill(skill_root: Path, rel: str) -> Path | None:
 
 
 def _rel_to_skill(root: Path, path: Path) -> str | None:
+    import os
+
+    from skillgate_ai.paths import PathTraversalError, require_under
+
     try:
-        return path.resolve().relative_to(root.resolve()).as_posix()
-    except ValueError:
+        safe = require_under(root, path)
+        base = os.path.realpath(os.path.expanduser(str(root)))
+        target = os.path.realpath(os.fsdecode(safe))
+        rel = os.path.relpath(target, base)
+    except (PathTraversalError, ValueError, OSError):
         return None
+    if rel.startswith(".."):
+        return None
+    return rel.replace("\\", "/")
 
 
 def _safe_filename(name: str) -> str:

@@ -24,6 +24,7 @@ from skillgate_ai.ingest import folder_matches_skill
 from skillgate_ai.pack_files import (
     GOLDEN_TAIL_CHARS as GOLDEN_TAIL_CHARS,
 )
+from skillgate_ai.pack_io import is_pack_file, read_pack_text, write_pack_text
 from skillgate_ai.pack_schema import (
     ExtraQuestion as ExtraQuestion,
 )
@@ -87,11 +88,10 @@ def cases_path(skill_path: str | Path) -> Path:
 def load_case_pack(skill_path: str | Path) -> CasePack | None:
     """Load evals/cases.yaml, or None when the file is absent."""
     root = skill_pack_root(skill_path)
-    path = cases_path(root)
-    if not path.is_file():
+    if not is_pack_file(root, CASES_REL):
         return None
     try:
-        raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        raw = yaml.safe_load(read_pack_text(root, CASES_REL)) or {}
     except yaml.YAMLError:
         raise SuiteError(
             "Couldn't load these checks.",
@@ -133,11 +133,10 @@ def save_case_pack(skill_path: str | Path, pack: CasePack) -> Path:
         CasePack.model_validate(pack.model_dump())
     except ValidationError as exc:
         raise SuiteError(friendly_validation_error(exc, kind="Case pack")) from None
-    dest = cases_path(root)
     previous = None
-    if dest.is_file():
+    if is_pack_file(root, CASES_REL):
         try:
-            raw = yaml.safe_load(dest.read_text(encoding="utf-8")) or {}
+            raw = yaml.safe_load(read_pack_text(root, CASES_REL)) or {}
             if isinstance(raw, dict):
                 previous = CasePack.model_validate(raw)
         except (OSError, UnicodeDecodeError, yaml.YAMLError, ValidationError):
@@ -145,9 +144,7 @@ def save_case_pack(skill_path: str | Path, pack: CasePack) -> Path:
     _reject_removed_seed_cases(previous, pack)
     _reject_missing_seed_cases(pack, root)
     _validate_pack_on_disk(root, pack)
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    dest.write_text(_dump_pack(pack), encoding="utf-8")
-    return dest
+    return write_pack_text(root, CASES_REL, _dump_pack(pack))
 
 
 def _dump_pack(pack: CasePack) -> str:
@@ -192,8 +189,7 @@ def _validate_pack_on_disk(root: Path, pack: CasePack) -> None:
         if case.input.needs_upload:
             continue
         for item in case.input.files:
-            src = pack_file_at(root, item.src)
-            if not src.is_file():
+            if not is_pack_file(root, item.src):
                 raise SuiteError(
                     f"Couldn't find {item.src} (listed as an input file for {case.id}).",
                     hint="Add the file under evals/fixtures/, or remove it from input.files.",
@@ -203,7 +199,7 @@ def _validate_pack_on_disk(root: Path, pack: CasePack) -> None:
             and case.should_trigger
             and case.golden is not None
             and not case.output_optional
-            and not pack_file_at(root, case.golden.path).is_file()
+            and not is_pack_file(root, case.golden.path)
         ):
             from skillgate_ai.case_pack.dataset import MISSING_GOLDEN_REASON
 

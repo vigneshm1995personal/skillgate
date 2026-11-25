@@ -9,6 +9,7 @@ from skillgate_ai.deploy import claude_skills_root, codex_skills_root, cursor_sk
 from skillgate_ai.errors import SkillGateError
 from skillgate_ai.ingest import NAME_RE, folder_slug, ingest_skill
 from skillgate_ai.pack import copy_skill_pack as copy_pack
+from skillgate_ai.pack_io import is_pack_file
 from skillgate_ai.paths import (
     PathTraversalError,
     contained_path,
@@ -67,12 +68,12 @@ def _workspace_skill_dir(path: Path, root: Path) -> Path | None:
     """Resolved skill folder when it and its SKILL.md stay inside ``root``; else None."""
     try:
         resolved = require_under(root, path)
-        skill_md = require_under(root, contained_path(resolved, "SKILL.md"))
+        require_under(root, contained_path(resolved, "SKILL.md"))
     except (OSError, ValueError, PathTraversalError):
         return None
     if not is_under_root(resolved, root):
         return None
-    if not skill_md.is_file():
+    if not is_pack_file(resolved, "SKILL.md"):
         return None
     return resolved
 
@@ -97,7 +98,7 @@ def catalog_entries(root: Path, *, include_agents: bool = False) -> list[dict[st
             resolved = path.resolve()
         if resolved in seen:
             return
-        if not (resolved / "SKILL.md").is_file():
+        if not is_pack_file(resolved, "SKILL.md"):
             return
         seen.add(resolved)
         slug = folder_slug(resolved)
@@ -122,10 +123,12 @@ def catalog_entries(root: Path, *, include_agents: bool = False) -> list[dict[st
             }
         )
 
-    if is_skill_pack(root) or (root / "SKILL.md").is_file():
+    import os
+
+    if is_skill_pack(root) or is_pack_file(root, "SKILL.md"):
         add(root, "workspace")
     skills_root = workspace_skills_root(root)
-    if not skills_root.is_dir():
+    if not os.path.isdir(os.fsdecode(skills_root)):
         for child in _iter_skill_dirs(root):
             add(child, "workspace")
     for child in _iter_skill_dirs(skills_root):
@@ -149,7 +152,9 @@ def catalog_entries(root: Path, *, include_agents: bool = False) -> list[dict[st
 
 def _immediate_agent_skill(path: Path) -> bool:
     """True when ``path`` is a direct child of a Cursor, Codex, or Claude skills folder."""
-    if not path.is_dir() or not (path / "SKILL.md").is_file():
+    import os
+
+    if not os.path.isdir(os.fsdecode(path)) or not is_pack_file(path, "SKILL.md"):
         return False
     parent = path.parent
     for _source, getter in SOURCE_ROOTS:

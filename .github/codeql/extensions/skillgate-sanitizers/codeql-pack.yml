@@ -1,4 +1,4 @@
 name: skillgate-ai/skillgate-sanitizers
-version: 0.0.2
+version: 0.0.3
 libraryPathDependencies:
   - codeql/python-all
