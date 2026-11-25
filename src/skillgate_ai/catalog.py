@@ -192,11 +192,14 @@ def find_skill(root: Path, name: str) -> Path:
     text = (name or "").strip()
     if not text:
         raise SkillGateError("A skill name is required.")
-    supplied = Path(text).expanduser()
-    looks_like_path = supplied.is_absolute() or "/" in text or "\\" in text or ".." in text
+    expanded = Path(text).expanduser()
+    looks_like_path = expanded.is_absolute() or "/" in text or "\\" in text or ".." in text
     if looks_like_path:
-        if supplied.is_absolute():
-            resolved = supplied.resolve()
+        if expanded.is_absolute():
+            try:
+                resolved = require_under(root, expanded.resolve())
+            except PathTraversalError as exc:
+                raise SkillGateError("That path is outside this project.") from exc
         else:
             resolved = contained_path(root, *Path(text).parts)
         if _immediate_agent_skill(resolved):

@@ -44,7 +44,7 @@ from skillgate_ai.pack_schema import (
     keep_locked_case,
     parse_judge_block,
 )
-from skillgate_ai.paths import contained_path
+from skillgate_ai.paths import PathTraversalError, contained_path, require_under
 
 
 def pin_checks(skill_path: str | Path, checks: list[dict[str, Any]]) -> CasePack:
@@ -237,18 +237,20 @@ def _persist_input_files(root: Path, files: object, *, case_id: str) -> list[Cas
             continue
         src_path = Path(src)
         if src_path.is_absolute() and src_path.is_file():
-            written = copy_into_pack(root, src=src_path, dest_name=dest_name)
+            safe_src = require_under(root, src_path)
+            written = copy_into_pack(root, src=safe_src, dest_name=dest_name)
             out.append(CaseFileCopy(src=written["src"], dest=written["dest"]))
             continue
         try:
             candidate = contained_path(root, src)
-        except ValueError:
+        except (ValueError, PathTraversalError):
             candidate = root / "__missing__"
         if candidate.is_file():
             out.append(CaseFileCopy(src=safe_relpath(src), dest=dest_name))
             continue
         if src_path.is_file():
-            written = copy_into_pack(root, src=src_path, dest_name=dest_name)
+            safe_src = require_under(root, src_path)
+            written = copy_into_pack(root, src=safe_src, dest_name=dest_name)
             out.append(CaseFileCopy(src=written["src"], dest=written["dest"]))
             continue
         raise ValueError(f"Pin could not find input file {src}.")
