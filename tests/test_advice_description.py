@@ -175,6 +175,28 @@ def test_tighten_description_is_idempotent():
     assert "unrelated questions" in first.lower()
 
 
+def test_synthesize_trigger_description_retargets_from_pdf_reference(tmp_path: Path) -> None:
+    skill = Skill(
+        path=tmp_path / "pdf-lite",
+        name="pdf-lite",
+        description="Too short.",
+        body="",
+    )
+    reference = Skill(
+        path=tmp_path / "pdf-ref",
+        name="pdf-ref",
+        description="Work with PDF documents and extract text.",
+        body="",
+    )
+    result = synthesize_trigger_description(
+        skill,
+        ["Please open quarterly-report.pdf and extract the tables"],
+        reference,
+    )
+    assert "pdf" in result.lower()
+    assert len(result) <= 1024
+
+
 def test_synthesize_trigger_description_selects_skill_for_failed_prompt(tmp_path: Path):
     skill = Skill(
         path=tmp_path / "pdf-tool",

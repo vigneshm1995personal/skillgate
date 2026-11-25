@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from skillgate_ai.fixture_bind import (
@@ -9,12 +11,20 @@ from skillgate_ai.fixture_bind import (
     _report_covers_pinned_ids,
     _template_check,
     _unique_id,
+    apply_inherit,
     authentic_completion_passed,
     coverage_required,
+    decide_gate,
     decide_gate_result,
+    expand_from_folder,
+    file_copies,
     is_completion_check,
+    is_negative_check,
     is_trigger_only,
 )
+
+ROOT = Path(__file__).resolve().parents[1]
+PDF_SKILL = ROOT / "skills" / "pdf"
 
 
 @pytest.mark.parametrize(
@@ -122,3 +132,112 @@ def test_authentic_completion_passed_requires_task_completion_score() -> None:
         ]
     }
     assert authentic_completion_passed(None, report) is False
+
+
+def test_is_negative_check_reads_should_trigger() -> None:
+    assert is_negative_check({"should_trigger": False}) is True
+    assert is_negative_check({"should_trigger": True}) is False
+
+
+def test_file_copies_maps_fixture_src_dest() -> None:
+    fixtures = [{"src": "evals/fixtures/a.pdf", "dest": "a.pdf"}]
+    assert file_copies(fixtures) == [{"src": "evals/fixtures/a.pdf", "dest": "a.pdf"}]
+
+
+def test_apply_inherit_injects_pack_fixtures_into_completion_checks() -> None:
+    checks = [{"prompt": "Complete", "contains": "done", "output_path": "output/x.txt"}]
+    out = apply_inherit(PDF_SKILL, checks, inherit=True)
+    assert out[0].get("files")
+    assert out[0].get("needs_upload") is False
+
+
+def test_apply_inherit_skips_when_inherit_false() -> None:
+    checks = [{"prompt": "Complete", "contains": "done", "output_path": "output/x.txt"}]
+    out = apply_inherit(PDF_SKILL, checks, inherit=False)
+    assert "files" not in out[0]
+
+
+def test_expand_from_folder_creates_completion_rows_from_fixtures() -> None:
+    existing = [{"prompt": "When user asks", "should_trigger": True}]
+    out = expand_from_folder(PDF_SKILL, existing, description="PDF tasks")
+    completion_ids = [item.get("id") for item in out if item.get("output_path")]
+    assert len(completion_ids) >= 1
+    assert any(item.get("files") for item in out)
+
+
+def test_prompt_for_file_when_dest_already_in_prompt() -> None:
+    dest = "evals/fixtures/hello.pdf"
+    assert _prompt_for_file(f"Open {dest}", dest) == f"Open {dest}"
+
+
+def test_prompt_for_file_capitalizes_read_line() -> None:
+    text = _prompt_for_file("summarize the file", "in.csv")
+    assert text.startswith("Read in.csv")
+    assert text.endswith(".")
+
+
+def test_template_check_prefers_existing_completion_row() -> None:
+    checks = [
+        {"prompt": "trig", "should_trigger": True},
+        {"contains": "x", "output_path": "custom/out.txt"},
+    ]
+    assert _template_check(checks, "desc")["output_path"] == "custom/out.txt"
+
+
+def test_coverage_required_when_pack_has_fixtures() -> None:
+    assert coverage_required(PDF_SKILL) is True
+
+
+def test_authentic_completion_passed_with_on_disk_fixture() -> None:
+    report = {
+        "tasks": [
+            {
+                "passed": True,
+                "scores": [{"scorer": "task_completion", "passed": True}],
+                "files": [{"src": "evals/fixtures/hello.pdf", "dest": "hello.pdf"}],
+            }
+        ]
+    }
+    assert authentic_completion_passed(PDF_SKILL, report) is True
+
+
+def test_decide_gate_returns_decision_string() -> None:
+    assert decide_gate(harness=None, passed=None, status="running") == "pending"
+
+
+def test_decide_gate_warnings_when_fingerprint_mismatch(monkeypatch: pytest.MonkeyPatch) -> None:
+    from skillgate_ai import harness
+
+    monkeypatch.setattr(harness, "is_live_harness", lambda name: name == "cursor-agent")
+    trust = __import__(
+        "skillgate_ai.case_pack",
+        fromlist=["trust_suite_for_skill"],
+    ).trust_suite_for_skill(PDF_SKILL)
+    assert trust is not None
+    verdict = decide_gate_result(
+        harness="cursor-agent",
+        passed=True,
+        status="done",
+        skill_path=PDF_SKILL,
+        report={
+            "tasks": [{"id": trust.case_ids[0]}],
+            "pack_fingerprint": "deadbeef00000000",
+        },
+    )
+    assert verdict.decision == "cleared"
+    assert any("Dataset" in item for item in verdict.warnings)
+
+
+def test_decide_gate_cleared_when_live_harness_passes(monkeypatch: pytest.MonkeyPatch) -> None:
+    from skillgate_ai import harness
+
+    monkeypatch.setattr(harness, "is_live_harness", lambda name: name == "cursor-agent")
+    verdict = decide_gate_result(
+        harness="cursor-agent",
+        passed=True,
+        status="done",
+        skill_path=PDF_SKILL,
+        report={"tasks": [], "pack_fingerprint": ""},
+    )
+    assert verdict.decision == "cleared"
+    assert verdict.reason == "This Dataset passed."

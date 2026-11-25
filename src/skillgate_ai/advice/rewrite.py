@@ -7,32 +7,16 @@ import yaml
 
 from skillgate_ai.ingest import FRONTMATTER_RE
 from skillgate_ai.pack.pathsafe import _path_under_skill, resolve_pack_root
-
-
-def _resolved_skill_md(skill_md: Path) -> Path:
-    """SKILL.md under a resolved pack root (same containment rules as pack writes)."""
-    path = Path(skill_md).expanduser()
-    if path.name != "SKILL.md":
-        raise ValueError("Expected SKILL.md")
-    root = resolve_pack_root(path.parent)
-    resolved = _path_under_skill(root, "SKILL.md")
-    if resolved is None or not resolved.is_file():
-        raise ValueError("SKILL.md not found in skill folder.")
-    return resolved
-
-
-def _path_under_root(root: Path, target: Path) -> Path:
-    base = root.resolve()
-    resolved = target.resolve()
-    try:
-        resolved.relative_to(base)
-    except ValueError as exc:
-        raise ValueError("Path must stay inside the working folder.") from exc
-    return resolved
+from skillgate_ai.pack.tree import pack_file_path
 
 
 def rewrite_skill_description(skill_md: Path, new_description: str) -> None:
-    skill_md = _resolved_skill_md(skill_md)
+    if skill_md.name != "SKILL.md":
+        raise ValueError("Expected SKILL.md")
+    try:
+        skill_md = pack_file_path(skill_md.parent, "SKILL.md")
+    except FileNotFoundError as exc:
+        raise ValueError("SKILL.md not found in skill folder.") from exc
     text = skill_md.read_text(encoding="utf-8")
     match = FRONTMATTER_RE.match(text)
     if not match:
@@ -73,7 +57,9 @@ def apply_description_fix(
     source_dir = resolve_pack_root(source)
     dest_root = dest_root.expanduser().resolve()
     dest_root.mkdir(parents=True, exist_ok=True)
-    dest = _path_under_root(dest_root, dest_root / source_dir.name)
+    dest = _path_under_skill(dest_root, source_dir.name)
+    if dest is None:
+        raise ValueError("Path must stay inside the working folder.")
     if dest.exists() and dest.resolve() == source_dir.resolve():
         rewrite_skill_description(dest / "SKILL.md", new_description)
     else:
