@@ -60,9 +60,8 @@ def test_action_metadata_is_marketplace_ready() -> None:
     setup = next(step for step in steps if step.get("uses", "").startswith("actions/setup-python@"))
     assert setup["with"]["python-version"] == "3.11"
     check = next(step for step in steps if step.get("id") == "check")
-    assert "SKILLGATE_ACTION_SCRIPT" in check["run"]
-    env_step = next(step for step in steps if "SKILLGATE_ACTION_SCRIPT" in step.get("run", ""))
-    assert "ACTION_PATH" in env_step["env"]
+    assert check["run"] == "python scripts/skillgate_action.py"
+    assert check["working-directory"] == "${{ github.action_path }}"
     assert meta["outputs"]["exit-code"]["value"] == "${{ steps.check.outputs.exit-code }}"
 
 
