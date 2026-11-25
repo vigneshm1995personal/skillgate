@@ -173,5 +173,3 @@ def is_under_root(path: str | Path, root: str | Path) -> bool:
         return os.path.commonpath([base, target]) == base
     except (ValueError, OSError):
         return False
-
-
