@@ -99,8 +99,8 @@ def ingest_skill(path: str | Path, *, strict: bool = True) -> Skill:
         return _ingest_lenient(folder)
     import os
 
-    folder_name = os.fsdecode(folder)
-    if not os.path.isdir(folder_name):
+    folder_dir = os.path.realpath(os.path.expanduser(os.fsdecode(folder)))
+    if not os.path.isdir(folder_dir):
         raise IngestError(f"Skill folder not found: {folder}")
     if not is_pack_file(folder, "SKILL.md"):
         raise IngestError(
@@ -202,8 +202,8 @@ def _ingest_lenient(folder: Path) -> Skill:
     slug = folder_slug(folder) if folder.name else "skill"
     import os
 
-    folder_name = os.fsdecode(folder)
-    if not os.path.isdir(folder_name):
+    folder_dir = os.path.realpath(os.path.expanduser(os.fsdecode(folder)))
+    if not os.path.isdir(folder_dir):
         return Skill(
             path=folder,
             name=slug,

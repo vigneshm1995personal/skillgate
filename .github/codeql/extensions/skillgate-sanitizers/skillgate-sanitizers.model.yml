@@ -6,6 +6,7 @@ extensions:
       - ["skillgate_ai.paths", "Member[contained_path].ReturnValue", "path-injection"]
       - ["skillgate_ai.paths", "Member[pack_file_at].ReturnValue", "path-injection"]
       - ["skillgate_ai.paths", "Member[pack_path_string].ReturnValue", "path-injection"]
+      - ["skillgate_ai.paths", "Member[skill_pack_root].ReturnValue", "path-injection"]
       - ["skillgate_ai.paths", "Member[require_under].ReturnValue", "path-injection"]
   - addsTo:
       pack: codeql/python-all

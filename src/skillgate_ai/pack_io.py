@@ -93,8 +93,10 @@ def glob_pack_files(root: str | Path, rel_dir: str, pattern: str) -> list[Path]:
     parts = [piece for piece in rel_dir.replace("\\", "/").split("/") if piece]
     dir_rel = "/".join(parts)
     try:
-        base_str = pack_path_string(root, dir_rel) if dir_rel else os.path.realpath(
-            os.path.expanduser(str(root))
+        base_str = (
+            pack_path_string(root, dir_rel)
+            if dir_rel
+            else os.path.realpath(os.path.expanduser(str(root)))
         )
     except PathTraversalError:
         return []

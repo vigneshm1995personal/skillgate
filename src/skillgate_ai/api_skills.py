@@ -294,8 +294,9 @@ def register_skill_routes(app: FastAPI) -> None:
                             abs_src = os.path.join(dirpath, name)
                             rel = os.path.relpath(abs_src, src_root).replace("\\", "/")
                             dest_rel = f"scripts/{rel}"
-                            require_under(source, Path(abs_src))
-                            with open(abs_src, "rb") as handle:
+                            rel_src = f"scripts/{rel}"
+                            src_path = pack_path_string(source, rel_src)
+                            with open(src_path, "rb") as handle:
                                 payload = handle.read()
                             write_pack_bytes(skill_path, dest_rel, payload)
         return skill_payload(state, skill_path)
