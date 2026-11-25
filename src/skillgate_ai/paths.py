@@ -26,13 +26,15 @@ def contained_path(root: str | Path, *parts: str | Path) -> Path:
 
 def require_under(root: str | Path, path: str | Path) -> Path:
     """Resolve ``path`` and return it when it lies under ``root``."""
-    base = Path(root).expanduser().resolve()
-    resolved = Path(path).expanduser().resolve()
+    base = os.path.realpath(os.path.expanduser(str(root)))
+    target = os.path.realpath(os.path.expanduser(str(path)))
     try:
-        resolved.relative_to(base)
+        common = os.path.commonpath([base, target])
     except ValueError as exc:
         raise PathTraversalError("Path is outside the allowed root.") from exc
-    return resolved
+    if common != base:
+        raise PathTraversalError("Path is outside the allowed root.")
+    return Path(target)
 
 
 def is_skill_pack(path: str | Path) -> bool:

@@ -204,8 +204,12 @@ def find_skill(root: Path, name: str) -> Path:
             except PathTraversalError as exc:
                 raise SkillGateError("That path is outside this project.") from exc
         else:
+            normalized = text.replace("\\", "/")
+            parts = [piece for piece in normalized.split("/") if piece and piece != "."]
+            if any(piece == ".." for piece in parts):
+                raise SkillGateError("That path is outside this project.")
             try:
-                resolved = contained_path(root, *Path(text).parts)
+                resolved = contained_path(root, *parts)
             except PathTraversalError as exc:
                 raise SkillGateError("That path is outside this project.") from exc
         if _immediate_agent_skill(resolved):
