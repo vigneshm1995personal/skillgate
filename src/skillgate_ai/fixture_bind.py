@@ -8,9 +8,10 @@ regression stay in the private hosted app.
 from __future__ import annotations
 
 import re
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, TypedDict
 
 from skillgate_ai.pack import (
     CASE_SUFFIXES,
@@ -29,11 +30,16 @@ _FILENAME_IN_PROMPT = re.compile(
 )
 
 
-def is_negative_check(check: dict[str, Any]) -> bool:
+class FileCopy(TypedDict):
+    src: str
+    dest: str
+
+
+def is_negative_check(check: Mapping[str, Any]) -> bool:
     return check.get("should_trigger") is False
 
 
-def is_completion_check(check: dict[str, Any]) -> bool:
+def is_completion_check(check: Mapping[str, Any]) -> bool:
     item = dict(check)
     contains = str(item.get("contains") or item.get("expected") or "").strip()
     output_path = str(item.get("output_path") or "").strip()
@@ -41,17 +47,17 @@ def is_completion_check(check: dict[str, Any]) -> bool:
     return bool(output_path or contains or golden_path)
 
 
-def is_trigger_only(check: dict[str, Any]) -> bool:
+def is_trigger_only(check: Mapping[str, Any]) -> bool:
     return not is_negative_check(check) and not is_completion_check(check)
 
 
-def file_copies(fixtures: list[dict[str, Any]]) -> list[dict[str, str]]:
+def file_copies(fixtures: Sequence[Mapping[str, Any]]) -> list[FileCopy]:
     return [{"src": item["src"], "dest": item["dest"]} for item in fixtures]
 
 
 def apply_inherit(
     skill_path: str | Path | None,
-    checks: list[dict[str, Any]] | None,
+    checks: Sequence[Mapping[str, Any]] | None,
     *,
     inherit: bool = True,
     glob_pat: str | None = None,
@@ -78,7 +84,7 @@ def apply_inherit(
 
 def expand_from_folder(
     skill_path: str | Path | None,
-    checks: list[dict[str, Any]] | None,
+    checks: Sequence[Mapping[str, Any]] | None,
     *,
     glob_pat: str | None = None,
     description: str = "",
@@ -113,8 +119,8 @@ def expand_from_folder(
 def coverage_required(
     skill_path: str | Path | None,
     *,
-    checks: list[dict[str, Any]] | None = None,
-    report: dict[str, Any] | None = None,
+    checks: Sequence[Mapping[str, Any]] | None = None,
+    report: Mapping[str, Any] | None = None,
 ) -> bool:
     if skill_path and relevant_eval_fixtures(skill_path):
         return True
@@ -131,7 +137,7 @@ def coverage_required(
 
 def authentic_completion_passed(
     skill_path: str | Path | None,
-    report: dict[str, Any] | None,
+    report: Mapping[str, Any] | None,
 ) -> bool:
     for task in (report or {}).get("tasks") or []:
         if not isinstance(task, dict) or task.get("passed") is not True:
@@ -164,7 +170,7 @@ def decide_gate(
     status: str | None = "done",
     skill_path: str | Path | None = None,
     report: dict[str, Any] | None = None,
-    checks: list[dict[str, Any]] | None = None,
+    checks: Sequence[Mapping[str, Any]] | None = None,
 ) -> str:
     return decide_gate_result(
         harness=harness,
@@ -183,7 +189,7 @@ def decide_gate_result(
     status: str | None = "done",
     skill_path: str | Path | None = None,
     report: dict[str, Any] | None = None,
-    checks: list[dict[str, Any]] | None = None,
+    checks: Sequence[Mapping[str, Any]] | None = None,
 ) -> GateVerdict:
     from skillgate_ai.harness import is_live_harness
 
@@ -205,7 +211,7 @@ def decide_gate_result(
 def _pass_warnings(
     skill_path: str | Path | None,
     report: dict[str, Any] | None,
-    checks: list[dict[str, Any]] | None,
+    checks: Sequence[Mapping[str, Any]] | None,
 ) -> tuple[str, ...]:
     from skillgate_ai.case_pack import trust_suite_for_skill
     from skillgate_ai.metrics import budget_gate_reason, metrics_blocking
@@ -229,7 +235,7 @@ def _pass_warnings(
     return tuple(warnings)
 
 
-def _report_covers_pinned_ids(report: dict[str, Any] | None, case_ids: tuple[str, ...]) -> bool:
+def _report_covers_pinned_ids(report: Mapping[str, Any] | None, case_ids: tuple[str, ...]) -> bool:
     if not case_ids:
         return False
     tasks = (report or {}).get("tasks") or []
@@ -237,7 +243,7 @@ def _report_covers_pinned_ids(report: dict[str, Any] | None, case_ids: tuple[str
     return all(case_id in seen for case_id in case_ids)
 
 
-def _template_check(checks: list[dict[str, Any]], description: str) -> dict[str, Any]:
+def _template_check(checks: Sequence[Mapping[str, Any]], description: str) -> dict[str, Any]:
     for item in checks:
         if is_completion_check(item):
             return dict(item)

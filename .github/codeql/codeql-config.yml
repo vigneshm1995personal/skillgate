@@ -1,0 +1,8 @@
+name: skillgate
+queries:
+  - uses: security-extended
+paths-ignore:
+  - src/skillgate_ai/web_static
+  - src/skillgate_ai/examples
+  - skills
+  - tests

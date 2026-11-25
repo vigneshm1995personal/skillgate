@@ -49,7 +49,7 @@ def test_copy_skill_pack_failed_copy_leaves_existing_install(
     def boom(*_args, **_kwargs):
         raise PermissionError(13, "Permission denied")
 
-    monkeypatch.setattr("skillgate_ai.pack.shutil.copytree", boom)
+    monkeypatch.setattr("skillgate_ai.pack.tree.shutil.copytree", boom)
     with pytest.raises(PermissionError):
         copy_skill_pack(source, dest)
     assert marker.is_file()
@@ -85,7 +85,7 @@ def test_deploy_readonly_parent_friendly_error(
     def boom(*_args, **_kwargs):
         raise PermissionError(13, "Permission denied")
 
-    monkeypatch.setattr("skillgate_ai.pack.shutil.copytree", boom)
+    monkeypatch.setattr("skillgate_ai.pack.tree.shutil.copytree", boom)
     result = runner.invoke(app, ["deploy", str(pack)])
     assert result.exit_code == 1, result.stdout
     combined = result.stdout + result.stderr

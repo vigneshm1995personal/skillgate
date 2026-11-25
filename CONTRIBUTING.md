@@ -16,6 +16,14 @@ CI and Docker install from the committed `uv.lock` with `uv sync --locked`. Afte
 
 `pre-commit install` runs Ruff, Ruff format, mypy, and the basic file hooks on each commit.
 
+## Tests
+
+```bash
+pytest -q -m "not integration"
+pytest -q -m "not integration" --cov   # enforces fail_under in pyproject.toml
+pytest -q -m integration tests/integration
+```
+
 ## Lint (required)
 
 ```bash

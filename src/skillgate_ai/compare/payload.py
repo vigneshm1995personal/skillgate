@@ -3,15 +3,39 @@
 from __future__ import annotations
 
 import copy
+from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import Any
+from typing import Any, NotRequired, TypedDict
 
 from skillgate_ai.compare.core import CompareArmSpec, _blank
 from skillgate_ai.eval_config import harness_display_name
 from skillgate_ai.pack import skill_pack_hash
 
 
-def _usage_for_task_ids(report: dict[str, Any], task_ids: list[str]) -> dict[str, Any] | None:
+class CompareCell(TypedDict):
+    passed: bool | None
+    usage: NotRequired[dict[str, int | float]]
+    duration_sec: NotRequired[float]
+
+
+class CompareCaseRow(TypedDict):
+    case_id: str
+    results: dict[str, CompareCell]
+    disagreement: bool
+
+
+class ComparePlanArm(TypedDict):
+    arm_id: str
+    label: str
+    subtitle: str
+    source: str
+    passed_count: int | None
+    task_count: int
+    usage: Mapping[str, Any] | None
+    duration_sec: float | None
+
+
+def _usage_for_task_ids(report: Mapping[str, Any], task_ids: list[str]) -> dict[str, Any] | None:
     tasks = _task_map(report)
     tokens = 0
     cost = 0.0
@@ -19,7 +43,7 @@ def _usage_for_task_ids(report: dict[str, Any], task_ids: list[str]) -> dict[str
     for task_id in task_ids:
         task = tasks.get(task_id) or {}
         raw_usage = task.get("usage")
-        usage: dict[str, Any] = raw_usage if isinstance(raw_usage, dict) else {}
+        usage: Mapping[str, Any] = raw_usage if isinstance(raw_usage, dict) else {}
         if usage.get("tokens_total") is not None:
             tokens += int(usage["tokens_total"])
             found = True
@@ -44,7 +68,7 @@ def _dry_run_payload(
     case_ids: list[str],
     max_spend_usd: float | None,
 ) -> dict[str, Any]:
-    arm_rows = [
+    arm_rows: list[ComparePlanArm] = [
         {
             "arm_id": spec.arm_id,
             "label": spec.label,
@@ -57,7 +81,7 @@ def _dry_run_payload(
         }
         for spec in arms
     ]
-    cases = [
+    cases: list[CompareCaseRow] = [
         {
             "case_id": cid,
             "results": {spec.arm_id: {"passed": None} for spec in arms},
@@ -84,7 +108,7 @@ def _dry_run_payload(
     }
 
 
-def _skill_pack_hash_from_report(report: dict[str, Any]) -> str | None:
+def _skill_pack_hash_from_report(report: Mapping[str, Any]) -> str | None:
     stored = report.get("skill_pack_hash")
     if isinstance(stored, str) and stored:
         return stored
@@ -96,14 +120,14 @@ def _skill_pack_hash_from_report(report: dict[str, Any]) -> str | None:
     return None
 
 
-def _usage_from_report(report: dict[str, Any] | None) -> dict[str, Any] | None:
+def _usage_from_report(report: Mapping[str, Any] | None) -> dict[str, Any] | None:
     if not isinstance(report, dict):
         return None
     usage = report.get("usage")
     return usage if isinstance(usage, dict) else None
 
 
-def _task_map(report: dict[str, Any] | None) -> dict[str, dict[str, Any]]:
+def _task_map(report: Mapping[str, Any] | None) -> dict[str, dict[str, Any]]:
     if not isinstance(report, dict):
         return {}
     tasks = report.get("tasks")
@@ -116,25 +140,32 @@ def _task_map(report: dict[str, Any] | None) -> dict[str, dict[str, Any]]:
     return out
 
 
-def _build_cases(arms: list[dict[str, Any]], case_ids: list[str]) -> list[dict[str, Any]]:
-    rows: list[dict[str, Any]] = []
+def _build_cases(arms: Sequence[Mapping[str, Any]], case_ids: list[str]) -> list[CompareCaseRow]:
+    rows: list[CompareCaseRow] = []
     for case_id in case_ids:
-        results: dict[str, Any] = {}
+        results: dict[str, CompareCell] = {}
         passes: list[bool] = []
         for arm in arms:
             arm_id = str(arm.get("arm_id") or "")
             task = (arm.get("task_by_id") or {}).get(case_id) or {}
             passed = task.get("passed")
-            cell: dict[str, Any] = {"passed": passed}
+            cell: CompareCell = {"passed": passed}
             usage = task.get("usage")
             if isinstance(usage, dict):
-                cell["usage"] = {
-                    key: usage.get(key)
-                    for key in ("tokens_total", "cost_usd")
-                    if usage.get(key) is not None
-                }
-            if task.get("duration_sec") is not None:
-                cell["duration_sec"] = task.get("duration_sec")
+                usage_row: dict[str, int | float] = {}
+                for key in ("tokens_total", "cost_usd"):
+                    raw = usage.get(key)
+                    if raw is None:
+                        continue
+                    if key == "tokens_total":
+                        usage_row[key] = int(raw)
+                    else:
+                        usage_row[key] = float(raw)
+                if usage_row:
+                    cell["usage"] = usage_row
+            duration = task.get("duration_sec")
+            if isinstance(duration, (int, float)) and not isinstance(duration, bool):
+                cell["duration_sec"] = float(duration)
             results[arm_id] = cell
             if isinstance(passed, bool):
                 passes.append(passed)
@@ -200,7 +231,7 @@ def _plan_subtitle(spec: CompareArmSpec) -> str:
     return _subtitle_for_arm(spec, spec.harness_pref)
 
 
-def _case_ids_from_report(report: dict[str, Any]) -> list[str]:
+def _case_ids_from_report(report: Mapping[str, Any]) -> list[str]:
     tasks = report.get("tasks")
     if isinstance(tasks, list):
         ids = [str(item.get("id")) for item in tasks if isinstance(item, dict) and item.get("id")]
@@ -210,7 +241,7 @@ def _case_ids_from_report(report: dict[str, Any]) -> list[str]:
 
 
 def _arm_stats_from_report(
-    report: dict[str, Any], case_ids: list[str]
+    report: Mapping[str, Any], case_ids: list[str]
 ) -> tuple[int, int, dict[str, dict[str, Any]]]:
     tasks = _task_map(report)
     active = case_ids or _case_ids_from_report(report)
