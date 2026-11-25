@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 import yaml
+from pydantic import ValidationError
 
 from skillgate_ai.case_pack.dataset import no_trigger_output_warning
 from skillgate_ai.case_pack.models import (
@@ -177,7 +178,7 @@ def suite_from_pack(pack: CasePack, skill_rel: str) -> SuiteSpec:
     )
     try:
         return SuiteSpec.model_validate(raw)
-    except Exception as exc:
+    except ValidationError as exc:
         raise SuiteError(f"Couldn't turn these checks into a run: {exc}") from exc
 
 

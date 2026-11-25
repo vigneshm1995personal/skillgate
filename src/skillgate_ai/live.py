@@ -373,12 +373,12 @@ class RunControl:
         if pid is None:
             try:
                 process.terminate()
-            except Exception:  # noqa: BLE001 - best effort
+            except OSError:
                 return
         else:
             try:
                 signal_group(process, signal.SIGTERM)
-            except Exception:  # noqa: BLE001 - best effort
+            except OSError:
                 return
         poll = getattr(process, "poll", None)
         if not callable(poll):
@@ -391,7 +391,7 @@ class RunControl:
                         process.kill()
                     else:
                         kill_group(process)
-            except Exception:  # noqa: BLE001, S110 - best effort
+            except OSError:
                 pass
 
         timer = threading.Timer(2.0, hard_kill)

@@ -12,6 +12,7 @@ is a Gate block, not a Jev Fail.
 from __future__ import annotations
 
 import re
+from collections.abc import Mapping, Sequence
 from typing import Any, Literal, NotRequired, TypedDict
 
 from pydantic import BaseModel, ValidationError, field_validator
@@ -148,8 +149,8 @@ def count_path_steps(
 
 
 def evaluate_task_metrics(
-    usage: dict[str, Any] | None,
-    spans: list[dict[str, Any]] | None,
+    usage: Mapping[str, Any] | None,
+    spans: Sequence[Mapping[str, Any]] | None,
     transcript: str | None,
     budgets: CaseBudgets | dict[str, Any] | None,
 ) -> TaskMetrics:
@@ -159,7 +160,8 @@ def evaluate_task_metrics(
         effective_or_none: CaseBudgets | None = None
     else:
         effective_or_none = effective
-    steps, errors, had_path = count_path_steps(spans, transcript)
+    span_list = [dict(item) for item in spans] if spans else None
+    steps, errors, had_path = count_path_steps(span_list, transcript)
     reasons: list[str] = []
     token_fail = False
     path_fail = False
@@ -212,12 +214,12 @@ def evaluate_task_metrics(
     return payload
 
 
-def metrics_blocking(report: dict[str, Any] | None) -> bool:
+def metrics_blocking(report: Mapping[str, Any] | None) -> bool:
     """True when any task has a pinned-budget fail. Missing metrics = not blocking."""
     return bool(_blocking_tasks(report))
 
 
-def budget_gate_reason(report: dict[str, Any] | None) -> str:
+def budget_gate_reason(report: Mapping[str, Any] | None) -> str:
     fails = _blocking_tasks(report)
     if not fails:
         return REASON_CLEARED
@@ -296,7 +298,7 @@ def _as_budgets(raw: CaseBudgets | dict[str, Any] | None) -> CaseBudgets:
         return CaseBudgets()
 
 
-def _tokens_total(usage: dict[str, Any] | None) -> int | None:
+def _tokens_total(usage: Mapping[str, Any] | None) -> int | None:
     if not isinstance(usage, dict):
         return None
     value = usage.get("tokens_total")
@@ -307,12 +309,12 @@ def _tokens_total(usage: dict[str, Any] | None) -> int | None:
     return None
 
 
-def _is_path_span(span: dict[str, Any]) -> bool:
+def _is_path_span(span: Mapping[str, Any]) -> bool:
     name = str(span.get("name") or "")
     return name in {"skill.select", "skill.load"} or name.startswith("tool.")
 
 
-def _is_error_span(span: dict[str, Any]) -> bool:
+def _is_error_span(span: Mapping[str, Any]) -> bool:
     if str(span.get("name") or "") == "gen_ai.error":
         return True
     status = span.get("status")
@@ -336,16 +338,16 @@ def _command_line_count(transcript: str) -> int:
     return count
 
 
-def _blocking_tasks(report: dict[str, Any] | None) -> list[dict[str, Any]]:
+def _blocking_tasks(report: Mapping[str, Any] | None) -> list[Mapping[str, Any]]:
     tasks = (report or {}).get("tasks") or []
-    out: list[dict[str, Any]] = []
+    out: list[Mapping[str, Any]] = []
     for task in tasks:
         if isinstance(task, dict) and _task_blocking(task):
             out.append(task)
     return out
 
 
-def _task_blocking(task: dict[str, Any]) -> bool:
+def _task_blocking(task: Mapping[str, Any]) -> bool:
     metrics = task.get("metrics")
     if not isinstance(metrics, dict):
         return False
@@ -354,7 +356,7 @@ def _task_blocking(task: dict[str, Any]) -> bool:
     return metrics.get("status") == "fail"
 
 
-def _task_status(task: dict[str, Any]) -> str | None:
+def _task_status(task: Mapping[str, Any]) -> str | None:
     metrics = task.get("metrics")
     if not isinstance(metrics, dict):
         return None
@@ -362,7 +364,7 @@ def _task_status(task: dict[str, Any]) -> str | None:
     return str(status) if status is not None else None
 
 
-def _task_reasons(task: dict[str, Any]) -> list[str]:
+def _task_reasons(task: Mapping[str, Any]) -> list[str]:
     metrics = task.get("metrics")
     if not isinstance(metrics, dict):
         return []

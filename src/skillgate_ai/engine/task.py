@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -397,7 +398,7 @@ def _harness_result_or_skip(
         result: HarnessResult = harness.run(sandbox, task.prompt, skills, timeout)
     except CheckAborted as exc:
         return None, _skipped_report(task, KILL_FAILURE if exc.reason == KILL else SKIP_FAILURE)
-    except Exception as exc:
+    except subprocess.TimeoutExpired as exc:
         blocked = timeout_harness_error(exc, timeout_sec=timeout)
         if blocked is not None:
             raise blocked from None

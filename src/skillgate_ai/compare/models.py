@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import time
 import uuid
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
 
@@ -132,7 +132,7 @@ def _live_arm_row(
     run_id: str,
     duration_sec: float,
     active_case_ids: list[str],
-) -> tuple[dict[str, Any], dict[str, Any] | None]:
+) -> tuple[dict[str, Any], Mapping[str, Any] | None]:
     tasks = _task_map(report)
     tasks = {key: tasks[key] for key in active_case_ids if key in tasks}
     passed_count = sum(1 for task in tasks.values() if task.get("passed") is True)

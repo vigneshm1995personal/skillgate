@@ -7,6 +7,7 @@ evals, persists history, and computes the process exit code (0 / 1 / 2).
 from __future__ import annotations
 
 import os
+import subprocess
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -284,7 +285,7 @@ def _execute_check(
             config=run_cfg,
             tryout=tryout,
         )
-    except Exception as exc:
+    except (SkillGateError, subprocess.TimeoutExpired) as exc:
         blocked = timeout_harness_error(exc)
         if blocked is None:
             if not isinstance(exc, SkillGateError):

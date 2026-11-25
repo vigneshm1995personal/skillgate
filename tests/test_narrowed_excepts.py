@@ -268,3 +268,99 @@ def test_parser_boundary_logs_are_debug_only(tmp_path, monkeypatch, caplog):
         _pdf_text(pdf)
     noisy = {"skillgate_ai.document_text", "skillgate_ai.scorers"}
     assert not [r for r in caplog.records if r.name in noisy]
+
+
+def test_parse_judge_block_validation_error_becomes_suite_error(monkeypatch):
+    from pydantic import TypeAdapter, ValidationError
+
+    from skillgate_ai.pack_schema import JudgeBlock, parse_judge_block
+
+    with pytest.raises(ValidationError) as caught:
+        TypeAdapter(int).validate_python("x")
+    err = caught.value
+    monkeypatch.setattr(JudgeBlock, "model_validate", lambda raw: (_ for _ in ()).throw(err))
+    with pytest.raises(SuiteError):
+        parse_judge_block({"x": 1})
+
+
+def test_parse_judge_block_unexpected_error_propagates(monkeypatch):
+    from skillgate_ai.pack_schema import JudgeBlock, parse_judge_block
+
+    monkeypatch.setattr(
+        JudgeBlock,
+        "model_validate",
+        lambda raw: (_ for _ in ()).throw(RuntimeError("bug")),
+    )
+    with pytest.raises(RuntimeError, match="bug"):
+        parse_judge_block({"x": 1})
+
+
+def test_suite_from_pack_unexpected_error_propagates(monkeypatch, tmp_path):
+    from skillgate_ai.case_pack.models import CasePack, PackCase
+    from skillgate_ai.case_pack.suites import suite_from_pack
+    from skillgate_ai.suite import SuiteSpec
+
+    pack = CasePack(
+        schema=1,
+        skill="demo",
+        cases=[
+            PackCase(
+                id="c1",
+                status="pinned",
+                prompt="Run",
+                should_trigger=True,
+            )
+        ],
+    )
+    def boom(_raw):
+        raise RuntimeError()
+
+    monkeypatch.setattr(SuiteSpec, "model_validate", boom)
+    with pytest.raises(RuntimeError):
+        suite_from_pack(pack, "demo")
+
+
+def test_harness_result_or_skip_maps_timeout_to_harness_error(monkeypatch):
+    import subprocess
+
+    from skillgate_ai.engine.task import _harness_result_or_skip
+    from skillgate_ai.errors import HarnessError
+    from skillgate_ai.suite import TaskSpec
+
+    class FakeHarness:
+        def run(self, *args, **kwargs):
+            raise subprocess.TimeoutExpired(cmd="agent", timeout=5)
+
+    task = TaskSpec(id="t", prompt="p", expect_skill=None, scorers=[])
+    with pytest.raises(HarnessError) as caught:
+        _harness_result_or_skip(task, FakeHarness(), None, [], 30, None)
+    assert caught.value.exit_code == 2
+    assert caught.value.__cause__ is None
+
+
+def test_harness_result_or_skip_reraises_other_errors():
+    from skillgate_ai.engine.task import _harness_result_or_skip
+    from skillgate_ai.suite import TaskSpec
+
+    class FakeHarness:
+        def run(self, *args, **kwargs):
+            raise ValueError("x")
+
+    task = TaskSpec(id="t", prompt="p", expect_skill=None, scorers=[])
+    with pytest.raises(ValueError):
+        _harness_result_or_skip(task, FakeHarness(), None, [], 30, None)
+
+
+def test_run_control_terminate_swallows_oserror():
+    from skillgate_ai.live import RunControl
+
+    class FakeProc:
+        pid = None
+
+        def terminate(self):
+            raise ProcessLookupError()
+
+        def poll(self):
+            return None
+
+    RunControl(run_id="r")._terminate(FakeProc())

@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 import yaml
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, ValidationError, field_validator, model_validator
 
 from skillgate_ai.errors import SuiteError, friendly_validation_error
 
@@ -296,7 +296,7 @@ def parse_judge_block(raw: object) -> JudgeBlock | None:
         return None
     try:
         block = JudgeBlock.model_validate(raw)
-    except Exception as exc:
+    except ValidationError as exc:
         raise SuiteError(friendly_validation_error(exc, kind="Judge")) from exc
     return None if block.is_empty() else block
 
