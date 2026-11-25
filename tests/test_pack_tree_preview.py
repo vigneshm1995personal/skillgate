@@ -6,7 +6,10 @@ import pytest
 
 from skillgate_ai.pack.pathsafe import (
     _safe_filename,
+    fixture_src_for,
     implied_fixture_name,
+    is_pack_relative,
+    resolve_pack_root,
     safe_relpath,
     try_resolve_pack_root,
 )
@@ -55,3 +58,30 @@ def test_implied_fixture_name_detects_pdf_mentions() -> None:
 def test_try_resolve_pack_root_returns_none_for_missing_dir(tmp_path: Path) -> None:
     missing = tmp_path / "nope"
     assert try_resolve_pack_root(missing) is None
+
+
+def test_resolve_pack_root_requires_directory(tmp_path: Path) -> None:
+    file_path = tmp_path / "not-a-dir"
+    file_path.write_text("x", encoding="utf-8")
+    with pytest.raises(ValueError, match="Skill folder not found"):
+        resolve_pack_root(file_path)
+
+
+def test_safe_relpath_maps_bare_filename_into_fixtures() -> None:
+    assert safe_relpath("hello.csv").endswith("hello.csv")
+    assert safe_relpath("SKILL.md") == "SKILL.md"
+
+
+def test_is_pack_relative_rejects_absolute_paths() -> None:
+    assert is_pack_relative("/etc/passwd") is False
+    assert is_pack_relative("evals/fixtures/x.pdf") is True
+
+
+def test_fixture_src_for_uses_dest_name() -> None:
+    assert fixture_src_for("ignored", dest="out/report.csv").endswith("report.csv")
+
+
+def test_implied_fixture_name_picks_csv_json_and_image_hints() -> None:
+    assert implied_fixture_name("edit this CSV").endswith(".csv")
+    assert implied_fixture_name("return JSON").endswith(".json")
+    assert implied_fixture_name("from this screenshot").endswith(".png")
