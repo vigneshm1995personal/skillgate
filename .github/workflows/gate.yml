@@ -13,6 +13,8 @@ on:
 
 permissions:
   contents: read
+  security-events: read
+  actions: read
 
 concurrency:
   group: gate-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -26,6 +28,10 @@ env:
 jobs:
   codeql:
     uses: ./.github/workflows/codeql.yml
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
     secrets: inherit
 
   all-gates:
@@ -36,7 +42,7 @@ jobs:
       - name: Require all gate jobs
         run: |
           case "${{ needs.lint.result }}${{ needs.test.result }}${{ needs.integration.result }}${{ needs.audit.result }}${{ needs.gate.result }}${{ needs.oss-surface.result }}${{ needs.codeql.result }}" in
-            successsuccesssuccesssuccesssuccesssuccess) exit 0 ;;
+            successsuccesssuccesssuccesssuccesssuccesssuccess) exit 0 ;;
             *) echo "One or more required jobs failed"; exit 1 ;;
           esac
 
