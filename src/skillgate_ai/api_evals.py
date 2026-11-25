@@ -14,7 +14,6 @@ except ModuleNotFoundError as exc:
 from skillgate_ai.api_models import EvalFixtureBindBody, EvalGenerateBody, EvalPinBody
 from skillgate_ai.api_payloads import fail, skill_payload, state_of
 from skillgate_ai.case_pack import (
-    CASES_REL,
     PIN_NEEDS_EXPECTED_HINT,
     checks_from_pack,
     dataset_view,
@@ -24,7 +23,7 @@ from skillgate_ai.case_pack import (
 from skillgate_ai.catalog import find_skill
 from skillgate_ai.errors import SuiteError
 from skillgate_ai.fixture_bind import apply_inherit, expand_from_folder
-from skillgate_ai.paths import require_under
+from skillgate_ai.paths import contained_path, require_under
 
 
 def register_eval_routes(app: FastAPI) -> None:
@@ -50,7 +49,7 @@ def register_eval_routes(app: FastAPI) -> None:
             source = "pack"
             note = "These checks are saved with this skill. Edit them, then press Run."
         yaml_out = ""
-        cases_file = skill_path / CASES_REL
+        cases_file = contained_path(skill_path, "evals", "cases.yaml")
         if cases_file.is_file():
             yaml_out = cases_file.read_text(encoding="utf-8")
         skill = skill_payload(state, skill_path)
@@ -87,11 +86,8 @@ def register_eval_routes(app: FastAPI) -> None:
             fail(400, str(exc), hint=PIN_NEEDS_EXPECTED_HINT)
         except SuiteError as exc:
             fail(400, exc.message, hint=exc.hint)
-        yaml_out = (
-            (skill_path / CASES_REL).read_text(encoding="utf-8")
-            if (skill_path / CASES_REL).is_file()
-            else ""
-        )
+        cases_file = contained_path(skill_path, "evals", "cases.yaml")
+        yaml_out = cases_file.read_text(encoding="utf-8") if cases_file.is_file() else ""
         return {
             "pack": pack.model_dump() if hasattr(pack, "model_dump") else pack,
             "fingerprint": None,

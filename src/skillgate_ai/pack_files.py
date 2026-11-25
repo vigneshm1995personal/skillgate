@@ -68,16 +68,24 @@ def file_inside_skill(root: Path, path: Path) -> Path | None:
 
 
 def resolve_golden_src(root: Path, case_id: str, golden_path: str | None) -> Path | None:
-    root = root.resolve()
-    folder = root / GOLDEN_DIR
+    from skillgate_ai.paths import PathTraversalError, contained_path
+
+    try:
+        base = contained_path(root)
+    except PathTraversalError:
+        return None
+    folder = contained_path(base, *GOLDEN_DIR.split("/"))
     if golden_path:
         rel = golden_path.replace("\\", "/").lstrip("/")
         parts = Path(rel).parts
         if ".." not in parts:
-            packed = file_inside_skill(root, root / rel)
+            try:
+                packed = file_inside_skill(base, contained_path(base, *parts))
+            except PathTraversalError:
+                packed = None
             if packed is not None:
                 return packed
-        named = file_inside_skill(root, folder / Path(rel).name)
+        named = file_inside_skill(base, contained_path(folder, Path(rel).name))
         if named is not None:
             return named
     if folder.is_dir():

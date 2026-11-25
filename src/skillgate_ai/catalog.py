@@ -67,10 +67,10 @@ def _workspace_skill_dir(path: Path, root: Path) -> Path | None:
     """Resolved skill folder when it and its SKILL.md stay inside ``root``; else None."""
     try:
         resolved = require_under(root, path)
-        skill_md = contained_path(resolved, "SKILL.md")
+        skill_md = require_under(root, contained_path(resolved, "SKILL.md"))
     except (OSError, ValueError, PathTraversalError):
         return None
-    if not is_under_root(resolved, root) or not is_under_root(skill_md, root):
+    if not is_under_root(resolved, root):
         return None
     if not skill_md.is_file():
         return None
@@ -194,15 +194,18 @@ def find_skill(root: Path, name: str) -> Path:
         raise SkillGateError("A skill name is required.")
     looks_like_path = text.startswith("/") or "/" in text or "\\" in text or ".." in text
     if looks_like_path:
-        expanded = Path(text).expanduser()
-        if expanded.is_absolute():
+        normalized = text.replace("\\", "/")
+        is_absolute_path = normalized.startswith("/") or (
+            len(normalized) > 1 and normalized[1] == ":"
+        )
+        if is_absolute_path:
             try:
-                resolved = require_under(root, expanded)
+                resolved = require_under(root, text)
             except PathTraversalError as exc:
                 from skillgate_ai.paths import skill_pack_root
 
                 try:
-                    agent_path = skill_pack_root(expanded)
+                    agent_path = skill_pack_root(text)
                 except PathTraversalError:
                     raise SkillGateError("That path is outside this project.") from exc
                 if _immediate_agent_skill(agent_path):

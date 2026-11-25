@@ -9,6 +9,7 @@ extensions:
       - ["skillgate_ai.catalog", "Member[find_skill].ReturnValue", "path-injection"]
       - ["skillgate_ai.pack.pathsafe", "Member[_path_under_skill].ReturnValue", "path-injection"]
       - ["skillgate_ai.pack.pathsafe", "Member[resolve_pack_root].ReturnValue", "path-injection"]
+      - ["skillgate_ai.history", "Member[history_dir].ReturnValue", "path-injection"]
   - addsTo:
       pack: codeql/python-all
       extensible: barrierGuardModel

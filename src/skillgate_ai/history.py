@@ -8,7 +8,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from skillgate_ai.paths import contained_path
+from skillgate_ai.paths import PathTraversalError, contained_path, require_under
 
 HISTORY_DIR = "evals/history"
 DEPLOY_REL = "evals/deploys.jsonl"
@@ -74,7 +74,7 @@ def append_eval(
 ) -> Path | None:
     """Append one JSONL row. Returns the file path, or None on EACCES/EROFS."""
     now = _local_now()
-    dest = history_dir(pack_root) / f"{now.strftime('%Y%m%d')}.jsonl"
+    dest = contained_path(history_dir(pack_root), f"{now.strftime('%Y%m%d')}.jsonl")
     from skillgate_ai.deploy_gate import infer_gate_moved
 
     is_tryout = tryout or bool((report or {}).get("tryout"))
@@ -132,7 +132,11 @@ def load_history(pack_root: str | Path, *, limit: int = 50) -> list[dict[str, An
         return []
     rows: list[dict[str, Any]] = []
     for path in dest_dir.glob("*.jsonl"):
-        for item in _read_jsonl(path):
+        try:
+            safe = require_under(dest_dir, path)
+        except PathTraversalError:
+            continue
+        for item in _read_jsonl(safe):
             if item.get("kind") in {"deploy", "compare"}:
                 continue
             if not item.get("run_id"):
@@ -157,7 +161,7 @@ def _scrub_compare_row(row: dict[str, Any]) -> dict[str, Any]:
 def append_compare(pack_root: str | Path, *, row: dict[str, Any]) -> Path | None:
     """Append one compare job row to pack history JSONL."""
     now = _local_now()
-    dest = history_dir(pack_root) / f"{now.strftime('%Y%m%d')}.jsonl"
+    dest = contained_path(history_dir(pack_root), f"{now.strftime('%Y%m%d')}.jsonl")
     payload = dict(row)
     payload.setdefault("ts", now.isoformat())
     payload.setdefault("kind", "compare")
@@ -171,7 +175,11 @@ def load_compares(pack_root: str | Path, *, limit: int = 50) -> list[dict[str, A
         return []
     rows: list[dict[str, Any]] = []
     for path in dest_dir.glob("*.jsonl"):
-        for item in _read_jsonl(path):
+        try:
+            safe = require_under(dest_dir, path)
+        except PathTraversalError:
+            continue
+        for item in _read_jsonl(safe):
             if item.get("kind") != "compare" or not item.get("compare_id"):
                 continue
             rows.append(_scrub_compare_row(item))

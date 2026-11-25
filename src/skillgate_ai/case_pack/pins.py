@@ -258,9 +258,10 @@ def _disk_golden(root: Path, case_id: str, output_path: str | None) -> CaseGolde
     found = resolve_golden_src(root, case_id, None)
     if found is None:
         return None
-    try:
-        rel = found.resolve().relative_to(root.resolve()).as_posix()
-    except ValueError:
+    from skillgate_ai.pack.pathsafe import _rel_to_skill
+
+    rel = _rel_to_skill(root, found)
+    if rel is None:
         return None
     return CaseGolden(
         output_path=output_path or "output/result.txt",
@@ -280,17 +281,24 @@ def _persist_golden(
     dest_output = output_path or "output/result.txt"
     found = resolve_golden_src(root, case_id, golden_path)
     if found is not None:
+        from skillgate_ai.pack.pathsafe import _rel_to_skill
+        from skillgate_ai.paths import require_under
+
         try:
-            rel = found.resolve().relative_to(root.resolve()).as_posix()
-        except ValueError:
+            safe_found = require_under(root, found)
+        except PathTraversalError:
             found = None
         else:
-            if rel.startswith(f"{GOLDEN_DIR}/"):
-                return CaseGolden(output_path=dest_output, path=rel, kind=golden_kind(found))
-            suffix = found.suffix or ".txt"
-            rel = f"{GOLDEN_DIR}/{case_id}{suffix}"
-            write_pack_file(root, rel=rel, content=found.read_bytes())
-            return CaseGolden(output_path=dest_output, path=rel, kind=golden_kind(found))
+            rel = _rel_to_skill(root, safe_found)
+            if rel is not None:
+                if rel.startswith(f"{GOLDEN_DIR}/"):
+                    return CaseGolden(
+                        output_path=dest_output, path=rel, kind=golden_kind(safe_found)
+                    )
+                suffix = safe_found.suffix or ".txt"
+                rel = f"{GOLDEN_DIR}/{case_id}{suffix}"
+                write_pack_file(root, rel=rel, content=safe_found.read_bytes())
+                return CaseGolden(output_path=dest_output, path=rel, kind=golden_kind(safe_found))
     if not contains_list:
         raise ValueError(PIN_NEEDS_EXPECTED)
     body = contains_list[0]

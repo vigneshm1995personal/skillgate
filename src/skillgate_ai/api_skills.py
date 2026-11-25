@@ -281,16 +281,9 @@ def register_skill_routes(app: FastAPI) -> None:
             except SkillGateError:
                 source = None
             if source is not None:
-                from skillgate_ai.paths import contained_path
+                from skillgate_ai.paths import copy_skill_subtree
 
-                src_scripts = require_under(source, contained_path(source, "scripts"))
-                dest_scripts = require_under(skill_path, contained_path(skill_path, "scripts"))
-                if src_scripts.is_dir():
-                    import shutil
-
-                    if dest_scripts.exists():
-                        shutil.rmtree(dest_scripts)
-                    shutil.copytree(src_scripts, dest_scripts)
+                copy_skill_subtree(source, skill_path, "scripts")
         return skill_payload(state, skill_path)
 
     @app.get("/api/history")

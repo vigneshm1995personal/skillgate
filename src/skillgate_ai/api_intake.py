@@ -9,12 +9,11 @@ import zipfile
 from pathlib import Path
 from typing import Any
 
-from skillgate_ai.case_pack import CASES_REL
 from skillgate_ai.catalog import safe_skill_folder_name, workspace_skills_root
 from skillgate_ai.errors import SkillGateError
 from skillgate_ai.ingest import FRONTMATTER_RE, ingest_skill
 from skillgate_ai.pack import copy_skill_pack
-from skillgate_ai.paths import PathTraversalError, require_under
+from skillgate_ai.paths import PathTraversalError, contained_path, require_under
 from skillgate_ai.scaffold import scaffold_trigger_cases
 
 _GIT_URL_RE = re.compile(r"^(https?://|git@|ssh://).+", re.IGNORECASE)
@@ -50,13 +49,13 @@ def write_pasted_skill(root: Path, markdown: str) -> Path:
     name = safe_skill_folder_name(display)
     parent = require_under(root, workspace_skills_root(root))
     parent.mkdir(parents=True, exist_ok=True)
-    dest = require_under(parent, parent / name)
+    dest = contained_path(parent, name)
     dest.mkdir(parents=True, exist_ok=True)
-    (dest / "SKILL.md").write_text(text, encoding="utf-8")
+    contained_path(dest, "SKILL.md").write_text(text, encoding="utf-8")
     ingest_skill(dest, strict=False)
     if not dest.exists():
         return dest
-    if not (dest / CASES_REL).is_file():
+    if not contained_path(dest, "evals", "cases.yaml").is_file():
         scaffold_trigger_cases(dest)
     return dest
 

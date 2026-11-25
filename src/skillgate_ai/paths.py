@@ -100,10 +100,10 @@ def project_root() -> Path:
 
 def skill_pack_root(skill_path: str | Path) -> Path:
     """Resolved skill pack folder under its config root, or a direct agent-skill install."""
-    raw = Path(skill_path).expanduser()
-    if ".." in raw.parts:
+    text = os.path.expanduser(str(skill_path))
+    if ".." in Path(text).parts:
         raise PathTraversalError("Path escapes the allowed root.")
-    resolved = Path(os.path.realpath(str(raw)))
+    resolved = Path(os.path.realpath(text))
     bound = Path(os.path.realpath(str(config_root_for(resolved))))
     try:
         return require_under(bound, resolved)
@@ -162,3 +162,19 @@ def is_under_root(path: str | Path, root: str | Path) -> bool:
         return os.path.commonpath([base, target]) == base
     except (ValueError, OSError):
         return False
+
+
+def copy_skill_subtree(src_root: Path, dest_root: Path, rel: str) -> None:
+    """Replace ``rel`` under dest_root with a tree copied from src_root."""
+    import shutil
+
+    cleaned = rel.replace("\\", "/").strip().strip("/")
+    parts = [piece for piece in cleaned.split("/") if piece and piece not in {".", ""}]
+    if not parts or any(piece == ".." for piece in parts):
+        raise PathTraversalError("Path escapes the allowed root.")
+    src = contained_path(src_root, *parts)
+    dest = contained_path(dest_root, *parts)
+    if dest.exists():
+        shutil.rmtree(dest)
+    if src.is_dir():
+        shutil.copytree(src, dest)
