@@ -312,6 +312,7 @@ def test_suite_from_pack_unexpected_error_propagates(monkeypatch, tmp_path):
             )
         ],
     )
+
     def boom(_raw):
         raise RuntimeError()
 

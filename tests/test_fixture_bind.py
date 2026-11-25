@@ -85,9 +85,9 @@ def test_template_check_falls_back_to_default_prompt() -> None:
 
 
 def test_decide_gate_result_status_branches() -> None:
-    assert decide_gate_result(
-        harness=None, passed=None, status="running"
-    ) == GateVerdict("pending", "Evaluation is still running.")
+    assert decide_gate_result(harness=None, passed=None, status="running") == GateVerdict(
+        "pending", "Evaluation is still running."
+    )
     assert decide_gate_result(harness=None, passed=None, status="error") == GateVerdict(
         "blocked", "This run ended in error."
     )

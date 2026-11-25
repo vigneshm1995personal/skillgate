@@ -96,9 +96,7 @@ def _listed_skill(state: AppState, item: Mapping[str, Any]) -> Mapping[str, Any]
     return {
         **payload,
         "source": source,
-        "source_label": _PICKER_SOURCE_LABELS.get(
-            source, str(item.get("source_label") or source)
-        ),
+        "source_label": _PICKER_SOURCE_LABELS.get(source, str(item.get("source_label") or source)),
     }
 
 

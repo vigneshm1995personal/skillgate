@@ -29,10 +29,7 @@ def test_description_is_usable_rejects_short_text():
 
 
 def test_description_is_usable_rejects_repeated_char_padding():
-    desc = (
-        "Extract text from aaaaaaaaaaaa files. "
-        "Use when the user mentions a pdf invoice."
-    )
+    desc = "Extract text from aaaaaaaaaaaa files. Use when the user mentions a pdf invoice."
     assert description_is_usable(desc) == (False, _VAGUE_HINT)
 
 
@@ -99,9 +96,7 @@ def test_apply_description_fix_copies_and_restores_scripts(tmp_path: Path):
     ref = tmp_path / "ref" / "demo"
     src.mkdir(parents=True)
     ref.mkdir(parents=True)
-    (src / "SKILL.md").write_text(
-        "---\nname: demo\ndescription: old\n---\n", encoding="utf-8"
-    )
+    (src / "SKILL.md").write_text("---\nname: demo\ndescription: old\n---\n", encoding="utf-8")
     (src / "scripts").mkdir()
     (src / "scripts" / "a.py").write_text("broken", encoding="utf-8")
     (ref / "scripts").mkdir(parents=True)
@@ -121,12 +116,8 @@ def test_apply_description_fix_copies_and_restores_scripts(tmp_path: Path):
 def test_apply_description_fix_rewrites_in_place_when_dest_is_source(tmp_path: Path):
     src = tmp_path / "demo"
     src.mkdir()
-    (src / "SKILL.md").write_text(
-        "---\nname: demo\ndescription: old\n---\n", encoding="utf-8"
-    )
-    out = apply_description_fix(
-        source=src, dest_root=tmp_path, new_description="new"
-    )
+    (src / "SKILL.md").write_text("---\nname: demo\ndescription: old\n---\n", encoding="utf-8")
+    out = apply_description_fix(source=src, dest_root=tmp_path, new_description="new")
     assert out == src
     assert "description: new" in (src / "SKILL.md").read_text(encoding="utf-8")
 

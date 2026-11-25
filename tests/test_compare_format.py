@@ -29,9 +29,7 @@ def test_fmt_duration_minutes_and_seconds() -> None:
 def test_row_to_line_pads_and_truncates() -> None:
     assert _row_to_line([]) == ""
     case_col = "case"
-    assert _row_to_line([case_col, None], arm_col_width=4) == (
-        case_col.ljust(32) + " | " + "—   "
-    )
+    assert _row_to_line([case_col, None], arm_col_width=4) == (case_col.ljust(32) + " | " + "—   ")
 
 
 def test_arm_column_title_dry_run_appends_subtitle() -> None:

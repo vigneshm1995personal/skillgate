@@ -32,9 +32,7 @@ def test_estimate_usage_cost_uses_longest_prefix_match() -> None:
 
 
 def test_estimate_usage_cost_total_only_counts_as_input() -> None:
-    assert (
-        estimate_usage_cost_usd("gpt-5.6-luna", Usage(tokens_total=2_000_000)) == 0.2
-    )
+    assert estimate_usage_cost_usd("gpt-5.6-luna", Usage(tokens_total=2_000_000)) == 0.2
 
 
 def test_usage_from_mapping_rejects_non_dict() -> None:
