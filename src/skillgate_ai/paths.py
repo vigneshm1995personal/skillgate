@@ -140,11 +140,9 @@ def _workspace_realpath_for_pack_check() -> str:
 
 def _has_workspace_skills(candidate: Path) -> bool:
     """A workspace is any folder with ``skills/`` (including right after ``skillgate init``)."""
-    try:
-        cand = os.path.realpath(os.fsdecode(candidate))
-        return os.path.isdir(os.path.join(cand, "skills"))
-    except OSError:
-        return False
+    from skillgate_ai.pack_layout import discovery_has_skills_dir
+
+    return discovery_has_skills_dir(candidate)
 
 
 def project_root() -> Path:
@@ -199,17 +197,15 @@ def config_root_for(path: str | Path | None = None) -> Path:
         if nearest_workspace is None and _has_workspace_skills(candidate):
             nearest_workspace = candidate
         try:
-            if nearest_keys is None and (candidate / ".skillgate" / "keys").is_file():
+            from skillgate_ai.pack_layout import discovery_keys_file, discovery_pack_markers
+
+            if nearest_keys is None and discovery_keys_file(candidate):
                 nearest_keys = candidate
         except OSError:
             pass
         try:
-            from skillgate_ai.pack_layout import discovery_skill_pack_dir
-
-            is_pack = discovery_skill_pack_dir(candidate)
+            has_skill_md, has_evals, is_pack = discovery_pack_markers(candidate)
             cand = os.path.realpath(os.fsdecode(candidate))
-            has_skill_md = os.path.isfile(os.path.join(cand, "SKILL.md"))
-            has_evals = os.path.isdir(os.path.join(cand, "evals"))
             start_dir = candidate == start and os.path.isdir(cand)
         except OSError:
             is_pack = has_skill_md = has_evals = start_dir = False

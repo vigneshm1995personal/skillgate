@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from contextlib import contextmanager
 from pathlib import Path
 
 from skillgate_ai.contained_fs import isdir_at, isfile_at
@@ -53,14 +54,65 @@ def single_path_segment_name(name: str) -> bool:
     return ".." not in Path(name).parts and os.sep not in name and "/" not in name
 
 
+@contextmanager
+def pinned_skillgate_root(realpath: str):
+    """Temporarily set ``SKILLGATE_ROOT`` for cwd-walk / mount probes only."""
+    prior = os.environ.get("SKILLGATE_ROOT")
+    os.environ["SKILLGATE_ROOT"] = realpath
+    try:
+        yield
+    finally:
+        if prior is None:
+            os.environ.pop("SKILLGATE_ROOT", None)
+        else:
+            os.environ["SKILLGATE_ROOT"] = prior
+
+
+def loose_mount_at_pinned_root(target_real: str) -> bool:
+    try:
+        with pinned_skillgate_root(target_real):
+            return loose_pack_mount_at(FsAnchor.SKILLGATE_ENV)
+    except OSError:
+        return False
+
+
 def discovery_skill_pack_dir(candidate: Path) -> bool:
-    """Cwd-walk helper only (literal subpaths; not for user-supplied CLI paths)."""
+    """Cwd-walk helper only (fixed anchor pin; not for arbitrary user CLI paths)."""
     try:
         cand = os.path.realpath(os.fsdecode(candidate))
         if ".." in Path(cand).parts:
             return False
-        skill = os.path.join(cand, "SKILL.md")
-        evals = os.path.join(cand, "evals")
-        return os.path.isfile(skill) and os.path.isdir(evals)
+        with pinned_skillgate_root(cand):
+            return strict_skill_pack_at(FsAnchor.SKILLGATE_ENV)
     except (OSError, ValueError):
         return False
+
+
+def discovery_has_skills_dir(candidate: Path) -> bool:
+    try:
+        cand = os.path.realpath(os.fsdecode(candidate))
+        with pinned_skillgate_root(cand):
+            return isdir_at(FsAnchor.SKILLGATE_ENV, "skills")
+    except OSError:
+        return False
+
+
+def discovery_keys_file(candidate: Path) -> bool:
+    try:
+        cand = os.path.realpath(os.fsdecode(candidate))
+        with pinned_skillgate_root(cand):
+            return isfile_at(FsAnchor.SKILLGATE_ENV, ".skillgate", "keys")
+    except OSError:
+        return False
+
+
+def discovery_pack_markers(candidate: Path) -> tuple[bool, bool, bool]:
+    try:
+        cand = os.path.realpath(os.fsdecode(candidate))
+        with pinned_skillgate_root(cand):
+            skill = isfile_at(FsAnchor.SKILLGATE_ENV, "SKILL.md")
+            evals = isdir_at(FsAnchor.SKILLGATE_ENV, "evals")
+            pack = strict_skill_pack_at(FsAnchor.SKILLGATE_ENV)
+            return skill, evals, pack
+    except OSError:
+        return False, False, False

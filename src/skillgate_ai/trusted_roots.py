@@ -109,38 +109,37 @@ def _is_pack_mount(resolved: Path) -> bool:
         parts = relative_segments_under(agent, target)
         if parts is not None and len(parts) == 1 and single_path_segment_name(parts[0]):
             return loose_pack_mount_at(agent_anchor, *parts)
-    skill_md = os.path.join(target, "SKILL.md")
-    if os.path.isfile(skill_md):
-        return True
-    if os.path.isdir(os.path.join(target, "evals")):
-        return True
-    if os.path.isdir(os.path.join(target, "scripts")):
-        return True
-    return os.path.isfile(os.path.join(target, "evals", "cases.yaml"))
+    from skillgate_ai.pack_layout import loose_mount_at_pinned_root
+
+    return loose_mount_at_pinned_root(target)
 
 
 def pack_access_root(skill_path: str | Path) -> tuple[FsAnchor, tuple[str, ...]]:
     """Fixed anchor kind plus validated relative segments to the pack root."""
     resolved = normalize_pack_target(skill_path)
-    from skillgate_ai.paths import _has_workspace_skills, config_root_for
-
-    env_root = os.environ.get("SKILLGATE_ROOT")
-    if env_root:
-        gate = Path(env_root).resolve()
-        if is_under_root(resolved, gate):
-            rel = resolved.relative_to(gate)
-            return FsAnchor.SKILLGATE_ENV, rel.parts
-
-    workspace = workspace_anchor()
-    if is_under_root(resolved, workspace):
-        rel = resolved.relative_to(workspace)
-        return FsAnchor.WORKSPACE, rel.parts
-
     from skillgate_ai.pack_layout import (
         relative_segments_under,
         single_path_segment_name,
         strict_skill_pack_at,
     )
+    from skillgate_ai.paths import _has_workspace_skills, config_root_for
+
+    target = os.path.realpath(os.fsdecode(resolved))
+    env_root = os.environ.get("SKILLGATE_ROOT")
+    if env_root and ".." not in Path(env_root).parts:
+        gate = Path(env_root).resolve()
+        gate_real = os.path.realpath(env_root)
+        if is_under_root(resolved, gate):
+            rel = relative_segments_under(gate_real, target)
+            if rel is not None:
+                return FsAnchor.SKILLGATE_ENV, rel
+
+    workspace = workspace_anchor()
+    workspace_real = os.path.realpath(os.fsdecode(workspace))
+    if is_under_root(resolved, workspace):
+        rel = relative_segments_under(workspace_real, target)
+        if rel is not None:
+            return FsAnchor.WORKSPACE, rel
 
     for getter, agent_anchor in _AGENT_GETTERS:
         try:
@@ -160,12 +159,14 @@ def pack_access_root(skill_path: str | Path) -> tuple[FsAnchor, tuple[str, ...]]
             continue
 
     bound = Path(os.path.realpath(os.fsdecode(config_root_for(resolved))))
+    bound_real = os.path.realpath(os.fsdecode(bound))
     if _has_workspace_skills(bound) and is_under_root(resolved, bound):
-        rel = resolved.relative_to(bound)
-        if bound != workspace_anchor():
-            _pin_skillgate_root(bound)
-            return FsAnchor.SKILLGATE_ENV, rel.parts
-        return FsAnchor.WORKSPACE, rel.parts
+        rel = relative_segments_under(bound_real, target)
+        if rel is not None:
+            if bound != workspace_anchor():
+                _pin_skillgate_root(bound)
+                return FsAnchor.SKILLGATE_ENV, rel
+            return FsAnchor.WORKSPACE, rel
 
     if is_under_root(resolved, bound) and _is_pack_mount(resolved):
         env_root = os.environ.get("SKILLGATE_ROOT")
@@ -174,11 +175,10 @@ def pack_access_root(skill_path: str | Path) -> tuple[FsAnchor, tuple[str, ...]]
             if _has_workspace_skills(gate) and _prefix_sibling_of_gate(bound, gate):
                 raise PathTraversalError("Path escapes the allowed root.")
         _pin_skillgate_root(bound if resolved == bound else resolved)
-        gate = Path(os.environ["SKILLGATE_ROOT"]).resolve()
-        rel = resolved.relative_to(gate)
-        return FsAnchor.SKILLGATE_ENV, rel.parts
-
-    target = os.path.realpath(os.fsdecode(resolved))
+        gate_real = os.path.realpath(os.environ["SKILLGATE_ROOT"])
+        rel = relative_segments_under(gate_real, target)
+        if rel is not None:
+            return FsAnchor.SKILLGATE_ENV, rel
     if resolved.is_absolute() and ".." not in resolved.parts and not os.path.exists(target):
         _pin_skillgate_root(resolved)
         return FsAnchor.SKILLGATE_ENV, ()
