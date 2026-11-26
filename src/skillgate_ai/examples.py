@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 import shutil
 from importlib.resources import files
 from pathlib import Path
@@ -35,12 +34,7 @@ def is_bundled_example_path(folder: Path) -> bool:
         canonical = bundled_example(slug)
     except SkillGateError:
         return False
-    if folder == canonical:
-        return True
-    try:
-        return os.path.samefile(canonical, folder)
-    except (OSError, ValueError):
-        return False
+    return folder == canonical
 
 
 def bundled_example(name: str) -> Path:

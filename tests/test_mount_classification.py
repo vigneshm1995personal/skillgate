@@ -185,3 +185,19 @@ def test_relative_segments_under_rejects_traversal() -> None:
     assert relative_segments_under(base, os.path.join(base, "skills", "pdf")) == ("skills", "pdf")
     assert relative_segments_under(base, base) == ()
     assert relative_segments_under(base, os.path.join(base, "..", "etc")) is None
+
+
+def test_named_child_finds_fixed_skill_markers(tmp_path: Path) -> None:
+    from skillgate_ai.pack_layout import _has_keys_child, _has_skill_pack_layout, _has_skills_child
+
+    ws = tmp_path / "ws"
+    (ws / "skills").mkdir(parents=True)
+    assert _has_skills_child(ws)
+    pack = ws / "skills" / "solo"
+    pack.mkdir()
+    (pack / "SKILL.md").write_text("---\nname: solo\n---\n", encoding="utf-8")
+    (pack / "evals").mkdir()
+    assert _has_skill_pack_layout(pack)
+    (ws / ".skillgate").mkdir()
+    (ws / ".skillgate" / "keys").write_text("{}", encoding="utf-8")
+    assert _has_keys_child(ws)
