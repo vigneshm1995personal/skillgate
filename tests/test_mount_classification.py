@@ -187,6 +187,53 @@ def test_relative_segments_under_rejects_traversal() -> None:
     assert relative_segments_under(base, os.path.join(base, "..", "etc")) is None
 
 
+def test_single_path_segment_name_rejects_traversal_tokens() -> None:
+    from skillgate_ai.pack_layout import single_path_segment_name
+
+    assert single_path_segment_name("skills")
+    assert not single_path_segment_name("")
+    assert not single_path_segment_name(".")
+    assert not single_path_segment_name("..")
+    assert not single_path_segment_name("a/b")
+
+
+def test_workspace_has_skills_dir_under_skillgate_env(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from skillgate_ai.pack_layout import workspace_has_skills_dir
+
+    ws = tmp_path / "ws"
+    (ws / "skills").mkdir(parents=True)
+    monkeypatch.setenv("SKILLGATE_ROOT", str(ws))
+    workspace_real = os.path.realpath(ws)
+    assert workspace_has_skills_dir(workspace_real, workspace_real)
+
+
+def test_classify_mount_at_loose_markers(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from skillgate_ai.fs_anchor import FsAnchor
+    from skillgate_ai.pack_layout import classify_mount_at
+
+    ws = tmp_path / "ws"
+  # Minimal pack: cases.yaml only (no SKILL.md)
+    pack = ws / "skills" / "loose"
+    pack.mkdir(parents=True)
+    (pack / "evals").mkdir()
+    (pack / "evals" / "cases.yaml").write_text(
+        "schema_version: 1\nskill: loose\ncases: []\n",
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(ws)
+    monkeypatch.setenv("SKILLGATE_ROOT", str(ws))
+    assert classify_mount_at(FsAnchor.SKILLGATE_ENV, "skills", "loose")
+
+    scripts_pack = ws / "skills" / "scripty"
+    scripts_pack.mkdir(parents=True)
+    (scripts_pack / "scripts").mkdir()
+    assert classify_mount_at(FsAnchor.SKILLGATE_ENV, "skills", "scripty")
+
+
 def test_fixed_suffix_layout_markers(tmp_path: Path) -> None:
     from skillgate_ai.pack_layout import (
         layout_has_skills_dir,
