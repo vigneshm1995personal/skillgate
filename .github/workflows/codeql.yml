@@ -94,22 +94,10 @@ jobs:
           fi
           echo "CodeQL enforce scan_ref=${scan_ref} head_sha=${head_sha} pr=${pr_number:-none}"
           alerts_path="repos/${repo}/code-scanning/alerts?state=open&ref=${scan_ref}&per_page=100"
-          analyses_path="repos/${repo}/code-scanning/analyses?ref=${scan_ref}&per_page=100"
           high_jq='[.[] | select(.rule.security_severity_level == "high" or .rule.security_severity_level == "critical")] | length'
           on_head_jq='[.[] | select(.rule.security_severity_level == "high" or .rule.security_severity_level == "critical") | select(.most_recent_instance.commit_sha == $head)] | length'
-          analysis_on_head_jq='[.[] | select(.commit_sha == $head)] | length'
 
           for attempt in 1 2 3 4 5 6 7 8 9 10 11 12; do
-            analysis_on_head=0
-            if [ -n "${head_sha}" ]; then
-              analysis_on_head="$(gh api "${analyses_path}" --paginate 2>/dev/null | jq --arg head "${head_sha}" "${analysis_on_head_jq}" || echo 0)"
-              echo "CodeQL analyses on head ${head_sha} (attempt ${attempt}): ${analysis_on_head}"
-              if [ "${analysis_on_head}" -eq 0 ]; then
-                echo "Waiting for merge-ref analysis for head ${head_sha}..."
-                sleep 45
-                continue
-              fi
-            fi
             if ! alerts_json="$(gh api "${alerts_path}" --paginate 2>/dev/null)"; then
               echo "CodeQL alerts API not ready for ${scan_ref} (attempt ${attempt})"
               if [ "${attempt}" -lt 12 ]; then
