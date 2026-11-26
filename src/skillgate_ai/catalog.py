@@ -152,20 +152,26 @@ def catalog_entries(root: Path, *, include_agents: bool = False) -> list[dict[st
 
 def _immediate_agent_skill(path: Path) -> bool:
     """True when ``path`` is a direct child of a Cursor, Codex, or Claude skills folder."""
+    import os
+
     from skillgate_ai.contained_fs import isdir_at, isfile_at
 
-    resolved = path.expanduser().resolve()
-    parent = resolved.parent
+    raw = os.path.expanduser(str(path))
+    if ".." in Path(raw).parts:
+        return False
+    name = os.path.basename(os.path.normpath(raw))
+    parent = os.path.normpath(os.path.dirname(raw))
+    if not name or name in {".", ".."}:
+        return False
     for _source, getter in SOURCE_ROOTS:
         if getter is None:
             continue
         try:
-            root = getter().resolve()
+            root = os.path.realpath(str(getter()))
         except OSError:
             continue
-        if parent != root:
+        if os.path.normpath(parent) != os.path.normpath(root):
             continue
-        name = resolved.name
         return isdir_at(root, name) and isfile_at(root, name, "SKILL.md")
     return False
 

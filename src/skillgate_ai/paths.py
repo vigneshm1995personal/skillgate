@@ -125,11 +125,8 @@ def skill_pack_root(skill_path: str | Path) -> Path:
             or isdir_at(resolved)
         ):
             return Path(os.path.realpath(text))
-        candidate = Path(text)
-        if not resolved.exists() and ".." not in candidate.parts:
-            parent = candidate.parent
-            if parent.exists():
-                return Path(os.path.realpath(text))
+        if not resolved.exists() and ".." not in Path(text).parts:
+            return Path(os.path.expanduser(text))
         raise
 
 
@@ -198,8 +195,7 @@ def pack_access_root(skill_path: str | Path) -> tuple[Path, tuple[str, ...]]:
         rel = resolved.relative_to(workspace)
         return workspace, rel.parts
     except ValueError:
-        parent = resolved.parent.resolve()
-        return parent, (resolved.name,)
+        return resolved.parent, (resolved.name,)
 
 
 def is_under_root(path: str | Path, root: str | Path) -> bool:
