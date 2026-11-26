@@ -209,14 +209,12 @@ def test_workspace_has_skills_dir_under_skillgate_env(
     assert workspace_has_skills_dir(workspace_real, workspace_real)
 
 
-def test_classify_mount_at_loose_markers(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_classify_mount_at_loose_markers(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     from skillgate_ai.fs_anchor import FsAnchor
     from skillgate_ai.pack_layout import classify_mount_at
 
     ws = tmp_path / "ws"
-  # Minimal pack: cases.yaml only (no SKILL.md)
+    # Minimal pack: cases.yaml only (no SKILL.md)
     pack = ws / "skills" / "loose"
     pack.mkdir(parents=True)
     (pack / "evals").mkdir()
