@@ -2,39 +2,43 @@
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
-from skillgate_ai.paths import PathTraversalError, pack_file_at, pack_path_string
+from skillgate_ai.contained_fs import (
+    append_text_line,
+    glob_files,
+    isdir_at,
+    isfile_at,
+    read_bytes_at,
+    read_text,
+    write_bytes_at,
+    write_text,
+)
+from skillgate_ai.paths import PathTraversalError, pack_file_at
+
+
+def _parts(rel: str) -> tuple[str, ...]:
+    from skillgate_ai.contained_fs import _split_rel
+
+    return _split_rel(rel)
 
 
 def read_pack_text(root: str | Path, rel: str, *, encoding: str = "utf-8") -> str:
-    with open(pack_path_string(root, rel), encoding=encoding) as handle:
-        return handle.read()
+    return read_text(root, *_parts(rel), encoding=encoding)
 
 
 def read_pack_bytes(root: str | Path, rel: str) -> bytes:
-    with open(pack_path_string(root, rel), "rb") as handle:
-        return handle.read()
+    return read_bytes_at(root, *_parts(rel))
 
 
 def write_pack_text(root: str | Path, rel: str, text: str, *, encoding: str = "utf-8") -> Path:
-    target_path = pack_path_string(root, rel)
-    parent = os.path.dirname(target_path)
-    if parent:
-        os.makedirs(parent, exist_ok=True)
-    with open(target_path, "w", encoding=encoding) as handle:
-        handle.write(text)
+    parts = _parts(rel)
+    write_text(root, *parts, text=text, encoding=encoding)
     return pack_file_at(root, rel)
 
 
 def write_pack_bytes(root: str | Path, rel: str, data: bytes) -> Path:
-    target_path = pack_path_string(root, rel)
-    parent = os.path.dirname(target_path)
-    if parent:
-        os.makedirs(parent, exist_ok=True)
-    with open(target_path, "wb") as handle:
-        handle.write(data)
+    write_bytes_at(root, *_parts(rel), data=data)
     return pack_file_at(root, rel)
 
 
@@ -42,15 +46,9 @@ def append_pack_line(
     root: str | Path, rel: str, line: str, *, encoding: str = "utf-8"
 ) -> Path | None:
     try:
-        target_path = pack_path_string(root, rel)
+        append_text_line(root, *_parts(rel), line=line, encoding=encoding)
     except PathTraversalError:
         return None
-    parent = os.path.dirname(target_path)
-    try:
-        if parent:
-            os.makedirs(parent, exist_ok=True)
-        with open(target_path, "a", encoding=encoding) as handle:
-            handle.write(line)
     except OSError:
         return None
     return pack_file_at(root, rel)
@@ -58,29 +56,26 @@ def append_pack_line(
 
 def read_pack_lines(root: str | Path, rel: str, *, encoding: str = "utf-8") -> list[str]:
     try:
-        target_path = pack_path_string(root, rel)
-    except PathTraversalError:
+        text = read_pack_text(root, rel, encoding=encoding)
+    except (PathTraversalError, OSError):
         return []
-    if not os.path.isfile(target_path):
+    if not is_pack_file(root, rel):
         return []
-    with open(target_path, encoding=encoding) as handle:
-        return handle.read().splitlines()
+    return text.splitlines()
 
 
 def is_pack_file(root: str | Path, rel: str) -> bool:
     try:
-        target_path = pack_path_string(root, rel)
+        return isfile_at(root, *_parts(rel))
     except PathTraversalError:
         return False
-    return os.path.isfile(target_path)
 
 
 def is_pack_dir(root: str | Path, rel: str) -> bool:
     try:
-        target_path = pack_path_string(root, rel)
+        return isdir_at(root, *_parts(rel))
     except PathTraversalError:
         return False
-    return os.path.isdir(target_path)
 
 
 def pack_entry_at(root: str | Path, rel: str) -> Path:
@@ -88,29 +83,14 @@ def pack_entry_at(root: str | Path, rel: str) -> Path:
 
 
 def glob_pack_files(root: str | Path, rel_dir: str, pattern: str) -> list[Path]:
-    import fnmatch
-
-    parts = [piece for piece in rel_dir.replace("\\", "/").split("/") if piece]
-    dir_rel = "/".join(parts)
     try:
-        base_str = (
-            pack_path_string(root, dir_rel)
-            if dir_rel
-            else os.path.realpath(os.path.expanduser(str(root)))
-        )
+        rels = glob_files(root, rel_dir, pattern)
     except PathTraversalError:
         return []
-    if not os.path.isdir(base_str):
-        return []
     out: list[Path] = []
-    for name in sorted(os.listdir(base_str)):
-        if not fnmatch.fnmatch(name, pattern):
-            continue
-        child_rel = f"{dir_rel}/{name}" if dir_rel else name
+    for rel in rels:
         try:
-            if not os.path.isfile(pack_path_string(root, child_rel)):
-                continue
-            out.append(pack_file_at(root, child_rel))
+            out.append(pack_file_at(root, rel))
         except PathTraversalError:
             continue
     return out

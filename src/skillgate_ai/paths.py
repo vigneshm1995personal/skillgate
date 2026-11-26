@@ -41,10 +41,9 @@ def require_under(root: str | Path, path: str | Path) -> Path:
 
 
 def is_skill_pack(path: str | Path) -> bool:
-    base = os.path.realpath(os.path.expanduser(str(path)))
-    return os.path.isfile(os.path.join(base, "SKILL.md")) and os.path.isdir(
-        os.path.join(base, "evals")
-    )
+    from skillgate_ai.contained_fs import isdir_at, isfile_at
+
+    return isfile_at(path, "SKILL.md") and isdir_at(path, "evals")
 
 
 def nearest_skill_pack(start: str | Path | None = None) -> Path | None:
@@ -77,8 +76,9 @@ def resolve_user_path(target: str | Path, root: Path | None = None) -> Path:
 
 def _has_workspace_skills(candidate: Path) -> bool:
     """A workspace is any folder with ``skills/`` (including right after ``skillgate init``)."""
-    skills_dir = os.path.join(os.fsdecode(candidate), "skills")
-    return os.path.isdir(skills_dir)
+    from skillgate_ai.contained_fs import isdir_at
+
+    return isdir_at(candidate, "skills")
 
 
 def project_root() -> Path:
@@ -115,15 +115,16 @@ def skill_pack_root(skill_path: str | Path) -> Path:
 
         if _immediate_agent_skill(resolved):
             return resolved
-        resolved_str = os.path.realpath(text)
+        from skillgate_ai.contained_fs import is_root_directory, isdir_at, isfile_at
+
         if (
             is_skill_pack(resolved)
-            or os.path.isfile(os.path.join(resolved_str, "SKILL.md"))
-            or os.path.isfile(os.path.join(resolved_str, "evals", "cases.yaml"))
-            or os.path.isdir(os.path.join(resolved_str, "evals"))
-            or os.path.isdir(resolved_str)
+            or isfile_at(resolved, "SKILL.md")
+            or isfile_at(resolved, "evals", "cases.yaml")
+            or isdir_at(resolved, "evals")
+            or is_root_directory(resolved)
         ):
-            return Path(resolved_str)
+            return Path(os.path.realpath(text))
         raise
 
 
@@ -145,15 +146,14 @@ def config_root_for(path: str | Path | None = None) -> Path:
     pack = None
     nearest_workspace: Path | None = None
     nearest_keys: Path | None = None
+    from skillgate_ai.contained_fs import isfile_at
+
     for candidate in (start, *start.parents):
         if nearest_workspace is None and _has_workspace_skills(candidate):
             nearest_workspace = candidate
-        candidate_name = os.fsdecode(candidate)
-        keys_file = os.path.join(candidate_name, ".skillgate", "keys")
-        if nearest_keys is None and os.path.isfile(keys_file):
+        if nearest_keys is None and isfile_at(candidate, ".skillgate", "keys"):
             nearest_keys = candidate
-        skill_md_file = os.path.join(candidate_name, "SKILL.md")
-        if pack is None and (is_skill_pack(candidate) or os.path.isfile(skill_md_file)):
+        if pack is None and (is_skill_pack(candidate) or isfile_at(candidate, "SKILL.md")):
             pack = candidate
     if nearest_workspace is not None:
         return nearest_workspace
@@ -171,20 +171,9 @@ def pack_file_at(root: str | Path, rel: str) -> Path:
 
 def pack_path_string(root: str | Path, rel: str) -> str:
     """Validated pack-relative path as a filesystem string."""
-    cleaned = rel.replace("\\", "/").strip().lstrip("/")
-    parts = [piece for piece in cleaned.split("/") if piece and piece not in {".", ""}]
-    if not parts or any(piece == ".." for piece in parts):
-        raise PathTraversalError("Path escapes the allowed root.")
-    base = os.path.realpath(os.path.expanduser(str(root)))
-    joined = os.path.join(base, *parts)
-    target = os.path.realpath(joined)
-    try:
-        common = os.path.commonpath([base, target])
-    except ValueError as exc:
-        raise PathTraversalError("Path escapes the allowed root.") from exc
-    if common != base:
-        raise PathTraversalError("Path escapes the allowed root.")
-    return target
+    from skillgate_ai.contained_fs import resolved_relative
+
+    return resolved_relative(root, rel)
 
 
 def is_under_root(path: str | Path, root: str | Path) -> bool:

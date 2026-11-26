@@ -7,6 +7,7 @@ import hashlib
 from pathlib import Path
 from typing import Any
 
+from skillgate_ai.contained_fs import file_size, iter_pack_files
 from skillgate_ai.pack.constants import (
     _SKIP_DIR_NAMES,
     _SKIP_FILE_NAMES,
@@ -27,28 +28,13 @@ def list_pack_files(skill_path: str | Path) -> list[dict[str, Any]]:
     root = try_resolve_pack_root(skill_path)
     if root is None:
         return []
-    import os
-
-    base = os.path.realpath(os.path.expanduser(str(root)))
     found: list[dict[str, Any]] = []
-    for dirpath, dirnames, filenames in os.walk(base, topdown=True, followlinks=False):
-        dirnames[:] = [name for name in dirnames if name.lower() not in _SKIP_DIR_NAMES]
-        for filename in sorted(filenames):
-            full = os.path.join(dirpath, filename)
-            try:
-                resolved = os.path.realpath(full)
-                if os.path.commonpath([base, resolved]) != base:
-                    continue
-            except (OSError, ValueError):
-                continue
-            if not os.path.isfile(resolved):
-                continue
-            rel = os.path.relpath(resolved, base).replace("\\", "/")
-            if rel == "SKILL.md" or rel.lower() in _SKIP_FILE_NAMES:
-                continue
-            if any(part.lower() in _SKIP_DIR_NAMES for part in Path(rel).parts):
-                continue
-            found.append({"path": rel, "bytes": os.path.getsize(resolved)})
+    for rel, size in iter_pack_files(
+        root,
+        skip_dir_names=_SKIP_DIR_NAMES,
+        skip_file_names=_SKIP_FILE_NAMES,
+    ):
+        found.append({"path": rel, "bytes": size})
     return found
 
 
@@ -155,11 +141,6 @@ def browser_files(skill_path: str | Path) -> list[dict[str, Any]]:
         return []
     items: list[dict[str, Any]] = []
     if is_pack_file(root, "SKILL.md"):
-        import os
-
-        from skillgate_ai.paths import pack_path_string
-
-        skill_md = pack_path_string(root, "SKILL.md")
-        items.append({"path": "SKILL.md", "bytes": os.path.getsize(skill_md)})
+        items.append({"path": "SKILL.md", "bytes": file_size(root, "SKILL.md")})
     items.extend(list_pack_files(root))
     return items

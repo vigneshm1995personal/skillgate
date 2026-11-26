@@ -281,24 +281,22 @@ def register_skill_routes(app: FastAPI) -> None:
             except SkillGateError:
                 source = None
             if source is not None:
-                import os
+                from skillgate_ai.contained_fs import isdir_at, iter_pack_files
+                from skillgate_ai.pack_io import read_pack_bytes, write_pack_bytes
+                from skillgate_ai.paths import contained_path
 
-                from skillgate_ai.pack_io import write_pack_bytes
-                from skillgate_ai.paths import contained_path, pack_path_string
-
-                src_root = pack_path_string(source, "scripts")
                 require_under(source, contained_path(source, "scripts"))
-                if os.path.isdir(src_root):
-                    for dirpath, _, filenames in os.walk(src_root, followlinks=False):
-                        for name in filenames:
-                            abs_src = os.path.join(dirpath, name)
-                            rel = os.path.relpath(abs_src, src_root).replace("\\", "/")
-                            dest_rel = f"scripts/{rel}"
-                            rel_src = f"scripts/{rel}"
-                            src_path = pack_path_string(source, rel_src)
-                            with open(src_path, "rb") as handle:
-                                file_bytes = handle.read()
-                            write_pack_bytes(skill_path, dest_rel, file_bytes)
+                if isdir_at(source, "scripts"):
+                    for rel, _size in iter_pack_files(
+                        source,
+                        skip_dir_names=frozenset(),
+                        skip_file_names=frozenset(),
+                    ):
+                        if not rel.startswith("scripts/"):
+                            continue
+                        dest_rel = rel
+                        file_bytes = read_pack_bytes(source, rel)
+                        write_pack_bytes(skill_path, dest_rel, file_bytes)
         return skill_payload(state, skill_path)
 
     @app.get("/api/history")

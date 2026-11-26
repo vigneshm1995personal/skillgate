@@ -1,11 +1,6 @@
 name: skillgate
-dependency-packs:
-  - skillgate-ai/skillgate-sanitizers@0.0.5
 queries:
   - uses: security-extended
-packs:
-  skillgate-ai/skillgate-sanitizers:
-    - .github/codeql/extensions/skillgate-sanitizers
 paths-ignore:
   - src/skillgate_ai/web_static
   - src/skillgate_ai/examples

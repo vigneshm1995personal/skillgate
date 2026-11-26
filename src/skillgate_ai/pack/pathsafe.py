@@ -18,9 +18,9 @@ def resolve_pack_root(skill_path: str | Path) -> Path:
         root = skill_pack_root(skill_path)
     except PathTraversalError as exc:
         raise ValueError("Skill folder not found.") from exc
-    import os
+    from skillgate_ai.contained_fs import is_root_directory
 
-    if not os.path.isdir(os.path.realpath(os.path.expanduser(str(root)))):
+    if not is_root_directory(root):
         raise ValueError("Skill folder not found.")
     return root
 
