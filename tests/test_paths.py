@@ -45,7 +45,9 @@ def test_require_under_rejects_outside(tmp_path: Path) -> None:
         require_under(root, outside)
 
 
-def test_contained_path_rejects_symlink_escape(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_contained_path_rejects_symlink_escape(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     root = (tmp_path / "ws").resolve()
     root.mkdir()
     monkeypatch.setenv("SKILLGATE_ROOT", str(root))
