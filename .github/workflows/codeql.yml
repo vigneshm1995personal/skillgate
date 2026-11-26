@@ -61,12 +61,21 @@ jobs:
           fi
           head_sha=""
           merge_ref=""
+          scan_ref="${{ github.ref }}"
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             scan_ref="refs/pull/${{ github.event.pull_request.number }}/head"
             merge_ref="refs/pull/${{ github.event.pull_request.number }}/merge"
             head_sha="${{ github.event.pull_request.head.sha }}"
-          else
-            scan_ref="${{ github.ref }}"
+          elif [ "${{ github.ref }}" != "refs/heads/main" ] && [[ "${{ github.ref }}" == refs/heads/* ]]; then
+            branch="${GITHUB_REF#refs/heads/}"
+            pr_json="$(gh pr list --head "${branch}" --state open --limit 1 --json number,headRefOid 2>/dev/null || true)"
+            pr_number="$(printf '%s' "${pr_json}" | jq -r '.[0].number // empty')"
+            pr_head="$(printf '%s' "${pr_json}" | jq -r '.[0].headRefOid // empty')"
+            if [ -n "${pr_number}" ]; then
+              scan_ref="refs/pull/${pr_number}/head"
+              merge_ref="refs/pull/${pr_number}/merge"
+              head_sha="${pr_head}"
+            fi
           fi
           high_jq='[.[] | select(.rule.security_severity_level == "high" or .rule.security_severity_level == "critical")] | length'
           on_head_jq='[.[] | select(.rule.security_severity_level == "high" or .rule.security_severity_level == "critical") | select(.most_recent_instance.commit_sha == $head)] | length'
