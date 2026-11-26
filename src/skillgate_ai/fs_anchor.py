@@ -45,10 +45,10 @@ def anchor_base(anchor: FsAnchor) -> str:
     if anchor is FsAnchor.ALLOW_ROOT:
         from skillgate_ai.allow_root import matched_allow_root_base
 
-        base = matched_allow_root_base()
-        if not base:
+        allow_base = matched_allow_root_base()
+        if not allow_base:
             raise PathTraversalError("Path escapes the allowed root.")
-        return base
+        return allow_base
     if anchor is FsAnchor.AGENT_CURSOR:
         from skillgate_ai.deploy import cursor_skills_root
 

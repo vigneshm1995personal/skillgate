@@ -212,9 +212,7 @@ def sync_once(
         prev_root = os.environ.get("SKILLGATE_ROOT")
         os.environ["SKILLGATE_ROOT"] = str(work)
         try:
-            skipped = [
-                name for name in names if latest_check_passed(work / prefix / name) is False
-            ]
+            skipped = [name for name in names if latest_check_passed(work / prefix / name) is False]
             skipped_set = set(skipped)
             roots = target_roots()
             per_target = {

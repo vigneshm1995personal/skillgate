@@ -84,21 +84,21 @@ def is_skill_pack(path: str | Path) -> bool:
     env = os.environ.get("SKILLGATE_ROOT")
     if env and ".." not in Path(env).parts:
         gate = os.path.realpath(env)
-        parts = relative_segments_under(gate, target)
-        if parts is not None:
-            return strict_skill_pack_at(FsAnchor.SKILLGATE_ENV, *parts)
+        gate_parts = relative_segments_under(gate, target)
+        if gate_parts is not None:
+            return strict_skill_pack_at(FsAnchor.SKILLGATE_ENV, *gate_parts)
     workspace = _workspace_realpath_for_pack_check()
-    parts = relative_segments_under(workspace, target)
-    if parts is not None:
-        return strict_skill_pack_at(FsAnchor.WORKSPACE, *parts)
+    workspace_parts = relative_segments_under(workspace, target)
+    if workspace_parts is not None:
+        return strict_skill_pack_at(FsAnchor.WORKSPACE, *workspace_parts)
     for getter, agent_anchor in _agent_roots():
         try:
             agent = os.path.realpath(os.fsdecode(getter().resolve()))
         except OSError:
             continue
-        parts = relative_segments_under(agent, target)
-        if parts is not None and len(parts) == 1:
-            return strict_skill_pack_at(agent_anchor, *parts)
+        agent_parts = relative_segments_under(agent, target)
+        if agent_parts is not None and len(agent_parts) == 1:
+            return strict_skill_pack_at(agent_anchor, *agent_parts)
     return False
 
 

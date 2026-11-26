@@ -59,7 +59,7 @@ def allow_root_realpaths() -> tuple[str, ...]:
 
 
 def record_matched_allow_root(realpath: str) -> None:
-    """Remember which allow-root matched ``pack_access_root`` for ``anchor_base``. """
+    """Remember which allow-root matched ``pack_access_root`` for ``anchor_base``."""
     global _matched_allow_root
     _matched_allow_root = realpath
 
