@@ -95,9 +95,8 @@ def ingest_skill(path: str | Path, *, strict: bool = True) -> Skill:
     from skillgate_ai.pack_io import is_pack_file, read_pack_text
     from skillgate_ai.paths import skill_pack_root
 
-    resolved = Path(path).expanduser()
-    if not strict and is_bundled_example_path(resolved):
-        return _ingest_lenient(resolved.resolve())
+    if not strict and is_bundled_example_path(Path(path)):
+        return _ingest_lenient(Path(path))
     folder = skill_pack_root(path)
     if not strict:
         return _ingest_lenient(folder)

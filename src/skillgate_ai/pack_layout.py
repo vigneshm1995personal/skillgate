@@ -53,50 +53,67 @@ def single_path_segment_name(name: str) -> bool:
     return ".." not in Path(name).parts and os.sep not in name and "/" not in name
 
 
-def _join_root(root_real: str, *parts: str) -> str:
+def _layout_path(root_real: str) -> Path | None:
+    """Absolute classifier root (callers pass ``realpath`` results only)."""
     if ".." in Path(root_real).parts:
-        raise ValueError("invalid root")
-    for part in parts:
-        if part in {".", ".."} or ".." in Path(part).parts:
-            raise ValueError("invalid part")
-    return os.path.normpath(os.path.join(root_real, *parts))
+        return None
+    try:
+        base = Path(root_real)
+        if not base.is_absolute():
+            return None
+        return base
+    except (OSError, ValueError):
+        return None
 
 
 def layout_has_skills_dir(root_real: str) -> bool:
+    base = _layout_path(root_real)
+    if base is None:
+        return False
     try:
-        return os.path.isdir(_join_root(root_real, "skills"))
-    except (OSError, ValueError):
+        return (base / "skills").is_dir()
+    except OSError:
         return False
 
 
 def layout_skill_pack_at_root(root_real: str) -> bool:
+    base = _layout_path(root_real)
+    if base is None:
+        return False
     try:
-        skill = os.path.isfile(_join_root(root_real, "SKILL.md"))
-        evals = os.path.isdir(_join_root(root_real, "evals"))
-        return skill and evals
-    except (OSError, ValueError):
+        return (base / "SKILL.md").is_file() and (base / "evals").is_dir()
+    except OSError:
         return False
 
 
 def layout_keys_file(root_real: str) -> bool:
+    base = _layout_path(root_real)
+    if base is None:
+        return False
     try:
-        return os.path.isfile(_join_root(root_real, ".skillgate", "keys"))
-    except (OSError, ValueError):
+        return (base / ".skillgate" / "keys").is_file()
+    except OSError:
         return False
 
 
 def layout_is_directory(root_real: str) -> bool:
+    base = _layout_path(root_real)
+    if base is None:
+        return False
     try:
-        return os.path.isdir(root_real)
+        return base.is_dir()
     except OSError:
         return False
 
 
 def layout_pack_markers(root_real: str) -> tuple[bool, bool, bool]:
+    base = _layout_path(root_real)
+    if base is None:
+        return False, False, False
     try:
-        skill = os.path.isfile(_join_root(root_real, "SKILL.md"))
-        evals = os.path.isdir(_join_root(root_real, "evals"))
-        pack = layout_skill_pack_at_root(root_real)
+        skill = (base / "SKILL.md").is_file()
+        evals = (base / "evals").is_dir()
+        pack = skill and evals
         return skill, evals, pack
     except OSError:
         return False, False, False

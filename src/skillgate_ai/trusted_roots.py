@@ -111,9 +111,9 @@ def pack_access_root(skill_path: str | Path) -> tuple[FsAnchor, tuple[str, ...]]
     if config_real != workspace_real and is_under_root(resolved, config):
         rel = relative_segments_under(config_real, target)
         if rel is not None:
-            from skillgate_ai.pack_layout import layout_has_skills_dir, layout_keys_file
+            from skillgate_ai.pack_layout import discovery_has_skills_dir, discovery_keys_file
 
-            if layout_has_skills_dir(config_real) or layout_keys_file(config_real):
+            if discovery_has_skills_dir(config) or discovery_keys_file(config):
                 return FsAnchor.CONFIG, rel
 
     for getter, agent_anchor in _agent_roots():

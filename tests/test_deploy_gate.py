@@ -172,6 +172,26 @@ def test_row_gate_moved_honors_explicit_false() -> None:
     assert row_gate_moved(row) is False
 
 
+def test_pack_gate_pending_for_untrusted_path() -> None:
+    assert pack_gate_decision("/etc/passwd") == ("pending", "Run checks to set the gate.")
+
+
+def test_pack_gate_pending_for_allow_root_even_after_green(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from skillgate_ai.allow_root import set_cli_allow_root
+
+    parent = tmp_path / "out"
+    pack = parent / "solo"
+    pack.mkdir(parents=True)
+    (pack / "SKILL.md").write_text("---\nname: solo\n---\n", encoding="utf-8")
+    monkeypatch.delenv("SKILLGATE_ROOT", raising=False)
+    set_cli_allow_root(parent)
+    _append(pack, run_id="green", passed=True, gate_moved=True)
+    assert pack_gate_decision(pack) == ("pending", "Run checks to set the gate.")
+    assert deploy_allowed(pack) is False
+
+
 def test_latest_check_skips_allow_root_pack_on_disk_reads_history(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

@@ -115,3 +115,64 @@ def test_standalone_classification_unchanged(
     anchor, parts = pack_access_root(pack)
     assert anchor is FsAnchor.ALLOW_ROOT
     assert parts == ("standalone",)
+
+
+def test_layout_classifiers_on_workspace_root(tmp_path: Path) -> None:
+    from skillgate_ai.pack_layout import (
+        layout_has_skills_dir,
+        layout_is_directory,
+        layout_pack_markers,
+        layout_skill_pack_at_root,
+    )
+
+    root = tmp_path / "ws"
+    (root / "skills").mkdir(parents=True)
+    resolved = os.path.realpath(root)
+    assert layout_has_skills_dir(resolved)
+    assert layout_is_directory(resolved)
+    assert layout_pack_markers(resolved) == (False, False, False)
+    assert layout_skill_pack_at_root(resolved) is False
+    pack = root / "skills" / "solo"
+    pack.mkdir(parents=True)
+    (pack / "SKILL.md").write_text("---\nname: solo\n---\n", encoding="utf-8")
+    (pack / "evals").mkdir()
+    pack_real = os.path.realpath(pack)
+    assert layout_skill_pack_at_root(pack_real)
+    assert layout_pack_markers(pack_real)[2]
+
+
+def test_layout_keys_file_and_rejects_relative_root(tmp_path: Path) -> None:
+    from skillgate_ai.pack_layout import layout_keys_file
+
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    (ws / ".skillgate").mkdir()
+    (ws / ".skillgate" / "keys").write_text("{}", encoding="utf-8")
+    assert layout_keys_file(os.path.realpath(ws)) is True
+    assert layout_keys_file("relative/path") is False
+
+
+def test_discovery_helpers_classify_workspace(tmp_path: Path) -> None:
+    from skillgate_ai.pack_layout import (
+        discovery_has_skills_dir,
+        discovery_is_directory,
+        discovery_keys_file,
+        discovery_pack_markers,
+        discovery_skill_pack_dir,
+    )
+
+    ws = tmp_path / "ws"
+    (ws / "skills").mkdir(parents=True)
+    pack = ws / "skills" / "solo"
+    pack.mkdir(parents=True)
+    (pack / "SKILL.md").write_text("---\nname: solo\n---\n", encoding="utf-8")
+    (pack / "evals").mkdir()
+    (ws / ".skillgate").mkdir(parents=True)
+    (ws / ".skillgate" / "keys").write_text("{}", encoding="utf-8")
+    assert discovery_is_directory(ws)
+    assert discovery_has_skills_dir(ws)
+    assert discovery_keys_file(ws)
+    assert discovery_skill_pack_dir(pack)
+    skill, evals, as_pack = discovery_pack_markers(pack)
+    assert skill and evals and as_pack
+    assert discovery_skill_pack_dir(tmp_path / "missing") is False

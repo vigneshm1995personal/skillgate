@@ -100,8 +100,23 @@ def newest_gate_moving_row(rows: Sequence[Mapping[str, Any]]) -> Mapping[str, An
     return None
 
 
+def _workspace_trusted_for_gate(pack: Path | str) -> bool:
+    """Gate / deploy UI uses workspace-trusted packs only (not ``--allow-root`` mounts)."""
+    from skillgate_ai.fs_anchor import FsAnchor
+    from skillgate_ai.paths import PathTraversalError
+    from skillgate_ai.trusted_roots import pack_access_root
+
+    try:
+        anchor, _ = pack_access_root(pack)
+    except PathTraversalError:
+        return False
+    return anchor is not FsAnchor.ALLOW_ROOT
+
+
 def pack_gate_decision(pack: Path | str) -> tuple[str, str]:
     """Pack-level deploy gate (newest gate-moving run)."""
+    if not _workspace_trusted_for_gate(pack):
+        return "pending", "Run checks to set the gate."
     rows = load_history(pack, limit=0)
     row = newest_gate_moving_row(rows)
     if row is None:

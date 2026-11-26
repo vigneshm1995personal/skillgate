@@ -345,7 +345,7 @@ jobs:
         # Live check needs SKILLGATE_OPENAI_API_KEY or --key-env OPENAI_API_KEY.
         # This image job has no secrets; default CMD keyless check must exit 2.
         run: |
-          docker run --rm skillgate:test sh -c 'mkdir -p /tmp/sg-ws/skills && export SKILLGATE_ROOT=/tmp/sg-ws && skillgate example pdf --dest /tmp/sg-ws/skills/pdf'
+          docker run --rm --entrypoint sh skillgate:test -c 'mkdir -p /tmp/sg-ws/skills && export SKILLGATE_ROOT=/tmp/sg-ws && skillgate example pdf --dest /tmp/sg-ws/skills/pdf'
           docker run --rm -e SKILLGATE_ROOT=/pack -v "$PWD/skills/pdf:/pack" skillgate:test ingest /pack
           set +e
           docker run --rm -e SKILLGATE_ROOT=/pack -v "$PWD/skills/pdf:/pack" skillgate:test
