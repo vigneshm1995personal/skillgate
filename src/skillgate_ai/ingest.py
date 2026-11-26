@@ -97,9 +97,14 @@ def ingest_skill(path: str | Path, *, strict: bool = True) -> Skill:
     folder = skill_pack_root(path)
     if not strict:
         return _ingest_lenient(folder)
-    from skillgate_ai.contained_fs import is_root_directory
+    from skillgate_ai.contained_fs import isdir_at
+    from skillgate_ai.paths import PathTraversalError, pack_access_root
 
-    if not is_root_directory(folder):
+    try:
+        anchor, prefix = pack_access_root(folder)
+    except PathTraversalError as exc:
+        raise IngestError(f"Skill folder not found: {folder}") from exc
+    if not isdir_at(anchor, *prefix):
         raise IngestError(f"Skill folder not found: {folder}")
     if not is_pack_file(folder, "SKILL.md"):
         raise IngestError(
@@ -199,9 +204,15 @@ def _ingest_lenient(folder: Path) -> Skill:
     Never raises. Broken SKILL.md is listed with a friendly warning.
     """
     slug = folder_slug(folder) if folder.name else "skill"
-    from skillgate_ai.contained_fs import is_root_directory
+    from skillgate_ai.contained_fs import isdir_at
+    from skillgate_ai.paths import PathTraversalError, pack_access_root
 
-    if not is_root_directory(folder):
+    try:
+        anchor, prefix = pack_access_root(folder)
+        missing = not isdir_at(anchor, *prefix)
+    except PathTraversalError:
+        missing = True
+    if missing:
         return Skill(
             path=folder,
             name=slug,

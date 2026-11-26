@@ -7,7 +7,7 @@ import hashlib
 from pathlib import Path
 from typing import Any
 
-from skillgate_ai.contained_fs import file_size, iter_pack_files
+from skillgate_ai.contained_fs import iter_pack_files
 from skillgate_ai.pack.constants import (
     _SKIP_DIR_NAMES,
     _SKIP_FILE_NAMES,
@@ -20,7 +20,7 @@ from skillgate_ai.pack.constants import (
 )
 from skillgate_ai.pack.pathsafe import try_resolve_pack_root
 from skillgate_ai.pack.samples import is_authentic_fixture_bytes
-from skillgate_ai.pack_io import is_pack_file, read_pack_bytes
+from skillgate_ai.pack_io import is_pack_file, pack_file_size, read_pack_bytes
 
 
 def list_pack_files(skill_path: str | Path) -> list[dict[str, Any]]:
@@ -141,6 +141,6 @@ def browser_files(skill_path: str | Path) -> list[dict[str, Any]]:
         return []
     items: list[dict[str, Any]] = []
     if is_pack_file(root, "SKILL.md"):
-        items.append({"path": "SKILL.md", "bytes": file_size(root, "SKILL.md")})
+        items.append({"path": "SKILL.md", "bytes": pack_file_size(root, "SKILL.md")})
     items.extend(list_pack_files(root))
     return items

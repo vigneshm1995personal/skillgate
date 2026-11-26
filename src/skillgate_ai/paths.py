@@ -115,16 +115,21 @@ def skill_pack_root(skill_path: str | Path) -> Path:
 
         if _immediate_agent_skill(resolved):
             return resolved
-        from skillgate_ai.contained_fs import is_root_directory, isdir_at, isfile_at
+        from skillgate_ai.contained_fs import isdir_at, isfile_at
 
         if (
             is_skill_pack(resolved)
             or isfile_at(resolved, "SKILL.md")
             or isfile_at(resolved, "evals", "cases.yaml")
             or isdir_at(resolved, "evals")
-            or is_root_directory(resolved)
+            or isdir_at(resolved)
         ):
             return Path(os.path.realpath(text))
+        candidate = Path(text)
+        if not resolved.exists() and ".." not in candidate.parts:
+            parent = candidate.parent
+            if parent.exists():
+                return Path(os.path.realpath(text))
         raise
 
 
@@ -174,6 +179,27 @@ def pack_path_string(root: str | Path, rel: str) -> str:
     from skillgate_ai.contained_fs import resolved_relative
 
     return resolved_relative(root, rel)
+
+
+def _rel_under_config_root(path: str | Path) -> tuple[Path, tuple[str, ...]] | None:
+    anchor = project_root().resolve()
+    try:
+        rel = Path(path).expanduser().resolve().relative_to(anchor)
+    except ValueError:
+        return None
+    return anchor, rel.parts
+
+
+def pack_access_root(skill_path: str | Path) -> tuple[Path, tuple[str, ...]]:
+    """Workspace anchor and relative path segments to a skill pack root."""
+    resolved = skill_pack_root(skill_path)
+    workspace = project_root().resolve()
+    try:
+        rel = resolved.relative_to(workspace)
+        return workspace, rel.parts
+    except ValueError:
+        parent = resolved.parent.resolve()
+        return parent, (resolved.name,)
 
 
 def is_under_root(path: str | Path, root: str | Path) -> bool:
