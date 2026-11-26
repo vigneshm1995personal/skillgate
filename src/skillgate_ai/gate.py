@@ -126,12 +126,8 @@ def run_check(
     """Run pack-local evals. Exit 0 green, 1 red, 2 live-without-key."""
     project = root if root is not None else project_root()
     suite_path = resolve_user_path(target, project)
-    if suite_path.is_dir():
-        from skillgate_ai.trusted_roots import register_standalone_pack_for_cli
-
-        register_standalone_pack_for_cli(suite_path)
-        if root is None:
-            project = project_root()
+    if suite_path.is_dir() and root is None:
+        project = project_root()
     if root is None and not os.environ.get("SKILLGATE_ROOT") and suite_path.is_dir():
         from skillgate_ai.paths import config_root_for
 

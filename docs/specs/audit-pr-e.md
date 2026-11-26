@@ -21,7 +21,7 @@ Targets re-audit gaps **1** (CodeQL + CI gate), **2** (Pydantic ingress), **4** 
 
 ## Step order
 
-1. `paths.PathTraversalError`, `contained_path`, `require_under`; CodeQL pack `.github/codeql/extensions/skillgate-sanitizers/`
+1. `paths.PathTraversalError`, `contained_path`, `require_under`; fixed `FsAnchor` roots (see `docs/specs/audit-pr-e-fixed-roots.md`)
 2. Route filesystem sinks through helpers; non-path fixes (launchd 0600, `action.yml`, secret masking, stack traces, anchored regex)
 3. `api_models.py` + replace all 17 `request.json()` handlers with `Body()` models
 4. `[[tool.mypy.overrides]]` on `paths`, `catalog`, `sandbox`, `local_guard` — fix errors in those modules only
@@ -30,7 +30,7 @@ Targets re-audit gaps **1** (CodeQL + CI gate), **2** (Pydantic ingress), **4** 
 
 ## Scope A — CodeQL (fix in code; never dismiss)
 
-- **43 × py/path-injection:** `contained_path` / `require_under` at sinks; `catalog.find_skill` choke; pack sanitizer model for `_path_under_skill`
+- **43 × py/path-injection:** `contained_path` / `require_under` at sinks; `catalog.find_skill` choke; fixed-root `pack_access_root` (no env-pin laundering)
 - **2 × py/overly-permissive-file:** `launchd.py` plist `0600`; stop chmod on `LaunchAgents` dir
 - **1 × py/stack-trace-exposure:** generic 404 message in `api.py`
 - **1 × py/clear-text-logging-sensitive-data:** mask via `::add-mask::` without logging secret bytes

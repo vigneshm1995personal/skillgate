@@ -53,7 +53,11 @@ def _run_gate(
     case_id: str | None = None,
     no_judge: bool = False,
     verbose: bool = False,
+    allow_root: Path | None = None,
 ) -> None:
+    from skillgate_ai.allow_root import set_cli_allow_root
+
+    set_cli_allow_root(allow_root)
     base._bind_key_env(key_env)
     machine = json_out or summary == "json"
     checks = None
@@ -116,6 +120,11 @@ def check_pack(
         "--verbose",
         help="Print the sanitized upstream scoring reason when scoring cannot run.",
     ),
+    allow_root: Path | None = typer.Option(
+        None,
+        "--allow-root",
+        help="Absolute directory that may hold a skill pack outside the workspace (user opt-in).",
+    ),
 ) -> None:
     """Exit 0 if green, 1 if red, 2 if it cannot run. Runs pack-local evals/cases.yaml."""
     _run_gate(
@@ -134,6 +143,7 @@ def check_pack(
         case_id=case_id,
         no_judge=no_judge,
         verbose=verbose,
+        allow_root=allow_root,
     )
 
 
