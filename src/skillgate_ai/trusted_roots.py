@@ -52,16 +52,15 @@ def normalize_pack_target(skill_path: str | Path) -> Path:
 
 
 def register_standalone_pack_for_cli(pack: str | Path) -> None:
-    """When ``check <packdir>`` is outside the cwd workspace, pin ``SKILLGATE_ROOT`` to that pack."""
+    """Set ``SKILLGATE_ROOT`` for standalone ``check <packdir>`` outside the cwd workspace."""
     resolved = normalize_pack_target(pack)
     workspace = _discover_workspace_from_cwd()
     if is_under_root(resolved, workspace):
         return
     from skillgate_ai.contained_fs import isdir_at, isfile_at
 
-    if not isfile_at(resolved, "SKILL.md"):
-        if not isdir_at(resolved, "evals"):
-            return
+    if not isfile_at(resolved, "SKILL.md") and not isdir_at(resolved, "evals"):
+        return
     os.environ["SKILLGATE_ROOT"] = os.fsdecode(resolved)
 
 
