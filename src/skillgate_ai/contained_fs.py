@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import fnmatch
+import os
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -23,10 +24,12 @@ def _reject_escape_parts(*parts: str) -> None:
 
 
 def _anchor(root: str | Path) -> Path:
-    text = str(root)
-    if ".." in Path(text).parts:
+    text = os.fspath(root)
+    parts = [piece for piece in text.replace("\\", "/").split("/") if piece not in {"", "."}]
+    if ".." in parts:
         raise PathTraversalError("Path escapes the allowed root.")
-    return Path(root).expanduser().resolve()
+    resolved = os.path.realpath(os.path.expanduser(text))
+    return Path(resolved)
 
 
 def _safe_target(root: str | Path, *rel_parts: str) -> Path:
