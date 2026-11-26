@@ -111,19 +111,16 @@ def glob_files(anchor: FsAnchor, rel_dir: str, pattern: str) -> list[str]:
             return []
     except (PathTraversalError, ValueError, OSError):
         return []
-    from skillgate_ai.fs_anchor import anchor_base
-
-    base_path = anchor_base(anchor)
     out: list[str] = []
     for name in sorted(os.listdir(dir_path)):
         if not fnmatch.fnmatch(name, pattern):
             continue
         child_parts = (*parts, name) if parts else (name,)
-        joined_child = os.path.join(base_path, *child_parts)
-        child_target = os.path.realpath(joined_child)
-        if not (child_target == base_path or child_target.startswith(base_path + os.sep)):
+        try:
+            child_path = _resolve(anchor, *child_parts)
+        except (PathTraversalError, ValueError, OSError):
             continue
-        if os.path.isfile(child_target):
+        if os.path.isfile(child_path):
             out.append("/".join(child_parts))
     return out
 
@@ -138,7 +135,6 @@ def iter_pack_files(
     from skillgate_ai.paths import pack_access_root
 
     anchor, pack_prefix = pack_access_root(skill_path)
-    pack_base = _resolve(anchor, *pack_prefix)
     pending: list[tuple[str, ...]] = [()]
     while pending:
         rel_parts = pending.pop()

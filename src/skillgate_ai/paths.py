@@ -6,8 +6,6 @@ import os
 from pathlib import Path
 
 from skillgate_ai.fs_anchor import FsAnchor
-
-
 from skillgate_ai.path_traversal import PathTraversalError
 
 __all__ = ["PathTraversalError", "FsAnchor"]
@@ -29,19 +27,25 @@ def filesystem_path_under(anchor: FsAnchor, *parts: str | Path) -> str:
 
 def contained_path(root: str | Path, *parts: str | Path) -> Path:
     """Join ``parts`` under ``root`` using fixed anchors."""
-    from skillgate_ai.trusted_roots import pack_access_root
+    from skillgate_ai.pack_layout import relative_segments_under
+    from skillgate_ai.trusted_roots import normalize_pack_target, pack_access_root
 
-    probe = Path(root).resolve()
     piece_parts = [str(p) for p in parts]
+    for part in piece_parts:
+        if part in {".", ".."} or ".." in Path(part).parts:
+            raise PathTraversalError("Path escapes the allowed root.")
+    probe = os.path.realpath(os.fsdecode(normalize_pack_target(root)))
     env = os.environ.get("SKILLGATE_ROOT")
-    if env and is_under_root(probe, Path(env).resolve()):
-        rel = probe.relative_to(Path(env).resolve())
-        return Path(filesystem_path_under(FsAnchor.SKILLGATE_ENV, *rel.parts, *piece_parts))
-    workspace = project_root().resolve()
-    if is_under_root(probe, workspace):
-        rel = probe.relative_to(workspace)
-        return Path(filesystem_path_under(FsAnchor.WORKSPACE, *rel.parts, *piece_parts))
-    anchor, prefix = pack_access_root(probe)
+    if env and ".." not in Path(env).parts:
+        gate = os.path.realpath(env)
+        rel = relative_segments_under(gate, probe)
+        if rel is not None:
+            return Path(filesystem_path_under(FsAnchor.SKILLGATE_ENV, *rel, *piece_parts))
+    workspace = os.path.realpath(os.fsdecode(project_root()))
+    rel = relative_segments_under(workspace, probe)
+    if rel is not None:
+        return Path(filesystem_path_under(FsAnchor.WORKSPACE, *rel, *piece_parts))
+    anchor, prefix = pack_access_root(root)
     return Path(filesystem_path_under(anchor, *prefix, *piece_parts))
 
 
@@ -55,11 +59,39 @@ def require_under(root: str | Path, path: str | Path) -> Path:
 
 
 def is_skill_pack(path: str | Path) -> bool:
-    probe = Path(path)
+    from skillgate_ai.pack_layout import (
+        discovery_skill_pack_dir,
+        relative_segments_under,
+        strict_skill_pack_at,
+    )
+    from skillgate_ai.trusted_roots import _AGENT_GETTERS, normalize_pack_target
+
     try:
-        return (probe / "SKILL.md").is_file() and (probe / "evals").is_dir()
-    except OSError:
+        resolved = normalize_pack_target(path)
+    except PathTraversalError:
         return False
+    if discovery_skill_pack_dir(resolved):
+        return True
+    target = os.path.realpath(os.fsdecode(resolved))
+    env = os.environ.get("SKILLGATE_ROOT")
+    if env and ".." not in Path(env).parts:
+        gate = os.path.realpath(env)
+        parts = relative_segments_under(gate, target)
+        if parts is not None:
+            return strict_skill_pack_at(FsAnchor.SKILLGATE_ENV, *parts)
+    workspace = _workspace_realpath_for_pack_check()
+    parts = relative_segments_under(workspace, target)
+    if parts is not None:
+        return strict_skill_pack_at(FsAnchor.WORKSPACE, *parts)
+    for getter, agent_anchor in _AGENT_GETTERS:
+        try:
+            agent = os.path.realpath(os.fsdecode(getter().resolve()))
+        except OSError:
+            continue
+        parts = relative_segments_under(agent, target)
+        if parts is not None and len(parts) == 1:
+            return strict_skill_pack_at(agent_anchor, *parts)
+    return False
 
 
 def nearest_skill_pack(start: str | Path | None = None) -> Path | None:
@@ -90,11 +122,26 @@ def resolve_user_path(target: str | Path, root: Path | None = None) -> Path:
     return cwd_hit.resolve()
 
 
+def _workspace_realpath_for_pack_check() -> str:
+    env = os.environ.get("SKILLGATE_ROOT")
+    if env and ".." not in Path(env).parts:
+        return os.path.realpath(env)
+    cwd = Path.cwd()
+    for candidate in (cwd, *cwd.parents):
+        if _has_workspace_skills(candidate):
+            return os.path.realpath(os.fsdecode(candidate))
+        from skillgate_ai.pack_layout import discovery_skill_pack_dir
+
+        if discovery_skill_pack_dir(candidate):
+            return os.path.realpath(os.fsdecode(candidate))
+    return os.path.realpath(os.fsdecode(cwd))
+
+
 def _has_workspace_skills(candidate: Path) -> bool:
     """A workspace is any folder with ``skills/`` (including right after ``skillgate init``)."""
     try:
-        skills = candidate / "skills"
-        return skills.is_dir()
+        cand = os.path.realpath(os.fsdecode(candidate))
+        return os.path.isdir(os.path.join(cand, "skills"))
     except OSError:
         return False
 
@@ -110,8 +157,11 @@ def project_root() -> Path:
         if _has_workspace_skills(candidate):
             workspace = candidate
             break
-        if pack is None and is_skill_pack(candidate):
-            pack = candidate
+        if pack is None:
+            from skillgate_ai.pack_layout import discovery_skill_pack_dir
+
+            if discovery_skill_pack_dir(candidate):
+                pack = candidate
     if workspace is not None:
         return workspace
     if pack is not None:
@@ -153,10 +203,13 @@ def config_root_for(path: str | Path | None = None) -> Path:
         except OSError:
             pass
         try:
-            is_pack = is_skill_pack(candidate)
-            has_skill_md = (candidate / "SKILL.md").is_file()
-            has_evals = (candidate / "evals").is_dir()
-            start_dir = candidate == start and candidate.is_dir()
+            from skillgate_ai.pack_layout import discovery_skill_pack_dir
+
+            is_pack = discovery_skill_pack_dir(candidate)
+            cand = os.path.realpath(os.fsdecode(candidate))
+            has_skill_md = os.path.isfile(os.path.join(cand, "SKILL.md"))
+            has_evals = os.path.isdir(os.path.join(cand, "evals"))
+            start_dir = candidate == start and os.path.isdir(cand)
         except OSError:
             is_pack = has_skill_md = has_evals = start_dir = False
         if pack is None and (is_pack or has_skill_md or has_evals or start_dir):

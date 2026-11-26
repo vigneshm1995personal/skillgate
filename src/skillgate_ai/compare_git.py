@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import shutil
 import os
+import shutil
 import subprocess
 import tempfile
 import uuid
@@ -67,25 +67,20 @@ def list_skill_git_versions(pack: Path) -> list[dict[str, str]]:
     return rows
 
 
-def _is_skill_pack_mount(probe: Path) -> bool:
-    from skillgate_ai.paths import is_skill_pack
-
-    try:
-        return (
-            is_skill_pack(probe)
-            or (probe / "SKILL.md").is_file()
-            or (probe / "evals").is_dir()
-            or (probe / "scripts").is_dir()
-        )
-    except OSError:
-        return False
-
-
 def find_git_root(pack: Path) -> Path:
-    from skillgate_ai.paths import pack_path_string, skill_pack_root
+    from skillgate_ai.pack_layout import relative_segments_under
+    from skillgate_ai.paths import (
+        FsAnchor,
+        filesystem_path_under,
+        is_skill_pack,
+        pack_path_string,
+        project_root,
+        skill_pack_root,
+    )
+    from skillgate_ai.trusted_roots import normalize_pack_target
 
     probe = Path(pack)
-    if _is_skill_pack_mount(probe):
+    if is_skill_pack(probe):
         skill_pack_root(probe)
         workdir = pack_path_string(probe, ".")
     else:
@@ -94,7 +89,15 @@ def find_git_root(pack: Path) -> Path:
                 "This skill folder is not inside a git repository.",
                 hint="Use history runs to compare versions, or move the pack into a git work tree.",
             )
-        workdir = os.fsdecode(probe.resolve())
+        target = os.path.realpath(os.fsdecode(normalize_pack_target(probe)))
+        workspace = os.path.realpath(os.fsdecode(project_root()))
+        rel = relative_segments_under(workspace, target)
+        if rel is None:
+            raise CompareError(
+                "This skill folder is not inside a git repository.",
+                hint="Use history runs to compare versions, or move the pack into a git work tree.",
+            )
+        workdir = filesystem_path_under(FsAnchor.WORKSPACE, *rel)
     try:
         # S603: subprocess git uses pack_path_string workdir or probe vetted for ..
         # S607: git binary is resolved from PATH by design in this CLI helper.
