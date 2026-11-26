@@ -43,6 +43,8 @@ jobs:
         language: [python, javascript-typescript, actions]
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ (inputs.pull_number != '' && format('refs/pull/{0}/merge', inputs.pull_number)) || (github.event_name == 'pull_request' && format('refs/pull/{0}/merge', github.event.pull_request.number)) || github.ref }}
       - uses: github/codeql-action/init@1bd86f2fdb4b86187fa4059f16f31a3202acc9ea # v4.39.4
         with:
           languages: ${{ matrix.language }}
@@ -91,11 +93,24 @@ jobs:
             scan_ref="${{ github.ref }}"
           fi
           echo "CodeQL enforce scan_ref=${scan_ref} head_sha=${head_sha} pr=${pr_number:-none}"
+          alerts_path="repos/${repo}/code-scanning/alerts?state=open&ref=${scan_ref}&per_page=100"
+          analyses_path="repos/${repo}/code-scanning/analyses?ref=${scan_ref}&per_page=100"
           high_jq='[.[] | select(.rule.security_severity_level == "high" or .rule.security_severity_level == "critical")] | length'
           on_head_jq='[.[] | select(.rule.security_severity_level == "high" or .rule.security_severity_level == "critical") | select(.most_recent_instance.commit_sha == $head)] | length'
+          analysis_on_head_jq='[.[] | select(.commit_sha == $head)] | length'
 
           for attempt in 1 2 3 4 5 6 7 8 9 10 11 12; do
-            if ! count="$(gh api "repos/${repo}/code-scanning/alerts" -f state=open -f ref="${scan_ref}" -F per_page=100 --paginate --jq "${high_jq}" 2>/dev/null)"; then
+            analysis_on_head=0
+            if [ -n "${head_sha}" ]; then
+              analysis_on_head="$(gh api "${analyses_path}" --paginate 2>/dev/null | jq --arg head "${head_sha}" "${analysis_on_head_jq}" || echo 0)"
+              echo "CodeQL analyses on head ${head_sha} (attempt ${attempt}): ${analysis_on_head}"
+              if [ "${analysis_on_head}" -eq 0 ]; then
+                echo "Waiting for merge-ref analysis for head ${head_sha}..."
+                sleep 45
+                continue
+              fi
+            fi
+            if ! alerts_json="$(gh api "${alerts_path}" --paginate 2>/dev/null)"; then
               echo "CodeQL alerts API not ready for ${scan_ref} (attempt ${attempt})"
               if [ "${attempt}" -lt 12 ]; then
                 sleep 45
@@ -103,9 +118,10 @@ jobs:
               fi
               exit 1
             fi
+            count="$(printf '%s' "${alerts_json}" | jq "${high_jq}")"
             echo "Open high/critical on ${scan_ref} (attempt ${attempt}): ${count}"
             if [ -n "${head_sha}" ]; then
-              on_head="$(gh api "repos/${repo}/code-scanning/alerts" -f state=open -f ref="${scan_ref}" -F per_page=100 --paginate 2>/dev/null | jq --arg head "${head_sha}" "${on_head_jq}" || echo 0)"
+              on_head="$(printf '%s' "${alerts_json}" | jq --arg head "${head_sha}" "${on_head_jq}")"
               stale_count="$((count - on_head))"
               echo "On head ${head_sha}: ${on_head}; stale older commits: ${stale_count}"
               if [ "${on_head}" -gt 0 ]; then
