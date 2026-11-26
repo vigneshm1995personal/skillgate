@@ -10,32 +10,32 @@ class PathTraversalError(ValueError):
     """Resolved path escapes the allowed root."""
 
 
-def contained_path(root: str | Path, *parts: str | Path) -> Path:
-    """Join ``parts`` under ``root`` and return the resolved path when it stays inside ``root``."""
-    base = os.path.realpath(os.path.expanduser(str(root)))
+def filesystem_path_under(root: str | Path, *parts: str | Path) -> str:
+    """Resolved absolute path under ``root`` (separator-aware containment for CodeQL)."""
+    text = str(root)
+    if ".." in Path(text).parts:
+        raise PathTraversalError("Path escapes the allowed root.")
     if any(str(part) in {".", ".."} or ".." in Path(str(part)).parts for part in parts):
         raise PathTraversalError("Path escapes the allowed root.")
     pieces = [str(part) for part in parts]
-    joined = os.path.join(base, *pieces) if pieces else base
-    target = os.path.realpath(os.path.expanduser(joined))
-    try:
-        common = os.path.commonpath([base, target])
-    except ValueError as exc:
-        raise PathTraversalError("Path escapes the allowed root.") from exc
-    if common != base:
+    base_path = os.path.normpath(os.path.realpath(text))
+    joined = os.path.join(base_path, *pieces) if pieces else base_path
+    fullpath = os.path.normpath(os.path.realpath(joined))
+    if not (fullpath == base_path or fullpath.startswith(base_path + os.sep)):
         raise PathTraversalError("Path escapes the allowed root.")
-    return Path(target)
+    return fullpath
+
+
+def contained_path(root: str | Path, *parts: str | Path) -> Path:
+    """Join ``parts`` under ``root`` and return the resolved path when it stays inside ``root``."""
+    return Path(filesystem_path_under(root, *parts))
 
 
 def require_under(root: str | Path, path: str | Path) -> Path:
     """Resolve ``path`` and return it when it lies under ``root``."""
-    base = os.path.realpath(os.path.expanduser(str(root)))
-    target = os.path.realpath(os.path.expanduser(str(path)))
-    try:
-        common = os.path.commonpath([base, target])
-    except ValueError as exc:
-        raise PathTraversalError("Path is outside the allowed root.") from exc
-    if common != base:
+    base_path = os.path.normpath(os.path.realpath(str(root)))
+    target = os.path.normpath(os.path.realpath(str(path)))
+    if not (target == base_path or target.startswith(base_path + os.sep)):
         raise PathTraversalError("Path is outside the allowed root.")
     return Path(target)
 
@@ -103,7 +103,8 @@ def project_root() -> Path:
 
 def skill_pack_root(skill_path: str | Path) -> Path:
     """Resolved skill pack folder under its config root, or a direct agent-skill install."""
-    text = os.path.expanduser(str(skill_path))
+    raw = str(skill_path)
+    text = os.path.expanduser(raw) if raw.startswith("~") else raw
     if ".." in Path(text).parts:
         raise PathTraversalError("Path escapes the allowed root.")
     resolved = Path(os.path.realpath(text))
@@ -126,7 +127,10 @@ def skill_pack_root(skill_path: str | Path) -> Path:
         ):
             return resolved
         if not resolved.exists() and ".." not in Path(text).parts:
-            return Path(os.path.expanduser(text))
+            candidate = Path(text)
+            if candidate.is_absolute():
+                return candidate
+            return (Path.cwd() / candidate).resolve()
         raise
 
 
@@ -173,9 +177,10 @@ def pack_file_at(root: str | Path, rel: str) -> Path:
 
 def pack_path_string(root: str | Path, rel: str) -> str:
     """Validated pack-relative path as a filesystem string."""
-    from skillgate_ai.contained_fs import resolved_relative
+    anchor, prefix = pack_access_root(root)
+    from skillgate_ai.contained_fs import _split_rel
 
-    return resolved_relative(root, rel)
+    return filesystem_path_under(anchor, *prefix, *_split_rel(rel))
 
 
 def _rel_under_config_root(path: str | Path) -> tuple[Path, tuple[str, ...]] | None:
@@ -200,8 +205,8 @@ def pack_access_root(skill_path: str | Path) -> tuple[Path, tuple[str, ...]]:
 
 def is_under_root(path: str | Path, root: str | Path) -> bool:
     try:
-        base = os.path.realpath(os.path.expanduser(str(root)))
-        target = os.path.realpath(os.path.expanduser(str(path)))
-        return os.path.commonpath([base, target]) == base
+        base_path = os.path.normpath(os.path.realpath(str(root)))
+        target = os.path.normpath(os.path.realpath(str(path)))
+        return target == base_path or target.startswith(base_path + os.sep)
     except (ValueError, OSError):
         return False

@@ -23,22 +23,10 @@ def _reject_escape_parts(*parts: str) -> None:
         raise PathTraversalError("Path escapes the allowed root.")
 
 
-def resolved_path(root: str | Path, *rel_parts: str) -> str:
-    text = str(root)
-    if ".." in Path(text).parts:
-        raise PathTraversalError("Path escapes the allowed root.")
-    _reject_escape_parts(*rel_parts)
-    base = os.path.realpath(os.path.expanduser(text))
-    joined = os.path.join(base, *rel_parts) if rel_parts else base
-    target = os.path.realpath(joined)
-    anchor = os.path.normpath(base)
-    if not (target == anchor or target.startswith(anchor + os.sep)):
-        raise PathTraversalError("Path escapes the allowed root.")
-    return target
-
-
 def resolved_relative(root: str | Path, rel: str) -> str:
-    return resolved_path(root, *_split_rel(rel))
+    from skillgate_ai.paths import filesystem_path_under
+
+    return filesystem_path_under(root, *_split_rel(rel))
 
 
 def is_root_directory(root: str | Path) -> bool:
@@ -46,14 +34,13 @@ def is_root_directory(root: str | Path) -> bool:
         text = str(root)
         if ".." in Path(text).parts:
             return False
-        base = os.path.realpath(os.path.expanduser(text))
-        target = os.path.realpath(base)
-        anchor = os.path.normpath(base)
-        if not (target == anchor or target.startswith(anchor + os.sep)):
+        base_path = os.path.normpath(os.path.realpath(text))
+        fullpath = os.path.normpath(os.path.realpath(base_path))
+        if not (fullpath == base_path or fullpath.startswith(base_path + os.sep)):
             return False
-    except (PathTraversalError, OSError, ValueError):
+        return os.path.isdir(fullpath)
+    except (OSError, ValueError):
         return False
-    return os.path.isdir(target)
 
 
 def isfile_at(root: str | Path, *rel_parts: str) -> bool:
@@ -62,15 +49,14 @@ def isfile_at(root: str | Path, *rel_parts: str) -> bool:
         if ".." in Path(text).parts:
             return False
         _reject_escape_parts(*rel_parts)
-        base = os.path.realpath(os.path.expanduser(text))
-        joined = os.path.join(base, *rel_parts) if rel_parts else base
-        target = os.path.realpath(joined)
-        anchor = os.path.normpath(base)
-        if not (target == anchor or target.startswith(anchor + os.sep)):
+        base_path = os.path.normpath(os.path.realpath(text))
+        joined = os.path.join(base_path, *rel_parts) if rel_parts else base_path
+        fullpath = os.path.normpath(os.path.realpath(joined))
+        if not (fullpath == base_path or fullpath.startswith(base_path + os.sep)):
             return False
+        return os.path.isfile(fullpath)
     except (PathTraversalError, OSError, ValueError):
         return False
-    return os.path.isfile(target)
 
 
 def isdir_at(root: str | Path, *rel_parts: str) -> bool:
@@ -79,15 +65,14 @@ def isdir_at(root: str | Path, *rel_parts: str) -> bool:
         if ".." in Path(text).parts:
             return False
         _reject_escape_parts(*rel_parts)
-        base = os.path.realpath(os.path.expanduser(text))
-        joined = os.path.join(base, *rel_parts) if rel_parts else base
-        target = os.path.realpath(joined)
-        anchor = os.path.normpath(base)
-        if not (target == anchor or target.startswith(anchor + os.sep)):
+        base_path = os.path.normpath(os.path.realpath(text))
+        joined = os.path.join(base_path, *rel_parts) if rel_parts else base_path
+        fullpath = os.path.normpath(os.path.realpath(joined))
+        if not (fullpath == base_path or fullpath.startswith(base_path + os.sep)):
             return False
+        return os.path.isdir(fullpath)
     except (PathTraversalError, OSError, ValueError):
         return False
-    return os.path.isdir(target)
 
 
 def file_size(root: str | Path, *rel_parts: str) -> int:
@@ -95,13 +80,12 @@ def file_size(root: str | Path, *rel_parts: str) -> int:
     if ".." in Path(text).parts:
         raise PathTraversalError("Path escapes the allowed root.")
     _reject_escape_parts(*rel_parts)
-    base = os.path.realpath(os.path.expanduser(text))
-    joined = os.path.join(base, *rel_parts) if rel_parts else base
-    target = os.path.realpath(joined)
-    anchor = os.path.normpath(base)
-    if not (target == anchor or target.startswith(anchor + os.sep)):
+    base_path = os.path.normpath(os.path.realpath(text))
+    joined = os.path.join(base_path, *rel_parts) if rel_parts else base_path
+    fullpath = os.path.normpath(os.path.realpath(joined))
+    if not (fullpath == base_path or fullpath.startswith(base_path + os.sep)):
         raise PathTraversalError("Path escapes the allowed root.")
-    return os.path.getsize(target)
+    return os.path.getsize(fullpath)
 
 
 def read_text(root: str | Path, *rel_parts: str, encoding: str = "utf-8") -> str:
@@ -109,13 +93,12 @@ def read_text(root: str | Path, *rel_parts: str, encoding: str = "utf-8") -> str
     if ".." in Path(text).parts:
         raise PathTraversalError("Path escapes the allowed root.")
     _reject_escape_parts(*rel_parts)
-    base = os.path.realpath(os.path.expanduser(text))
-    joined = os.path.join(base, *rel_parts) if rel_parts else base
-    target = os.path.realpath(joined)
-    anchor = os.path.normpath(base)
-    if not (target == anchor or target.startswith(anchor + os.sep)):
+    base_path = os.path.normpath(os.path.realpath(text))
+    joined = os.path.join(base_path, *rel_parts) if rel_parts else base_path
+    fullpath = os.path.normpath(os.path.realpath(joined))
+    if not (fullpath == base_path or fullpath.startswith(base_path + os.sep)):
         raise PathTraversalError("Path escapes the allowed root.")
-    with open(target, encoding=encoding) as handle:
+    with open(fullpath, encoding=encoding) as handle:
         return handle.read()
 
 
@@ -124,13 +107,12 @@ def read_bytes_at(root: str | Path, *rel_parts: str) -> bytes:
     if ".." in Path(text).parts:
         raise PathTraversalError("Path escapes the allowed root.")
     _reject_escape_parts(*rel_parts)
-    base = os.path.realpath(os.path.expanduser(text))
-    joined = os.path.join(base, *rel_parts) if rel_parts else base
-    target = os.path.realpath(joined)
-    anchor = os.path.normpath(base)
-    if not (target == anchor or target.startswith(anchor + os.sep)):
+    base_path = os.path.normpath(os.path.realpath(text))
+    joined = os.path.join(base_path, *rel_parts) if rel_parts else base_path
+    fullpath = os.path.normpath(os.path.realpath(joined))
+    if not (fullpath == base_path or fullpath.startswith(base_path + os.sep)):
         raise PathTraversalError("Path escapes the allowed root.")
-    with open(target, "rb") as handle:
+    with open(fullpath, "rb") as handle:
         return handle.read()
 
 
@@ -139,16 +121,15 @@ def write_text(root: str | Path, *rel_parts: str, text: str, encoding: str = "ut
     if ".." in Path(text_root).parts:
         raise PathTraversalError("Path escapes the allowed root.")
     _reject_escape_parts(*rel_parts)
-    base = os.path.realpath(os.path.expanduser(text_root))
-    joined = os.path.join(base, *rel_parts) if rel_parts else base
-    target = os.path.realpath(joined)
-    anchor = os.path.normpath(base)
-    if not (target == anchor or target.startswith(anchor + os.sep)):
+    base_path = os.path.normpath(os.path.realpath(text_root))
+    joined = os.path.join(base_path, *rel_parts) if rel_parts else base_path
+    fullpath = os.path.normpath(os.path.realpath(joined))
+    if not (fullpath == base_path or fullpath.startswith(base_path + os.sep)):
         raise PathTraversalError("Path escapes the allowed root.")
-    os.makedirs(os.path.dirname(target), exist_ok=True)
-    with open(target, "w", encoding=encoding) as handle:
+    os.makedirs(os.path.dirname(fullpath), exist_ok=True)
+    with open(fullpath, "w", encoding=encoding) as handle:
         handle.write(text)
-    return target
+    return fullpath
 
 
 def write_bytes_at(root: str | Path, *rel_parts: str, data: bytes) -> str:
@@ -156,16 +137,15 @@ def write_bytes_at(root: str | Path, *rel_parts: str, data: bytes) -> str:
     if ".." in Path(text).parts:
         raise PathTraversalError("Path escapes the allowed root.")
     _reject_escape_parts(*rel_parts)
-    base = os.path.realpath(os.path.expanduser(text))
-    joined = os.path.join(base, *rel_parts) if rel_parts else base
-    target = os.path.realpath(joined)
-    anchor = os.path.normpath(base)
-    if not (target == anchor or target.startswith(anchor + os.sep)):
+    base_path = os.path.normpath(os.path.realpath(text))
+    joined = os.path.join(base_path, *rel_parts) if rel_parts else base_path
+    fullpath = os.path.normpath(os.path.realpath(joined))
+    if not (fullpath == base_path or fullpath.startswith(base_path + os.sep)):
         raise PathTraversalError("Path escapes the allowed root.")
-    os.makedirs(os.path.dirname(target), exist_ok=True)
-    with open(target, "wb") as handle:
+    os.makedirs(os.path.dirname(fullpath), exist_ok=True)
+    with open(fullpath, "wb") as handle:
         handle.write(data)
-    return target
+    return fullpath
 
 
 def append_text_line(root: str | Path, *rel_parts: str, line: str, encoding: str = "utf-8") -> str:
@@ -173,16 +153,15 @@ def append_text_line(root: str | Path, *rel_parts: str, line: str, encoding: str
     if ".." in Path(text).parts:
         raise PathTraversalError("Path escapes the allowed root.")
     _reject_escape_parts(*rel_parts)
-    base = os.path.realpath(os.path.expanduser(text))
-    joined = os.path.join(base, *rel_parts) if rel_parts else base
-    target = os.path.realpath(joined)
-    anchor = os.path.normpath(base)
-    if not (target == anchor or target.startswith(anchor + os.sep)):
+    base_path = os.path.normpath(os.path.realpath(text))
+    joined = os.path.join(base_path, *rel_parts) if rel_parts else base_path
+    fullpath = os.path.normpath(os.path.realpath(joined))
+    if not (fullpath == base_path or fullpath.startswith(base_path + os.sep)):
         raise PathTraversalError("Path escapes the allowed root.")
-    os.makedirs(os.path.dirname(target), exist_ok=True)
-    with open(target, "a", encoding=encoding) as handle:
+    os.makedirs(os.path.dirname(fullpath), exist_ok=True)
+    with open(fullpath, "a", encoding=encoding) as handle:
         handle.write(line)
-    return target
+    return fullpath
 
 
 def list_names(root: str | Path, *rel_dir_parts: str) -> list[str]:
@@ -190,15 +169,14 @@ def list_names(root: str | Path, *rel_dir_parts: str) -> list[str]:
     if ".." in Path(text).parts:
         raise PathTraversalError("Path escapes the allowed root.")
     _reject_escape_parts(*rel_dir_parts)
-    base = os.path.realpath(os.path.expanduser(text))
-    joined = os.path.join(base, *rel_dir_parts) if rel_dir_parts else base
-    target = os.path.realpath(joined)
-    anchor = os.path.normpath(base)
-    if not (target == anchor or target.startswith(anchor + os.sep)):
+    base_path = os.path.normpath(os.path.realpath(text))
+    joined = os.path.join(base_path, *rel_dir_parts) if rel_dir_parts else base_path
+    fullpath = os.path.normpath(os.path.realpath(joined))
+    if not (fullpath == base_path or fullpath.startswith(base_path + os.sep)):
         raise PathTraversalError("Path escapes the allowed root.")
-    if not os.path.isdir(target):
+    if not os.path.isdir(fullpath):
         return []
-    return sorted(name for name in os.listdir(target))
+    return sorted(name for name in os.listdir(fullpath))
 
 
 def glob_files(root: str | Path, rel_dir: str, pattern: str) -> list[str]:
@@ -208,11 +186,10 @@ def glob_files(root: str | Path, rel_dir: str, pattern: str) -> list[str]:
         if ".." in Path(text).parts:
             return []
         _reject_escape_parts(*parts)
-        base = os.path.realpath(os.path.expanduser(text))
-        joined = os.path.join(base, *parts) if parts else base
-        dir_path = os.path.realpath(joined)
-        anchor = os.path.normpath(base)
-        if not (dir_path == anchor or dir_path.startswith(anchor + os.sep)):
+        base_path = os.path.normpath(os.path.realpath(text))
+        joined = os.path.join(base_path, *parts) if parts else base_path
+        dir_path = os.path.normpath(os.path.realpath(joined))
+        if not (dir_path == base_path or dir_path.startswith(base_path + os.sep)):
             return []
     except (PathTraversalError, ValueError):
         return []
@@ -223,10 +200,9 @@ def glob_files(root: str | Path, rel_dir: str, pattern: str) -> list[str]:
         if not fnmatch.fnmatch(name, pattern):
             continue
         child_parts = (*parts, name) if parts else (name,)
-        joined_child = os.path.join(base, *child_parts) if child_parts else base
-        child_target = os.path.realpath(joined_child)
-        anchor = os.path.normpath(base)
-        if not (child_target == anchor or child_target.startswith(anchor + os.sep)):
+        joined_child = os.path.join(base_path, *child_parts) if child_parts else base_path
+        child_target = os.path.normpath(os.path.realpath(joined_child))
+        if not (child_target == base_path or child_target.startswith(base_path + os.sep)):
             continue
         if os.path.isfile(child_target):
             out.append("/".join(child_parts))
@@ -247,17 +223,15 @@ def iter_pack_files(
     if ".." in Path(anchor_text).parts:
         return
     _reject_escape_parts(*pack_prefix)
-    pack_base = os.path.realpath(
-        os.path.join(os.path.realpath(os.path.expanduser(anchor_text)), *pack_prefix)
-    )
+    anchor_base = os.path.normpath(os.path.realpath(anchor_text))
+    pack_base = os.path.normpath(os.path.realpath(os.path.join(anchor_base, *pack_prefix)))
     pending: list[tuple[str, ...]] = [()]
     while pending:
         rel_parts = pending.pop()
         try:
             joined = os.path.join(pack_base, *rel_parts) if rel_parts else pack_base
-            dir_path = os.path.realpath(joined)
-            pack_root = os.path.normpath(pack_base)
-            if not (dir_path == pack_root or dir_path.startswith(pack_root + os.sep)):
+            dir_path = os.path.normpath(os.path.realpath(joined))
+            if not (dir_path == pack_base or dir_path.startswith(pack_base + os.sep)):
                 continue
         except (PathTraversalError, ValueError, OSError):
             continue
@@ -267,9 +241,10 @@ def iter_pack_files(
         for name in sorted(os.listdir(dir_path)):
             child_parts = (*rel_parts, name)
             try:
-                child_path = os.path.realpath(os.path.join(pack_base, *child_parts))
-                pack_root = os.path.normpath(pack_base)
-                if not (child_path == pack_root or child_path.startswith(pack_root + os.sep)):
+                child_path = os.path.normpath(
+                    os.path.realpath(os.path.join(pack_base, *child_parts))
+                )
+                if not (child_path == pack_base or child_path.startswith(pack_base + os.sep)):
                     continue
             except (PathTraversalError, ValueError, OSError):
                 continue

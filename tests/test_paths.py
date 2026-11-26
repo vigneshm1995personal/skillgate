@@ -86,18 +86,18 @@ def test_contained_fs_roundtrip_under_root(tmp_path: Path) -> None:
         list_names,
         read_bytes_at,
         read_text,
-        resolved_path,
         resolved_relative,
         write_bytes_at,
         write_text,
     )
+    from skillgate_ai.paths import filesystem_path_under
 
     root = (tmp_path / "pack").resolve()
     root.mkdir()
     nested = root / "nested"
     nested.mkdir()
     rel = write_text(root, "nested", "note.txt", text="hello")
-    assert resolved_path(root, "nested", "note.txt") == rel
+    assert filesystem_path_under(root, "nested", "note.txt") == rel
     assert resolved_relative(root, "nested/note.txt") == rel
     assert isfile_at(root, "nested", "note.txt")
     assert isdir_at(root, "nested")

@@ -68,30 +68,25 @@ def file_inside_skill(root: Path, path: Path) -> Path | None:
 
 
 def resolve_golden_src(root: Path, case_id: str, golden_path: str | None) -> Path | None:
-    from skillgate_ai.paths import PathTraversalError, contained_path
+    from skillgate_ai.pack.pathsafe import _path_under_skill
+    from skillgate_ai.pack_io import glob_pack_files
 
-    try:
-        base = contained_path(root)
-    except PathTraversalError:
-        return None
-    folder = contained_path(base, *GOLDEN_DIR.split("/"))
     if golden_path:
         rel = golden_path.replace("\\", "/").lstrip("/")
         parts = Path(rel).parts
         if ".." not in parts:
-            try:
-                packed = file_inside_skill(base, contained_path(base, *parts))
-            except PathTraversalError:
-                packed = None
+            packed = _path_under_skill(root, rel)
             if packed is not None:
-                return packed
-        named = file_inside_skill(base, contained_path(folder, Path(rel).name))
-        if named is not None:
-            return named
-    if folder.is_dir():
-        matches = sorted(
-            path for path in folder.iterdir() if path.is_file() and path.stem == case_id
-        )
-        if matches:
-            return matches[0]
+                inside = file_inside_skill(root, packed)
+                if inside is not None:
+                    return inside
+        named_rel = f"{GOLDEN_DIR}/{Path(rel).name}"
+        packed = _path_under_skill(root, named_rel)
+        if packed is not None:
+            named = file_inside_skill(root, packed)
+            if named is not None:
+                return named
+    for path in glob_pack_files(root, GOLDEN_DIR, "*"):
+        if path.stem == case_id and path.is_file():
+            return path
     return None

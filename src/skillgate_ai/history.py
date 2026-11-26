@@ -14,7 +14,7 @@ from skillgate_ai.pack_io import (
     is_pack_file,
     read_pack_text,
 )
-from skillgate_ai.paths import contained_path
+from skillgate_ai.paths import pack_file_at
 
 HISTORY_DIR = "evals/history"
 DEPLOY_REL = "evals/deploys.jsonl"
@@ -25,8 +25,7 @@ def _local_now() -> datetime:
 
 
 def history_dir(pack_root: str | Path) -> Path:
-    base = contained_path(pack_root)
-    return contained_path(base, *HISTORY_DIR.split("/"))
+    return pack_file_at(pack_root, HISTORY_DIR)
 
 
 def _read_jsonl_rel(pack_root: str | Path, rel: str) -> list[dict[str, Any]]:
@@ -123,11 +122,10 @@ def _row_ts(item: Mapping[str, Any]) -> datetime:
 
 def load_history(pack_root: str | Path, *, limit: int = 50) -> list[dict[str, Any]]:
     """Newest-last eval rows by ``ts``. Missing dir → empty list. Never reads the deploy log."""
-    root = contained_path(pack_root)
     rows: list[dict[str, Any]] = []
-    for path in glob_pack_files(root, HISTORY_DIR, "*.jsonl"):
+    for path in glob_pack_files(pack_root, HISTORY_DIR, "*.jsonl"):
         rel = f"{HISTORY_DIR}/{path.name}"
-        for item in _read_jsonl_rel(root, rel):
+        for item in _read_jsonl_rel(pack_root, rel):
             if item.get("kind") in {"deploy", "compare"}:
                 continue
             if not item.get("run_id"):
@@ -162,11 +160,10 @@ def append_compare(pack_root: str | Path, *, row: dict[str, Any]) -> Path | None
 
 def load_compares(pack_root: str | Path, *, limit: int = 50) -> list[dict[str, Any]]:
     """Newest-last compare rows. Does not include eval runs or deploy log."""
-    root = contained_path(pack_root)
     rows: list[dict[str, Any]] = []
-    for path in glob_pack_files(root, HISTORY_DIR, "*.jsonl"):
+    for path in glob_pack_files(pack_root, HISTORY_DIR, "*.jsonl"):
         rel = f"{HISTORY_DIR}/{path.name}"
-        for item in _read_jsonl_rel(root, rel):
+        for item in _read_jsonl_rel(pack_root, rel):
             if item.get("kind") != "compare" or not item.get("compare_id"):
                 continue
             rows.append(_scrub_compare_row(item))
