@@ -66,10 +66,27 @@ def list_skill_git_versions(pack: Path) -> list[dict[str, str]]:
     return rows
 
 
+def _is_skill_pack_mount(probe: Path) -> bool:
+    from skillgate_ai.contained_fs import isdir_at, isfile_at
+    from skillgate_ai.paths import is_skill_pack
+
+    return (
+        is_skill_pack(probe)
+        or isfile_at(probe, "SKILL.md")
+        or isdir_at(probe, "evals")
+        or isdir_at(probe, "scripts")
+    )
+
+
 def find_git_root(pack: Path) -> Path:
+    from skillgate_ai.contained_fs import isdir_at, isfile_at
     from skillgate_ai.paths import skill_pack_root
 
-    pack = skill_pack_root(pack)
+    probe = Path(pack)
+    if isfile_at(probe, "SKILL.md") or isdir_at(probe, "evals") or _is_skill_pack_mount(probe):
+        pack = skill_pack_root(probe)
+    else:
+        pack = probe.resolve()
     try:
         out = subprocess.run(  # noqa: S603 - fixed git argv; ref and path are separate argv items
             ["git", "rev-parse", "--show-toplevel"],  # noqa: S607 - git resolved from PATH by design

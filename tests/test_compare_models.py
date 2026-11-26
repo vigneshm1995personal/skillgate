@@ -237,6 +237,7 @@ def test_scrub_customer_compare_payload_fills_missing_label() -> None:
 def test_append_compare_scrubs_leaks_on_disk(tmp_path: Path) -> None:
     pack = tmp_path / "pdf"
     pack.mkdir()
+    (pack / "evals").mkdir()
     leaky = {
         "compare_id": "abc123456789",
         "mode": "models",

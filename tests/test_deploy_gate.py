@@ -27,6 +27,7 @@ def _append(
     error: dict | None = None,
     gate_moved: bool | None = None,
 ) -> None:
+    (pack / "evals").mkdir(parents=True, exist_ok=True)
     append_eval(
         pack,
         run_id=run_id,

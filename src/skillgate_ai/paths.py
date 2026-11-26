@@ -102,36 +102,10 @@ def project_root() -> Path:
 
 
 def skill_pack_root(skill_path: str | Path) -> Path:
-    """Resolved skill pack folder under its config root, or a direct agent-skill install."""
-    raw = str(skill_path)
-    text = os.path.expanduser(raw) if raw.startswith("~") else raw
-    if ".." in Path(text).parts:
-        raise PathTraversalError("Path escapes the allowed root.")
-    resolved = Path(os.path.realpath(text))
-    bound = Path(os.path.realpath(str(config_root_for(resolved))))
-    try:
-        return require_under(bound, resolved)
-    except PathTraversalError:
-        from skillgate_ai.catalog import _immediate_agent_skill
+    """Resolved skill pack under workspace, agent skill root, or registered standalone mount."""
+    from skillgate_ai.trusted_roots import skill_pack_root_from_access
 
-        if _immediate_agent_skill(resolved):
-            return resolved
-        from skillgate_ai.contained_fs import isdir_at, isfile_at
-
-        if (
-            is_skill_pack(resolved)
-            or isfile_at(resolved, "SKILL.md")
-            or isfile_at(resolved, "evals", "cases.yaml")
-            or isdir_at(resolved, "evals")
-            or isdir_at(resolved)
-        ):
-            return resolved
-        if ".." not in Path(text).parts:
-            candidate = Path(text)
-            if candidate.is_absolute():
-                return candidate
-            return Path(filesystem_path_under(Path.cwd(), *candidate.parts))
-        raise
+    return skill_pack_root_from_access(skill_path)
 
 
 def user_skillgate_dir() -> Path:
@@ -152,14 +126,19 @@ def config_root_for(path: str | Path | None = None) -> Path:
     pack = None
     nearest_workspace: Path | None = None
     nearest_keys: Path | None = None
-    from skillgate_ai.contained_fs import isfile_at
+    from skillgate_ai.contained_fs import isdir_at, isfile_at
 
     for candidate in (start, *start.parents):
         if nearest_workspace is None and _has_workspace_skills(candidate):
             nearest_workspace = candidate
         if nearest_keys is None and isfile_at(candidate, ".skillgate", "keys"):
             nearest_keys = candidate
-        if pack is None and (is_skill_pack(candidate) or isfile_at(candidate, "SKILL.md")):
+        if pack is None and (
+            is_skill_pack(candidate)
+            or isfile_at(candidate, "SKILL.md")
+            or isdir_at(candidate, "evals")
+            or (candidate == start and isdir_at(candidate))
+        ):
             pack = candidate
     if nearest_workspace is not None:
         return nearest_workspace
@@ -193,14 +172,10 @@ def _rel_under_config_root(path: str | Path) -> tuple[Path, tuple[str, ...]] | N
 
 
 def pack_access_root(skill_path: str | Path) -> tuple[Path, tuple[str, ...]]:
-    """Workspace anchor and relative path segments to a skill pack root."""
-    resolved = skill_pack_root(skill_path)
-    workspace = project_root().resolve()
-    try:
-        rel = resolved.relative_to(workspace)
-        return workspace, rel.parts
-    except ValueError:
-        return resolved, ()
+    """Workspace or agent anchor and relative path segments to a skill pack root."""
+    from skillgate_ai.trusted_roots import pack_access_root as trusted_pack_access_root
+
+    return trusted_pack_access_root(skill_path)
 
 
 def is_under_root(path: str | Path, root: str | Path) -> bool:
