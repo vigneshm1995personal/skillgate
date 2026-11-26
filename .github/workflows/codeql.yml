@@ -85,8 +85,12 @@ jobs:
           on_head_jq='[.[] | select(.rule.security_severity_level == "high" or .rule.security_severity_level == "critical") | select(.most_recent_instance.commit_sha == $head)] | length'
 
           for attempt in 1 2 3 4 5 6 7 8 9 10 11 12; do
-            if ! count="$(gh api "repos/${repo}/code-scanning/alerts" -f state=open -f ref="${scan_ref}" -F per_page=100 --paginate --jq "${high_jq}")"; then
-              echo "CodeQL alerts API query failed on ${scan_ref}"
+            if ! count="$(gh api "repos/${repo}/code-scanning/alerts" -f state=open -f ref="${scan_ref}" -F per_page=100 --paginate --jq "${high_jq}" 2>/dev/null)"; then
+              echo "CodeQL alerts API not ready for ${scan_ref} (attempt ${attempt})"
+              if [ "${attempt}" -lt 12 ]; then
+                sleep 45
+                continue
+              fi
               exit 1
             fi
             echo "Open high/critical on ${scan_ref} (attempt ${attempt}): ${count}"

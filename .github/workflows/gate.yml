@@ -30,9 +30,10 @@ jobs:
   codeql:
     uses: ./.github/workflows/codeql.yml
     permissions:
-      contents: read
-      security-events: write
       actions: read
+      contents: read
+      pull-requests: read
+      security-events: write
     secrets: inherit
 
   all-gates:
