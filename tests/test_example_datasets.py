@@ -16,7 +16,13 @@ from typer.testing import CliRunner
 from skillgate_ai.api import create_app
 from skillgate_ai.case_pack import load_case_pack
 from skillgate_ai.cli import app
-from skillgate_ai.examples import DATASET_EXAMPLES, install_examples, list_examples
+from skillgate_ai.examples import (
+    DATASET_EXAMPLES,
+    bundled_example,
+    install_examples,
+    is_bundled_example_path,
+    list_examples,
+)
 from skillgate_ai.ingest import ingest_skill
 from skillgate_ai.pack import relevant_eval_fixtures
 
@@ -219,3 +225,10 @@ def test_examples_api_install_skips_existing_files(tmp_path: Path, monkeypatch) 
     assert second.json()["skipped"]
     assert "sk-" not in second.text
     assert not any(path.is_file() for path in home.rglob("*"))
+
+
+def test_is_bundled_example_path() -> None:
+    path = bundled_example("receipt-extractor")
+    assert is_bundled_example_path(path)
+    assert is_bundled_example_path(ROOT / "skills" / "pdf")
+    assert not is_bundled_example_path(ROOT / "README.md")

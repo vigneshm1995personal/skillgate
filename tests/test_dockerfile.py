@@ -87,7 +87,7 @@ def test_dockerignore_allows_packaged_example_skills() -> None:
 def test_gate_workflow_example_dest_matches_skill_name() -> None:
     text = (ROOT / ".github" / "workflows" / "gate.yml").read_text(encoding="utf-8")
     assert "/tmp/example-pdf" not in text
-    assert "skillgate example pdf --dest /tmp/pdf" in text
-    assert "skillgate ingest /tmp/pdf" in text
+    assert "skillgate example pdf --dest /tmp/sg-ws/skills/pdf" in text
+    assert "skillgate ingest /tmp/sg-ws/skills/pdf" in text
     assert "SKILLGATE_OPENAI_API_KEY" in text
     assert "--key-env" in text

@@ -1,10 +1,15 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import pytest
 
-from skillgate_ai.allow_root import set_cli_allow_root
+from skillgate_ai.allow_root import (
+    allow_root_realpaths,
+    read_user_allow_root_file,
+    set_cli_allow_root,
+)
 from skillgate_ai.fs_anchor import FsAnchor
 from skillgate_ai.paths import PathTraversalError
 from skillgate_ai.trusted_roots import (
@@ -33,9 +38,7 @@ def test_pack_access_under_workspace(tmp_path: Path, monkeypatch: pytest.MonkeyP
     assert parts[-2:] == ("skills", "pdf")
 
 
-def test_agent_skill_immediate_child(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_agent_skill_immediate_child(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     ws = tmp_path / "proj"
     (ws / "skills").mkdir(parents=True)
     agent_root = tmp_path / "cursor-skills"
@@ -55,9 +58,23 @@ def test_agent_skill_immediate_child(
     assert parts == ("foo",)
 
 
-def test_rejects_nested_agent_path(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_agent_skill_without_evals_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    agent_root = tmp_path / "cursor-skills"
+    pack = agent_root / "foo"
+    pack.mkdir(parents=True)
+    (pack / "SKILL.md").write_text("---\nname: foo\n---\n", encoding="utf-8")
+    monkeypatch.delenv("SKILLGATE_ROOT", raising=False)
+
+    def _cursor() -> Path:
+        return agent_root
+
+    monkeypatch.setattr("skillgate_ai.deploy.cursor_skills_root", _cursor)
+    anchor, parts = pack_access_root(pack)
+    assert anchor is FsAnchor.AGENT_CURSOR
+    assert parts == ("foo",)
+
+
+def test_rejects_nested_agent_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     ws = tmp_path / "proj"
     (ws / "skills").mkdir(parents=True)
     agent_root = tmp_path / "cursor-skills"
@@ -74,6 +91,18 @@ def test_rejects_nested_agent_path(
     monkeypatch.setattr("skillgate_ai.deploy.cursor_skills_root", _cursor)
     with pytest.raises(PathTraversalError):
         pack_access_root(nested)
+
+
+def test_read_user_allow_root_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    allowed = tmp_path / "packs"
+    allowed.mkdir()
+    cfg = tmp_path / ".skillgate" / "allow-root"
+    cfg.parent.mkdir(parents=True)
+    cfg.write_text(f"{allowed}\n", encoding="utf-8")
+    resolved = os.path.realpath(allowed)
+    assert read_user_allow_root_file() == resolved
+    assert resolved in allow_root_realpaths()
 
 
 def test_rejects_etc_without_allow_root() -> None:
@@ -97,9 +126,7 @@ def test_allow_root_cli_parent(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) 
     assert parts == ("standalone",)
 
 
-def test_pack_cannot_opt_in_via_repo_env(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_pack_cannot_opt_in_via_repo_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     ws = tmp_path / "proj"
     (ws / "skills").mkdir(parents=True)
     pack = tmp_path / "outside" / "pack"

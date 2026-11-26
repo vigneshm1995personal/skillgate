@@ -91,9 +91,7 @@ def test_connect_writes_0600_helper_json(monkeypatch: pytest.MonkeyPatch, tmp_pa
     assert data["device_id"] == "dev-1"
 
 
-def test_helper_hash_mismatch_rejected(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
+def test_helper_hash_mismatch_rejected(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     skill_dir = _write_skill(tmp_path / "pdf", "pdf")
     correct_hash = skill_pack_hash(skill_dir)
     monkeypatch.setattr(
@@ -147,9 +145,7 @@ def test_helper_verifies_goldens_in_recorded_hash(
     assert not (installed / "evals" / "goldens").exists()
 
 
-def test_helper_refuses_red_latest_check(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
+def test_helper_refuses_red_latest_check(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     from skillgate_ai.history import append_eval
 
     skill_dir = _write_skill(tmp_path / "skills" / "pdf", "pdf")
@@ -207,9 +203,7 @@ def test_helper_failed_copy_leaves_existing_install(
     assert marker.read_text(encoding="utf-8") == "old-install"
 
 
-def test_helper_installs_and_reports(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
+def test_helper_installs_and_reports(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     skill_dir = _write_skill(tmp_path / "pdf", "pdf")
     correct_hash = skill_pack_hash(skill_dir)
     monkeypatch.setattr(
