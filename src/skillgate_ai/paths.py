@@ -124,7 +124,7 @@ def skill_pack_root(skill_path: str | Path) -> Path:
             or isdir_at(resolved, "evals")
             or isdir_at(resolved)
         ):
-            return Path(os.path.realpath(text))
+            return resolved
         if not resolved.exists() and ".." not in Path(text).parts:
             return Path(os.path.expanduser(text))
         raise
