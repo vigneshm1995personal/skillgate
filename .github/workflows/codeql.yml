@@ -5,6 +5,17 @@ on:
     branches: [main]
   pull_request:
   workflow_call:
+    inputs:
+      pull_number:
+        description: "PR number for merge-ref CodeQL enforce (from gate)."
+        type: string
+        required: false
+        default: ""
+      head_sha:
+        description: "PR head commit SHA for stale-alert filtering."
+        type: string
+        required: false
+        default: ""
   schedule:
     - cron: "17 4 * * 1"
 
@@ -63,24 +74,23 @@ jobs:
             echo "gh CLI missing; CodeQL alert gate cannot run"
             exit 1
           fi
-          head_sha=""
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            scan_ref="refs/pull/${{ github.event.pull_request.number }}/merge"
-            head_sha="${{ github.event.pull_request.head.sha }}"
-          elif [ "${{ github.ref }}" != "refs/heads/main" ] && [[ "${{ github.ref }}" == refs/heads/* ]]; then
+          head_sha="${{ inputs.head_sha || github.event.pull_request.head.sha || github.sha }}"
+          pr_number="${{ inputs.pull_number || github.event.pull_request.number || '' }}"
+          if [ -z "${pr_number}" ]; then
+            pr_number="$(gh api "repos/${repo}/commits/${GITHUB_SHA}/pulls" -H "Accept: application/vnd.github+json" --jq '.[0].number // empty' 2>/dev/null || true)"
+          fi
+          if [ -z "${pr_number}" ] && [[ "${GITHUB_REF}" == refs/heads/* ]]; then
             branch="${GITHUB_REF#refs/heads/}"
-            pr_json="$(gh pr list --head "${branch}" --state open --limit 1 --json number,headRefOid 2>/dev/null || true)"
-            pr_number="$(printf '%s' "${pr_json}" | jq -r '.[0].number // empty')"
-            pr_head="$(printf '%s' "${pr_json}" | jq -r '.[0].headRefOid // empty')"
-            if [ -n "${pr_number}" ]; then
-              scan_ref="refs/pull/${pr_number}/merge"
-              head_sha="${pr_head}"
-            else
-              scan_ref="${{ github.ref }}"
-            fi
+            pr_number="$(gh api "repos/${repo}/pulls" -f head="${{ github.repository_owner }}:${branch}" -f state=open -f per_page=1 --jq '.[0].number // empty' 2>/dev/null || true)"
+          fi
+          if [ -n "${pr_number}" ]; then
+            scan_ref="refs/pull/${pr_number}/merge"
+          elif [ "${{ github.event_name }}" = "pull_request" ]; then
+            scan_ref="refs/pull/${{ github.event.pull_request.number }}/merge"
           else
             scan_ref="${{ github.ref }}"
           fi
+          echo "CodeQL enforce scan_ref=${scan_ref} head_sha=${head_sha} pr=${pr_number:-none}"
           high_jq='[.[] | select(.rule.security_severity_level == "high" or .rule.security_severity_level == "critical")] | length'
           on_head_jq='[.[] | select(.rule.security_severity_level == "high" or .rule.security_severity_level == "critical") | select(.most_recent_instance.commit_sha == $head)] | length'
 
@@ -95,7 +105,7 @@ jobs:
             fi
             echo "Open high/critical on ${scan_ref} (attempt ${attempt}): ${count}"
             if [ -n "${head_sha}" ]; then
-              on_head="$(gh api "repos/${repo}/code-scanning/alerts" -f state=open -f ref="${scan_ref}" -F per_page=100 --paginate --jq "${on_head_jq}" -f head="${head_sha}" || echo 0)"
+              on_head="$(gh api "repos/${repo}/code-scanning/alerts" -f state=open -f ref="${scan_ref}" -F per_page=100 --paginate 2>/dev/null | jq --arg head "${head_sha}" "${on_head_jq}" || echo 0)"
               stale_count="$((count - on_head))"
               echo "On head ${head_sha}: ${on_head}; stale older commits: ${stale_count}"
               if [ "${on_head}" -gt 0 ]; then

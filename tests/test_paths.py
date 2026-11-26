@@ -75,3 +75,35 @@ def test_contained_fs_rejects_prefix_sibling_after_realpath(tmp_path: Path) -> N
     except (OSError, NotImplementedError):
         pytest.skip("symlinks not supported here")
     assert not isfile_at(root, "escape", "leak.txt")
+
+
+def test_contained_fs_roundtrip_under_root(tmp_path: Path) -> None:
+    from skillgate_ai.contained_fs import (
+        file_size,
+        glob_files,
+        isdir_at,
+        isfile_at,
+        list_names,
+        read_bytes_at,
+        read_text,
+        resolved_path,
+        resolved_relative,
+        write_bytes_at,
+        write_text,
+    )
+
+    root = (tmp_path / "pack").resolve()
+    root.mkdir()
+    nested = root / "nested"
+    nested.mkdir()
+    rel = write_text(root, "nested", "note.txt", text="hello")
+    assert resolved_path(root, "nested", "note.txt") == rel
+    assert resolved_relative(root, "nested/note.txt") == rel
+    assert isfile_at(root, "nested", "note.txt")
+    assert isdir_at(root, "nested")
+    assert read_text(root, "nested", "note.txt") == "hello"
+    assert file_size(root, "nested", "note.txt") > 0
+    write_bytes_at(root, "nested", "bin.dat", data=b"\x01\x02")
+    assert read_bytes_at(root, "nested", "bin.dat") == b"\x01\x02"
+    assert "note.txt" in list_names(root, "nested")
+    assert "nested/note.txt" in glob_files(root, "nested", "*.txt")
