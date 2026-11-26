@@ -24,12 +24,11 @@ def _reject_escape_parts(*parts: str) -> None:
 
 
 def _anchor(root: str | Path) -> Path:
-    text = os.fspath(root)
-    parts = [piece for piece in text.replace("\\", "/").split("/") if piece not in {"", "."}]
-    if ".." in parts:
+    text = str(root)
+    if ".." in Path(text).parts:
         raise PathTraversalError("Path escapes the allowed root.")
-    resolved = os.path.realpath(os.path.expanduser(text))
-    return Path(resolved)
+    resolved_name = os.path.realpath(os.path.expanduser(text))
+    return Path(resolved_name)
 
 
 def _safe_target(root: str | Path, *rel_parts: str) -> Path:
