@@ -256,8 +256,8 @@ def iter_pack_files(
         try:
             joined = os.path.join(pack_base, *rel_parts) if rel_parts else pack_base
             dir_path = os.path.realpath(joined)
-            pack_prefix = pack_base.rstrip(os.sep) + os.sep
-            if dir_path != pack_base and not dir_path.startswith(pack_prefix):
+            under_prefix = pack_base.rstrip(os.sep) + os.sep
+            if dir_path != pack_base and not dir_path.startswith(under_prefix):
                 continue
         except (PathTraversalError, ValueError, OSError):
             continue
@@ -268,8 +268,8 @@ def iter_pack_files(
             child_parts = (*rel_parts, name)
             try:
                 child_path = os.path.realpath(os.path.join(pack_base, *child_parts))
-                pack_prefix = pack_base.rstrip(os.sep) + os.sep
-                if child_path != pack_base and not child_path.startswith(pack_prefix):
+                under_prefix = pack_base.rstrip(os.sep) + os.sep
+                if child_path != pack_base and not child_path.startswith(under_prefix):
                     continue
             except (PathTraversalError, ValueError, OSError):
                 continue
