@@ -116,12 +116,11 @@ def discovery_is_directory(candidate: Path) -> bool:
 
 
 def anchor_path_uncreated(target_real: str) -> bool:
-    if os.path.lexists(target_real):
-        return False
     try:
         with pinned_skillgate_root(target_real):
             return not (
                 isdir_at(FsAnchor.SKILLGATE_ENV)
+                or isfile_at(FsAnchor.SKILLGATE_ENV)
                 or isfile_at(FsAnchor.SKILLGATE_ENV, "SKILL.md")
             )
     except OSError:
