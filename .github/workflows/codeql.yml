@@ -47,6 +47,8 @@ jobs:
     timeout-minutes: 15
     permissions:
       actions: read
+      contents: read
+      pull-requests: read
       security-events: read
     steps:
       - name: Fail when open high-severity alerts remain
