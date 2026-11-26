@@ -61,9 +61,7 @@ def test_mcp_dict_any_lines_frozen() -> None:
 def test_typed_dict_floor() -> None:
     count = 0
     for path in SRC.rglob("*.py"):
-        count += len(
-            re.findall(r"class \w+\(TypedDict", path.read_text(encoding="utf-8"))
-        )
+        count += len(re.findall(r"class \w+\(TypedDict", path.read_text(encoding="utf-8")))
     assert count >= 29
 
 

@@ -54,8 +54,6 @@ class DeployAdapter(Protocol):
         ...
 
 
-
-
 class _PackAdapter:
     id: str = ""
     label: str = ""
