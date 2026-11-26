@@ -106,6 +106,28 @@ def discovery_keys_file(candidate: Path) -> bool:
         return False
 
 
+def discovery_is_directory(candidate: Path) -> bool:
+    try:
+        cand = os.path.realpath(os.fsdecode(candidate))
+        with pinned_skillgate_root(cand):
+            return isdir_at(FsAnchor.SKILLGATE_ENV)
+    except OSError:
+        return False
+
+
+def anchor_path_uncreated(target_real: str) -> bool:
+    if os.path.lexists(target_real):
+        return False
+    try:
+        with pinned_skillgate_root(target_real):
+            return not (
+                isdir_at(FsAnchor.SKILLGATE_ENV)
+                or isfile_at(FsAnchor.SKILLGATE_ENV, "SKILL.md")
+            )
+    except OSError:
+        return False
+
+
 def discovery_pack_markers(candidate: Path) -> tuple[bool, bool, bool]:
     try:
         cand = os.path.realpath(os.fsdecode(candidate))

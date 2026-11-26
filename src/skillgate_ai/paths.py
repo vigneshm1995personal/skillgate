@@ -204,9 +204,10 @@ def config_root_for(path: str | Path | None = None) -> Path:
         except OSError:
             pass
         try:
+            from skillgate_ai.pack_layout import discovery_is_directory
+
             has_skill_md, has_evals, is_pack = discovery_pack_markers(candidate)
-            cand = os.path.realpath(os.fsdecode(candidate))
-            start_dir = candidate == start and os.path.isdir(cand)
+            start_dir = candidate == start and discovery_is_directory(candidate)
         except OSError:
             is_pack = has_skill_md = has_evals = start_dir = False
         if pack is None and (is_pack or has_skill_md or has_evals or start_dir):

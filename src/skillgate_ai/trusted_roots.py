@@ -179,7 +179,9 @@ def pack_access_root(skill_path: str | Path) -> tuple[FsAnchor, tuple[str, ...]]
         rel = relative_segments_under(gate_real, target)
         if rel is not None:
             return FsAnchor.SKILLGATE_ENV, rel
-    if resolved.is_absolute() and ".." not in resolved.parts and not os.path.exists(target):
+    from skillgate_ai.pack_layout import anchor_path_uncreated, discovery_is_directory
+
+    if resolved.is_absolute() and ".." not in resolved.parts and anchor_path_uncreated(target):
         _pin_skillgate_root(resolved)
         return FsAnchor.SKILLGATE_ENV, ()
 
@@ -188,7 +190,9 @@ def pack_access_root(skill_path: str | Path) -> tuple[FsAnchor, tuple[str, ...]]
         if _has_workspace_skills(gate) and not is_under_root(resolved, gate):
             raise PathTraversalError("Path escapes the allowed root.")
 
-    if ".." not in resolved.parts and (resolved.is_dir() or _is_pack_mount(resolved)):
+    if ".." not in resolved.parts and (
+        discovery_is_directory(resolved) or _is_pack_mount(resolved)
+    ):
         _pin_skillgate_root(resolved)
         return FsAnchor.SKILLGATE_ENV, ()
 
