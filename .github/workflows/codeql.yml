@@ -10,6 +10,8 @@ on:
 
 permissions:
   contents: read
+  pull-requests: read
+  security-events: read
 
 concurrency:
   group: codeql-${{ github.event.pull_request.number || github.ref }}
@@ -62,11 +64,8 @@ jobs:
             exit 1
           fi
           head_sha=""
-          merge_ref=""
-          scan_ref="${{ github.ref }}"
           if [ "${{ github.event_name }}" = "pull_request" ]; then
-            scan_ref="refs/pull/${{ github.event.pull_request.number }}/head"
-            merge_ref="refs/pull/${{ github.event.pull_request.number }}/merge"
+            scan_ref="refs/pull/${{ github.event.pull_request.number }}/merge"
             head_sha="${{ github.event.pull_request.head.sha }}"
           elif [ "${{ github.ref }}" != "refs/heads/main" ] && [[ "${{ github.ref }}" == refs/heads/* ]]; then
             branch="${GITHUB_REF#refs/heads/}"
@@ -74,10 +73,13 @@ jobs:
             pr_number="$(printf '%s' "${pr_json}" | jq -r '.[0].number // empty')"
             pr_head="$(printf '%s' "${pr_json}" | jq -r '.[0].headRefOid // empty')"
             if [ -n "${pr_number}" ]; then
-              scan_ref="refs/pull/${pr_number}/head"
-              merge_ref="refs/pull/${pr_number}/merge"
+              scan_ref="refs/pull/${pr_number}/merge"
               head_sha="${pr_head}"
+            else
+              scan_ref="${{ github.ref }}"
             fi
+          else
+            scan_ref="${{ github.ref }}"
           fi
           high_jq='[.[] | select(.rule.security_severity_level == "high" or .rule.security_severity_level == "critical")] | length'
           on_head_jq='[.[] | select(.rule.security_severity_level == "high" or .rule.security_severity_level == "critical") | select(.most_recent_instance.commit_sha == $head)] | length'
@@ -88,24 +90,28 @@ jobs:
               exit 1
             fi
             echo "Open high/critical on ${scan_ref} (attempt ${attempt}): ${count}"
-            if [ "${count}" -eq 0 ]; then
-              if [ -n "${merge_ref}" ] && [ -n "${head_sha}" ]; then
-                merge_count="$(gh api "repos/${repo}/code-scanning/alerts" -f state=open -f ref="${merge_ref}" -F per_page=100 --paginate --jq "${high_jq}" || echo 0)"
-                on_head="$(gh api "repos/${repo}/code-scanning/alerts" -f state=open -f ref="${merge_ref}" -F per_page=100 --paginate --jq "${on_head_jq}" -f head="${head_sha}" || echo 0)"
-                echo "Merge ${merge_ref} total high/critical: ${merge_count}; on head ${head_sha}: ${on_head}"
-                if [ "${on_head}" -gt 0 ]; then
-                  echo "Open CodeQL alerts on merge still reference the current head commit."
-                  exit 1
-                fi
-                if [ "${merge_count}" -gt 0 ] && [ "${attempt}" -lt 12 ]; then
-                  echo "Head scan is clean; waiting for merge ref ingest (${merge_count} stale)..."
-                  sleep 45
-                  continue
-                fi
-                if [ "${merge_count}" -gt 0 ]; then
-                  echo "Head is clean; merge ref still lists ${merge_count} stale alert(s) (none on ${head_sha})."
-                fi
+            if [ -n "${head_sha}" ]; then
+              on_head="$(gh api "repos/${repo}/code-scanning/alerts" -f state=open -f ref="${scan_ref}" -F per_page=100 --paginate --jq "${on_head_jq}" -f head="${head_sha}" || echo 0)"
+              stale_count="$((count - on_head))"
+              echo "On head ${head_sha}: ${on_head}; stale older commits: ${stale_count}"
+              if [ "${on_head}" -gt 0 ]; then
+                echo "Resolve open CodeQL path alerts on the current head commit."
+                exit 1
               fi
+              if [ "${count}" -eq 0 ]; then
+                exit 0
+              fi
+              if [ "${stale_count}" -eq "${count}" ] && [ "${attempt}" -lt 12 ]; then
+                echo "Waiting for merge ref ingest to clear stale alerts..."
+                sleep 45
+                continue
+              fi
+              if [ "${stale_count}" -eq "${count}" ]; then
+                echo "No high/critical alerts on head ${head_sha}; ${count} stale merge listing(s) remain."
+                exit 0
+              fi
+            fi
+            if [ "${count}" -eq 0 ]; then
               exit 0
             fi
             if [ "${attempt}" -lt 12 ]; then
