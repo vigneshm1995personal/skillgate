@@ -187,17 +187,22 @@ def test_relative_segments_under_rejects_traversal() -> None:
     assert relative_segments_under(base, os.path.join(base, "..", "etc")) is None
 
 
-def test_named_child_finds_fixed_skill_markers(tmp_path: Path) -> None:
-    from skillgate_ai.pack_layout import _has_keys_child, _has_skill_pack_layout, _has_skills_child
+def test_fixed_suffix_layout_markers(tmp_path: Path) -> None:
+    from skillgate_ai.pack_layout import (
+        layout_has_skills_dir,
+        layout_keys_file,
+        layout_skill_pack_at_root,
+    )
 
     ws = tmp_path / "ws"
     (ws / "skills").mkdir(parents=True)
-    assert _has_skills_child(ws)
+    resolved = os.path.realpath(ws)
+    assert layout_has_skills_dir(resolved)
     pack = ws / "skills" / "solo"
     pack.mkdir()
     (pack / "SKILL.md").write_text("---\nname: solo\n---\n", encoding="utf-8")
     (pack / "evals").mkdir()
-    assert _has_skill_pack_layout(pack)
+    assert layout_skill_pack_at_root(os.path.realpath(pack))
     (ws / ".skillgate").mkdir()
     (ws / ".skillgate" / "keys").write_text("{}", encoding="utf-8")
-    assert _has_keys_child(ws)
+    assert layout_keys_file(resolved)

@@ -240,23 +240,28 @@ def test_deploy_targets_comma_list(tmp_path: Path, monkeypatch: pytest.MonkeyPat
     assert not (cursor / "pdf" / "evals").exists()
 
 
-def test_deploy_reads_dotenv(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_deploy_ignores_trust_keys_in_dotenv(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     proj = tmp_path / "proj"
     pack = proj / "skills" / "pdf"
     shutil.copytree(ROOT / "skills" / "pdf", pack)
     _wipe_history(pack)
-    cursor_dest = tmp_path / "from-dotenv"
+    dotenv_dest = tmp_path / "from-dotenv"
     (proj / ".env").write_text(
-        f"SKILLGATE_CURSOR_SKILLS={cursor_dest}\n",
+        f"SKILLGATE_CURSOR_SKILLS={dotenv_dest}\n",
         encoding="utf-8",
     )
+    skills_root = tmp_path / "cursor-skills"
     monkeypatch.chdir(proj)
     monkeypatch.delenv("SKILLGATE_CURSOR_SKILLS", raising=False)
     monkeypatch.delenv("SKILLGATE_ROOT", raising=False)
+    monkeypatch.setenv("SKILLGATE_CURSOR_SKILLS", str(skills_root))
     append_eval(pack, run_id="green", passed=True)
     result = runner.invoke(app, ["deploy", str(pack)])
     assert result.exit_code == 0, result.stdout
-    assert (cursor_dest / "pdf" / "SKILL.md").is_file()
+    assert (skills_root / "pdf" / "SKILL.md").is_file()
+    assert not dotenv_dest.exists()
 
 
 def test_deploy_help_labels_force() -> None:

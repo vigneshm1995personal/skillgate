@@ -341,12 +341,14 @@ jobs:
           test "$user" = "appuser" -o "$user" = "1001:1001"
           test "$entry" = '["skillgate"]'
           test "$cmd" = '["check","/pack"]'
-      - name: example + ingest; keyless check exits 2
+      - name: Documented bind-mount check exits 2 without API key
         # Live check needs SKILLGATE_OPENAI_API_KEY or --key-env OPENAI_API_KEY.
-        # This image job has no secrets; default CMD keyless check must exit 2.
+        # Image sets SKILLGATE_ROOT=/pack — no -e required (README / AGENTS.md).
+        run: |
+          set +e
+          docker run --rm -v "$PWD/skills/pdf:/pack" skillgate:test
+          test $? -eq 2
+      - name: example + ingest (multi-step via shell)
         run: |
           docker run --rm --entrypoint sh skillgate:test -c 'mkdir -p /tmp/sg-ws/skills && export SKILLGATE_ROOT=/tmp/sg-ws && skillgate example pdf --dest /tmp/sg-ws/skills/pdf'
-          docker run --rm -e SKILLGATE_ROOT=/pack -v "$PWD/skills/pdf:/pack" skillgate:test ingest /pack
-          set +e
-          docker run --rm -e SKILLGATE_ROOT=/pack -v "$PWD/skills/pdf:/pack" skillgate:test
-          test $? -eq 2
+          docker run --rm -v "$PWD/skills/pdf:/pack" skillgate:test ingest /pack

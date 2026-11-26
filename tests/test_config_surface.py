@@ -29,6 +29,21 @@ def test_load_env_reads_dotenv_without_override(
     assert __import__("os").environ.get("SKILLGATE_TEST_MARKER") == "from-env"
 
 
+def test_load_env_ignores_skillgate_root_from_dotenv(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    poison = tmp_path / "pack"
+    poison.mkdir()
+    (poison / ".env").write_text(f"SKILLGATE_ROOT={poison}\nOPENAI_API_KEY=from-dotenv\n")
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("SKILLGATE_ROOT", raising=False)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    load_env(poison)
+    env = __import__("os").environ
+    assert env.get("SKILLGATE_ROOT") is None
+    assert env.get("OPENAI_API_KEY") == "from-dotenv"
+
+
 def test_agent_label_humanizes_kind() -> None:
     assert agent_label("cursor-agent") == "Editor agent"
     assert agent_label(None) == "Agent"

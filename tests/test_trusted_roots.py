@@ -133,14 +133,55 @@ def test_pack_cannot_opt_in_via_repo_env(tmp_path: Path, monkeypatch: pytest.Mon
     pack.mkdir(parents=True)
     (pack / "SKILL.md").write_text("---\nname: solo\n---\n", encoding="utf-8")
     (pack / "evals").mkdir()
+    (pack / "evals" / "cases.yaml").write_text(
+        "schema_version: 1\nskill: solo\ncases: []\n",
+        encoding="utf-8",
+    )
     (pack / ".skillgate").mkdir()
     (pack / ".skillgate" / "allow-root").write_text(f"{pack}\n", encoding="utf-8")
+    (pack / ".env").write_text(f"SKILLGATE_ROOT={pack}\n", encoding="utf-8")
     cwd = ws / "cwd"
     cwd.mkdir()
     monkeypatch.chdir(cwd)
     monkeypatch.delenv("SKILLGATE_ROOT", raising=False)
+    from skillgate_ai.config import load_env
+    from skillgate_ai.paths import config_root_for
+
+    load_env(config_root_for(pack))
+    assert __import__("os").environ.get("SKILLGATE_ROOT") is None
     with pytest.raises(PathTraversalError):
         pack_access_root(pack)
+
+
+def test_pack_dotenv_skillgate_root_does_not_unlock_run_check(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import os
+
+    from skillgate_ai.config import load_env
+    from skillgate_ai.gate import run_check
+    from skillgate_ai.paths import config_root_for
+
+    ws = tmp_path / "proj"
+    (ws / "skills").mkdir(parents=True)
+    pack = tmp_path / "outside" / "solo"
+    pack.mkdir(parents=True)
+    (pack / "SKILL.md").write_text(
+        "---\nname: solo\ndescription: Solo.\n---\n# Solo\n",
+        encoding="utf-8",
+    )
+    (pack / "evals").mkdir()
+    (pack / "evals" / "cases.yaml").write_text(
+        "schema_version: 1\nskill: solo\ncases: []\n",
+        encoding="utf-8",
+    )
+    (pack / ".env").write_text(f"SKILLGATE_ROOT={pack}\n", encoding="utf-8")
+    monkeypatch.chdir(ws)
+    monkeypatch.delenv("SKILLGATE_ROOT", raising=False)
+    load_env(config_root_for(pack))
+    assert os.environ.get("SKILLGATE_ROOT") is None
+    with pytest.raises(PathTraversalError):
+        run_check(str(pack), source="test", no_judge=True, live=False)
 
 
 def test_rejects_outside_all_roots() -> None:

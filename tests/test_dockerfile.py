@@ -45,6 +45,7 @@ def test_dockerfile_is_cli_not_serve() -> None:
     assert text.splitlines()[0] == "# syntax=docker/dockerfile:1"
     assert 'ENTRYPOINT ["skillgate"]' in text
     assert 'CMD ["check", "/pack"]' in text
+    assert "SKILLGATE_ROOT=/pack" in text
     assert "serve" not in text.lower()
     assert "EXPOSE" not in text
     assert "USER appuser" in text

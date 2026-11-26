@@ -59,9 +59,22 @@ def require_under(root: str | Path, path: str | Path) -> Path:
     return Path(target)
 
 
+def _rel_under_skillgate_env(candidate: Path) -> tuple[str, ...] | None:
+    from skillgate_ai.pack_layout import relative_segments_under
+
+    env = os.environ.get("SKILLGATE_ROOT")
+    if not env or ".." in Path(env).parts:
+        return None
+    gate = os.path.realpath(env)
+    try:
+        cand = os.path.realpath(os.fsdecode(candidate))
+    except OSError:
+        return None
+    return relative_segments_under(gate, cand)
+
+
 def is_skill_pack(path: str | Path) -> bool:
     from skillgate_ai.pack_layout import (
-        discovery_skill_pack_dir,
         loose_pack_mount_at,
         relative_segments_under,
         strict_skill_pack_at,
@@ -78,8 +91,6 @@ def is_skill_pack(path: str | Path) -> bool:
             return True
     except PathTraversalError:
         pass
-    if discovery_skill_pack_dir(resolved):
-        return True
     target = os.path.realpath(os.fsdecode(resolved))
     env = os.environ.get("SKILLGATE_ROOT")
     if env and ".." not in Path(env).parts:
@@ -131,6 +142,8 @@ def resolve_user_path(target: str | Path, root: Path | None = None) -> Path:
 
 
 def _workspace_realpath_for_pack_check() -> str:
+    from skillgate_ai.pack_layout import layout_skill_pack_at_root
+
     env = os.environ.get("SKILLGATE_ROOT")
     if env and ".." not in Path(env).parts:
         return os.path.realpath(env)
@@ -138,18 +151,29 @@ def _workspace_realpath_for_pack_check() -> str:
     for candidate in (cwd, *cwd.parents):
         if _has_workspace_skills(candidate):
             return os.path.realpath(os.fsdecode(candidate))
-        from skillgate_ai.pack_layout import discovery_skill_pack_dir
-
-        if discovery_skill_pack_dir(candidate):
-            return os.path.realpath(os.fsdecode(candidate))
+        try:
+            cand = os.path.realpath(os.fsdecode(candidate))
+        except OSError:
+            continue
+        if layout_skill_pack_at_root(cand):
+            return cand
     return os.path.realpath(os.fsdecode(cwd))
 
 
 def _has_workspace_skills(candidate: Path) -> bool:
     """A workspace is any folder with ``skills/`` (including right after ``skillgate init``)."""
-    from skillgate_ai.pack_layout import discovery_has_skills_dir
+    from skillgate_ai.contained_fs import isdir_at
+    from skillgate_ai.fs_anchor import FsAnchor
+    from skillgate_ai.pack_layout import layout_has_skills_dir
 
-    return discovery_has_skills_dir(candidate)
+    rel = _rel_under_skillgate_env(candidate)
+    if rel is not None:
+        return isdir_at(FsAnchor.SKILLGATE_ENV, *rel, "skills")
+    try:
+        cand = os.path.realpath(os.fsdecode(candidate))
+    except OSError:
+        return False
+    return layout_has_skills_dir(cand)
 
 
 def project_root() -> Path:
@@ -164,9 +188,13 @@ def project_root() -> Path:
             workspace = candidate
             break
         if pack is None:
-            from skillgate_ai.pack_layout import discovery_skill_pack_dir
+            from skillgate_ai.pack_layout import layout_skill_pack_at_root
 
-            if discovery_skill_pack_dir(candidate):
+            try:
+                cand = os.path.realpath(os.fsdecode(candidate))
+            except OSError:
+                continue
+            if layout_skill_pack_at_root(cand):
                 pack = candidate
     if workspace is not None:
         return workspace
@@ -204,17 +232,17 @@ def config_root_for(path: str | Path | None = None) -> Path:
         if nearest_workspace is None and _has_workspace_skills(candidate):
             nearest_workspace = candidate
         try:
-            from skillgate_ai.pack_layout import discovery_keys_file, discovery_pack_markers
+            from skillgate_ai.pack_layout import (
+                layout_is_directory,
+                layout_keys_file,
+                layout_pack_markers,
+            )
 
-            if nearest_keys is None and discovery_keys_file(candidate):
+            cand = os.path.realpath(os.fsdecode(candidate))
+            if nearest_keys is None and layout_keys_file(cand):
                 nearest_keys = candidate
-        except OSError:
-            pass
-        try:
-            from skillgate_ai.pack_layout import discovery_is_directory
-
-            has_skill_md, has_evals, is_pack = discovery_pack_markers(candidate)
-            start_dir = candidate == start and discovery_is_directory(candidate)
+            has_skill_md, has_evals, is_pack = layout_pack_markers(cand)
+            start_dir = candidate == start and layout_is_directory(cand)
         except OSError:
             is_pack = has_skill_md = has_evals = start_dir = False
         if pack is None and (is_pack or has_skill_md or has_evals or start_dir):
