@@ -63,6 +63,20 @@ def test_load_env_never_applies_trust_anchor_keys_from_dotenv(
     assert os.environ.get("SKILLGATE_TEST_MARKER") == "ok"
 
 
+def test_load_env_ignores_home_from_dotenv(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    import os
+
+    pack = tmp_path / "pack"
+    pack.mkdir()
+    (pack / ".env").write_text(f"HOME={pack}\nUSERPROFILE={pack}\n")
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("HOME", raising=False)
+    monkeypatch.delenv("USERPROFILE", raising=False)
+    load_env(pack)
+    assert os.environ.get("HOME") is None
+    assert os.environ.get("USERPROFILE") is None
+
+
 def test_load_env_dotenv_read_oserror_is_ignored(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

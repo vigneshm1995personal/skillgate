@@ -93,13 +93,27 @@ def test_rejects_nested_agent_path(tmp_path: Path, monkeypatch: pytest.MonkeyPat
         pack_access_root(nested)
 
 
+def test_user_home_for_allow_root_fail_closed_without_passwd_or_env(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from skillgate_ai.allow_root import user_home_for_allow_root
+
+    monkeypatch.setattr("pwd.getpwuid", lambda _uid: (_ for _ in ()).throw(KeyError()))
+    monkeypatch.delenv("HOME", raising=False)
+    monkeypatch.delenv("USERPROFILE", raising=False)
+    assert user_home_for_allow_root() is None
+
+
 def test_read_user_allow_root_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("HOME", str(tmp_path))
     allowed = tmp_path / "packs"
     allowed.mkdir()
     cfg = tmp_path / ".skillgate" / "allow-root"
     cfg.parent.mkdir(parents=True)
     cfg.write_text(f"{allowed}\n", encoding="utf-8")
+    monkeypatch.setattr(
+        "skillgate_ai.allow_root.user_home_for_allow_root",
+        lambda: tmp_path,
+    )
     resolved = os.path.realpath(allowed)
     assert read_user_allow_root_file() == resolved
     assert resolved in allow_root_realpaths()
@@ -176,10 +190,57 @@ def test_pack_dotenv_skillgate_root_does_not_unlock_run_check(
         encoding="utf-8",
     )
     (pack / ".env").write_text(f"SKILLGATE_ROOT={pack}\n", encoding="utf-8")
+    set_cli_allow_root(None)
     monkeypatch.chdir(ws)
     monkeypatch.delenv("SKILLGATE_ROOT", raising=False)
     load_env(config_root_for(pack))
     assert os.environ.get("SKILLGATE_ROOT") is None
+    with pytest.raises(PathTraversalError):
+        run_check(str(pack), source="test", no_judge=True, live=False)
+
+
+def test_pack_dotenv_home_cannot_fake_allow_root_run_check(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    _isolate_user_home: Path,
+) -> None:
+    from skillgate_ai.allow_root import read_user_allow_root_file
+    from skillgate_ai.config import load_env
+    from skillgate_ai.gate import run_check
+    from skillgate_ai.paths import config_root_for
+
+    ws = tmp_path / "proj"
+    (ws / "skills").mkdir(parents=True)
+    pack = tmp_path / "outside" / "solo"
+    pack.mkdir(parents=True)
+    (pack / "SKILL.md").write_text(
+        "---\nname: solo\ndescription: Solo.\n---\n# Solo\n",
+        encoding="utf-8",
+    )
+    (pack / "evals").mkdir()
+    (pack / "evals" / "cases.yaml").write_text(
+        "schema_version: 1\nskill: solo\ncases: []\n",
+        encoding="utf-8",
+    )
+    (pack / ".skillgate").mkdir()
+    (pack / ".skillgate" / "allow-root").write_text(f"{pack}\n", encoding="utf-8")
+    (pack / ".env").write_text(f"HOME={pack}\n", encoding="utf-8")
+    set_cli_allow_root(None)
+    monkeypatch.chdir(ws)
+    monkeypatch.delenv("HOME", raising=False)
+    monkeypatch.delenv("USERPROFILE", raising=False)
+    monkeypatch.delenv("SKILLGATE_ROOT", raising=False)
+
+    class _Passwd:
+        pw_dir = str(_isolate_user_home)
+
+    monkeypatch.setattr("pwd.getpwuid", lambda _uid: _Passwd())
+    load_env(config_root_for(pack))
+    assert os.environ.get("HOME") is None
+    assert read_user_allow_root_file() is None
+    monkeypatch.setenv("HOME", str(pack))
+    assert read_user_allow_root_file() is None
+    monkeypatch.delenv("HOME", raising=False)
     with pytest.raises(PathTraversalError):
         run_check(str(pack), source="test", no_judge=True, live=False)
 

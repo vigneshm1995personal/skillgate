@@ -35,13 +35,18 @@ DEFAULT_JUDGE_REASONING_EFFORT = "low"
 CODEX_REASONING_EFFORTS = frozenset({"low", "medium", "high", "ultra"})
 DEFAULT_CODEX_REASONING_EFFORT = "medium"
 
-# Pack/repo `.env` must not override trust roots — only the process env or user home may.
+# Pack/repo `.env` must not set trust roots or paths that locate user config / allow-root.
 DOTENV_BLOCKED_TRUST_KEYS = frozenset(
     {
         "SKILLGATE_ROOT",
         "SKILLGATE_CURSOR_SKILLS",
         "SKILLGATE_CODEX_SKILLS",
         "SKILLGATE_CLAUDE_SKILLS",
+        "HOME",
+        "USERPROFILE",
+        "HOMEDRIVE",
+        "HOMEPATH",
+        "XDG_CONFIG_HOME",
     }
 )
 
