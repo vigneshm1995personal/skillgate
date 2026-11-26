@@ -59,13 +59,17 @@ jobs:
             echo "gh CLI missing; CodeQL alert gate cannot run"
             exit 1
           fi
+          head_sha=""
+          head_ref=""
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             scan_ref="refs/pull/${{ github.event.pull_request.number }}/merge"
+            head_ref="refs/pull/${{ github.event.pull_request.number }}/head"
+            head_sha="${{ github.event.pull_request.head.sha }}"
           else
             scan_ref="${{ github.ref }}"
           fi
           count=""
-          for attempt in 1 2 3 4 5 6; do
+          for attempt in 1 2 3 4 5 6 7 8 9 10 11 12; do
             if ! count="$(gh api "repos/${repo}/code-scanning/alerts" -f state=open -f ref="${scan_ref}" -F per_page=100 --paginate --jq '[.[] | select(.rule.security_severity_level == "high" or .rule.security_severity_level == "critical")] | length')"; then
               echo "CodeQL alerts API query failed"
               exit 1
@@ -74,7 +78,21 @@ jobs:
             if [ "${count}" -eq 0 ]; then
               exit 0
             fi
-            if [ "${attempt}" -lt 6 ]; then
+            if [ -n "${head_sha}" ] && [ -n "${head_ref}" ]; then
+              head_count="$(gh api "repos/${repo}/code-scanning/alerts" -f state=open -f ref="${head_ref}" -F per_page=100 --paginate --jq '[.[] | select(.rule.security_severity_level == "high" or .rule.security_severity_level == "critical")] | length' || echo 0)"
+              stale_on_merge="$(gh api "repos/${repo}/code-scanning/alerts" -f state=open -f ref="${scan_ref}" -F per_page=100 --paginate --jq --arg head "${head_sha}" '[.[] | select(.rule.security_severity_level == "high" or .rule.security_severity_level == "critical") | select(.most_recent_instance.commit_sha != $head)] | length' || echo 0)"
+              echo "Head ${head_ref} high/critical: ${head_count}; merge alerts not on head ${head_sha}: ${stale_on_merge}"
+              if [ "${head_count}" -gt 0 ]; then
+                echo "Resolve open CodeQL alerts on head before merge."
+                exit 1
+              fi
+              if [ "${stale_on_merge}" -eq "${count}" ]; then
+                echo "Waiting for merge ref CodeQL ingest to match head ${head_sha}..."
+                sleep 45
+                continue
+              fi
+            fi
+            if [ "${attempt}" -lt 12 ]; then
               sleep 30
             fi
           done

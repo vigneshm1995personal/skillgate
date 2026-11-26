@@ -58,3 +58,20 @@ def test_contained_path_rejects_symlink_escape(tmp_path: Path) -> None:
         pytest.skip("symlinks not supported here")
     with pytest.raises(PathTraversalError):
         contained_path(root, "escape", "leak.txt")
+
+
+def test_contained_fs_rejects_prefix_sibling_after_realpath(tmp_path: Path) -> None:
+    """``/tmp/a`` must not absorb ``/tmp/ab`` (separator-aware containment)."""
+    from skillgate_ai.contained_fs import isfile_at
+
+    root = (tmp_path / "a").resolve()
+    root.mkdir()
+    sibling = (tmp_path / "ab").resolve()
+    sibling.mkdir()
+    leak = sibling / "leak.txt"
+    leak.write_text("secret", encoding="utf-8")
+    try:
+        os.symlink(sibling, root / "escape")
+    except (OSError, NotImplementedError):
+        pytest.skip("symlinks not supported here")
+    assert not isfile_at(root, "escape", "leak.txt")
