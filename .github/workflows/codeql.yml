@@ -34,7 +34,7 @@ jobs:
       actions: read
     outputs:
       merge_sha: ${{ steps.merge_meta.outputs.sha }}
-      pr_number: ${{ steps.merge_meta.outputs.pr_number }}
+      scan_ref: ${{ steps.merge_meta.outputs.scan_ref }}
     strategy:
       fail-fast: false
       matrix:
@@ -44,20 +44,19 @@ jobs:
         with:
           ref: ${{ (inputs.pull_number != '' && format('refs/pull/{0}/merge', inputs.pull_number)) || (github.event_name == 'pull_request' && format('refs/pull/{0}/merge', github.event.pull_request.number)) || github.ref }}
       - id: merge_meta
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
-          pr_number="${{ inputs.pull_number || github.event.pull_request.number || '' }}"
-          if [ -z "${pr_number}" ]; then
-            pr_number="$(gh api "repos/${{ github.repository }}/commits/$(git rev-parse HEAD)/pulls" -H "Accept: application/vnd.github+json" --jq '.[0].number // empty' 2>/dev/null || true)"
+          input_pr="${{ inputs.pull_number }}"
+          event_pr="${{ github.event.pull_request.number }}"
+          if [ -n "${input_pr}" ]; then
+            scan_ref="refs/pull/${input_pr}/merge"
+          elif [ "${{ github.event_name }}" = "pull_request" ] && [ -n "${event_pr}" ]; then
+            scan_ref="refs/pull/${event_pr}/merge"
+          else
+            scan_ref="${GITHUB_REF}"
           fi
-          if [ -z "${pr_number}" ] && [[ "${GITHUB_REF}" == refs/heads/* ]]; then
-            branch="${GITHUB_REF#refs/heads/}"
-            pr_number="$(gh api "repos/${{ github.repository }}/pulls" -f head="${{ github.repository_owner }}:${branch}" -f state=open -f per_page=1 --jq '.[0].number // empty' 2>/dev/null || true)"
-          fi
-          echo "pr_number=${pr_number}" >> "$GITHUB_OUTPUT"
+          echo "scan_ref=${scan_ref}" >> "$GITHUB_OUTPUT"
       - uses: github/codeql-action/init@1bd86f2fdb4b86187fa4059f16f31a3202acc9ea # v4.39.4
         with:
           languages: ${{ matrix.language }}
@@ -86,17 +85,7 @@ jobs:
           set -euo pipefail
           repo="${{ github.repository }}"
           merge_sha="${{ needs.analyze.outputs.merge_sha }}"
-          pr_number="${{ needs.analyze.outputs.pr_number }}"
-          if [ -z "${pr_number}" ]; then
-            pr_number="${{ inputs.pull_number || github.event.pull_request.number || '' }}"
-          fi
-          if [ -n "${pr_number}" ]; then
-            scan_ref="refs/pull/${pr_number}/merge"
-          elif [ "${{ github.event_name }}" = "pull_request" ]; then
-            scan_ref="refs/pull/${{ github.event.pull_request.number }}/merge"
-          else
-            scan_ref="${{ github.ref }}"
-          fi
+          scan_ref="${{ needs.analyze.outputs.scan_ref }}"
           echo "CodeQL enforce scan_ref=${scan_ref} merge_sha=${merge_sha}"
           alerts_path="repos/${repo}/code-scanning/alerts?state=open&ref=${scan_ref}&per_page=100"
           analyses_path="repos/${repo}/code-scanning/analyses?ref=${scan_ref}&tool_name=CodeQL&per_page=5"
