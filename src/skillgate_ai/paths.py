@@ -195,7 +195,7 @@ def pack_access_root(skill_path: str | Path) -> tuple[Path, tuple[str, ...]]:
         rel = resolved.relative_to(workspace)
         return workspace, rel.parts
     except ValueError:
-        return resolved.parent, (resolved.name,)
+        return resolved, ()
 
 
 def is_under_root(path: str | Path, root: str | Path) -> bool:
