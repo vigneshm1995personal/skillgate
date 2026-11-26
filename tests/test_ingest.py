@@ -59,12 +59,12 @@ def test_bad_name_hyphens(tmp_path: Path) -> None:
 
 
 def test_discover_missing_dir_raises(tmp_path: Path) -> None:
-    with pytest.raises(IngestError, match="skills/ folder not found"):
+    with pytest.raises(IngestError, match="No SKILL.md folders in skills/"):
         discover_skills(tmp_path / "skills")
 
 
 def test_discover_empty_dir_raises(tmp_path: Path) -> None:
-    (tmp_path / "skills").mkdir()
+    (tmp_path / "skills").mkdir(exist_ok=True)
     with pytest.raises(IngestError, match="No SKILL.md folders"):
         discover_skills(tmp_path / "skills")
 

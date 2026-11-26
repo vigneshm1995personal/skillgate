@@ -790,7 +790,7 @@ SUB_COMMANDS: dict[str, tuple[str, ...]] = {
     "history": ("show",),
     "compare": ("models", "versions", "show", "cancel", "list"),
 }
-CLI_SURFACE_SHA256 = "fef41941cc39083729c70c9dce2d9917e75af399cd38cd99a86e37ebbdf27933"
+CLI_SURFACE_SHA256 = "3f89a036548dcd193161cc57665ade72c130d1370ef94c2562d78994f00a2539"
 
 _ALL = [(m, n) for m, names in REGISTRY.items() for n in names]
 _ALL += [(m, n) for m, names in PASS_THROUGH.items() for n in names]

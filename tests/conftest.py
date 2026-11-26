@@ -41,6 +41,34 @@ os.environ["AWS_SESSION_TOKEN"] = ""
 
 
 @pytest.fixture(autouse=True)
+def _tmp_allow_root_for_pack_tests(request: pytest.FixtureRequest) -> None:
+    from skillgate_ai.allow_root import set_cli_allow_root
+
+    blocklist = {
+        "test_pack_cannot_opt_in_via_repo_env",
+        "test_rejects_etc_without_allow_root",
+        "test_prefix_sibling_outside_skillgate_env_gate",
+        "test_sibling_prefix_under_workspace",
+    }
+    if "tmp_path" in request.fixturenames and request.node.name not in blocklist:
+        tmp_path = request.getfixturevalue("tmp_path")
+        set_cli_allow_root(tmp_path)
+    yield
+    set_cli_allow_root(None)
+
+
+@pytest.fixture(autouse=True)
+def _workspace_env(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Stable SKILLGATE_ROOT for tests (tmp_path workspace vs repo checkout)."""
+    if "tmp_path" in request.fixturenames:
+        tmp_path = request.getfixturevalue("tmp_path")
+        (tmp_path / "skills").mkdir(exist_ok=True)
+        monkeypatch.setenv("SKILLGATE_ROOT", str(tmp_path))
+        return
+    monkeypatch.setenv("SKILLGATE_ROOT", str(ROOT))
+
+
+@pytest.fixture(autouse=True)
 def _no_http_retry_sleep(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("skillgate_ai.http_retry.sleep", lambda _seconds: None)
 

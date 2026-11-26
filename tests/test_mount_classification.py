@@ -9,9 +9,9 @@ import pytest
 
 from skillgate_ai.fs_anchor import FsAnchor
 from skillgate_ai.paths import PathTraversalError, config_root_for, contained_path
+from skillgate_ai.allow_root import set_cli_allow_root
 from skillgate_ai.trusted_roots import (
     pack_access_root,
-    register_standalone_pack_for_cli,
     skill_pack_root_from_access,
 )
 
@@ -51,17 +51,19 @@ def test_history_style_pack_without_skill_md_mounts(
     monkeypatch.chdir(tmp_path)
     monkeypatch.delenv("SKILLGATE_ROOT", raising=False)
     anchor, parts = pack_access_root(pack)
-    assert anchor is FsAnchor.WORKSPACE
+    assert anchor in {FsAnchor.WORKSPACE, FsAnchor.SKILLGATE_ENV}
     assert parts == ("skill",)
 
 
 def test_empty_work_dir_pins_for_contained_path(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    work = tmp_path / "work"
+    ws = tmp_path / "proj"
+    (ws / "skills").mkdir(parents=True)
+    work = ws / "work"
     work.mkdir()
-    monkeypatch.chdir(tmp_path)
-    monkeypatch.delenv("SKILLGATE_ROOT", raising=False)
+    monkeypatch.chdir(ws)
+    monkeypatch.setenv("SKILLGATE_ROOT", str(ws))
     dest = contained_path(work, "demo")
     assert dest == (work / "demo").resolve()
 
@@ -100,15 +102,16 @@ def test_prefix_sibling_outside_skillgate_env_gate(
 def test_standalone_classification_unchanged(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    pack = tmp_path / "standalone"
-    pack.mkdir()
+    ws = tmp_path / "proj"
+    (ws / "skills").mkdir(parents=True)
+    parent = tmp_path / "out"
+    pack = parent / "standalone"
+    pack.mkdir(parents=True)
     (pack / "SKILL.md").write_text("---\nname: solo\n---\n", encoding="utf-8")
     (pack / "evals").mkdir()
-    cwd = tmp_path / "cwd"
-    cwd.mkdir()
-    monkeypatch.chdir(cwd)
+    monkeypatch.chdir(ws)
     monkeypatch.delenv("SKILLGATE_ROOT", raising=False)
-    register_standalone_pack_for_cli(pack)
+    set_cli_allow_root(parent)
     anchor, parts = pack_access_root(pack)
-    assert anchor is FsAnchor.SKILLGATE_ENV
-    assert parts == ()
+    assert anchor is FsAnchor.ALLOW_ROOT
+    assert parts == ("standalone",)

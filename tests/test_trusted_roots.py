@@ -5,13 +5,20 @@ from pathlib import Path
 
 import pytest
 
+from skillgate_ai.allow_root import set_cli_allow_root
 from skillgate_ai.fs_anchor import FsAnchor
 from skillgate_ai.paths import PathTraversalError
 from skillgate_ai.trusted_roots import (
     pack_access_root,
-    register_standalone_pack_for_cli,
     skill_pack_root_from_access,
 )
+
+
+@pytest.fixture(autouse=True)
+def _clear_allow_root() -> None:
+    set_cli_allow_root(None)
+    yield
+    set_cli_allow_root(None)
 
 
 def test_pack_access_under_workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -27,22 +34,87 @@ def test_pack_access_under_workspace(tmp_path: Path, monkeypatch: pytest.MonkeyP
     assert parts[-2:] == ("skills", "pdf")
 
 
-def test_standalone_pack_registers_skillgate_root(
+def test_agent_skill_immediate_child(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    pack = tmp_path / "standalone"
-    pack.mkdir()
+    ws = tmp_path / "proj"
+    (ws / "skills").mkdir(parents=True)
+    agent_root = tmp_path / "cursor-skills"
+    pack = agent_root / "foo"
+    pack.mkdir(parents=True)
+    (pack / "SKILL.md").write_text("---\nname: foo\n---\n", encoding="utf-8")
+    (pack / "evals").mkdir()
+    monkeypatch.chdir(ws)
+    monkeypatch.delenv("SKILLGATE_ROOT", raising=False)
+
+    def _cursor() -> Path:
+        return agent_root
+
+    monkeypatch.setattr("skillgate_ai.deploy.cursor_skills_root", _cursor)
+    anchor, parts = pack_access_root(pack)
+    assert anchor is FsAnchor.AGENT_CURSOR
+    assert parts == ("foo",)
+
+
+def test_rejects_nested_agent_path(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    ws = tmp_path / "proj"
+    (ws / "skills").mkdir(parents=True)
+    agent_root = tmp_path / "cursor-skills"
+    nested = agent_root / "foo" / "bar"
+    nested.mkdir(parents=True)
+    (nested / "SKILL.md").write_text("x", encoding="utf-8")
+    (nested / "evals").mkdir()
+    monkeypatch.chdir(ws)
+    monkeypatch.delenv("SKILLGATE_ROOT", raising=False)
+
+    def _cursor() -> Path:
+        return agent_root
+
+    monkeypatch.setattr("skillgate_ai.deploy.cursor_skills_root", _cursor)
+    with pytest.raises(PathTraversalError):
+        pack_access_root(nested)
+
+
+def test_rejects_etc_without_allow_root() -> None:
+    with pytest.raises(PathTraversalError, match="allow-root"):
+        pack_access_root("/etc")
+
+
+def test_allow_root_cli_parent(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    ws = tmp_path / "proj"
+    (ws / "skills").mkdir(parents=True)
+    parent = tmp_path / "out"
+    pack = parent / "standalone"
+    pack.mkdir(parents=True)
     (pack / "SKILL.md").write_text("---\nname: solo\n---\n", encoding="utf-8")
     (pack / "evals").mkdir()
-    cwd = tmp_path / "other"
+    monkeypatch.chdir(ws)
+    monkeypatch.delenv("SKILLGATE_ROOT", raising=False)
+    set_cli_allow_root(parent)
+    anchor, parts = pack_access_root(pack)
+    assert anchor is FsAnchor.ALLOW_ROOT
+    assert parts == ("standalone",)
+
+
+def test_pack_cannot_opt_in_via_repo_env(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    ws = tmp_path / "proj"
+    (ws / "skills").mkdir(parents=True)
+    pack = tmp_path / "outside" / "pack"
+    pack.mkdir(parents=True)
+    (pack / "SKILL.md").write_text("---\nname: solo\n---\n", encoding="utf-8")
+    (pack / "evals").mkdir()
+    (pack / ".skillgate").mkdir()
+    (pack / ".skillgate" / "allow-root").write_text(f"{pack}\n", encoding="utf-8")
+    cwd = ws / "cwd"
     cwd.mkdir()
     monkeypatch.chdir(cwd)
     monkeypatch.delenv("SKILLGATE_ROOT", raising=False)
-    register_standalone_pack_for_cli(pack)
-    assert os.environ.get("SKILLGATE_ROOT") == str(pack.resolve())
-    anchor, parts = pack_access_root(pack)
-    assert anchor is FsAnchor.SKILLGATE_ENV
-    assert parts == ()
+    with pytest.raises(PathTraversalError):
+        pack_access_root(pack)
 
 
 def test_rejects_outside_all_roots() -> None:
