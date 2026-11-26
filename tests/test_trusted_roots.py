@@ -5,7 +5,8 @@ from pathlib import Path
 
 import pytest
 
-from skillgate_ai.paths import PathTraversalError, project_root
+from skillgate_ai.fs_anchor import FsAnchor
+from skillgate_ai.paths import PathTraversalError
 from skillgate_ai.trusted_roots import (
     pack_access_root,
     register_standalone_pack_for_cli,
@@ -22,7 +23,7 @@ def test_pack_access_under_workspace(tmp_path: Path, monkeypatch: pytest.MonkeyP
     (skills / "SKILL.md").write_text("---\nname: pdf\n---\n", encoding="utf-8")
     (skills / "evals").mkdir()
     anchor, parts = pack_access_root(skills)
-    assert anchor == project_root().resolve()
+    assert anchor is FsAnchor.WORKSPACE
     assert parts[-2:] == ("skills", "pdf")
 
 
@@ -40,7 +41,7 @@ def test_standalone_pack_registers_skillgate_root(
     register_standalone_pack_for_cli(pack)
     assert os.environ.get("SKILLGATE_ROOT") == str(pack.resolve())
     anchor, parts = pack_access_root(pack)
-    assert anchor == pack.resolve()
+    assert anchor is FsAnchor.SKILLGATE_ENV
     assert parts == ()
 
 

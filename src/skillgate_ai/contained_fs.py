@@ -1,4 +1,4 @@
-"""Filesystem I/O and checks under a trusted root with inline containment."""
+"""Filesystem I/O and checks under a fixed anchor with validated relative segments."""
 
 from __future__ import annotations
 
@@ -7,6 +7,7 @@ import os
 from collections.abc import Iterator
 from pathlib import Path
 
+from skillgate_ai.fs_anchor import FsAnchor
 from skillgate_ai.paths import PathTraversalError
 
 
@@ -23,167 +24,96 @@ def _reject_escape_parts(*parts: str) -> None:
         raise PathTraversalError("Path escapes the allowed root.")
 
 
-def resolved_relative(root: str | Path, rel: str) -> str:
+def _resolve(anchor: FsAnchor, *rel_parts: str) -> str:
     from skillgate_ai.paths import filesystem_path_under
 
-    return filesystem_path_under(root, *_split_rel(rel))
+    _reject_escape_parts(*rel_parts)
+    return filesystem_path_under(anchor, *rel_parts)
 
 
-def is_root_directory(root: str | Path) -> bool:
-    return isdir_at(root)
+def resolved_relative(anchor: FsAnchor, rel: str) -> str:
+    return _resolve(anchor, *_split_rel(rel))
 
 
-def isfile_at(root: str | Path, *rel_parts: str) -> bool:
+def is_root_directory(anchor: FsAnchor) -> bool:
+    return isdir_at(anchor)
+
+
+def isfile_at(anchor: FsAnchor, *rel_parts: str) -> bool:
     try:
-        text = str(root)
-        if ".." in Path(text).parts:
-            return False
-        _reject_escape_parts(*rel_parts)
-        base_path = os.path.realpath(text)
-        joined = os.path.join(base_path, *rel_parts) if rel_parts else base_path
-        fullpath = os.path.realpath(joined)
-        if fullpath == base_path or fullpath.startswith(base_path + os.sep):
-            return os.path.isfile(fullpath)
+        fullpath = _resolve(anchor, *rel_parts)
+        return os.path.isfile(fullpath)
     except (PathTraversalError, OSError, ValueError):
         return False
-    return False
 
 
-def isdir_at(root: str | Path, *rel_parts: str) -> bool:
+def isdir_at(anchor: FsAnchor, *rel_parts: str) -> bool:
     try:
-        text = str(root)
-        if ".." in Path(text).parts:
-            return False
-        _reject_escape_parts(*rel_parts)
-        base_path = os.path.realpath(text)
-        joined = os.path.join(base_path, *rel_parts) if rel_parts else base_path
-        fullpath = os.path.realpath(joined)
-        if fullpath == base_path or fullpath.startswith(base_path + os.sep):
-            return os.path.isdir(fullpath)
+        fullpath = _resolve(anchor, *rel_parts)
+        return os.path.isdir(fullpath)
     except (PathTraversalError, OSError, ValueError):
         return False
-    return False
 
 
-def file_size(root: str | Path, *rel_parts: str) -> int:
-    text = str(root)
-    if ".." in Path(text).parts:
+def file_size(anchor: FsAnchor, *rel_parts: str) -> int:
+    fullpath = _resolve(anchor, *rel_parts)
+    return os.path.getsize(fullpath)
+
+
+def read_text(anchor: FsAnchor, *rel_parts: str, encoding: str = "utf-8") -> str:
+    fullpath = _resolve(anchor, *rel_parts)
+    with open(fullpath, encoding=encoding) as handle:
+        return handle.read()
+
+
+def read_bytes_at(anchor: FsAnchor, *rel_parts: str) -> bytes:
+    fullpath = _resolve(anchor, *rel_parts)
+    with open(fullpath, "rb") as handle:
+        return handle.read()
+
+
+def write_text(anchor: FsAnchor, *rel_parts: str, text: str, encoding: str = "utf-8") -> str:
+    fullpath = _resolve(anchor, *rel_parts)
+    os.makedirs(os.path.dirname(fullpath), exist_ok=True)
+    with open(fullpath, "w", encoding=encoding) as handle:
+        handle.write(text)
+    return fullpath
+
+
+def write_bytes_at(anchor: FsAnchor, *rel_parts: str, data: bytes) -> str:
+    fullpath = _resolve(anchor, *rel_parts)
+    os.makedirs(os.path.dirname(fullpath), exist_ok=True)
+    with open(fullpath, "wb") as handle:
+        handle.write(data)
+    return fullpath
+
+
+def append_text_line(anchor: FsAnchor, *rel_parts: str, line: str, encoding: str = "utf-8") -> str:
+    fullpath = _resolve(anchor, *rel_parts)
+    os.makedirs(os.path.dirname(fullpath), exist_ok=True)
+    with open(fullpath, "a", encoding=encoding) as handle:
+        handle.write(line)
+    return fullpath
+
+
+def list_names(anchor: FsAnchor, *rel_dir_parts: str) -> list[str]:
+    fullpath = _resolve(anchor, *rel_dir_parts)
+    if not os.path.isdir(fullpath):
         raise PathTraversalError("Path escapes the allowed root.")
-    _reject_escape_parts(*rel_parts)
-    base_path = os.path.realpath(text)
-    joined = os.path.join(base_path, *rel_parts) if rel_parts else base_path
-    fullpath = os.path.realpath(joined)
-    if fullpath == base_path or fullpath.startswith(base_path + os.sep):
-        return os.path.getsize(fullpath)
-    raise PathTraversalError("Path escapes the allowed root.")
+    return sorted(name for name in os.listdir(fullpath))
 
 
-def read_text(root: str | Path, *rel_parts: str, encoding: str = "utf-8") -> str:
-    text = str(root)
-    if ".." in Path(text).parts:
-        raise PathTraversalError("Path escapes the allowed root.")
-    _reject_escape_parts(*rel_parts)
-    base_path = os.path.realpath(text)
-    joined = os.path.join(base_path, *rel_parts) if rel_parts else base_path
-    fullpath = os.path.realpath(joined)
-    if fullpath == base_path or fullpath.startswith(base_path + os.sep):
-        with open(fullpath, encoding=encoding) as handle:
-            return handle.read()
-    raise PathTraversalError("Path escapes the allowed root.")
-
-
-def read_bytes_at(root: str | Path, *rel_parts: str) -> bytes:
-    text = str(root)
-    if ".." in Path(text).parts:
-        raise PathTraversalError("Path escapes the allowed root.")
-    _reject_escape_parts(*rel_parts)
-    base_path = os.path.realpath(text)
-    joined = os.path.join(base_path, *rel_parts) if rel_parts else base_path
-    fullpath = os.path.realpath(joined)
-    if fullpath == base_path or fullpath.startswith(base_path + os.sep):
-        with open(fullpath, "rb") as handle:
-            return handle.read()
-    raise PathTraversalError("Path escapes the allowed root.")
-
-
-def write_text(root: str | Path, *rel_parts: str, text: str, encoding: str = "utf-8") -> str:
-    text_root = str(root)
-    if ".." in Path(text_root).parts:
-        raise PathTraversalError("Path escapes the allowed root.")
-    _reject_escape_parts(*rel_parts)
-    base_path = os.path.realpath(text_root)
-    joined = os.path.join(base_path, *rel_parts) if rel_parts else base_path
-    fullpath = os.path.realpath(joined)
-    if fullpath == base_path or fullpath.startswith(base_path + os.sep):
-        os.makedirs(os.path.dirname(fullpath), exist_ok=True)
-        with open(fullpath, "w", encoding=encoding) as handle:
-            handle.write(text)
-        return fullpath
-    raise PathTraversalError("Path escapes the allowed root.")
-
-
-def write_bytes_at(root: str | Path, *rel_parts: str, data: bytes) -> str:
-    text = str(root)
-    if ".." in Path(text).parts:
-        raise PathTraversalError("Path escapes the allowed root.")
-    _reject_escape_parts(*rel_parts)
-    base_path = os.path.realpath(text)
-    joined = os.path.join(base_path, *rel_parts) if rel_parts else base_path
-    fullpath = os.path.realpath(joined)
-    if fullpath == base_path or fullpath.startswith(base_path + os.sep):
-        os.makedirs(os.path.dirname(fullpath), exist_ok=True)
-        with open(fullpath, "wb") as handle:
-            handle.write(data)
-        return fullpath
-    raise PathTraversalError("Path escapes the allowed root.")
-
-
-def append_text_line(root: str | Path, *rel_parts: str, line: str, encoding: str = "utf-8") -> str:
-    text = str(root)
-    if ".." in Path(text).parts:
-        raise PathTraversalError("Path escapes the allowed root.")
-    _reject_escape_parts(*rel_parts)
-    base_path = os.path.realpath(text)
-    joined = os.path.join(base_path, *rel_parts) if rel_parts else base_path
-    fullpath = os.path.realpath(joined)
-    if fullpath == base_path or fullpath.startswith(base_path + os.sep):
-        os.makedirs(os.path.dirname(fullpath), exist_ok=True)
-        with open(fullpath, "a", encoding=encoding) as handle:
-            handle.write(line)
-        return fullpath
-    raise PathTraversalError("Path escapes the allowed root.")
-
-
-def list_names(root: str | Path, *rel_dir_parts: str) -> list[str]:
-    text = str(root)
-    if ".." in Path(text).parts:
-        raise PathTraversalError("Path escapes the allowed root.")
-    _reject_escape_parts(*rel_dir_parts)
-    base_path = os.path.realpath(text)
-    joined = os.path.join(base_path, *rel_dir_parts) if rel_dir_parts else base_path
-    fullpath = os.path.realpath(joined)
-    under_root = fullpath == base_path or fullpath.startswith(base_path + os.sep)
-    if under_root and os.path.isdir(fullpath):
-        return sorted(name for name in os.listdir(fullpath))
-    raise PathTraversalError("Path escapes the allowed root.")
-
-
-def glob_files(root: str | Path, rel_dir: str, pattern: str) -> list[str]:
+def glob_files(anchor: FsAnchor, rel_dir: str, pattern: str) -> list[str]:
     parts = _split_rel(rel_dir) if rel_dir else ()
     try:
-        text = str(root)
-        if ".." in Path(text).parts:
-            return []
-        _reject_escape_parts(*parts)
-        base_path = os.path.realpath(text)
-        joined = os.path.join(base_path, *parts) if parts else base_path
-        dir_path = os.path.realpath(joined)
-        if not (dir_path == base_path or dir_path.startswith(base_path + os.sep)):
-            return []
+        dir_path = _resolve(anchor, *parts)
         if not os.path.isdir(dir_path):
             return []
     except (PathTraversalError, ValueError, OSError):
         return []
+    from skillgate_ai.fs_anchor import anchor_base
+
+    base_path = anchor_base(anchor)
     out: list[str] = []
     for name in sorted(os.listdir(dir_path)):
         if not fnmatch.fnmatch(name, pattern):
@@ -191,8 +121,9 @@ def glob_files(root: str | Path, rel_dir: str, pattern: str) -> list[str]:
         child_parts = (*parts, name) if parts else (name,)
         joined_child = os.path.join(base_path, *child_parts)
         child_target = os.path.realpath(joined_child)
-        under_child = child_target == base_path or child_target.startswith(base_path + os.sep)
-        if under_child and os.path.isfile(child_target):
+        if not (child_target == base_path or child_target.startswith(base_path + os.sep)):
+            continue
+        if os.path.isfile(child_target):
             out.append("/".join(child_parts))
     return out
 
@@ -207,31 +138,17 @@ def iter_pack_files(
     from skillgate_ai.paths import pack_access_root
 
     anchor, pack_prefix = pack_access_root(skill_path)
-    anchor_text = str(anchor)
-    if ".." in Path(anchor_text).parts:
-        return
-    _reject_escape_parts(*pack_prefix)
-    anchor_base = os.path.realpath(anchor_text)
-    pack_joined = os.path.join(anchor_base, *pack_prefix) if pack_prefix else anchor_base
-    pack_base = os.path.realpath(pack_joined)
-    if not (pack_base == anchor_base or pack_base.startswith(anchor_base + os.sep)):
-        return
+    pack_base = _resolve(anchor, *pack_prefix)
     pending: list[tuple[str, ...]] = [()]
     while pending:
         rel_parts = pending.pop()
-        dir_joined = os.path.join(pack_base, *rel_parts) if rel_parts else pack_base
-        dir_path = os.path.realpath(dir_joined)
-        if not (dir_path == pack_base or dir_path.startswith(pack_base + os.sep)):
-            continue
+        dir_path = _resolve(anchor, *pack_prefix, *rel_parts)
         if not os.path.isdir(dir_path):
             continue
         subdirs: list[tuple[str, ...]] = []
         for name in sorted(os.listdir(dir_path)):
             child_parts = (*rel_parts, name)
-            child_joined = os.path.join(pack_base, *child_parts)
-            child_path = os.path.realpath(child_joined)
-            if not (child_path == pack_base or child_path.startswith(pack_base + os.sep)):
-                continue
+            child_path = _resolve(anchor, *pack_prefix, *child_parts)
             if os.path.isdir(child_path):
                 if name.lower() not in skip_dir_names:
                     subdirs.append(child_parts)

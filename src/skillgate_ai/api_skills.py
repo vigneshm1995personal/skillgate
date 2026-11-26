@@ -286,7 +286,10 @@ def register_skill_routes(app: FastAPI) -> None:
                 from skillgate_ai.paths import contained_path
 
                 require_under(source, contained_path(source, "scripts"))
-                if isdir_at(source, "scripts"):
+                from skillgate_ai.paths import pack_access_root
+
+                src_anchor, src_prefix = pack_access_root(source)
+                if isdir_at(src_anchor, *src_prefix, "scripts"):
                     for rel, _size in iter_pack_files(
                         source,
                         skip_dir_names=frozenset(),

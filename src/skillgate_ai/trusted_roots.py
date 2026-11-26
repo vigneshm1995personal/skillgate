@@ -7,12 +7,13 @@ from collections.abc import Callable
 from pathlib import Path
 
 from skillgate_ai.deploy import claude_skills_root, codex_skills_root, cursor_skills_root
+from skillgate_ai.fs_anchor import FsAnchor
 from skillgate_ai.paths import PathTraversalError, is_under_root
 
-_AGENT_GETTERS: tuple[Callable[[], Path], ...] = (
-    cursor_skills_root,
-    codex_skills_root,
-    claude_skills_root,
+_AGENT_GETTERS: tuple[tuple[Callable[[], Path], FsAnchor], ...] = (
+    (cursor_skills_root, FsAnchor.AGENT_CURSOR),
+    (codex_skills_root, FsAnchor.AGENT_CODEX),
+    (claude_skills_root, FsAnchor.AGENT_CLAUDE),
 )
 
 
@@ -51,17 +52,19 @@ def normalize_pack_target(skill_path: str | Path) -> Path:
     return Path(os.path.realpath(text))
 
 
+def _pin_skillgate_root(resolved: Path) -> None:
+    os.environ["SKILLGATE_ROOT"] = os.fsdecode(resolved)
+
+
 def register_standalone_pack_for_cli(pack: str | Path) -> None:
     """Set ``SKILLGATE_ROOT`` for standalone ``check <packdir>`` outside the cwd workspace."""
     resolved = normalize_pack_target(pack)
     workspace = _discover_workspace_from_cwd()
     if is_under_root(resolved, workspace):
         return
-    from skillgate_ai.contained_fs import isdir_at, isfile_at
-
-    if not isfile_at(resolved, "SKILL.md") and not isdir_at(resolved, "evals"):
+    if not _is_pack_mount(resolved):
         return
-    os.environ["SKILLGATE_ROOT"] = os.fsdecode(resolved)
+    _pin_skillgate_root(resolved)
 
 
 def _prefix_sibling_of_gate(bound: Path, gate: Path) -> bool:
@@ -74,45 +77,59 @@ def _prefix_sibling_of_gate(bound: Path, gate: Path) -> bool:
 
 
 def _is_pack_mount(resolved: Path) -> bool:
-    from skillgate_ai.contained_fs import isdir_at, isfile_at
     from skillgate_ai.paths import is_skill_pack
 
-    return (
-        is_skill_pack(resolved)
-        or isfile_at(resolved, "SKILL.md")
-        or isfile_at(resolved, "evals", "cases.yaml")
-        or isdir_at(resolved, "evals")
-        or isdir_at(resolved, "scripts")
-    )
+    try:
+        return (
+            is_skill_pack(resolved)
+            or (resolved / "SKILL.md").is_file()
+            or (resolved / "evals" / "cases.yaml").is_file()
+            or (resolved / "evals").is_dir()
+            or (resolved / "scripts").is_dir()
+        )
+    except OSError:
+        return False
 
 
-def pack_access_root(skill_path: str | Path) -> tuple[Path, tuple[str, ...]]:
-    """Fixed anchor plus relative segments; anchor is never the raw user path alone."""
+def pack_access_root(skill_path: str | Path) -> tuple[FsAnchor, tuple[str, ...]]:
+    """Fixed anchor kind plus validated relative segments to the pack root."""
     resolved = normalize_pack_target(skill_path)
     from skillgate_ai.paths import _has_workspace_skills, config_root_for
+
+    env_root = os.environ.get("SKILLGATE_ROOT")
+    if env_root:
+        gate = Path(env_root).resolve()
+        if is_under_root(resolved, gate):
+            rel = resolved.relative_to(gate)
+            return FsAnchor.SKILLGATE_ENV, rel.parts
 
     workspace = workspace_anchor()
     if is_under_root(resolved, workspace):
         rel = resolved.relative_to(workspace)
-        return workspace, rel.parts
+        return FsAnchor.WORKSPACE, rel.parts
 
-    for getter in _AGENT_GETTERS:
+    for getter, agent_anchor in _AGENT_GETTERS:
         try:
             agent = getter().resolve()
         except OSError:
             continue
         if resolved.parent.resolve() != agent:
             continue
-        from skillgate_ai.contained_fs import isdir_at, isfile_at
-
         name = resolved.name
-        if name and isdir_at(agent, name) and isfile_at(agent, name, "SKILL.md"):
-            return agent, (name,)
+        skill_dir = agent / name
+        try:
+            if name and skill_dir.is_dir() and (skill_dir / "SKILL.md").is_file():
+                return agent_anchor, (name,)
+        except OSError:
+            continue
 
     bound = config_root_for(resolved).resolve()
     if _has_workspace_skills(bound) and is_under_root(resolved, bound):
         rel = resolved.relative_to(bound)
-        return bound, rel.parts
+        if bound != workspace_anchor():
+            _pin_skillgate_root(bound)
+            return FsAnchor.SKILLGATE_ENV, rel.parts
+        return FsAnchor.WORKSPACE, rel.parts
 
     if is_under_root(resolved, bound) and _is_pack_mount(resolved):
         env_root = os.environ.get("SKILLGATE_ROOT")
@@ -120,24 +137,28 @@ def pack_access_root(skill_path: str | Path) -> tuple[Path, tuple[str, ...]]:
             gate = Path(env_root).resolve()
             if _has_workspace_skills(gate) and _prefix_sibling_of_gate(bound, gate):
                 raise PathTraversalError("Path escapes the allowed root.")
-        if resolved == bound:
-            return bound, ()
-        rel = resolved.relative_to(bound)
-        return bound, rel.parts
-
-    env_root = os.environ.get("SKILLGATE_ROOT")
-    if env_root:
-        gate = Path(env_root).resolve()
-        if _has_workspace_skills(gate) and not is_under_root(resolved, gate):
-            raise PathTraversalError("Path escapes the allowed root.")
-        if is_under_root(resolved, gate):
-            rel = resolved.relative_to(gate)
-            return gate, rel.parts
+        _pin_skillgate_root(bound if resolved == bound else resolved)
+        gate = Path(os.environ["SKILLGATE_ROOT"]).resolve()
+        rel = resolved.relative_to(gate)
+        return FsAnchor.SKILLGATE_ENV, rel.parts
 
     raw = str(skill_path)
     candidate = Path(os.path.expanduser(raw) if raw.startswith("~") else raw)
     if candidate.is_absolute() and ".." not in candidate.parts and not candidate.exists():
-        return candidate.resolve(), ()
+        _pin_skillgate_root(candidate.resolve())
+        return FsAnchor.SKILLGATE_ENV, ()
+
+    if env_root:
+        gate = Path(env_root).resolve()
+        if _has_workspace_skills(gate) and not is_under_root(resolved, gate):
+            raise PathTraversalError("Path escapes the allowed root.")
+
+    try:
+        if resolved.is_dir() and ".." not in resolved.parts:
+            _pin_skillgate_root(resolved)
+            return FsAnchor.SKILLGATE_ENV, ()
+    except OSError:
+        pass
 
     raise PathTraversalError("Path escapes the allowed root.")
 
@@ -147,5 +168,5 @@ def skill_pack_root_from_access(skill_path: str | Path) -> Path:
 
     anchor, parts = pack_access_root(skill_path)
     if not parts:
-        return anchor
+        return Path(filesystem_path_under(anchor))
     return Path(filesystem_path_under(anchor, *parts))

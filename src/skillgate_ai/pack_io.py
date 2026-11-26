@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from skillgate_ai.fs_anchor import FsAnchor
 from skillgate_ai.contained_fs import (
     _split_rel as _split_rel,
 )
@@ -21,7 +22,10 @@ from skillgate_ai.contained_fs import (
 from skillgate_ai.paths import PathTraversalError, pack_access_root, pack_file_at
 
 
-def _pack_parts(skill_path: str | Path, rel: str) -> tuple[Path, tuple[str, ...]]:
+def _pack_parts(skill_path: str | Path, rel: str) -> tuple[FsAnchor, tuple[str, ...]]:
+    from skillgate_ai.trusted_roots import register_standalone_pack_for_cli
+
+    register_standalone_pack_for_cli(skill_path)
     anchor, prefix = pack_access_root(skill_path)
     return anchor, (*prefix, *_split_rel(rel))
 

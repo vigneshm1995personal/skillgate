@@ -5,20 +5,21 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-
-class PathTraversalError(ValueError):
-    """Resolved path escapes the allowed root."""
+from skillgate_ai.fs_anchor import FsAnchor
 
 
-def filesystem_path_under(root: str | Path, *parts: str | Path) -> str:
-    """Resolved absolute path under ``root`` (separator-aware containment for CodeQL)."""
-    text = str(root)
-    if ".." in Path(text).parts:
-        raise PathTraversalError("Path escapes the allowed root.")
+from skillgate_ai.path_traversal import PathTraversalError
+
+__all__ = ["PathTraversalError", "FsAnchor"]
+
+
+def filesystem_path_under(anchor: FsAnchor, *parts: str | Path) -> str:
+    """Resolved absolute path under a fixed anchor (separator-aware containment)."""
+    from skillgate_ai.fs_anchor import anchor_base
     if any(str(part) in {".", ".."} or ".." in Path(str(part)).parts for part in parts):
         raise PathTraversalError("Path escapes the allowed root.")
     pieces = [str(part) for part in parts]
-    base_path = os.path.realpath(text)
+    base_path = anchor_base(anchor)
     joined = os.path.join(base_path, *pieces) if pieces else base_path
     fullpath = os.path.realpath(joined)
     if fullpath == base_path or fullpath.startswith(base_path + os.sep):
@@ -27,8 +28,21 @@ def filesystem_path_under(root: str | Path, *parts: str | Path) -> str:
 
 
 def contained_path(root: str | Path, *parts: str | Path) -> Path:
-    """Join ``parts`` under ``root`` and return the resolved path when it stays inside ``root``."""
-    return Path(filesystem_path_under(root, *parts))
+    """Join ``parts`` under ``root`` using fixed anchors."""
+    from skillgate_ai.trusted_roots import pack_access_root
+
+    probe = Path(root).resolve()
+    piece_parts = [str(p) for p in parts]
+    env = os.environ.get("SKILLGATE_ROOT")
+    if env and is_under_root(probe, Path(env).resolve()):
+        rel = probe.relative_to(Path(env).resolve())
+        return Path(filesystem_path_under(FsAnchor.SKILLGATE_ENV, *rel.parts, *piece_parts))
+    workspace = project_root().resolve()
+    if is_under_root(probe, workspace):
+        rel = probe.relative_to(workspace)
+        return Path(filesystem_path_under(FsAnchor.WORKSPACE, *rel.parts, *piece_parts))
+    anchor, prefix = pack_access_root(probe)
+    return Path(filesystem_path_under(anchor, *prefix, *piece_parts))
 
 
 def require_under(root: str | Path, path: str | Path) -> Path:
@@ -41,9 +55,11 @@ def require_under(root: str | Path, path: str | Path) -> Path:
 
 
 def is_skill_pack(path: str | Path) -> bool:
-    from skillgate_ai.contained_fs import isdir_at, isfile_at
-
-    return isfile_at(path, "SKILL.md") and isdir_at(path, "evals")
+    probe = Path(path)
+    try:
+        return (probe / "SKILL.md").is_file() and (probe / "evals").is_dir()
+    except OSError:
+        return False
 
 
 def nearest_skill_pack(start: str | Path | None = None) -> Path | None:
@@ -76,9 +92,11 @@ def resolve_user_path(target: str | Path, root: Path | None = None) -> Path:
 
 def _has_workspace_skills(candidate: Path) -> bool:
     """A workspace is any folder with ``skills/`` (including right after ``skillgate init``)."""
-    from skillgate_ai.contained_fs import isdir_at
-
-    return isdir_at(candidate, "skills")
+    try:
+        skills = candidate / "skills"
+        return skills.is_dir()
+    except OSError:
+        return False
 
 
 def project_root() -> Path:
@@ -126,19 +144,22 @@ def config_root_for(path: str | Path | None = None) -> Path:
     pack = None
     nearest_workspace: Path | None = None
     nearest_keys: Path | None = None
-    from skillgate_ai.contained_fs import isdir_at, isfile_at
-
     for candidate in (start, *start.parents):
         if nearest_workspace is None and _has_workspace_skills(candidate):
             nearest_workspace = candidate
-        if nearest_keys is None and isfile_at(candidate, ".skillgate", "keys"):
-            nearest_keys = candidate
-        if pack is None and (
-            is_skill_pack(candidate)
-            or isfile_at(candidate, "SKILL.md")
-            or isdir_at(candidate, "evals")
-            or (candidate == start and isdir_at(candidate))
-        ):
+        try:
+            if nearest_keys is None and (candidate / ".skillgate" / "keys").is_file():
+                nearest_keys = candidate
+        except OSError:
+            pass
+        try:
+            is_pack = is_skill_pack(candidate)
+            has_skill_md = (candidate / "SKILL.md").is_file()
+            has_evals = (candidate / "evals").is_dir()
+            start_dir = candidate == start and candidate.is_dir()
+        except OSError:
+            is_pack = has_skill_md = has_evals = start_dir = False
+        if pack is None and (is_pack or has_skill_md or has_evals or start_dir):
             pack = candidate
     if nearest_workspace is not None:
         return nearest_workspace
@@ -171,7 +192,7 @@ def _rel_under_config_root(path: str | Path) -> tuple[Path, tuple[str, ...]] | N
     return anchor, rel.parts
 
 
-def pack_access_root(skill_path: str | Path) -> tuple[Path, tuple[str, ...]]:
+def pack_access_root(skill_path: str | Path) -> tuple[FsAnchor, tuple[str, ...]]:
     """Workspace or agent anchor and relative path segments to a skill pack root."""
     from skillgate_ai.trusted_roots import pack_access_root as trusted_pack_access_root
 

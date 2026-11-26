@@ -28,9 +28,10 @@ def test_nearest_skill_pack_none_outside(tmp_path: Path) -> None:
     assert nearest_skill_pack(tmp_path) is None
 
 
-def test_contained_path_rejects_escape(tmp_path: Path) -> None:
+def test_contained_path_rejects_escape(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     root = (tmp_path / "ws").resolve()
     root.mkdir()
+    monkeypatch.setenv("SKILLGATE_ROOT", str(root))
     with pytest.raises(PathTraversalError):
         contained_path(root, "..", "etc", "passwd")
 
@@ -44,9 +45,10 @@ def test_require_under_rejects_outside(tmp_path: Path) -> None:
         require_under(root, outside)
 
 
-def test_contained_path_rejects_symlink_escape(tmp_path: Path) -> None:
+def test_contained_path_rejects_symlink_escape(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     root = (tmp_path / "ws").resolve()
     root.mkdir()
+    monkeypatch.setenv("SKILLGATE_ROOT", str(root))
     outside = (tmp_path / "outside").resolve()
     outside.mkdir()
     secret = outside / "leak.txt"
@@ -60,12 +62,16 @@ def test_contained_path_rejects_symlink_escape(tmp_path: Path) -> None:
         contained_path(root, "escape", "leak.txt")
 
 
-def test_contained_fs_rejects_prefix_sibling_after_realpath(tmp_path: Path) -> None:
+def test_contained_fs_rejects_prefix_sibling_after_realpath(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """``/tmp/a`` must not absorb ``/tmp/ab`` (separator-aware containment)."""
     from skillgate_ai.contained_fs import isfile_at
+    from skillgate_ai.fs_anchor import FsAnchor
 
     root = (tmp_path / "a").resolve()
     root.mkdir()
+    monkeypatch.setenv("SKILLGATE_ROOT", str(root))
     sibling = (tmp_path / "ab").resolve()
     sibling.mkdir()
     leak = sibling / "leak.txt"
@@ -74,10 +80,10 @@ def test_contained_fs_rejects_prefix_sibling_after_realpath(tmp_path: Path) -> N
         os.symlink(sibling, root / "escape")
     except (OSError, NotImplementedError):
         pytest.skip("symlinks not supported here")
-    assert not isfile_at(root, "escape", "leak.txt")
+    assert not isfile_at(FsAnchor.SKILLGATE_ENV, "escape", "leak.txt")
 
 
-def test_contained_fs_roundtrip_under_root(tmp_path: Path) -> None:
+def test_contained_fs_roundtrip_under_root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     from skillgate_ai.contained_fs import (
         file_size,
         glob_files,
@@ -90,20 +96,23 @@ def test_contained_fs_roundtrip_under_root(tmp_path: Path) -> None:
         write_bytes_at,
         write_text,
     )
+    from skillgate_ai.fs_anchor import FsAnchor
     from skillgate_ai.paths import filesystem_path_under
 
     root = (tmp_path / "pack").resolve()
     root.mkdir()
+    monkeypatch.setenv("SKILLGATE_ROOT", str(root))
+    anchor = FsAnchor.SKILLGATE_ENV
     nested = root / "nested"
     nested.mkdir()
-    rel = write_text(root, "nested", "note.txt", text="hello")
-    assert filesystem_path_under(root, "nested", "note.txt") == rel
-    assert resolved_relative(root, "nested/note.txt") == rel
-    assert isfile_at(root, "nested", "note.txt")
-    assert isdir_at(root, "nested")
-    assert read_text(root, "nested", "note.txt") == "hello"
-    assert file_size(root, "nested", "note.txt") > 0
-    write_bytes_at(root, "nested", "bin.dat", data=b"\x01\x02")
-    assert read_bytes_at(root, "nested", "bin.dat") == b"\x01\x02"
-    assert "note.txt" in list_names(root, "nested")
-    assert "nested/note.txt" in glob_files(root, "nested", "*.txt")
+    rel = write_text(anchor, "nested", "note.txt", text="hello")
+    assert filesystem_path_under(anchor, "nested", "note.txt") == rel
+    assert resolved_relative(anchor, "nested/note.txt") == rel
+    assert isfile_at(anchor, "nested", "note.txt")
+    assert isdir_at(anchor, "nested")
+    assert read_text(anchor, "nested", "note.txt") == "hello"
+    assert file_size(anchor, "nested", "note.txt") > 0
+    write_bytes_at(anchor, "nested", "bin.dat", data=b"\x01\x02")
+    assert read_bytes_at(anchor, "nested", "bin.dat") == b"\x01\x02"
+    assert "note.txt" in list_names(anchor, "nested")
+    assert "nested/note.txt" in glob_files(anchor, "nested", "*.txt")

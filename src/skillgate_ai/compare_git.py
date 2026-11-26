@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import shutil
+import os
 import subprocess
 import tempfile
 import uuid
@@ -67,30 +68,38 @@ def list_skill_git_versions(pack: Path) -> list[dict[str, str]]:
 
 
 def _is_skill_pack_mount(probe: Path) -> bool:
-    from skillgate_ai.contained_fs import isdir_at, isfile_at
     from skillgate_ai.paths import is_skill_pack
 
-    return (
-        is_skill_pack(probe)
-        or isfile_at(probe, "SKILL.md")
-        or isdir_at(probe, "evals")
-        or isdir_at(probe, "scripts")
-    )
+    try:
+        return (
+            is_skill_pack(probe)
+            or (probe / "SKILL.md").is_file()
+            or (probe / "evals").is_dir()
+            or (probe / "scripts").is_dir()
+        )
+    except OSError:
+        return False
 
 
 def find_git_root(pack: Path) -> Path:
-    from skillgate_ai.contained_fs import isdir_at, isfile_at
-    from skillgate_ai.paths import skill_pack_root
+    from skillgate_ai.paths import pack_path_string, skill_pack_root
 
     probe = Path(pack)
-    if isfile_at(probe, "SKILL.md") or isdir_at(probe, "evals") or _is_skill_pack_mount(probe):
-        pack = skill_pack_root(probe)
+    if _is_skill_pack_mount(probe):
+        skill_pack_root(probe)
+        workdir = pack_path_string(probe, ".")
     else:
-        pack = probe.resolve()
+        if ".." in probe.parts:
+            raise CompareError(
+                "This skill folder is not inside a git repository.",
+                hint="Use history runs to compare versions, or move the pack into a git work tree.",
+            )
+        workdir = os.fsdecode(probe.resolve())
     try:
+        # S603: subprocess git uses pack_path_string workdir or probe vetted for ..
+        # S607: git binary is resolved from PATH by design in this CLI helper.
         out = subprocess.run(  # noqa: S603 - fixed git argv; ref and path are separate argv items
-            ["git", "rev-parse", "--show-toplevel"],  # noqa: S607 - git resolved from PATH by design
-            cwd=pack,
+            ["git", "-C", workdir, "rev-parse", "--show-toplevel"],  # noqa: S607 - git from PATH
             check=True,
             capture_output=True,
             text=True,

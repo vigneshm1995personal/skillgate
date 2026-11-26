@@ -155,24 +155,27 @@ def _immediate_agent_skill(path: Path) -> bool:
     import os
 
     from skillgate_ai.contained_fs import isdir_at, isfile_at
+    from skillgate_ai.fs_anchor import FsAnchor
 
     raw = os.path.expanduser(str(path))
     if ".." in Path(raw).parts:
         return False
     name = os.path.basename(os.path.normpath(raw))
-    parent = os.path.normpath(os.path.dirname(raw))
     if not name or name in {".", ".."}:
         return False
-    for _source, getter in SOURCE_ROOTS:
-        if getter is None:
-            continue
+    agent_anchors = (
+        (cursor_skills_root, FsAnchor.AGENT_CURSOR),
+        (codex_skills_root, FsAnchor.AGENT_CODEX),
+        (claude_skills_root, FsAnchor.AGENT_CLAUDE),
+    )
+    for getter, anchor in agent_anchors:
         try:
             root = os.path.realpath(str(getter()))
         except OSError:
             continue
-        if os.path.normpath(parent) != os.path.normpath(root):
+        if os.path.normpath(os.path.dirname(raw)) != os.path.normpath(root):
             continue
-        return isdir_at(root, name) and isfile_at(root, name, "SKILL.md")
+        return isdir_at(anchor, name) and isfile_at(anchor, name, "SKILL.md")
     return False
 
 
