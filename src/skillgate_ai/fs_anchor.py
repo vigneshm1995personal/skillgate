@@ -12,6 +12,8 @@ from skillgate_ai.path_traversal import PathTraversalError
 class FsAnchor(Enum):
     WORKSPACE = "workspace"
     SKILLGATE_ENV = "skillgate_env"
+    CONFIG = "config"
+    ALLOW_ROOT = "allow_root"
     AGENT_CURSOR = "agent_cursor"
     AGENT_CODEX = "agent_codex"
     AGENT_CLAUDE = "agent_claude"
@@ -32,6 +34,21 @@ def anchor_base(anchor: FsAnchor) -> str:
         if not env or ".." in Path(env).parts:
             raise PathTraversalError("Path escapes the allowed root.")
         return os.path.realpath(env)
+    if anchor is FsAnchor.CONFIG:
+        from skillgate_ai.paths import config_root_for
+
+        base = config_root_for(None)
+        text = os.fsdecode(base)
+        if ".." in Path(text).parts:
+            raise PathTraversalError("Path escapes the allowed root.")
+        return os.path.realpath(text)
+    if anchor is FsAnchor.ALLOW_ROOT:
+        from skillgate_ai.allow_root import matched_allow_root_base
+
+        base = matched_allow_root_base()
+        if not base:
+            raise PathTraversalError("Path escapes the allowed root.")
+        return base
     if anchor is FsAnchor.AGENT_CURSOR:
         from skillgate_ai.deploy import cursor_skills_root
 

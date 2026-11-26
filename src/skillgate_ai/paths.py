@@ -62,15 +62,22 @@ def require_under(root: str | Path, path: str | Path) -> Path:
 def is_skill_pack(path: str | Path) -> bool:
     from skillgate_ai.pack_layout import (
         discovery_skill_pack_dir,
+        loose_pack_mount_at,
         relative_segments_under,
         strict_skill_pack_at,
     )
-    from skillgate_ai.trusted_roots import _AGENT_GETTERS, normalize_pack_target
+    from skillgate_ai.trusted_roots import _agent_roots, normalize_pack_target, pack_access_root
 
     try:
         resolved = normalize_pack_target(path)
     except PathTraversalError:
         return False
+    try:
+        anchor, parts = pack_access_root(resolved)
+        if loose_pack_mount_at(anchor, *parts):
+            return True
+    except PathTraversalError:
+        pass
     if discovery_skill_pack_dir(resolved):
         return True
     target = os.path.realpath(os.fsdecode(resolved))
@@ -84,7 +91,7 @@ def is_skill_pack(path: str | Path) -> bool:
     parts = relative_segments_under(workspace, target)
     if parts is not None:
         return strict_skill_pack_at(FsAnchor.WORKSPACE, *parts)
-    for getter, agent_anchor in _AGENT_GETTERS:
+    for getter, agent_anchor in _agent_roots():
         try:
             agent = os.path.realpath(os.fsdecode(getter().resolve()))
         except OSError:
