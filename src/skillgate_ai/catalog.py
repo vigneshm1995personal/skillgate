@@ -166,9 +166,7 @@ def _immediate_agent_skill(path: Path) -> bool:
         if parent != root:
             continue
         name = resolved.name
-        if not isdir_at(root, name) or not isfile_at(root, name, "SKILL.md"):
-            return False
-        return True
+        return isdir_at(root, name) and isfile_at(root, name, "SKILL.md")
     return False
 
 
