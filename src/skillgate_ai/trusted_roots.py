@@ -179,11 +179,7 @@ def pack_access_root(skill_path: str | Path) -> tuple[FsAnchor, tuple[str, ...]]
         return FsAnchor.SKILLGATE_ENV, rel.parts
 
     target = os.path.realpath(os.fsdecode(resolved))
-    if (
-        resolved.is_absolute()
-        and ".." not in resolved.parts
-        and not os.path.exists(target)
-    ):
+    if resolved.is_absolute() and ".." not in resolved.parts and not os.path.exists(target):
         _pin_skillgate_root(resolved)
         return FsAnchor.SKILLGATE_ENV, ()
 

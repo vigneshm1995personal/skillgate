@@ -14,6 +14,7 @@ __all__ = ["PathTraversalError", "FsAnchor"]
 def filesystem_path_under(anchor: FsAnchor, *parts: str | Path) -> str:
     """Resolved absolute path under a fixed anchor (separator-aware containment)."""
     from skillgate_ai.fs_anchor import anchor_base
+
     if any(str(part) in {".", ".."} or ".." in Path(str(part)).parts for part in parts):
         raise PathTraversalError("Path escapes the allowed root.")
     pieces = [str(part) for part in parts]
