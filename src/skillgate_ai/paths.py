@@ -18,12 +18,12 @@ def filesystem_path_under(root: str | Path, *parts: str | Path) -> str:
     if any(str(part) in {".", ".."} or ".." in Path(str(part)).parts for part in parts):
         raise PathTraversalError("Path escapes the allowed root.")
     pieces = [str(part) for part in parts]
-    base_path = os.path.normpath(os.path.realpath(text))
+    base_path = os.path.realpath(text)
     joined = os.path.join(base_path, *pieces) if pieces else base_path
-    fullpath = os.path.normpath(os.path.realpath(joined))
-    if not (fullpath == base_path or fullpath.startswith(base_path + os.sep)):
-        raise PathTraversalError("Path escapes the allowed root.")
-    return fullpath
+    fullpath = os.path.realpath(joined)
+    if fullpath == base_path or fullpath.startswith(base_path + os.sep):
+        return fullpath
+    raise PathTraversalError("Path escapes the allowed root.")
 
 
 def contained_path(root: str | Path, *parts: str | Path) -> Path:
@@ -126,11 +126,11 @@ def skill_pack_root(skill_path: str | Path) -> Path:
             or isdir_at(resolved)
         ):
             return resolved
-        if not resolved.exists() and ".." not in Path(text).parts:
+        if ".." not in Path(text).parts:
             candidate = Path(text)
             if candidate.is_absolute():
                 return candidate
-            return (Path.cwd() / candidate).resolve()
+            return Path(filesystem_path_under(Path.cwd(), *candidate.parts))
         raise
 
 
