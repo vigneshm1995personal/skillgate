@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 import tempfile
@@ -31,9 +32,11 @@ def list_skill_git_versions(pack: Path) -> list[dict[str, str]]:
         root = find_git_root(pack)
     except CompareError:
         return []
+    from skillgate_ai.paths import PathTraversalError, require_under
+
     try:
-        rel = pack.resolve().relative_to(root.resolve())
-    except ValueError:
+        rel = require_under(root, pack).relative_to(root)
+    except (PathTraversalError, ValueError, OSError):
         return []
     spec = "." if str(rel) in {"", "."} else str(rel)
     try:
@@ -65,11 +68,41 @@ def list_skill_git_versions(pack: Path) -> list[dict[str, str]]:
 
 
 def find_git_root(pack: Path) -> Path:
-    pack = pack.resolve()
+    from skillgate_ai.pack_layout import relative_segments_under
+    from skillgate_ai.paths import (
+        FsAnchor,
+        filesystem_path_under,
+        is_skill_pack,
+        pack_path_string,
+        project_root,
+        skill_pack_root,
+    )
+    from skillgate_ai.trusted_roots import normalize_pack_target
+
+    probe = Path(pack)
+    if is_skill_pack(probe):
+        skill_pack_root(probe)
+        workdir = pack_path_string(probe, ".")
+    else:
+        if ".." in probe.parts:
+            raise CompareError(
+                "This skill folder is not inside a git repository.",
+                hint="Use history runs to compare versions, or move the pack into a git work tree.",
+            )
+        target = os.path.realpath(os.fsdecode(normalize_pack_target(probe)))
+        workspace = os.path.realpath(os.fsdecode(project_root()))
+        rel = relative_segments_under(workspace, target)
+        if rel is None:
+            raise CompareError(
+                "This skill folder is not inside a git repository.",
+                hint="Use history runs to compare versions, or move the pack into a git work tree.",
+            )
+        workdir = filesystem_path_under(FsAnchor.WORKSPACE, *rel)
     try:
+        # S603: subprocess git uses pack_path_string workdir or probe vetted for ..
+        # S607: git binary is resolved from PATH by design in this CLI helper.
         out = subprocess.run(  # noqa: S603 - fixed git argv; ref and path are separate argv items
-            ["git", "rev-parse", "--show-toplevel"],  # noqa: S607 - git resolved from PATH by design
-            cwd=pack,
+            ["git", "-C", workdir, "rev-parse", "--show-toplevel"],  # noqa: S607 - git from PATH
             check=True,
             capture_output=True,
             text=True,

@@ -91,20 +91,30 @@ def folder_slug(folder: Path) -> str:
 
 
 def ingest_skill(path: str | Path, *, strict: bool = True) -> Skill:
-    folder = Path(path).expanduser().resolve()
+    from skillgate_ai.examples import is_bundled_example_path
+    from skillgate_ai.pack_io import is_pack_file, read_pack_text
+    from skillgate_ai.paths import skill_pack_root
+
+    if not strict and is_bundled_example_path(Path(path)):
+        return _ingest_lenient(Path(path))
+    folder = skill_pack_root(path)
     if not strict:
         return _ingest_lenient(folder)
-    if not folder.exists():
+    from skillgate_ai.contained_fs import isdir_at
+    from skillgate_ai.paths import PathTraversalError, pack_access_root
+
+    try:
+        anchor, prefix = pack_access_root(folder)
+    except PathTraversalError as exc:
+        raise IngestError(f"Skill folder not found: {folder}") from exc
+    if not isdir_at(anchor, *prefix):
         raise IngestError(f"Skill folder not found: {folder}")
-    if not folder.is_dir():
-        raise IngestError(f"Skill path is not a directory: {folder}")
-    skill_md = folder / "SKILL.md"
-    if not skill_md.is_file():
+    if not is_pack_file(folder, "SKILL.md"):
         raise IngestError(
             f"Missing SKILL.md in {folder.name}/",
             hint="A skill is a folder with a SKILL.md file (agentskills spec).",
         )
-    text = skill_md.read_text(encoding="utf-8")
+    text = read_pack_text(folder, "SKILL.md")
     match = FRONTMATTER_RE.match(text)
     if not match:
         raise IngestError(
@@ -147,8 +157,10 @@ def ingest_skill(path: str | Path, *, strict: bool = True) -> Skill:
 
 
 def _require_cases_match(folder: Path) -> None:
+    from skillgate_ai.pack_io import is_pack_file
+
     for name in ("cases.yaml", "cases.yml"):
-        if (folder / "evals" / name).is_file():
+        if is_pack_file(folder, f"evals/{name}"):
             from skillgate_ai.case_pack import load_case_pack
 
             load_case_pack(folder)
@@ -195,7 +207,15 @@ def _ingest_lenient(folder: Path) -> Skill:
     Never raises. Broken SKILL.md is listed with a friendly warning.
     """
     slug = folder_slug(folder) if folder.name else "skill"
-    if not folder.exists() or not folder.is_dir():
+    from skillgate_ai.contained_fs import isdir_at
+    from skillgate_ai.paths import PathTraversalError, pack_access_root
+
+    try:
+        anchor, prefix = pack_access_root(folder)
+        missing = not isdir_at(anchor, *prefix)
+    except PathTraversalError:
+        missing = True
+    if missing:
         return Skill(
             path=folder,
             name=slug,
@@ -204,8 +224,9 @@ def _ingest_lenient(folder: Path) -> Skill:
             body="",
             warning="This skill folder is missing.",
         )
-    skill_md = folder / "SKILL.md"
-    if not skill_md.is_file():
+    from skillgate_ai.pack_io import is_pack_file, read_pack_text
+
+    if not is_pack_file(folder, "SKILL.md"):
         return Skill(
             path=folder,
             name=slug,
@@ -215,7 +236,7 @@ def _ingest_lenient(folder: Path) -> Skill:
             warning="This skill is missing its SKILL.md file.",
         )
     try:
-        text = skill_md.read_text(encoding="utf-8")
+        text = read_pack_text(folder, "SKILL.md")
     except (OSError, UnicodeError):
         return Skill(
             path=folder,

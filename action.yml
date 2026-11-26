@@ -60,6 +60,7 @@ runs:
       id: check
       shell: bash
       env:
+        SKILLGATE_ACTION_SCRIPT: ${{ github.action_path }}/scripts/skillgate_action.py
         INPUT_PATH: ${{ inputs.path }}
         INPUT_VERSION: ${{ inputs.version }}
         INPUT_JUDGE: ${{ inputs.judge }}
@@ -68,4 +69,4 @@ runs:
         INPUT_ACCOUNT_ID: ${{ inputs.account-id }}
         INPUT_HARNESS: ${{ inputs.harness }}
         INPUT_ARGS: ${{ inputs.args }}
-      run: python "${{ github.action_path }}/scripts/skillgate_action.py"
+      run: python "$SKILLGATE_ACTION_SCRIPT"

@@ -34,12 +34,10 @@ def new_cmd(
     name: str = typer.Argument(..., help="Skill folder name (lowercase, hyphens)"),
 ) -> None:
     """Create `skills/NAME` with SKILL.md and starter checks (same as the UI)."""
-    from pathlib import Path as _Path
-
-    from skillgate_ai.paths import config_root_for
+    from skillgate_ai.paths import project_root
     from skillgate_ai.workspace import new_skill
 
-    root = config_root_for(_Path.cwd())
+    root = project_root()
     try:
         dest = new_skill(root, name)
     except SkillGateError as exc:

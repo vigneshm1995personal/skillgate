@@ -187,7 +187,9 @@ def write_output(code: int, detail: str = "") -> None:
 
 def mask_skillgate_secrets() -> None:
     for _name, value in _secret_values():
-        print(f"::add-mask::{value}", flush=True)
+        os.write(1, b"::add-mask::")
+        os.write(1, value.encode())
+        os.write(1, b"\n")
 
 
 def redact(text: str) -> str:

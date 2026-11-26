@@ -6,10 +6,13 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any, cast
 
+from skillgate_ai.api_models import CheckPreviewBody
+
 try:
-    from fastapi import Request
+    from fastapi import Body, Request
 except ModuleNotFoundError:
     Request = Any  # type: ignore[assignment,misc]  # core checks show needs no web stack
+    Body = Any  # type: ignore[assignment]  # optional ui extra
 
 from skillgate_ai.errors import SkillGateError
 from skillgate_ai.judge_spec import (
@@ -111,7 +114,9 @@ def _spec_for_pack(pack: Path | None) -> JudgeSpec:
 def _skill_text(pack: Path | None) -> str | None:
     if pack is None:
         return None
-    path = pack / "SKILL.md"
+    from skillgate_ai.paths import contained_path
+
+    path = contained_path(pack, "SKILL.md")
     if not path.is_file():
         return None
     return path.read_text(encoding="utf-8")
@@ -146,9 +151,11 @@ def register_check_routes(app: Any) -> None:
         return find_skill(state_of(request).root, text)
 
     @app.post("/api/checks/preview")
-    async def preview_check(request: Request) -> dict[str, Any]:
-        body = await request.json()
-        raw = body.get("question") if isinstance(body, dict) else None
+    async def preview_check(
+        request: Request,
+        payload: CheckPreviewBody = Body(),
+    ) -> dict[str, Any]:
+        raw = payload.question
         if not isinstance(raw, dict):
             fail(400, "Pass the check to preview.")
         try:

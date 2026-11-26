@@ -934,7 +934,8 @@ def test_tryout_history_does_not_unlock_deploy(tmp_path: Path, monkeypatch) -> N
 def test_root_level_example_pack_is_listed_and_history_shows_cli_runs(
     tmp_path: Path, monkeypatch
 ) -> None:
-    pack = tmp_path / "pdf"
+    pack = tmp_path / "skills" / "pdf"
+    pack.parent.mkdir(parents=True, exist_ok=True)
     shutil.copytree(ROOT / "skills" / "pdf", pack)
     append_eval(
         pack,

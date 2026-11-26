@@ -26,7 +26,7 @@ def test_write_launch_agent_omits_keep_alive_by_default(launch_home: Path) -> No
     )
     plist = plistlib.loads(dest.read_bytes())
     assert "KeepAlive" not in plist
-    assert (dest.stat().st_mode & 0o777) == 0o644
+    assert (dest.stat().st_mode & 0o777) == 0o600
     assert (launch_dir.stat().st_mode & 0o777) == 0o755
 
 

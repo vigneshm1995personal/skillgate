@@ -9,10 +9,11 @@ from typing import Any
 from skillgate_ai.extras import UI_FEATURE, MissingExtraError
 
 try:
-    from fastapi import FastAPI, Request
+    from fastapi import Body, FastAPI, Request
 except ModuleNotFoundError as exc:
     raise MissingExtraError(UI_FEATURE, "ui") from exc
 
+from skillgate_ai.api_models import CompareModelsBody, CompareVersionsBody
 from skillgate_ai.api_payloads import AppState, fail, state_of
 from skillgate_ai.catalog import find_skill
 from skillgate_ai.compare import (
@@ -94,16 +95,20 @@ def register_compare_routes(app: FastAPI) -> None:
         return scrub_customer_compare_payload(row)
 
     @app.post("/api/compare/models")
-    async def post_compare_models(request: Request) -> dict[str, Any]:
+    async def post_compare_models(
+        request: Request,
+        payload: CompareModelsBody = Body(),
+    ) -> dict[str, Any]:
         state = state_of(request)
-        body = await request.json()
-        return _start_models_compare(state, body)
+        return _start_models_compare(state, payload.model_dump())
 
     @app.post("/api/compare/versions")
-    async def post_compare_versions(request: Request) -> dict[str, Any]:
+    async def post_compare_versions(
+        request: Request,
+        payload: CompareVersionsBody = Body(),
+    ) -> dict[str, Any]:
         state = state_of(request)
-        body = await request.json()
-        return _start_versions_compare(state, body)
+        return _start_versions_compare(state, payload.model_dump())
 
     @app.post("/api/compare/{compare_id}/cancel")
     def post_compare_cancel(compare_id: str, request: Request) -> dict[str, Any]:

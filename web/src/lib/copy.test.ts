@@ -109,7 +109,7 @@ describe("settings footer", () => {
     expect(form).toMatch(/Account id/)
     expect(form).toMatch(/htmlFor=\{`\$\{idPrefix\}-base-url`\}/)
     expect(form).toMatch(/Base URL/)
-    expect(form).toMatch(/https:\/\/example\.com\/v1/)
+    expect(form).toContain("https://example.com/v1")
     expect(form).not.toMatch(/settings-judge-endpoint/)
     expect(form).toMatch(/htmlFor=\{`\$\{idPrefix\}-model`\}/)
     expect(form).toMatch(/API key/)

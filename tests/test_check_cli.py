@@ -60,7 +60,7 @@ def test_live_missing_key_is_not_recorded_as_failed_check(
     _wipe_history(pack)
     hist = pack / "evals" / "history"
     assert latest_check_passed(pack) is None
-    result = runner.invoke(app, ["check", str(pack)])
+    result = runner.invoke(app, ["check", str(pack), "--allow-root", str(tmp_path)])
     assert result.exit_code == 2
     assert "No agent is available" in result.stdout
     assert latest_check_passed(pack) is None

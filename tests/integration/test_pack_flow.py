@@ -64,8 +64,11 @@ def test_example_unknown_name_fails(tmp_path: Path, monkeypatch: pytest.MonkeyPa
 
 
 def test_import_local_folder_copies_skill(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from skillgate_ai.allow_root import set_cli_allow_root
+
     root = make_workspace(monkeypatch, tmp_path)
     src = tmp_path / "src" / "notes"
+    set_cli_allow_root(tmp_path)
     src.mkdir(parents=True)
     (src / "SKILL.md").write_text(
         "---\nname: notes\n"

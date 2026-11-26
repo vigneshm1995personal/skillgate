@@ -17,7 +17,9 @@ def rewrite_skill_description(skill_md: Path, new_description: str) -> None:
         skill_md = pack_file_path(skill_md.parent, "SKILL.md")
     except FileNotFoundError as exc:
         raise ValueError("SKILL.md not found in skill folder.") from exc
-    text = skill_md.read_text(encoding="utf-8")
+    from skillgate_ai.pack_io import read_pack_text, write_pack_text
+
+    text = read_pack_text(skill_md.parent, "SKILL.md")
     match = FRONTMATTER_RE.match(text)
     if not match:
         raise ValueError("SKILL.md has no YAML frontmatter to patch.")
@@ -27,7 +29,7 @@ def rewrite_skill_description(skill_md: Path, new_description: str) -> None:
     parsed["description"] = new_description
     body = text[match.end() :]
     dumped = yaml.safe_dump(parsed, sort_keys=False, allow_unicode=True)
-    skill_md.write_text(f"---\n{dumped}---\n{body}", encoding="utf-8")
+    write_pack_text(skill_md.parent, "SKILL.md", f"---\n{dumped}---\n{body}")
 
 
 def description_from_paste(markdown: str) -> str:

@@ -12,7 +12,10 @@ on:
         default: ""
 
 permissions:
+  actions: read
   contents: read
+  pull-requests: read
+  security-events: read
 
 concurrency:
   group: gate-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -24,6 +27,29 @@ env:
   UV_VERSION: "0.12.13"
 
 jobs:
+  codeql:
+    uses: ./.github/workflows/codeql.yml
+    with:
+      pull_number: ${{ github.event.pull_request.number || '' }}
+    permissions:
+      actions: read
+      contents: read
+      pull-requests: read
+      security-events: write
+    secrets: inherit
+
+  all-gates:
+    runs-on: ubuntu-latest
+    needs: [lint, test, integration, audit, gate, oss-surface, codeql]
+    if: always()
+    steps:
+      - name: Require all gate jobs
+        run: |
+          case "${{ needs.lint.result }}${{ needs.test.result }}${{ needs.integration.result }}${{ needs.audit.result }}${{ needs.gate.result }}${{ needs.oss-surface.result }}${{ needs.codeql.result }}" in
+            successsuccesssuccesssuccesssuccesssuccesssuccess) exit 0 ;;
+            *) echo "One or more required jobs failed"; exit 1 ;;
+          esac
+
   lint:
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -207,12 +233,14 @@ jobs:
       # Downstream Action: `skillgate check . --key-env OPENAI_API_KEY` with
       # env OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}, or set
       # SKILLGATE_OPENAI_API_KEY (decision B — never ambient OPENAI_API_KEY).
-      - run: skillgate example pdf --dest /tmp/pdf
-      - run: skillgate ingest /tmp/pdf
-      - name: keyless check exits 2
+      - name: example under workspace; keyless check exits 2
         run: |
+          mkdir -p /tmp/sg-ws/skills
+          export SKILLGATE_ROOT=/tmp/sg-ws
+          skillgate example pdf --dest /tmp/sg-ws/skills/pdf
+          skillgate ingest /tmp/sg-ws/skills/pdf
           set +e
-          skillgate check /tmp/pdf
+          skillgate check /tmp/sg-ws/skills/pdf
           test $? -eq 2
       - name: ui without the ui extra exits 2 with the install hint
         run: |
@@ -313,12 +341,14 @@ jobs:
           test "$user" = "appuser" -o "$user" = "1001:1001"
           test "$entry" = '["skillgate"]'
           test "$cmd" = '["check","/pack"]'
-      - name: example + ingest; keyless check exits 2
+      - name: Documented bind-mount check exits 2 without API key
         # Live check needs SKILLGATE_OPENAI_API_KEY or --key-env OPENAI_API_KEY.
-        # This image job has no secrets; default CMD keyless check must exit 2.
+        # Image sets SKILLGATE_ROOT=/pack — no -e required (README / AGENTS.md).
         run: |
-          docker run --rm skillgate:test example pdf --dest /tmp/pdf
-          docker run --rm -v "$PWD/skills/pdf:/pack" skillgate:test ingest /pack
           set +e
           docker run --rm -v "$PWD/skills/pdf:/pack" skillgate:test
           test $? -eq 2
+      - name: example + ingest (multi-step via shell)
+        run: |
+          docker run --rm --entrypoint sh skillgate:test -c 'mkdir -p /tmp/sg-ws/skills && export SKILLGATE_ROOT=/tmp/sg-ws && skillgate example pdf --dest /tmp/sg-ws/skills/pdf'
+          docker run --rm -v "$PWD/skills/pdf:/pack" skillgate:test ingest /pack

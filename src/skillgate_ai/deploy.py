@@ -91,7 +91,7 @@ class _PackAdapter:
                 hint="Use lowercase letters, numbers, and hyphens.",
             )
         if remote_gated:
-            if latest_check_passed(source) is False:
+            if pack_on_disk_check_passed(source) is False:
                 raise refuse_ungated_install(name, never_checked=False)
         else:
             require_passing_check(source, name=name, force=force)
@@ -189,14 +189,40 @@ def get_adapter(target: str) -> DeployAdapter:
     return cls()
 
 
-def latest_check_passed(pack: Path) -> bool | None:
-    """True/False from the newest gate-moving check, or None if none yet."""
+def _gate_moving_passed(pack: Path) -> bool | None:
     row = newest_gate_moving_row(load_history(pack, limit=0))
     if row is None:
         return None
     if row.get("passed") is None:
         return None
     return bool(row.get("passed"))
+
+
+def latest_check_passed(pack: Path) -> bool | None:
+    """Gate history for workspace-trusted packs (sync, local deploy)."""
+    from skillgate_ai.fs_anchor import FsAnchor
+    from skillgate_ai.paths import PathTraversalError
+    from skillgate_ai.trusted_roots import pack_access_root
+
+    try:
+        anchor, _ = pack_access_root(pack)
+    except PathTraversalError:
+        return None
+    if anchor is FsAnchor.ALLOW_ROOT:
+        return None
+    return _gate_moving_passed(pack)
+
+
+def pack_on_disk_check_passed(pack: Path) -> bool | None:
+    """Read gate history wherever pack IO is allowed (helper bundle extract)."""
+    from skillgate_ai.paths import PathTraversalError
+    from skillgate_ai.trusted_roots import pack_access_root
+
+    try:
+        pack_access_root(pack)
+    except PathTraversalError:
+        return None
+    return _gate_moving_passed(pack)
 
 
 def require_passing_check(pack: Path, *, name: str, force: bool = False) -> None:

@@ -22,6 +22,21 @@ BUNDLED_EXAMPLES = EXAMPLE_NAMES + DATASET_EXAMPLES
 _SKIP_DIRS = {".git", "__pycache__", ".skillgate"}
 
 
+def is_bundled_example_path(folder: Path) -> bool:
+    """Packaged example trees (not user paths) for lenient ingest/list."""
+    slug = folder.name
+    if slug not in BUNDLED_EXAMPLES:
+        return False
+    dev_tree = Path(__file__).resolve().parents[2] / "skills" / slug
+    if folder == dev_tree:
+        return True
+    try:
+        canonical = bundled_example(slug)
+    except SkillGateError:
+        return False
+    return folder == canonical
+
+
 def bundled_example(name: str) -> Path:
     slug = (name or "").strip()
     if slug not in BUNDLED_EXAMPLES:

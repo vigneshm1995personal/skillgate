@@ -58,31 +58,35 @@ def golden_kind(path: str | Path) -> Literal["json", "text", "bytes"]:
 
 
 def file_inside_skill(root: Path, path: Path) -> Path | None:
+    from skillgate_ai.paths import PathTraversalError, require_under
+
     try:
-        resolved = path.expanduser().resolve()
-        resolved.relative_to(root.resolve())
-    except (OSError, ValueError):
+        resolved = require_under(root, path)
+    except PathTraversalError:
         return None
     return resolved if resolved.is_file() else None
 
 
 def resolve_golden_src(root: Path, case_id: str, golden_path: str | None) -> Path | None:
-    root = root.resolve()
-    folder = root / GOLDEN_DIR
+    from skillgate_ai.pack.pathsafe import _path_under_skill
+    from skillgate_ai.pack_io import glob_pack_files
+
     if golden_path:
         rel = golden_path.replace("\\", "/").lstrip("/")
         parts = Path(rel).parts
         if ".." not in parts:
-            packed = file_inside_skill(root, root / rel)
+            packed = _path_under_skill(root, rel)
             if packed is not None:
-                return packed
-        named = file_inside_skill(root, folder / Path(rel).name)
-        if named is not None:
-            return named
-    if folder.is_dir():
-        matches = sorted(
-            path for path in folder.iterdir() if path.is_file() and path.stem == case_id
-        )
-        if matches:
-            return matches[0]
+                inside = file_inside_skill(root, packed)
+                if inside is not None:
+                    return inside
+        named_rel = f"{GOLDEN_DIR}/{Path(rel).name}"
+        packed = _path_under_skill(root, named_rel)
+        if packed is not None:
+            named = file_inside_skill(root, packed)
+            if named is not None:
+                return named
+    for path in glob_pack_files(root, GOLDEN_DIR, "*"):
+        if path.stem == case_id and path.is_file():
+            return path
     return None

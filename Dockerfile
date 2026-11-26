@@ -36,7 +36,8 @@ WORKDIR /app
 RUN addgroup --system --gid 1001 appgroup && \
     adduser --system --uid 1001 --ingroup appgroup appuser
 COPY --from=build --link --chown=1001:1001 /opt/venv /opt/venv
-ENV PATH="/opt/venv/bin:$PATH"
+ENV PATH="/opt/venv/bin:$PATH" \
+    SKILLGATE_ROOT=/pack
 USER appuser
 ENTRYPOINT ["skillgate"]
 CMD ["check", "/pack"]
@@ -50,7 +51,8 @@ RUN addgroup --system --gid 1001 appgroup && \
 
 COPY --from=build --link --chown=1001:1001 /opt/venv /opt/venv
 
-ENV PATH="/opt/venv/bin:$PATH"
+ENV PATH="/opt/venv/bin:$PATH" \
+    SKILLGATE_ROOT=/pack
 
 USER appuser
 

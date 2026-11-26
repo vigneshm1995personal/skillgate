@@ -6,6 +6,7 @@ path; drafts and suggest-from-skill checks are not.
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Any, Literal
 
@@ -44,11 +45,12 @@ from skillgate_ai.pack_schema import (
     keep_locked_case,
     parse_judge_block,
 )
+from skillgate_ai.paths import PathTraversalError, contained_path, require_under, skill_pack_root
 
 
 def pin_checks(skill_path: str | Path, checks: list[dict[str, Any]]) -> CasePack:
     """Upsert checks into evals/cases.yaml as pinned cases."""
-    root = Path(skill_path).expanduser().resolve()
+    root = skill_pack_root(skill_path)
     skill_name = _skill_name(root)
     existing = None
     path = cases_path(root)
@@ -225,7 +227,7 @@ def _persist_input_files(root: Path, files: object, *, case_id: str) -> list[Cas
         content = _file_content(item)
         if content is not None:
             name = dest_name or f"{case_id}.txt"
-            if src and not Path(src).is_absolute():
+            if src and not os.path.isabs(src):
                 rel = safe_relpath(src)
             else:
                 rel = f"{FIXTURE_DIR}/{Path(name).name}"
@@ -234,18 +236,23 @@ def _persist_input_files(root: Path, files: object, *, case_id: str) -> list[Cas
             continue
         if not src:
             continue
-        src_path = Path(src)
-        if src_path.is_absolute() and src_path.is_file():
-            written = copy_into_pack(root, src=src_path, dest_name=dest_name)
+        if os.path.isabs(src):
+            from skillgate_ai.pack.pathsafe import _rel_to_skill
+            from skillgate_ai.pack_io import is_pack_file
+
+            safe_src = require_under(root, src)
+            src_rel = _rel_to_skill(root, safe_src)
+            if src_rel is None or not is_pack_file(root, src_rel):
+                raise ValueError(f"Pin could not find input file {src}.")
+            written = copy_into_pack(root, src=safe_src, dest_name=dest_name)
             out.append(CaseFileCopy(src=written["src"], dest=written["dest"]))
             continue
-        candidate = root / src
+        try:
+            candidate = contained_path(root, src)
+        except PathTraversalError:
+            raise ValueError(f"Pin could not find input file {src}.") from None
         if candidate.is_file():
             out.append(CaseFileCopy(src=safe_relpath(src), dest=dest_name))
-            continue
-        if src_path.is_file():
-            written = copy_into_pack(root, src=src_path, dest_name=dest_name)
-            out.append(CaseFileCopy(src=written["src"], dest=written["dest"]))
             continue
         raise ValueError(f"Pin could not find input file {src}.")
     return out
@@ -255,9 +262,10 @@ def _disk_golden(root: Path, case_id: str, output_path: str | None) -> CaseGolde
     found = resolve_golden_src(root, case_id, None)
     if found is None:
         return None
-    try:
-        rel = found.resolve().relative_to(root.resolve()).as_posix()
-    except ValueError:
+    from skillgate_ai.pack.pathsafe import _rel_to_skill
+
+    rel = _rel_to_skill(root, found)
+    if rel is None:
         return None
     return CaseGolden(
         output_path=output_path or "output/result.txt",
@@ -277,17 +285,27 @@ def _persist_golden(
     dest_output = output_path or "output/result.txt"
     found = resolve_golden_src(root, case_id, golden_path)
     if found is not None:
+        from skillgate_ai.pack.pathsafe import _rel_to_skill
+        from skillgate_ai.paths import require_under
+
         try:
-            rel = found.resolve().relative_to(root.resolve()).as_posix()
-        except ValueError:
+            safe_found = require_under(root, found)
+        except PathTraversalError:
             found = None
         else:
-            if rel.startswith(f"{GOLDEN_DIR}/"):
-                return CaseGolden(output_path=dest_output, path=rel, kind=golden_kind(found))
-            suffix = found.suffix or ".txt"
-            rel = f"{GOLDEN_DIR}/{case_id}{suffix}"
-            write_pack_file(root, rel=rel, content=found.read_bytes())
-            return CaseGolden(output_path=dest_output, path=rel, kind=golden_kind(found))
+            rel_src = _rel_to_skill(root, safe_found)
+            if rel_src is not None:
+                if rel_src.startswith(f"{GOLDEN_DIR}/"):
+                    return CaseGolden(
+                        output_path=dest_output, path=rel_src, kind=golden_kind(safe_found)
+                    )
+                from skillgate_ai.pack_io import read_pack_bytes
+
+                suffix = safe_found.suffix or ".txt"
+                rel = f"{GOLDEN_DIR}/{case_id}{suffix}"
+                payload = read_pack_bytes(root, rel_src)
+                write_pack_file(root, rel=rel, content=payload)
+                return CaseGolden(output_path=dest_output, path=rel, kind=golden_kind(safe_found))
     if not contains_list:
         raise ValueError(PIN_NEEDS_EXPECTED)
     body = contains_list[0]

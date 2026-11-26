@@ -237,8 +237,8 @@ def test_green_check_unlocks_deploy(tmp_path: Path, monkeypatch: pytest.MonkeyPa
     _root, pack, _api = live_check(monkeypatch, tmp_path, harness)
     code, _out = cli(["check", str(pack)])
     assert code == 0
-    deploy_code, _dout = cli(["deploy", str(pack), "--target", "cursor"])
-    assert deploy_code == 0
+    deploy_code, dout = cli(["deploy", str(pack), "--target", "cursor"])
+    assert deploy_code == 0, dout
     assert (tmp_path / "cursor-skills" / "memo" / "SKILL.md").is_file()
     assert not (tmp_path / "cursor-skills" / "memo" / "evals").exists()
     assert (pack / "evals" / "deploys.jsonl").is_file()

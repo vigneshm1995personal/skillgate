@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
 from urllib.parse import urlparse
 
 from skillgate_ai.extras import UI_FEATURE, MissingExtraError
@@ -42,7 +43,11 @@ def origin_is_loopback(origin: str) -> bool:
 
 
 class LocalUIGuard(BaseHTTPMiddleware):
-    async def dispatch(self, request: Request, call_next) -> Response:
+    async def dispatch(
+        self,
+        request: Request,
+        call_next: Callable[[Request], Awaitable[Response]],
+    ) -> Response:
         host = request.headers.get("host") or ""
         if not host_is_loopback(host):
             return _forbid("This local UI only accepts requests on 127.0.0.1 or localhost.")

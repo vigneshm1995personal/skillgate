@@ -35,12 +35,12 @@ FIXTURES = ROOT / "tests" / "fixtures" / "q10"
 
 
 @pytest.fixture(autouse=True)
-def _never_touch_real_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    home = tmp_path / "home"
-    home.mkdir()
+def _never_touch_real_home(
+    tmp_path_factory: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    home = tmp_path_factory.mktemp("home")
     monkeypatch.setenv("HOME", str(home))
     monkeypatch.setattr(Path, "home", staticmethod(lambda: home))
-    monkeypatch.chdir(tmp_path)
 
 
 def _load(name: str) -> dict:

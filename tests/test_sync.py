@@ -64,10 +64,13 @@ def test_sync_copies_skills_into_targets(project_root: Path, tmp_path: Path) -> 
         assert (root / "pdf-tools" / "SKILL.md").is_file()
 
 
-def test_sync_skips_skill_whose_latest_check_failed(project_root: Path, tmp_path: Path) -> None:
+def test_sync_skips_skill_whose_latest_check_failed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     from skillgate_ai.history import append_eval
 
     repo = _init_repo(tmp_path / "repo", ["ok-skill", "red-skill"])
+    monkeypatch.setenv("SKILLGATE_ROOT", str(repo))
     append_eval(repo / "skills" / "red-skill", run_id="red", passed=False)
     subprocess.run(["git", "add", "-A"], cwd=repo, check=True, capture_output=True)
     subprocess.run(
@@ -91,10 +94,13 @@ def test_sync_skips_skill_whose_latest_check_failed(project_root: Path, tmp_path
     assert not (cursor_root / "red-skill").exists()
 
 
-def test_sync_cli_reports_skipped_not_synced(project_root: Path, tmp_path: Path) -> None:
+def test_sync_cli_reports_skipped_not_synced(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     from skillgate_ai.history import append_eval
 
     repo = _init_repo(tmp_path / "repo", ["ok-skill", "red-skill"])
+    monkeypatch.setenv("SKILLGATE_ROOT", str(repo))
     append_eval(repo / "skills" / "red-skill", run_id="red", passed=False)
     subprocess.run(["git", "add", "-A"], cwd=repo, check=True, capture_output=True)
     subprocess.run(
@@ -212,7 +218,7 @@ def test_sync_install_launchd_plist(monkeypatch: pytest.MonkeyPatch, tmp_path: P
     plist = plistlib.loads(dest.read_bytes())
     assert plist["RunAtLoad"] is True
     assert "https://github.com/acme/skills.git" in plist["ProgramArguments"]
-    assert os.stat(dest).st_mode & 0o777 == 0o644
+    assert os.stat(dest).st_mode & 0o777 == 0o600
 
 
 def test_clone_uses_double_dash_and_timeout(

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from skillgate_ai.deploy import deploy_allowed, require_passing_check
 from skillgate_ai.deploy_gate import (
     infer_gate_moved,
@@ -27,6 +29,7 @@ def _append(
     error: dict | None = None,
     gate_moved: bool | None = None,
 ) -> None:
+    (pack / "evals").mkdir(parents=True, exist_ok=True)
     append_eval(
         pack,
         run_id=run_id,
@@ -167,3 +170,42 @@ def test_pack_gate_decision_empty_history(tmp_path: Path, monkeypatch) -> None:
 def test_row_gate_moved_honors_explicit_false() -> None:
     row = {"gate_moved": False, "passed": True, "tryout": False}
     assert row_gate_moved(row) is False
+
+
+def test_pack_gate_pending_for_untrusted_path() -> None:
+    assert pack_gate_decision("/etc/passwd") == ("pending", "Run checks to set the gate.")
+
+
+def test_pack_gate_pending_for_allow_root_even_after_green(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from skillgate_ai.allow_root import set_cli_allow_root
+
+    parent = tmp_path / "out"
+    pack = parent / "solo"
+    pack.mkdir(parents=True)
+    (pack / "SKILL.md").write_text("---\nname: solo\n---\n", encoding="utf-8")
+    monkeypatch.delenv("SKILLGATE_ROOT", raising=False)
+    set_cli_allow_root(parent)
+    _append(pack, run_id="green", passed=True, gate_moved=True)
+    assert pack_gate_decision(pack) == ("pending", "Run checks to set the gate.")
+    assert deploy_allowed(pack) is False
+
+
+def test_latest_check_skips_allow_root_pack_on_disk_reads_history(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from skillgate_ai.allow_root import set_cli_allow_root
+    from skillgate_ai.deploy import latest_check_passed, pack_on_disk_check_passed
+
+    parent = tmp_path / "out"
+    pack = parent / "solo"
+    pack.mkdir(parents=True)
+    (pack / "SKILL.md").write_text("---\nname: solo\n---\n", encoding="utf-8")
+    monkeypatch.delenv("SKILLGATE_ROOT", raising=False)
+    set_cli_allow_root(parent)
+    _append(pack, run_id="red", passed=False, gate_moved=True)
+    assert latest_check_passed(pack) is None
+    assert pack_on_disk_check_passed(pack) is False
+    assert newest_gate_moving_row(load_history(pack, limit=0)) is not None

@@ -15,7 +15,7 @@ from skillgate_ai.pack.constants import (
     TEXT_SUFFIXES,
 )
 from skillgate_ai.pack.listing import browser_files
-from skillgate_ai.pack.pathsafe import _path_under_skill, resolve_pack_root
+from skillgate_ai.pack.pathsafe import resolve_pack_root
 
 
 def copy_skill_pack(
@@ -81,17 +81,24 @@ def copy_skill_pack(
 
 
 def pack_file_path(skill_path: str | Path, rel: str) -> Path:
+
     root = resolve_pack_root(skill_path)
-    candidate = _path_under_skill(root, rel)
-    if candidate is None or not candidate.is_file():
+    from skillgate_ai.pack_io import is_pack_file
+    from skillgate_ai.paths import pack_file_at
+
+    if not is_pack_file(root, rel):
         raise FileNotFoundError(rel)
-    return candidate
+    return pack_file_at(root, rel)
 
 
 def pack_preview(skill_path: str | Path, rel: str) -> dict[str, Any]:
-    path = pack_file_path(skill_path, rel)
-    data = path.read_bytes()
-    suffix = path.suffix.lower()
+    from skillgate_ai.pack_io import is_pack_file, read_pack_bytes
+
+    root = resolve_pack_root(skill_path)
+    if not is_pack_file(root, rel):
+        raise FileNotFoundError(rel)
+    data = read_pack_bytes(root, rel)
+    suffix = Path(rel).suffix.lower()
     if suffix in IMAGE_SUFFIXES:
         kind = "image"
     elif suffix == ".pdf":

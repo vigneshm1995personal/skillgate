@@ -10,7 +10,7 @@ from urllib.parse import unquote
 from skillgate_ai.extras import UI_FEATURE, MissingExtraError
 
 try:
-    from fastapi import FastAPI, File, Form, Request, UploadFile
+    from fastapi import Body, FastAPI, File, Form, Request, UploadFile
     from fastapi.responses import FileResponse
 except ModuleNotFoundError as exc:
     raise MissingExtraError(UI_FEATURE, "ui") from exc
@@ -20,6 +20,14 @@ from skillgate_ai.api_intake import (
     extract_uploaded_skill,
     import_path_or_git_result,
     write_pasted_skill,
+)
+from skillgate_ai.api_models import (
+    ApplyFixBody,
+    DeployBody,
+    ImportSkillsBody,
+    InstallExamplesBody,
+    PackFileWriteBody,
+    PasteSkillBody,
 )
 from skillgate_ai.api_payloads import AppState, fail, history_payload, skill_payload, state_of
 from skillgate_ai.catalog import (
@@ -42,6 +50,7 @@ from skillgate_ai.pack import (
     write_pack_file,
     write_sample_fixture,
 )
+from skillgate_ai.paths import require_under
 
 _PICKER_SOURCE_LABELS = {
     "workspace": "This project",
@@ -110,15 +119,14 @@ def register_skill_routes(app: FastAPI) -> None:
         return {"examples": list_examples()}
 
     @app.post("/api/examples/install")
-    async def install_dataset_examples(request: Request) -> dict[str, Any]:
+    async def install_dataset_examples(
+        request: Request,
+        install: InstallExamplesBody | None = Body(None),
+    ) -> dict[str, Any]:
         state = state_of(request)
-        body: Mapping[str, Any] = {}
-        if request.headers.get("content-length") not in {None, "0"}:
-            parsed = await request.json()
-            if isinstance(parsed, dict):
-                body = parsed
-        raw_names = body.get("names")
-        name = str(body.get("name") or "").strip()
+        payload = install or InstallExamplesBody()
+        raw_names = payload.names
+        name = str(payload.name or "").strip()
         names: list[str] | None
         if isinstance(raw_names, list) and raw_names:
             names = [str(item).strip() for item in raw_names if str(item).strip()]
@@ -144,19 +152,18 @@ def register_skill_routes(app: FastAPI) -> None:
         return {"sources": agent_source_status()}
 
     @app.post("/api/skills/import")
-    async def import_skills(request: Request) -> dict[str, Any]:
+    async def import_skills(
+        request: Request,
+        import_body: ImportSkillsBody | None = Body(None),
+    ) -> dict[str, Any]:
         state = state_of(request)
-        body = (
-            await request.json() if request.headers.get("content-length") not in {None, "0"} else {}
-        )
-        if not isinstance(body, dict):
-            body = {}
-        folder = str(body.get("folder") or body.get("path") or "").strip()
-        git_url = str(body.get("git_url") or body.get("git") or "").strip()
+        payload = import_body or ImportSkillsBody()
+        folder = str(payload.folder or payload.path or "").strip()
+        git_url = str(payload.git_url or payload.git or "").strip()
         if folder or git_url:
             result = import_path_or_git_result(state.root, git_url or folder)
         else:
-            sources = body.get("sources")
+            sources = payload.sources
             result = import_from_agent_folders(
                 state.root,
                 sources=sources if isinstance(sources, list) else None,
@@ -194,28 +201,33 @@ def register_skill_routes(app: FastAPI) -> None:
         return FileResponse(pack_file_path(skill, path))
 
     @app.post("/api/skills/pack-file")
-    async def write_skill_pack_file(request: Request) -> dict[str, Any]:
+    async def write_skill_pack_file(
+        request: Request,
+        payload: PackFileWriteBody = Body(),
+    ) -> dict[str, Any]:
         state = state_of(request)
-        body = await request.json()
-        skill_path = find_skill(state.root, str(body.get("skill") or ""))
-        if body.get("generate"):
+        skill_path = find_skill(state.root, payload.skill)
+        if payload.generate:
             try:
                 written = write_sample_fixture(
                     skill_path,
-                    dest=str(body.get("path") or body.get("filename") or "").strip() or None,
-                    prompt=str(body.get("prompt") or ""),
+                    dest=str(payload.path or payload.filename or "").strip() or None,
+                    prompt=payload.prompt,
                     description=ingest_skill(skill_path).description,
                 )
-            except CannotSynthesizeFixture as exc:
+            except CannotSynthesizeFixture:
                 return {
                     "skill": skill_payload(state, skill_path),
                     "file": None,
                     "needs_upload": True,
-                    "message": str(exc),
+                    "message": (
+                        "This check needs a real photo or scan — "
+                        "upload one instead of a generated sample."
+                    ),
                 }
             return {"skill": skill_payload(state, skill_path), "file": written}
-        rel = str(body.get("path") or body.get("filename") or "").strip()
-        content = body.get("content")
+        rel = str(payload.path or payload.filename or "").strip()
+        content = payload.content
         if content is None:
             fail(400, "Pass file content to write.")
         if not rel:
@@ -238,10 +250,9 @@ def register_skill_routes(app: FastAPI) -> None:
         return {"skill": skill_payload(state, skill_path), "file": written}
 
     @app.post("/api/skills/paste")
-    async def paste_skill(request: Request) -> dict[str, Any]:
+    async def paste_skill(request: Request, payload: PasteSkillBody = Body()) -> dict[str, Any]:
         state = state_of(request)
-        body = await request.json()
-        markdown = str((body or {}).get("markdown") or "").strip()
+        markdown = payload.markdown.strip()
         if not markdown:
             fail(400, "Paste a SKILL.md file.")
         path = write_pasted_skill(state.root, markdown)
@@ -255,30 +266,40 @@ def register_skill_routes(app: FastAPI) -> None:
         return skill_payload(state, path)
 
     @app.post("/api/skills/apply-fix")
-    async def apply_fix(request: Request) -> dict[str, Any]:
+    async def apply_fix(request: Request, payload: ApplyFixBody = Body()) -> dict[str, Any]:
         state = state_of(request)
-        body = await request.json()
-        skill_path = find_skill(state.root, str(body.get("skill") or ""))
-        paste = str(body.get("paste") or "").strip()
+        skill_path = require_under(state.root, find_skill(state.root, payload.skill))
+        paste = payload.paste.strip()
         if not paste:
             fail(400, "Pass a SKILL.md paste block.")
         description = description_from_paste(paste) if paste.lstrip().startswith("---") else paste
         rewrite_skill_description(skill_path / "SKILL.md", description)
-        restore = str(body.get("restore_scripts_from") or "").strip()
+        restore = payload.restore_scripts_from.strip()
         if restore:
             try:
-                source = find_skill(state.root, restore)
+                source = require_under(state.root, find_skill(state.root, restore))
             except SkillGateError:
                 source = None
             if source is not None:
-                src_scripts = source / "scripts"
-                dest_scripts = skill_path / "scripts"
-                if src_scripts.is_dir():
-                    import shutil
+                from skillgate_ai.contained_fs import isdir_at, iter_pack_files
+                from skillgate_ai.pack_io import read_pack_bytes, write_pack_bytes
+                from skillgate_ai.paths import contained_path
 
-                    if dest_scripts.exists():
-                        shutil.rmtree(dest_scripts)
-                    shutil.copytree(src_scripts, dest_scripts)
+                require_under(source, contained_path(source, "scripts"))
+                from skillgate_ai.paths import pack_access_root
+
+                src_anchor, src_prefix = pack_access_root(source)
+                if isdir_at(src_anchor, *src_prefix, "scripts"):
+                    for rel, _size in iter_pack_files(
+                        source,
+                        skip_dir_names=frozenset(),
+                        skip_file_names=frozenset(),
+                    ):
+                        if not rel.startswith("scripts/"):
+                            continue
+                        dest_rel = rel
+                        file_bytes = read_pack_bytes(source, rel)
+                        write_pack_bytes(skill_path, dest_rel, file_bytes)
         return skill_payload(state, skill_path)
 
     @app.get("/api/history")
@@ -291,19 +312,18 @@ def register_skill_routes(app: FastAPI) -> None:
         return workspace_history(state)
 
     @app.post("/api/deploy")
-    async def deploy(request: Request) -> dict[str, Any]:
+    async def deploy(request: Request, payload: DeployBody = Body()) -> dict[str, Any]:
         state = state_of(request)
-        body = await request.json()
-        target = str(body.get("target") or "").strip().lower()
-        mode = str(body.get("mode") or "local").strip().lower()
+        target = payload.target.strip().lower()
+        mode = payload.mode.strip().lower()
         if mode == "git" or target == "git":
             fail(404, "Publishing to git isn’t in the local app.")
-        skill_path = find_skill(state.root, str(body.get("skill") or ""))
+        skill_path = find_skill(state.root, payload.skill)
         loaded = ingest_skill(skill_path, strict=False)
         require_passing_check(
             skill_path,
             name=loaded.name,
-            force=bool(body.get("force")),
+            force=payload.force,
         )
         if not get_llm_config(state.root).has_any_key:
             raise missing_key_error()

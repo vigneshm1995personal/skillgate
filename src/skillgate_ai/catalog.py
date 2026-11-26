@@ -9,7 +9,14 @@ from skillgate_ai.deploy import claude_skills_root, codex_skills_root, cursor_sk
 from skillgate_ai.errors import SkillGateError
 from skillgate_ai.ingest import NAME_RE, folder_slug, ingest_skill
 from skillgate_ai.pack import copy_skill_pack as copy_pack
-from skillgate_ai.paths import is_skill_pack, is_under_root
+from skillgate_ai.pack_io import is_pack_file
+from skillgate_ai.paths import (
+    PathTraversalError,
+    contained_path,
+    is_skill_pack,
+    is_under_root,
+    require_under,
+)
 
 SOURCE_ROOTS = (
     ("workspace", None),
@@ -60,13 +67,13 @@ def _iter_skill_dirs(parent: Path) -> list[Path]:
 def _workspace_skill_dir(path: Path, root: Path) -> Path | None:
     """Resolved skill folder when it and its SKILL.md stay inside ``root``; else None."""
     try:
-        resolved = path.resolve()
-        skill_md = (resolved / "SKILL.md").resolve()
-    except OSError:
+        resolved = require_under(root, path)
+        require_under(root, contained_path(resolved, "SKILL.md"))
+    except (OSError, ValueError, PathTraversalError):
         return None
-    if not is_under_root(resolved, root) or not is_under_root(skill_md, root):
+    if not is_under_root(resolved, root):
         return None
-    if not skill_md.is_file():
+    if not is_pack_file(resolved, "SKILL.md"):
         return None
     return resolved
 
@@ -91,7 +98,7 @@ def catalog_entries(root: Path, *, include_agents: bool = False) -> list[dict[st
             resolved = path.resolve()
         if resolved in seen:
             return
-        if not (resolved / "SKILL.md").is_file():
+        if not is_pack_file(resolved, "SKILL.md"):
             return
         seen.add(resolved)
         slug = folder_slug(resolved)
@@ -116,10 +123,12 @@ def catalog_entries(root: Path, *, include_agents: bool = False) -> list[dict[st
             }
         )
 
-    if is_skill_pack(root) or (root / "SKILL.md").is_file():
+    import os
+
+    if is_skill_pack(root) or is_pack_file(root, "SKILL.md"):
         add(root, "workspace")
     skills_root = workspace_skills_root(root)
-    if not skills_root.is_dir():
+    if not os.path.isdir(os.fsdecode(skills_root)):
         for child in _iter_skill_dirs(root):
             add(child, "workspace")
     for child in _iter_skill_dirs(skills_root):
@@ -143,18 +152,30 @@ def catalog_entries(root: Path, *, include_agents: bool = False) -> list[dict[st
 
 def _immediate_agent_skill(path: Path) -> bool:
     """True when ``path`` is a direct child of a Cursor, Codex, or Claude skills folder."""
-    if not path.is_dir() or not (path / "SKILL.md").is_file():
+    import os
+
+    from skillgate_ai.contained_fs import isdir_at, isfile_at
+    from skillgate_ai.fs_anchor import FsAnchor
+
+    raw = os.path.expanduser(str(path))
+    if ".." in Path(raw).parts:
         return False
-    parent = path.parent
-    for _source, getter in SOURCE_ROOTS:
-        if getter is None:
-            continue
+    name = os.path.basename(os.path.normpath(raw))
+    if not name or name in {".", ".."}:
+        return False
+    agent_anchors = (
+        (cursor_skills_root, FsAnchor.AGENT_CURSOR),
+        (codex_skills_root, FsAnchor.AGENT_CODEX),
+        (claude_skills_root, FsAnchor.AGENT_CLAUDE),
+    )
+    for getter, anchor in agent_anchors:
         try:
-            root = getter().resolve()
+            root = os.path.realpath(str(getter()))
         except OSError:
             continue
-        if parent == root:
-            return True
+        if os.path.normpath(os.path.dirname(raw)) != os.path.normpath(root):
+            continue
+        return isdir_at(anchor, name) and isfile_at(anchor, name, "SKILL.md")
     return False
 
 
@@ -186,10 +207,34 @@ def find_skill(root: Path, name: str) -> Path:
     text = (name or "").strip()
     if not text:
         raise SkillGateError("A skill name is required.")
-    supplied = Path(text).expanduser()
-    looks_like_path = supplied.is_absolute() or "/" in text or "\\" in text or ".." in text
+    looks_like_path = text.startswith("/") or "/" in text or "\\" in text or ".." in text
     if looks_like_path:
-        resolved = supplied.resolve() if supplied.is_absolute() else (root / text).resolve()
+        normalized = text.replace("\\", "/")
+        is_absolute_path = normalized.startswith("/") or (
+            len(normalized) > 1 and normalized[1] == ":"
+        )
+        if is_absolute_path:
+            try:
+                resolved = require_under(root, text)
+            except PathTraversalError as exc:
+                from skillgate_ai.paths import skill_pack_root
+
+                try:
+                    agent_path = skill_pack_root(text)
+                except PathTraversalError:
+                    raise SkillGateError("That path is outside this project.") from exc
+                if _immediate_agent_skill(agent_path):
+                    return agent_path
+                raise SkillGateError("That path is outside this project.") from exc
+        else:
+            normalized = text.replace("\\", "/")
+            parts = [piece for piece in normalized.split("/") if piece and piece != "."]
+            if any(piece == ".." for piece in parts):
+                raise SkillGateError("That path is outside this project.")
+            try:
+                resolved = contained_path(root, *parts)
+            except PathTraversalError as exc:
+                raise SkillGateError("That path is outside this project.") from exc
         if _immediate_agent_skill(resolved):
             return resolved
         if not is_under_root(resolved, root):
@@ -238,7 +283,7 @@ def import_from_agent_folders(
             slug = folder_slug(skill_dir)
             if slugs and slug not in slugs and skill_dir.name not in slugs:
                 continue
-            dest = dest_parent / slug
+            dest = contained_path(dest_parent, slug)
             if dest.exists():
                 skipped.append(
                     {

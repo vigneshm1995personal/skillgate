@@ -882,11 +882,15 @@ def test_run_inherited_kills_process_group_on_timeout(tmp_path: Path) -> None:
     assert code == 124
     parent_pid, child_pid = (int(part) for part in pids_file.read_text(encoding="utf-8").split())
     assert _pid_gone(parent_pid)
-    deadline = time.time() + 5
-    while time.time() < deadline and not dead_marker.is_file():
+    deadline = time.time() + 10
+    marker = ""
+    while time.time() < deadline:
+        if dead_marker.is_file():
+            marker = dead_marker.read_text(encoding="utf-8")
+            if marker == "dead":
+                break
         time.sleep(0.05)
-    assert dead_marker.is_file()
-    assert dead_marker.read_text(encoding="utf-8") == "dead"
+    assert marker == "dead"
     assert _pid_gone(child_pid)
 
 

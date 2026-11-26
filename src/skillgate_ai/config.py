@@ -6,7 +6,7 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
-from dotenv import load_dotenv
+from dotenv import dotenv_values
 
 from skillgate_ai.errors import MissingLLMKeyError
 from skillgate_ai.judge_bank import DEFAULT_MIN_CONFIDENCE as DEFAULT_JUDGE_MIN_CONFIDENCE
@@ -35,6 +35,35 @@ DEFAULT_JUDGE_REASONING_EFFORT = "low"
 CODEX_REASONING_EFFORTS = frozenset({"low", "medium", "high", "ultra"})
 DEFAULT_CODEX_REASONING_EFFORT = "medium"
 
+# Pack/repo `.env` must not set trust roots or paths that locate user config / allow-root.
+DOTENV_BLOCKED_TRUST_KEYS = frozenset(
+    {
+        "SKILLGATE_ROOT",
+        "SKILLGATE_CURSOR_SKILLS",
+        "SKILLGATE_CODEX_SKILLS",
+        "SKILLGATE_CLAUDE_SKILLS",
+        "HOME",
+        "USERPROFILE",
+        "HOMEDRIVE",
+        "HOMEPATH",
+        "XDG_CONFIG_HOME",
+    }
+)
+
+
+def _apply_dotenv_file(path: Path) -> None:
+    try:
+        values = dotenv_values(path)
+    except OSError:
+        return
+    for key, value in values.items():
+        if not key or value is None:
+            continue
+        if key in DOTENV_BLOCKED_TRUST_KEYS:
+            continue
+        if key not in os.environ:
+            os.environ[key] = value
+
 
 def normalize_codex_reasoning_effort(value: str | None) -> str:
     raw = (value or "").strip().lower()
@@ -60,7 +89,7 @@ def load_env(project_root: Path | None = None) -> None:
         seen.add(resolved)
         path = resolved / ".env"
         if path.is_file():
-            load_dotenv(path, override=False)
+            _apply_dotenv_file(path)
 
 
 def _opt(name: str) -> str | None:

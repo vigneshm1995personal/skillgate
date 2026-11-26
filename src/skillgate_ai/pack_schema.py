@@ -134,10 +134,12 @@ def case_id_slug(value: object) -> str:
 def _example_marker_slug(pack_root: Path | None) -> str | None:
     if pack_root is None:
         return None
-    marker = pack_root / "evals" / ".skillgate-example"
-    if not marker.is_file():
+    from skillgate_ai.pack_io import is_pack_file, read_pack_text
+
+    marker_rel = "evals/.skillgate-example"
+    if not is_pack_file(pack_root, marker_rel):
         return None
-    slug = marker.read_text(encoding="utf-8").strip()
+    slug = read_pack_text(pack_root, marker_rel).strip()
     return slug if slug in SEED_CASE_IDS else None
 
 

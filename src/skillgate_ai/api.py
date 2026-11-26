@@ -10,7 +10,7 @@ from typing import Any
 from skillgate_ai.extras import UI_FEATURE, MissingExtraError
 
 try:
-    from fastapi import FastAPI, Request
+    from fastapi import Body, FastAPI, Request
     from fastapi.middleware.cors import CORSMiddleware
     from fastapi.responses import JSONResponse
 except ModuleNotFoundError as exc:
@@ -19,6 +19,7 @@ except ModuleNotFoundError as exc:
 from skillgate_ai import __version__
 from skillgate_ai.api_compare import register_compare_routes
 from skillgate_ai.api_evals import register_eval_routes
+from skillgate_ai.api_models import JudgeSettingsBody, SetKeyBody
 from skillgate_ai.api_payloads import (
     SETTINGS_KEYS,
     AppState,
@@ -114,7 +115,7 @@ def create_app(*, root: Path | None = None, pack: Path | None = None) -> FastAPI
     async def _missing(_request: Request, exc: FileNotFoundError) -> JSONResponse:
         return JSONResponse(
             status_code=404,
-            content={"detail": {"message": str(exc) or "File not found."}},
+            content={"detail": {"message": "File not found."}},
         )
 
     _register_core_routes(app)
@@ -174,15 +175,14 @@ def _register_core_routes(app: FastAPI) -> None:
         return {"keys": keys_payload(state_of(request))}
 
     @app.put("/api/settings/keys/{name}")
-    async def set_key(name: str, request: Request) -> dict[str, Any]:
+    async def set_key(name: str, request: Request, payload: SetKeyBody = Body()) -> dict[str, Any]:
         state = state_of(request)
         from skillgate_ai.keys import internal_key_name
 
         vault_name = internal_key_name(name)
         if vault_name not in SETTINGS_KEYS:
             fail(400, "Unknown key name.")
-        body = await request.json()
-        value = str((body or {}).get("value") or "").strip()
+        value = payload.value.strip()
         if not value:
             fail(400, "Paste a key before saving.")
         if any(ch in value for ch in "\r\n"):
@@ -241,23 +241,24 @@ def _register_core_routes(app: FastAPI) -> None:
         return {"judge": settings.to_public_dict()}
 
     @app.put("/api/settings/judge")
-    async def put_judge_settings(request: Request) -> dict[str, Any]:
+    async def put_judge_settings(
+        request: Request,
+        payload: JudgeSettingsBody = Body(),
+    ) -> dict[str, Any]:
         from skillgate_ai.judge_settings import save_judge_settings
 
         state = state_of(request)
-        body = await request.json() or {}
-        if not isinstance(body, dict):
-            body = {}
-        key_env: dict[str, Any] = {"key_env": body.get("key_env")} if "key_env" in body else {}
+        dumped = payload.model_dump(exclude_unset=True)
+        key_env: dict[str, Any] = {"key_env": dumped["key_env"]} if "key_env" in dumped else {}
         try:
             settings = save_judge_settings(
                 state.root,
-                provider=str(body.get("provider") or "auto"),
-                region=body.get("region"),
-                model=body.get("model"),
-                base_url=body.get("base_url"),
-                decisions_path=body.get("decisions_path"),
-                account_id=body.get("account_id"),
+                provider=str(dumped.get("provider") or "auto"),
+                region=dumped.get("region"),
+                model=dumped.get("model"),
+                base_url=dumped.get("base_url"),
+                decisions_path=dumped.get("decisions_path"),
+                account_id=dumped.get("account_id"),
                 **key_env,
             )
         except SkillGateError as exc:

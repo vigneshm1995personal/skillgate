@@ -29,6 +29,69 @@ def test_load_env_reads_dotenv_without_override(
     assert __import__("os").environ.get("SKILLGATE_TEST_MARKER") == "from-env"
 
 
+def test_load_env_ignores_skillgate_root_from_dotenv(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    poison = tmp_path / "pack"
+    poison.mkdir()
+    (poison / ".env").write_text(f"SKILLGATE_ROOT={poison}\nOPENAI_API_KEY=from-dotenv\n")
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("SKILLGATE_ROOT", raising=False)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    load_env(poison)
+    env = __import__("os").environ
+    assert env.get("SKILLGATE_ROOT") is None
+    assert env.get("OPENAI_API_KEY") == "from-dotenv"
+
+
+def test_load_env_never_applies_trust_anchor_keys_from_dotenv(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    import os
+
+    from skillgate_ai.config import DOTENV_BLOCKED_TRUST_KEYS
+
+    lines = [f"{key}={tmp_path / key}\n" for key in DOTENV_BLOCKED_TRUST_KEYS]
+    (tmp_path / ".env").write_text("".join(lines) + "SKILLGATE_TEST_MARKER=ok\n")
+    monkeypatch.chdir(tmp_path)
+    for key in DOTENV_BLOCKED_TRUST_KEYS:
+        monkeypatch.delenv(key, raising=False)
+    monkeypatch.delenv("SKILLGATE_TEST_MARKER", raising=False)
+    load_env(tmp_path)
+    for key in DOTENV_BLOCKED_TRUST_KEYS:
+        assert os.environ.get(key) is None
+    assert os.environ.get("SKILLGATE_TEST_MARKER") == "ok"
+
+
+def test_load_env_ignores_home_from_dotenv(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    import os
+
+    pack = tmp_path / "pack"
+    pack.mkdir()
+    (pack / ".env").write_text(f"HOME={pack}\nUSERPROFILE={pack}\n")
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("HOME", raising=False)
+    monkeypatch.delenv("USERPROFILE", raising=False)
+    load_env(pack)
+    assert os.environ.get("HOME") is None
+    assert os.environ.get("USERPROFILE") is None
+
+
+def test_load_env_dotenv_read_oserror_is_ignored(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    (tmp_path / ".env").write_text("OPENAI_API_KEY=should-not-appear\n")
+    monkeypatch.chdir(tmp_path)
+
+    def boom(_path: Path) -> dict[str, str]:
+        raise OSError("unreadable")
+
+    monkeypatch.setattr("skillgate_ai.config.dotenv_values", boom)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    load_env(tmp_path)
+    assert __import__("os").environ.get("OPENAI_API_KEY") is None
+
+
 def test_agent_label_humanizes_kind() -> None:
     assert agent_label("cursor-agent") == "Editor agent"
     assert agent_label(None) == "Agent"

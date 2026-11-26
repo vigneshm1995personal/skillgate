@@ -7,10 +7,11 @@ from typing import Any
 from skillgate_ai.extras import UI_FEATURE, MissingExtraError
 
 try:
-    from fastapi import FastAPI, Request
+    from fastapi import Body, FastAPI, Request
 except ModuleNotFoundError as exc:
     raise MissingExtraError(UI_FEATURE, "ui") from exc
 
+from skillgate_ai.api_models import EvalBaselineBody, PromoteDraftBody
 from skillgate_ai.api_payloads import fail, skill_payload, state_of
 from skillgate_ai.catalog import find_skill
 
@@ -46,24 +47,22 @@ def register_hosted_shims(app: FastAPI) -> None:
         }
 
     @app.post("/api/evals/baseline")
-    async def baseline(request: Request) -> dict[str, Any]:
-        body = await request.json()
-        skill = str(body.get("skill") or "")
+    async def baseline(request: Request, payload: EvalBaselineBody = Body()) -> dict[str, Any]:
+        skill = payload.skill
         return {
             "skill": skill,
             "baseline": {
-                "run_id": body.get("run_id"),
+                "run_id": payload.run_id,
                 "source": "manual",
                 "resolved": False,
             },
         }
 
     @app.post("/api/evals/promote-draft")
-    async def promote_draft(request: Request) -> dict[str, Any]:
+    async def promote_draft(request: Request, payload: PromoteDraftBody = Body()) -> dict[str, Any]:
         state = state_of(request)
-        body = await request.json()
-        task = body.get("task") or {}
-        skill_name = body.get("skill")
+        task = payload.task or {}
+        skill_name = payload.skill
         skill = None
         if skill_name:
             skill = skill_payload(state, find_skill(state.root, str(skill_name)))

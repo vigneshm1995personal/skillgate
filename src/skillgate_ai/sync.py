@@ -177,7 +177,7 @@ def _sync_one_target(
         if latest_check_passed(source) is False:
             continue
         copy_skill_pack(source, root / name)
-        ingest_skill(root / name)
+        ingest_skill(root / name, strict=False)
         installed += 1
     _save_state(root, sorted(managed_after))
     return {
@@ -209,15 +209,23 @@ def sync_once(
         prefix = path_prefix or "skills"
         for name in names:
             _reject_symlinks(work / prefix / name)
-        skipped = [name for name in names if latest_check_passed(work / prefix / name) is False]
-        skipped_set = set(skipped)
-        roots = target_roots()
-        per_target = {
-            target: _sync_one_target(
-                root=roots[target], repo_root=work, path_prefix=path_prefix, names=names
-            )
-            for target in selected
-        }
+        prev_root = os.environ.get("SKILLGATE_ROOT")
+        os.environ["SKILLGATE_ROOT"] = str(work)
+        try:
+            skipped = [name for name in names if latest_check_passed(work / prefix / name) is False]
+            skipped_set = set(skipped)
+            roots = target_roots()
+            per_target = {
+                target: _sync_one_target(
+                    root=roots[target], repo_root=work, path_prefix=path_prefix, names=names
+                )
+                for target in selected
+            }
+        finally:
+            if prev_root is None:
+                os.environ.pop("SKILLGATE_ROOT", None)
+            else:
+                os.environ["SKILLGATE_ROOT"] = prev_root
     return {
         "skills": names,
         "synced": [name for name in names if name not in skipped_set],

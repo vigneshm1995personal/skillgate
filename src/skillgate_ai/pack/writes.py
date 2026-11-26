@@ -41,12 +41,13 @@ def write_pack_file(
             "That path is outside the skill folder.",
             hint="Pick a file inside this skill.",
         ) from exc
-    dest_path.parent.mkdir(parents=True, exist_ok=True)
+    from skillgate_ai.pack_io import write_pack_bytes
+
     data = content.encode("utf-8") if isinstance(content, str) else content
     from skillgate_ai.pack_schema import guard_cases_yaml_write
 
     guard_cases_yaml_write(root, relative, data)
-    dest_path.write_bytes(data)
+    write_pack_bytes(root, relative, data)
     return {"src": relative, "dest": Path(relative).name, "path": relative}
 
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from typing import Any
 
@@ -28,14 +29,14 @@ runner = CliRunner()
 
 
 def cli(argv: list[str]) -> tuple[int, str]:
-    result = runner.invoke(app, argv)
+    result = runner.invoke(app, argv, env={**os.environ})
     if result.exception is not None and not isinstance(result.exception, SystemExit):
         raise result.exception
     return result.exit_code, plain_text(result.stdout + result.stderr)
 
 
 def cli_json(argv: list[str]) -> tuple[int, dict[str, Any]]:
-    result = runner.invoke(app, argv)
+    result = runner.invoke(app, argv, env={**os.environ})
     if result.exception is not None and not isinstance(result.exception, SystemExit):
         raise result.exception
     payload: dict[str, Any] = {}
@@ -47,6 +48,7 @@ def cli_json(argv: list[str]) -> tuple[int, dict[str, Any]]:
 def make_workspace(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
     root = tmp_path / "ws"
     root.mkdir()
+    (root / "skills").mkdir(exist_ok=True)
     monkeypatch.setenv("SKILLGATE_ROOT", str(root))
     monkeypatch.setenv("SKILLGATE_CURSOR_SKILLS", str(tmp_path / "cursor-skills"))
     monkeypatch.setenv("SKILLGATE_CODEX_SKILLS", str(tmp_path / "codex-skills"))

@@ -53,7 +53,9 @@ def create_pack(
 
 def scaffold_trigger_cases(pack: str | Path) -> CasePack:
     """Two pinned cases: one should-trigger (no golden) and one negative."""
-    root = Path(pack).expanduser().resolve()
+    from skillgate_ai.paths import skill_pack_root
+
+    root = skill_pack_root(pack)
     skill = ingest_skill(root, strict=False)
     prompt = _prompt_from_description(skill.name, skill.description)
     cases = CasePack(

@@ -9,12 +9,23 @@ from skillgate_ai.pack.constants import (
     _SAFE_NAME,
     FIXTURE_DIR,
 )
+from skillgate_ai.paths import PathTraversalError, contained_path, skill_pack_root
 
 
 def resolve_pack_root(skill_path: str | Path) -> Path:
     """Resolved skill pack directory (must exist)."""
-    root = Path(skill_path).expanduser().resolve()
-    if not root.is_dir():
+    try:
+        root = skill_pack_root(skill_path)
+    except PathTraversalError as exc:
+        raise ValueError("Skill folder not found.") from exc
+    from skillgate_ai.contained_fs import isdir_at
+    from skillgate_ai.paths import pack_access_root
+
+    try:
+        anchor, prefix = pack_access_root(root)
+    except PathTraversalError as exc:
+        raise ValueError("Skill folder not found.") from exc
+    if not isdir_at(anchor, *prefix):
         raise ValueError("Skill folder not found.")
     return root
 
@@ -82,20 +93,27 @@ def _path_under_skill(skill_root: Path, rel: str) -> Path | None:
     parts = [p for p in cleaned.split("/") if p and p not in {".", ""}]
     if not parts or any(p == ".." for p in parts):
         return None
-    base = skill_root.resolve()
-    candidate = base.joinpath(*parts).resolve()
     try:
-        candidate.relative_to(base)
-    except ValueError:
+        return contained_path(skill_root, *parts)
+    except PathTraversalError:
         return None
-    return candidate
 
 
 def _rel_to_skill(root: Path, path: Path) -> str | None:
+    import os
+
+    from skillgate_ai.paths import PathTraversalError, require_under
+
     try:
-        return path.resolve().relative_to(root.resolve()).as_posix()
-    except ValueError:
+        safe = require_under(root, path)
+        base = os.path.realpath(os.path.expanduser(str(root)))
+        target = os.path.realpath(os.fsdecode(safe))
+        rel = os.path.relpath(target, base)
+    except (PathTraversalError, ValueError, OSError):
         return None
+    if rel.startswith(".."):
+        return None
+    return rel.replace("\\", "/")
 
 
 def _safe_filename(name: str) -> str:

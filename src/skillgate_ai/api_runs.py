@@ -7,10 +7,11 @@ from typing import Any
 from skillgate_ai.extras import UI_FEATURE, MissingExtraError
 
 try:
-    from fastapi import FastAPI, Request
+    from fastapi import Body, FastAPI, Request
 except ModuleNotFoundError as exc:
     raise MissingExtraError(UI_FEATURE, "ui") from exc
 
+from skillgate_ai.api_models import StartRunBody
 from skillgate_ai.api_payloads import (
     AppState,
     fail,
@@ -55,8 +56,8 @@ def start_run(state: AppState, body: dict[str, Any]) -> dict[str, Any]:
 
 def register_run_routes(app: FastAPI) -> None:
     @app.post("/api/runs")
-    async def post_run(request: Request) -> dict[str, Any]:
-        return start_run(state_of(request), await request.json())
+    async def post_run(request: Request, payload: StartRunBody = Body()) -> dict[str, Any]:
+        return start_run(state_of(request), payload.model_dump())
 
     @app.get("/api/runs/{run_id}")
     def get_run(run_id: str, request: Request) -> dict[str, Any]:

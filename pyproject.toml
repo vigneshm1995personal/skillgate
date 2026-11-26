@@ -124,6 +124,11 @@ select = ["E", "W", "F", "I", "UP", "B", "SIM", "BLE", "S"]
 "src/skillgate_ai/cli*.py" = ["B008"]
 "src/skillgate_ai/api_evals.py" = ["B008"]
 "src/skillgate_ai/api_skills.py" = ["B008"]
+"src/skillgate_ai/checks_show.py" = ["B008"]
+"src/skillgate_ai/api.py" = ["B008"]
+"src/skillgate_ai/api_runs.py" = ["B008"]
+"src/skillgate_ai/api_compare.py" = ["B008"]
+"src/skillgate_ai/api_shims.py" = ["B008"]
 # setuptools cmdclass names must match the setuptools command classes.
 "src/skillgate_build.py" = ["N801"]
 # Fixture copy / JS-in-Python strings that cannot wrap without changing values.
@@ -151,6 +156,20 @@ explicit_package_bases = true
 exclude = [
   '(?x)(src/skillgate_ai/examples/)',
 ]
+
+[[tool.mypy.overrides]]
+module = [
+  "skillgate_ai.paths",
+  "skillgate_ai.catalog",
+  "skillgate_ai.sandbox",
+  "skillgate_ai.local_guard",
+]
+disallow_any_generics = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+no_implicit_optional = true
+warn_return_any = true
 
 [tool.coverage.run]
 source = ["skillgate_ai"]
