@@ -53,12 +53,11 @@ def single_path_segment_name(name: str) -> bool:
     return ".." not in Path(name).parts and os.sep not in name and "/" not in name
 
 
-def _layout_path(root_real: str) -> Path | None:
-    """Absolute classifier root (callers pass ``realpath`` results only)."""
-    if ".." in Path(root_real).parts:
+def _classifier_base(realpath: str) -> Path | None:
+    if ".." in Path(realpath).parts:
         return None
     try:
-        base = Path(root_real)
+        base = Path(realpath)
         if not base.is_absolute():
             return None
         return base
@@ -67,64 +66,32 @@ def _layout_path(root_real: str) -> Path | None:
 
 
 def layout_has_skills_dir(root_real: str) -> bool:
-    base = _layout_path(root_real)
-    if base is None:
-        return False
-    try:
-        return (base / "skills").is_dir()
-    except OSError:
-        return False
+    return discovery_has_skills_dir(Path(root_real))
 
 
 def layout_skill_pack_at_root(root_real: str) -> bool:
-    base = _layout_path(root_real)
-    if base is None:
-        return False
-    try:
-        return (base / "SKILL.md").is_file() and (base / "evals").is_dir()
-    except OSError:
-        return False
+    return discovery_skill_pack_dir(Path(root_real))
 
 
 def layout_keys_file(root_real: str) -> bool:
-    base = _layout_path(root_real)
-    if base is None:
-        return False
-    try:
-        return (base / ".skillgate" / "keys").is_file()
-    except OSError:
-        return False
+    return discovery_keys_file(Path(root_real))
 
 
 def layout_is_directory(root_real: str) -> bool:
-    base = _layout_path(root_real)
-    if base is None:
-        return False
-    try:
-        return base.is_dir()
-    except OSError:
-        return False
+    return discovery_is_directory(Path(root_real))
 
 
 def layout_pack_markers(root_real: str) -> tuple[bool, bool, bool]:
-    base = _layout_path(root_real)
-    if base is None:
-        return False, False, False
-    try:
-        skill = (base / "SKILL.md").is_file()
-        evals = (base / "evals").is_dir()
-        pack = skill and evals
-        return skill, evals, pack
-    except OSError:
-        return False, False, False
+    return discovery_pack_markers(Path(root_real))
 
 
 def discovery_skill_pack_dir(candidate: Path) -> bool:
     try:
         cand = os.path.realpath(os.fsdecode(candidate))
-        if ".." in Path(cand).parts:
+        base = _classifier_base(cand)
+        if base is None:
             return False
-        return layout_skill_pack_at_root(cand)
+        return (base / "SKILL.md").is_file() and (base / "evals").is_dir()
     except (OSError, ValueError):
         return False
 
@@ -132,7 +99,10 @@ def discovery_skill_pack_dir(candidate: Path) -> bool:
 def discovery_has_skills_dir(candidate: Path) -> bool:
     try:
         cand = os.path.realpath(os.fsdecode(candidate))
-        return layout_has_skills_dir(cand)
+        base = _classifier_base(cand)
+        if base is None:
+            return False
+        return (base / "skills").is_dir()
     except OSError:
         return False
 
@@ -140,7 +110,10 @@ def discovery_has_skills_dir(candidate: Path) -> bool:
 def discovery_keys_file(candidate: Path) -> bool:
     try:
         cand = os.path.realpath(os.fsdecode(candidate))
-        return layout_keys_file(cand)
+        base = _classifier_base(cand)
+        if base is None:
+            return False
+        return (base / ".skillgate" / "keys").is_file()
     except OSError:
         return False
 
@@ -148,7 +121,10 @@ def discovery_keys_file(candidate: Path) -> bool:
 def discovery_is_directory(candidate: Path) -> bool:
     try:
         cand = os.path.realpath(os.fsdecode(candidate))
-        return layout_is_directory(cand)
+        base = _classifier_base(cand)
+        if base is None:
+            return False
+        return base.is_dir()
     except OSError:
         return False
 
@@ -156,6 +132,12 @@ def discovery_is_directory(candidate: Path) -> bool:
 def discovery_pack_markers(candidate: Path) -> tuple[bool, bool, bool]:
     try:
         cand = os.path.realpath(os.fsdecode(candidate))
-        return layout_pack_markers(cand)
+        base = _classifier_base(cand)
+        if base is None:
+            return False, False, False
+        skill = (base / "SKILL.md").is_file()
+        evals = (base / "evals").is_dir()
+        pack = skill and evals
+        return skill, evals, pack
     except OSError:
         return False, False, False

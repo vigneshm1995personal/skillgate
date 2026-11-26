@@ -176,3 +176,12 @@ def test_discovery_helpers_classify_workspace(tmp_path: Path) -> None:
     skill, evals, as_pack = discovery_pack_markers(pack)
     assert skill and evals and as_pack
     assert discovery_skill_pack_dir(tmp_path / "missing") is False
+
+
+def test_relative_segments_under_rejects_traversal() -> None:
+    from skillgate_ai.pack_layout import relative_segments_under
+
+    base = os.path.realpath("/tmp/ws")
+    assert relative_segments_under(base, os.path.join(base, "skills", "pdf")) == ("skills", "pdf")
+    assert relative_segments_under(base, base) == ()
+    assert relative_segments_under(base, os.path.join(base, "..", "etc")) is None

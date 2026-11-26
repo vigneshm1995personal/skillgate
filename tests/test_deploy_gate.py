@@ -177,7 +177,8 @@ def test_pack_gate_pending_for_untrusted_path() -> None:
 
 
 def test_pack_gate_pending_for_allow_root_even_after_green(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from skillgate_ai.allow_root import set_cli_allow_root
 

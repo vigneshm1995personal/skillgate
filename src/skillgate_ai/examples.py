@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import shutil
 from importlib.resources import files
 from pathlib import Path
@@ -24,20 +25,22 @@ _SKIP_DIRS = {".git", "__pycache__", ".skillgate"}
 
 def is_bundled_example_path(folder: Path) -> bool:
     """Packaged example trees (not user paths) for lenient ingest/list."""
-    try:
-        resolved = folder.expanduser().resolve()
-    except OSError:
+    slug = folder.name
+    if slug not in BUNDLED_EXAMPLES:
         return False
+    dev_tree = Path(__file__).resolve().parents[2] / "skills" / slug
+    if folder == dev_tree:
+        return True
     try:
-        packaged = files("skillgate_ai").joinpath("examples")
-        pkg_root = Path(str(packaged)).resolve()
-        if resolved == pkg_root or resolved.is_relative_to(pkg_root):
-            return True
-    except (FileNotFoundError, ModuleNotFoundError, TypeError, ValueError, OSError):
-        pass
-    here = Path(__file__).resolve()
-    skills_root = (here.parents[2] / "skills").resolve()
-    return bool(resolved.parent == skills_root and resolved.name in BUNDLED_EXAMPLES)
+        canonical = bundled_example(slug)
+    except SkillGateError:
+        return False
+    if folder == canonical:
+        return True
+    try:
+        return os.path.samefile(canonical, folder)
+    except (OSError, ValueError):
+        return False
 
 
 def bundled_example(name: str) -> Path:
