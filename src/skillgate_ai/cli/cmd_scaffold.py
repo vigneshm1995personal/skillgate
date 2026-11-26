@@ -34,8 +34,6 @@ def new_cmd(
     name: str = typer.Argument(..., help="Skill folder name (lowercase, hyphens)"),
 ) -> None:
     """Create `skills/NAME` with SKILL.md and starter checks (same as the UI)."""
-    from pathlib import Path as _Path
-
     from skillgate_ai.paths import project_root
     from skillgate_ai.workspace import new_skill
 

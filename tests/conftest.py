@@ -49,6 +49,8 @@ def _tmp_allow_root_for_pack_tests(request: pytest.FixtureRequest) -> None:
         "test_rejects_etc_without_allow_root",
         "test_prefix_sibling_outside_skillgate_env_gate",
         "test_sibling_prefix_under_workspace",
+        "test_sync_skips_skill_whose_latest_check_failed",
+        "test_sync_cli_reports_skipped_not_synced",
     }
     if "tmp_path" in request.fixturenames and request.node.name not in blocklist:
         tmp_path = request.getfixturevalue("tmp_path")
