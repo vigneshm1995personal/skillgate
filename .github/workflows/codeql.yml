@@ -99,10 +99,24 @@ jobs:
           fi
           echo "CodeQL enforce scan_ref=${scan_ref} merge_sha=${merge_sha}"
           alerts_path="repos/${repo}/code-scanning/alerts?state=open&ref=${scan_ref}&per_page=100"
-            on_merge_jq='[.[] | select((.rule.security_severity_level == "high" or .rule.security_severity_level == "critical" or .rule.severity == "error")) | select(.most_recent_instance.commit_sha == $merge)] | length'
-            list_jq='[.[] | select(.rule.security_severity_level == "high" or .rule.security_severity_level == "critical" or .rule.severity == "error") | select(.most_recent_instance.commit_sha == $merge)] | .[] | "\(.rule.id) \(.most_recent_instance.location.path):\(.most_recent_instance.location.start_line)"'
+          analyses_path="repos/${repo}/code-scanning/analyses?ref=${scan_ref}&tool_name=CodeQL&per_page=5"
+          on_merge_jq='[.[] | select((.rule.security_severity_level == "high" or .rule.security_severity_level == "critical" or .rule.severity == "error")) | select(.most_recent_instance.commit_sha == $merge)] | length'
+          list_jq='[.[] | select(.rule.security_severity_level == "high" or .rule.security_severity_level == "critical" or .rule.severity == "error") | select(.most_recent_instance.commit_sha == $merge)] | .[] | "\(.rule.id) \(.most_recent_instance.location.path):\(.most_recent_instance.location.start_line)"'
 
-          for attempt in 1 2 3 4 5 6 7 8 9 10 11 12; do
+          analysis_ready=0
+          alerts_json=""
+          on_merge=""
+          for attempt in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18; do
+            latest_analysis_sha=""
+            if analyses_json="$(gh api "${analyses_path}" 2>/dev/null)"; then
+              latest_analysis_sha="$(printf '%s' "${analyses_json}" | jq -r --arg merge "${merge_sha}" '[.[] | select(.commit_sha == $merge)] | .[0].commit_sha // empty')"
+            fi
+            if [ -z "${latest_analysis_sha}" ] || [ "${latest_analysis_sha}" != "${merge_sha}" ]; then
+              echo "Waiting for CodeQL analysis on merge ${merge_sha} (attempt ${attempt}, latest=${latest_analysis_sha:-none})"
+              sleep 45
+              continue
+            fi
+            analysis_ready=1
             if ! alerts_json="$(gh api "${alerts_path}" --paginate 2>/dev/null)"; then
               echo "CodeQL alerts API not ready for ${scan_ref} (attempt ${attempt})"
               sleep 45
@@ -110,12 +124,20 @@ jobs:
             fi
             on_merge="$(printf '%s' "${alerts_json}" | jq --arg merge "${merge_sha}" "${on_merge_jq}")"
             echo "High/critical on merge commit ${merge_sha} (attempt ${attempt}): ${on_merge}"
+            if [ "${attempt}" -lt 2 ]; then
+              sleep 45
+              continue
+            fi
             if [ "${on_merge}" -eq 0 ]; then
-              echo "CodeQL enforce: 0 high/critical alerts on analyzed merge commit."
+              echo "CodeQL enforce: 0 high/critical alerts on analyzed merge commit ${merge_sha}."
               exit 0
             fi
             sleep 45
           done
+          if [ "${analysis_ready}" -ne 1 ]; then
+            echo "Timeout: no CodeQL analysis ingested for merge commit ${merge_sha} on ${scan_ref}."
+            exit 1
+          fi
           printf '%s\n' "${alerts_json}" | jq -r --arg merge "${merge_sha}" "${list_jq}" || true
-          echo "Resolve ${on_merge} open high/critical CodeQL alert(s) on merge commit ${merge_sha}."
+          echo "Resolve ${on_merge:-unknown} open high/critical CodeQL alert(s) on merge commit ${merge_sha}."
           exit 1
