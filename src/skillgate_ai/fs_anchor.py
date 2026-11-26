@@ -50,15 +50,15 @@ def anchor_base(anchor: FsAnchor) -> str:
             raise PathTraversalError("Path escapes the allowed root.")
         return allow_base
     if anchor is FsAnchor.AGENT_CURSOR:
-        from skillgate_ai.deploy import cursor_skills_root
+        from skillgate_ai.agent_roots import cursor_skills_root
 
         return os.path.realpath(str(cursor_skills_root()))
     if anchor is FsAnchor.AGENT_CODEX:
-        from skillgate_ai.deploy import codex_skills_root
+        from skillgate_ai.agent_roots import codex_skills_root
 
         return os.path.realpath(str(codex_skills_root()))
     if anchor is FsAnchor.AGENT_CLAUDE:
-        from skillgate_ai.deploy import claude_skills_root
+        from skillgate_ai.agent_roots import claude_skills_root
 
         return os.path.realpath(str(claude_skills_root()))
     raise PathTraversalError("Path escapes the allowed root.")

@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from skillgate_ai.deploy import claude_skills_root, codex_skills_root, cursor_skills_root
+from skillgate_ai.agent_roots import claude_skills_root, codex_skills_root, cursor_skills_root
 from skillgate_ai.errors import SkillGateError
 from skillgate_ai.ingest import NAME_RE, folder_slug, ingest_skill
 from skillgate_ai.pack import copy_skill_pack as copy_pack

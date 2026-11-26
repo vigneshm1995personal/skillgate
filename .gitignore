@@ -13,6 +13,7 @@ dist/
 build/
 .pytest_cache/
 .ruff_cache/
+.import_linter_cache/
 .skillgate/
 .coverage
 .coverage.*

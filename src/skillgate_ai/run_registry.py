@@ -8,7 +8,7 @@ from __future__ import annotations
 import copy
 import threading
 import uuid
-from collections.abc import Callable
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -36,14 +36,14 @@ class RunBusyError(SkillGateError):
 class RunRequest:
     skill_path: Path
     harness: str = "auto"
-    checks: list[dict[str, Any]] | None = None
+    checks: Sequence[Mapping[str, Any]] | None = None
     config: dict[str, Any] = field(default_factory=dict)
     tryout: bool = False
     no_judge: bool = False
     source: str = "ui"
 
 
-def attach_stamped_config(record: RunRecord, report: dict[str, Any] | None) -> None:
+def attach_stamped_config(record: RunRecord, report: Mapping[str, Any] | None) -> None:
     """Replace the request config with the resolved stamp so UI Result/Metrics match the run."""
     from skillgate_ai.eval_config import EvalRunConfig, customer_run_details
 
@@ -56,7 +56,7 @@ def attach_stamped_config(record: RunRecord, report: dict[str, Any] | None) -> N
         record["config"] = merged
 
 
-def resolve_harness(config: dict[str, Any], requested: str | None) -> str:
+def resolve_harness(config: Mapping[str, Any], requested: str | None) -> str:
     """config.harness_pref wins if it's a known pref, else requested, else 'auto'."""
     pref = str(config.get("harness_pref") or "").strip().lower()
     req = str(requested or "").strip().lower()
@@ -80,7 +80,7 @@ class RunRegistry:
         self._busy_pred = busy
         self._threads: dict[str, threading.Thread] = {}
         self._heartbeat_stop: dict[str, threading.Event] = {}
-        self._run_meta: dict[str, dict[str, Any]] = {}
+        self._run_meta: dict[str, Mapping[str, Any]] = {}
 
     def busy(self) -> bool:
         if self._busy_pred is not None:
@@ -88,7 +88,7 @@ class RunRegistry:
         with self.lock:
             return any(record.get("status") == "running" for record in self.runs.values())
 
-    def set_run_meta(self, run_id: str, meta: dict[str, Any]) -> None:
+    def set_run_meta(self, run_id: str, meta: Mapping[str, Any]) -> None:
         self._run_meta[run_id] = dict(meta)
         record = self.runs.get(run_id)
         if record is not None:

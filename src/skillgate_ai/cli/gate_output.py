@@ -10,9 +10,9 @@ from typing import NoReturn
 import typer
 
 import skillgate_ai.cli.base as base
-from skillgate_ai.api_payloads import scrub_browser_payload
 from skillgate_ai.errors import SkillGateError, error_payload
 from skillgate_ai.report import format_cli, format_github, report_to_dict
+from skillgate_ai.scrub import scrub_browser_payload
 
 
 def _present_check(result, *, verbose: bool = False) -> None:

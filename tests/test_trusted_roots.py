@@ -52,7 +52,7 @@ def test_agent_skill_immediate_child(tmp_path: Path, monkeypatch: pytest.MonkeyP
     def _cursor() -> Path:
         return agent_root
 
-    monkeypatch.setattr("skillgate_ai.deploy.cursor_skills_root", _cursor)
+    monkeypatch.setattr("skillgate_ai.agent_roots.cursor_skills_root", _cursor)
     anchor, parts = pack_access_root(pack)
     assert anchor is FsAnchor.AGENT_CURSOR
     assert parts == ("foo",)
@@ -68,7 +68,7 @@ def test_agent_skill_without_evals_dir(tmp_path: Path, monkeypatch: pytest.Monke
     def _cursor() -> Path:
         return agent_root
 
-    monkeypatch.setattr("skillgate_ai.deploy.cursor_skills_root", _cursor)
+    monkeypatch.setattr("skillgate_ai.agent_roots.cursor_skills_root", _cursor)
     anchor, parts = pack_access_root(pack)
     assert anchor is FsAnchor.AGENT_CURSOR
     assert parts == ("foo",)
@@ -88,7 +88,7 @@ def test_rejects_nested_agent_path(tmp_path: Path, monkeypatch: pytest.MonkeyPat
     def _cursor() -> Path:
         return agent_root
 
-    monkeypatch.setattr("skillgate_ai.deploy.cursor_skills_root", _cursor)
+    monkeypatch.setattr("skillgate_ai.agent_roots.cursor_skills_root", _cursor)
     with pytest.raises(PathTraversalError):
         pack_access_root(nested)
 

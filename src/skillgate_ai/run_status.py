@@ -9,6 +9,7 @@ import re
 import socket
 import tempfile
 import threading
+from collections.abc import Mapping
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -63,7 +64,7 @@ def _iso_now() -> str:
     return datetime.now(UTC).astimezone().isoformat()
 
 
-def _owner() -> dict[str, Any]:
+def _owner() -> Mapping[str, Any]:
     return {"pid": os.getpid(), "hostname": socket.gethostname()}
 
 
@@ -90,7 +91,7 @@ def persist_run_status(
     run_id: str,
     record: dict[str, Any],
     *,
-    meta: dict[str, Any] | None = None,
+    meta: Mapping[str, Any] | None = None,
 ) -> None:
     """Best-effort status snapshot without the report body."""
     slim = {key: record.get(key) for key in record if key != "report"}
@@ -155,12 +156,12 @@ def _heartbeat_stale(heartbeat_at: str | None) -> bool:
     return age > ORPHAN_HEARTBEAT_SEC
 
 
-def _apply_orphan(payload: dict[str, Any], path: Path) -> dict[str, Any]:
+def _apply_orphan(payload: Mapping[str, Any], path: Path) -> Mapping[str, Any]:
     record_obj = payload.get("record")
     record = record_obj if isinstance(record_obj, dict) else {}
     status = str(record.get("status") or payload.get("status") or "running")
     if status not in ("running", "started"):
-        return payload
+        return dict(payload)
     owner_obj = payload.get("owner")
     owner = owner_obj if isinstance(owner_obj, dict) else {}
     pid = int(owner.get("pid") or 0)
@@ -169,7 +170,7 @@ def _apply_orphan(payload: dict[str, Any], path: Path) -> dict[str, Any]:
     dead = local and not _pid_alive(pid)
     stale = _heartbeat_stale(str(payload.get("heartbeat_at") or ""))
     if not dead and not stale:
-        return payload
+        return dict(payload)
     message = ORPHAN_MESSAGE.format(pid=pid or "?", host=host or "?")
     out = dict(payload)
     next_record = dict(record)
@@ -189,7 +190,7 @@ def _apply_orphan(payload: dict[str, Any], path: Path) -> dict[str, Any]:
     return out
 
 
-def read_run_status(path: Path) -> dict[str, Any] | None:
+def read_run_status(path: Path) -> Mapping[str, Any] | None:
     if not path.is_file():
         return None
     try:
@@ -204,7 +205,7 @@ def read_run_status(path: Path) -> dict[str, Any] | None:
     return _apply_orphan(payload, path)
 
 
-def record_from_status(payload: dict[str, Any]) -> dict[str, Any] | None:
+def record_from_status(payload: Mapping[str, Any]) -> dict[str, Any] | None:
     record = payload.get("record") if isinstance(payload.get("record"), dict) else None
     if record is None:
         return None
@@ -230,7 +231,7 @@ def start_heartbeat(
     return thread
 
 
-def find_status_file(root: Path, run_id: str) -> tuple[dict[str, Any], Path] | None:
+def find_status_file(root: Path, run_id: str) -> tuple[Mapping[str, Any], Path] | None:
     from skillgate_ai.catalog import catalog_entries
     from skillgate_ai.paths import is_skill_pack
 

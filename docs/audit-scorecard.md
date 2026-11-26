@@ -71,3 +71,21 @@ _Footnote:_ PR C row `dict[str, Any]` "After 480" was re-measured on `cc8919a` a
 
 - Coverage target ~85% / `dict[str, Any]` ≤ 520 needs more B2 + D3 tests (FastAPI routes and `mcp/` frozen)
 - `judge_settings` S101, CodeQL triage
+
+## PR F (Option B) — layering, strict FS mypy, gate payloads
+
+| Metric | Before (`9b91ccb6`) | After | Command |
+|---|---|---|---|
+| `dict[str, Any]` lines (all `src`) | 516 | 490 | `grep -rn 'dict[str, Any\]' src/skillgate_ai --include='*.py' \| wc -l` |
+| `mcp/` `dict[str, Any]` lines | 46 | 46 | same under `src/skillgate_ai/mcp` |
+| `TypedDict` classes | 27 | 29+ | `grep -rnE 'class \w+\(TypedDict' src/skillgate_ai` |
+| import-linter contracts | 0 | 4 kept | `lint-imports` |
+| mypy strict modules | 4 | 13 (`agent_roots`, `scrub`, FS core) | `pyproject.toml` overrides |
+| Unit coverage | ~84.06% | ~84.09% | `pytest -m "not integration" --cov` |
+| Unit tests passed | 2138 | 2155+ | `pytest -m "not integration"` |
+
+### Open items (post F)
+
+- CodeQL alert triage (admin); FS `layers` contract (Option C)
+- `engine/models.py` dataclass fields stay `dict[str, Any]` (judge protocol boundary)
+- Branch coverage / `fail_under` ≥ 84.5 deferred

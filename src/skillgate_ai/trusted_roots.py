@@ -18,7 +18,7 @@ _OUTSIDE_PACK_ROOT_MSG = (
 
 
 def _agent_roots() -> tuple[tuple[Callable[[], Path], FsAnchor], ...]:
-    from skillgate_ai.deploy import (
+    from skillgate_ai.agent_roots import (
         claude_skills_root,
         codex_skills_root,
         cursor_skills_root,

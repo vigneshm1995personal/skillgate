@@ -71,6 +71,8 @@ jobs:
       - run: ruff check
       - run: ruff format --check
       - run: mypy src
+      - name: Import layering (import-linter)
+        run: lint-imports
 
   test-matrix:
     name: test (${{ matrix.python-version }})

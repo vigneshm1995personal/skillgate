@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import subprocess
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
@@ -286,10 +287,10 @@ def _judge_task(
 
 
 def _combined_usage(
-    task_usage: dict[str, Any] | None,
+    task_usage: Mapping[str, Any] | None,
     judged: Any,
     result: HarnessResult,
-    run_config: dict[str, Any] | None,
+    run_config: Mapping[str, Any] | None,
 ) -> dict[str, Any] | None:
     from skillgate_ai.usage import combine_task_usage
 
@@ -553,7 +554,7 @@ def _skipped_report(task: TaskSpec, reason: str) -> TaskReport:
     )
 
 
-def _spans_from_transcript(transcript: str) -> list[dict[str, Any]] | None:
+def _spans_from_transcript(transcript: str) -> list[Any] | None:
     from skillgate_ai.spans import spans_from_jsonl
 
     spans = spans_from_jsonl(transcript or "")
