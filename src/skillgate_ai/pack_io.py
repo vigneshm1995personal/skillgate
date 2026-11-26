@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from skillgate_ai.fs_anchor import FsAnchor
 from skillgate_ai.contained_fs import (
     _split_rel as _split_rel,
 )
@@ -19,6 +18,7 @@ from skillgate_ai.contained_fs import (
     write_bytes_at,
     write_text,
 )
+from skillgate_ai.fs_anchor import FsAnchor
 from skillgate_ai.paths import PathTraversalError, pack_access_root, pack_file_at
 
 
