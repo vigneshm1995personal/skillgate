@@ -199,8 +199,8 @@ def scrub_compare_payload(payload: dict[str, Any]) -> dict[str, Any]:
 
 def scrub_customer_compare_payload(payload: dict[str, Any]) -> dict[str, Any]:
     """Compare JSON for CLI --json and browser/API (compare scrub + global browser scrub)."""
-    from skillgate_ai.api_payloads import scrub_browser_payload
     from skillgate_ai.eval_config import customer_config_label
+    from skillgate_ai.scrub import scrub_browser_payload
 
     data = scrub_browser_payload(scrub_compare_payload(payload))
     for arm in data.get("arms") or []:

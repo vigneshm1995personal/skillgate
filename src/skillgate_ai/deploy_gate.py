@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal, TypedDict
 
 from skillgate_ai.history import load_history
 
@@ -52,7 +52,15 @@ def row_gate_moved(row: Mapping[str, Any]) -> bool:
 RUNNING_GATE_REASON = "Check is still running."
 
 
-def run_gate_summary(row: Mapping[str, Any], *, tryout_reason: str | None = None) -> dict[str, Any]:
+class GateSummary(TypedDict):
+    kind: Literal["tryout", "official"]
+    moves_gate: bool
+    decision: str
+    reason: str
+    tryout_reason: str | None
+
+
+def run_gate_summary(row: Mapping[str, Any], *, tryout_reason: str | None = None) -> GateSummary:
     """Uniform gate block for a history row or a live run record."""
     report = row.get("report") if isinstance(row.get("report"), dict) else None
     tryout = row_is_tryout(row, report)

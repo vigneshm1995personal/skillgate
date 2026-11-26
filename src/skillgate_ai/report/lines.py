@@ -43,7 +43,7 @@ def _task_fail_line(task: TaskReport) -> str:
     return "This check did not pass."
 
 
-def _named_builtin_fail(judge: dict[str, Any]) -> str | None:
+def _named_builtin_fail(judge: Mapping[str, Any]) -> str | None:
     from skillgate_ai.judge_bank import (
         CHECK_CELL_LABELS,
         PASS_LOCK,
@@ -131,7 +131,9 @@ def _task_check_answers(task: TaskReport) -> tuple[list[dict[str, str]], str]:
         cells = [item for item in raw if isinstance(item, dict)]
     if cells:
         raw_answers_map = judge.get("answers")
-        answers_map: dict[str, Any] = raw_answers_map if isinstance(raw_answers_map, dict) else {}
+        answers_map: Mapping[str, Any] = (
+            raw_answers_map if isinstance(raw_answers_map, dict) else {}
+        )
         rows: list[dict[str, str]] = []
         if isinstance(raw, dict):
             pairs = ((str(key), cell) for key, cell in raw.items() if isinstance(cell, dict))
@@ -190,9 +192,9 @@ def _extra_source_lines(task: TaskReport) -> list[str]:
 
     judge = task.judge if isinstance(task.judge, dict) else {}
     raw_cells = judge.get("cells")
-    cells: dict[str, Any] = raw_cells if isinstance(raw_cells, dict) else {}
+    cells: Mapping[str, Any] = raw_cells if isinstance(raw_cells, dict) else {}
     raw_answers = judge.get("answers")
-    answers: dict[str, Any] = raw_answers if isinstance(raw_answers, dict) else {}
+    answers: Mapping[str, Any] = raw_answers if isinstance(raw_answers, dict) else {}
     lines: list[str] = []
     for key, cell in cells.items():
         if key in CHECK_CELL_ORDER or key in SOFT_CELL_ORDER:

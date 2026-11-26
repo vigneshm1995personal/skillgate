@@ -9,10 +9,10 @@ from __future__ import annotations
 import os
 import subprocess
 import uuid
-from collections.abc import Callable
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, TypedDict
 
 from skillgate_ai.config import LLMConfig, get_llm_config, load_env
 from skillgate_ai.demo_files import ensure_demo_pdfs
@@ -64,7 +64,7 @@ def persist_eval(
 ) -> None:
     if pack_root is None or not pack_root.is_dir():
         return
-    from skillgate_ai.api_payloads import scrub_browser_payload, scrub_config
+    from skillgate_ai.scrub import scrub_browser_payload, scrub_config
 
     cfg = config.to_dict() if isinstance(config, EvalRunConfig) else config
     is_tryout = tryout or bool((report or {}).get("tryout"))
@@ -119,7 +119,7 @@ def run_check(
     run_id: str | None = None,
     source: str = "cli",
     root: Path | None = None,
-    checks: list[dict[str, Any]] | None = None,
+    checks: Sequence[Mapping[str, Any]] | None = None,
     tryout: bool = False,
     no_judge: bool = False,
 ) -> CheckResult:
@@ -396,9 +396,18 @@ def _quality_scoring_was_skipped(report: SuiteReport) -> bool:
     return False
 
 
-def result_payload(result: CheckResult) -> dict[str, Any]:
+class CheckResultPayload(TypedDict):
+    run_id: str
+    exit_code: int
+    demo_notice: str | None
+    expect_fail_notice: str | None
+    error: Mapping[str, Any] | None
+    report: Any | None
+
+
+def result_payload(result: CheckResult) -> CheckResultPayload:
     """JSON for the local UI / tests. ``exit_code`` matches the CLI."""
-    payload: dict[str, Any] = {
+    payload: CheckResultPayload = {
         "run_id": result.run_id,
         "exit_code": result.exit_code,
         "demo_notice": result.demo_notice,

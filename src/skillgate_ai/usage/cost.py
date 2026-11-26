@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any
 
 from skillgate_ai.usage.model import (
@@ -103,7 +104,7 @@ def normalize_judge_api_usage(
 
 
 def combine_task_usage(
-    agent: dict[str, Any] | None,
+    agent: Mapping[str, Any] | None,
     judged: dict[str, Any] | None,
     *,
     agent_model: str | None = None,
@@ -115,7 +116,7 @@ def combine_task_usage(
     judge_raw = judged.get("usage") if isinstance(judged, dict) else None
     judge_u = usage_from_mapping(judge_raw)
     if agent_u is None and judge_u is None:
-        return agent
+        return None if agent is None else dict(agent)
     if agent_subscription and agent_u is not None:
         agent_u = Usage(
             tokens_in=agent_u.tokens_in,

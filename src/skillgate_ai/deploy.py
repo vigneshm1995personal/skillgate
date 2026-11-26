@@ -2,17 +2,25 @@
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 from typing import NotRequired, Protocol, TypedDict
 
+from skillgate_ai.agent_roots import (  # noqa: F401, I001 — MCP / legacy callers
+    claude_skills_root as claude_skills_root,
+)
+from skillgate_ai.agent_roots import (
+    codex_skills_root as codex_skills_root,
+)
+from skillgate_ai.agent_roots import (
+    cursor_skills_root as cursor_skills_root,
+)
 from skillgate_ai.deploy_gate import deploy_allowed, newest_gate_moving_row
 from skillgate_ai.errors import DeployError, IngestError, friendly_os_error
 from skillgate_ai.history import load_history
-
-__all__ = ["deploy_allowed"]
 from skillgate_ai.ingest import NAME_RE, Skill, folder_slug, ingest_skill
 from skillgate_ai.pack import copy_skill_pack
+
+__all__ = ["deploy_allowed"]
 
 
 class DeployResult(TypedDict):
@@ -46,25 +54,6 @@ class DeployAdapter(Protocol):
         ...
 
 
-def _override_root(env_var: str) -> Path | None:
-    env = os.environ.get(env_var, "").strip()
-    return Path(env).expanduser().resolve() if env else None
-
-
-def cursor_skills_root() -> Path:
-    return (
-        _override_root("SKILLGATE_CURSOR_SKILLS") or (Path.home() / ".cursor" / "skills").resolve()
-    )
-
-
-def codex_skills_root() -> Path:
-    return _override_root("SKILLGATE_CODEX_SKILLS") or (Path.home() / ".codex" / "skills").resolve()
-
-
-def claude_skills_root() -> Path:
-    return (
-        _override_root("SKILLGATE_CLAUDE_SKILLS") or (Path.home() / ".claude" / "skills").resolve()
-    )
 
 
 class _PackAdapter:

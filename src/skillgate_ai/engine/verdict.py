@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -29,7 +30,7 @@ def _outcome_judge_outputs(task: TaskSpec, artifacts: RunArtifacts) -> list[dict
         for item in spec.files:
             dest = artifacts.workspace / item.path
             present = dest.is_file()
-            row: dict[str, Any] = {"path": item.path, "present": present}
+            row = {"path": item.path, "present": present}
             if present:
                 from skillgate_ai.judge_context import enrich_output_row
 
@@ -280,7 +281,7 @@ def _live_verdict(
 
 def _why_expected_output(
     task: TaskSpec,
-    golden_payload: dict[str, Any] | None,
+    golden_payload: Mapping[str, Any] | None,
     *,
     skill_name: str | None = None,
 ) -> Any:

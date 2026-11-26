@@ -9,7 +9,7 @@ import pytest
 from skillgate_ai.config import get_llm_config
 from skillgate_ai.demo_files import ensure_demo_pdfs
 from skillgate_ai.errors import HarnessError, error_payload
-from skillgate_ai.gate import run_check
+from skillgate_ai.gate import CheckResult, CheckResultPayload, result_payload, run_check
 from skillgate_ai.harness import CursorAgentHarness, live_harness_or_error
 from skillgate_ai.keys import set_vault_key
 from skillgate_ai.paths import resolve_user_path
@@ -250,3 +250,20 @@ def test_resolve_user_path_prefers_cwd(tmp_path: Path, monkeypatch: pytest.Monke
     assert resolved == local.resolve()
     via_name = resolve_user_path(Path("pdf"), proj)
     assert via_name == local.resolve()
+
+
+def test_result_payload_key_order() -> None:
+    keys = [
+        "run_id",
+        "exit_code",
+        "demo_notice",
+        "expect_fail_notice",
+        "error",
+        "report",
+    ]
+    assert list(CheckResultPayload.__annotations__) == keys
+    res = CheckResult(run_id="r", exit_code=1, report=None)
+    res_payload = result_payload(res)
+    assert list(res_payload) == keys
+    assert res_payload["report"] is None
+    assert json.loads(json.dumps(res_payload)) == res_payload

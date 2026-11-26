@@ -174,7 +174,7 @@ def load_compares(pack_root: str | Path, *, limit: int = 50) -> list[dict[str, A
 
 
 def _scrub_history_row(row: dict[str, Any]) -> dict[str, Any]:
-    from skillgate_ai.api_payloads import scrub_browser_payload
+    from skillgate_ai.scrub import scrub_browser_payload
 
     return scrub_browser_payload(row)
 

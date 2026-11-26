@@ -8,6 +8,7 @@ import pytest
 
 from skillgate_ai.deploy import deploy_allowed, require_passing_check
 from skillgate_ai.deploy_gate import (
+    GateSummary,
     infer_gate_moved,
     local_gate,
     newest_gate_moving_row,
@@ -140,6 +141,15 @@ def test_run_gate_summary_tryout_pending() -> None:
     summary = run_gate_summary({"tryout": True, "passed": True})
     assert summary["decision"] == "pending"
     assert "Single-check" in summary["reason"]
+
+
+def test_run_gate_summary_matches_typed_dict() -> None:
+    keys = ["kind", "moves_gate", "decision", "reason", "tryout_reason"]
+    assert list(GateSummary.__annotations__) == keys
+    running = run_gate_summary({"status": "running", "tryout": False})
+    assert list(running) == keys
+    error_row = run_gate_summary({"passed": None, "error": {"message": "x"}})
+    assert list(error_row) == keys
 
 
 def test_newest_gate_moving_row_skips_non_moving() -> None:

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Any
 
 from skillgate_ai.engine.models import EvalProgress, TaskProgress, TaskReport
 from skillgate_ai.harness import Harness
@@ -19,7 +18,7 @@ def _emit_progress(
     reports: list[TaskReport],
     config: dict | None = None,
     running_task: TaskSpec | None = None,
-    running_spans: list[dict[str, Any]] | None = None,
+    running_spans=None,
     running_transcript: str = "",
     pack_fingerprint: str | None = None,
     pack_case_ids: tuple[str, ...] | list[str] | None = None,
@@ -50,7 +49,7 @@ def _eval_progress(
     reports: list[TaskReport],
     config: dict | None = None,
     running_task: TaskSpec | None = None,
-    running_spans: list[dict[str, Any]] | None = None,
+    running_spans=None,
     running_transcript: str = "",
     pack_fingerprint: str | None = None,
     pack_case_ids: tuple[str, ...] | list[str] | None = None,

@@ -20,3 +20,11 @@ repos:
         args: [src]
         pass_filenames: false
         additional_dependencies: []
+  - repo: local
+    hooks:
+      - id: import-linter
+        name: import-linter
+        entry: lint-imports
+        language: system
+        pass_filenames: false
+        types: [python]

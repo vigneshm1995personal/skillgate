@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any, Literal
 
@@ -245,7 +246,7 @@ def trust_suite_for_skill(skill_path: str | Path) -> TrustSuite | None:
 
 def suite_from_checks(
     skill_path: str | Path,
-    checks: list[dict[str, Any]],
+    checks: Sequence[Mapping[str, Any]],
     *,
     tryout: bool = False,
     only_listed: bool = False,
