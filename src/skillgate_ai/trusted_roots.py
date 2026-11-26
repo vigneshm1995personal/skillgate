@@ -45,6 +45,16 @@ def normalize_pack_target(skill_path: str | Path) -> Path:
     return Path(os.path.realpath(text))
 
 
+def _rel_under_workspace_skills(rel: tuple[str, ...]) -> bool:
+    if not rel:
+        return False
+    if rel[0] == "skills":
+        return len(rel) <= 3
+    if "skills" not in rel:
+        return False
+    return len(rel) - rel.index("skills") <= 2
+
+
 def _prefix_sibling_of_gate(bound: Path, gate: Path) -> bool:
     """Detect ``/tmp/a`` vs ``/tmp/ab`` style prefix siblings around a workspace gate."""
     gate_text = os.path.normpath(os.path.realpath(str(gate)))
@@ -61,7 +71,6 @@ def pack_access_root(skill_path: str | Path) -> tuple[FsAnchor, tuple[str, ...]]
         loose_pack_mount_at,
         relative_segments_under,
         single_path_segment_name,
-        strict_skill_pack_at,
     )
 
     target = os.path.realpath(os.fsdecode(resolved))
@@ -89,11 +98,11 @@ def pack_access_root(skill_path: str | Path) -> tuple[FsAnchor, tuple[str, ...]]
                     raise PathTraversalError("Path escapes the allowed root.")
             from skillgate_ai.contained_fs import isdir_at
 
-            under_skills = bool(rel) and rel[0] == "skills"
-            shallow_pack = len(rel) <= 2 and (
-                loose_pack_mount_at(FsAnchor.WORKSPACE, *rel)
-                or isdir_at(FsAnchor.WORKSPACE, *rel, "evals")
+            pack_layout_ok = loose_pack_mount_at(FsAnchor.WORKSPACE, *rel) or isdir_at(
+                FsAnchor.WORKSPACE, *rel, "evals"
             )
+            under_skills = _rel_under_workspace_skills(rel) and pack_layout_ok
+            shallow_pack = len(rel) <= 2 and pack_layout_ok
             if under_skills or shallow_pack:
                 return FsAnchor.WORKSPACE, rel
 
@@ -119,7 +128,7 @@ def pack_access_root(skill_path: str | Path) -> tuple[FsAnchor, tuple[str, ...]]
         if not single_path_segment_name(name):
             continue
         try:
-            if strict_skill_pack_at(agent_anchor, name):
+            if loose_pack_mount_at(agent_anchor, name):
                 return agent_anchor, (name,)
         except OSError:
             continue

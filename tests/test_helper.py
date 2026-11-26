@@ -92,7 +92,7 @@ def test_connect_writes_0600_helper_json(monkeypatch: pytest.MonkeyPatch, tmp_pa
 
 
 def test_helper_hash_mismatch_rejected(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, project_root: Path
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     skill_dir = _write_skill(tmp_path / "pdf", "pdf")
     correct_hash = skill_pack_hash(skill_dir)
@@ -116,7 +116,7 @@ def test_helper_hash_mismatch_rejected(
 
 
 def test_helper_verifies_goldens_in_recorded_hash(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, project_root: Path
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     """Passes recorded with evals/goldens still verify; editor install omits goldens."""
     skill_dir = _write_skill(tmp_path / "csv-clean", "csv-clean")
@@ -148,11 +148,11 @@ def test_helper_verifies_goldens_in_recorded_hash(
 
 
 def test_helper_refuses_red_latest_check(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, project_root: Path
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     from skillgate_ai.history import append_eval
 
-    skill_dir = _write_skill(tmp_path / "pdf", "pdf")
+    skill_dir = _write_skill(tmp_path / "skills" / "pdf", "pdf")
     append_eval(skill_dir, run_id="red", passed=False)
     correct_hash = skill_pack_hash(skill_dir)
     monkeypatch.setattr(
@@ -174,7 +174,7 @@ def test_helper_refuses_red_latest_check(
 
 
 def test_helper_failed_copy_leaves_existing_install(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, project_root: Path
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     skill_dir = _write_skill(tmp_path / "pdf", "pdf")
     correct_hash = skill_pack_hash(skill_dir)
@@ -208,7 +208,7 @@ def test_helper_failed_copy_leaves_existing_install(
 
 
 def test_helper_installs_and_reports(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, project_root: Path
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     skill_dir = _write_skill(tmp_path / "pdf", "pdf")
     correct_hash = skill_pack_hash(skill_dir)

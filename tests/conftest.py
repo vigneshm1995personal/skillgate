@@ -66,6 +66,9 @@ def _workspace_env(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPat
         tmp_path = request.getfixturevalue("tmp_path")
         (tmp_path / "skills").mkdir(exist_ok=True)
         monkeypatch.setenv("SKILLGATE_ROOT", str(tmp_path))
+        monkeypatch.setenv("SKILLGATE_CURSOR_SKILLS", str(tmp_path / "cursor-skills"))
+        monkeypatch.setenv("SKILLGATE_CODEX_SKILLS", str(tmp_path / "codex-skills"))
+        monkeypatch.setenv("SKILLGATE_CLAUDE_SKILLS", str(tmp_path / "claude-skills"))
         return
     monkeypatch.setenv("SKILLGATE_ROOT", str(ROOT))
 

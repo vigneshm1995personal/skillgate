@@ -17,6 +17,11 @@ runner = CliRunner()
 
 
 def _client(root: Path, monkeypatch) -> TestClient:
+    from skillgate_ai.allow_root import set_cli_allow_root
+
+    set_cli_allow_root(None)
+    (root / "skills").mkdir(parents=True, exist_ok=True)
+    monkeypatch.setenv("SKILLGATE_ROOT", str(root))
     monkeypatch.setenv("SKILLGATE_MODE", "local")
     app = create_app(root=root)
     return TestClient(app, base_url="http://127.0.0.1:8765")

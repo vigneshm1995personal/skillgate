@@ -22,6 +22,24 @@ BUNDLED_EXAMPLES = EXAMPLE_NAMES + DATASET_EXAMPLES
 _SKIP_DIRS = {".git", "__pycache__", ".skillgate"}
 
 
+def is_bundled_example_path(folder: Path) -> bool:
+    """Packaged example trees (not user paths) for lenient ingest/list."""
+    try:
+        resolved = folder.expanduser().resolve()
+    except OSError:
+        return False
+    try:
+        packaged = files("skillgate_ai").joinpath("examples")
+        pkg_root = Path(str(packaged)).resolve()
+        if resolved == pkg_root or resolved.is_relative_to(pkg_root):
+            return True
+    except (FileNotFoundError, ModuleNotFoundError, TypeError, ValueError, OSError):
+        pass
+    here = Path(__file__).resolve()
+    skills_root = (here.parents[2] / "skills").resolve()
+    return bool(resolved.parent == skills_root and resolved.name in BUNDLED_EXAMPLES)
+
+
 def bundled_example(name: str) -> Path:
     slug = (name or "").strip()
     if slug not in BUNDLED_EXAMPLES:

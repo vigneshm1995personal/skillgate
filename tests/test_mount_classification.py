@@ -7,9 +7,9 @@ from pathlib import Path
 
 import pytest
 
+from skillgate_ai.allow_root import set_cli_allow_root
 from skillgate_ai.fs_anchor import FsAnchor
 from skillgate_ai.paths import PathTraversalError, config_root_for, contained_path
-from skillgate_ai.allow_root import set_cli_allow_root
 from skillgate_ai.trusted_roots import (
     pack_access_root,
     skill_pack_root_from_access,

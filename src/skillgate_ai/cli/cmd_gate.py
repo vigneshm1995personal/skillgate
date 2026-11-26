@@ -57,7 +57,8 @@ def _run_gate(
 ) -> None:
     from skillgate_ai.allow_root import set_cli_allow_root
 
-    set_cli_allow_root(allow_root)
+    if allow_root is not None:
+        set_cli_allow_root(allow_root)
     base._bind_key_env(key_env)
     machine = json_out or summary == "json"
     checks = None

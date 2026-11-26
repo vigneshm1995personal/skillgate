@@ -302,42 +302,50 @@ def process_job(url: str, config: dict, job: dict) -> dict:
     headers = {"Authorization": f"Bearer {config['token']}"}
     mismatch = _mismatch_result(targets)
     bundle = _http_get(f"{url}/api/helper/bundles/{job_id}", headers=headers)
+    from skillgate_ai.allow_root import set_cli_allow_root
+
     with tempfile.TemporaryDirectory(prefix="sg-helper-") as td:
         root = Path(td)
         _extract_bundle(bundle, root)
-        manifest_path = root / "manifest.json"
-        if not manifest_path.is_file():
-            return _failed_result(targets, _INSTALL_FAILED)
+        set_cli_allow_root(root)
         try:
-            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-        except (OSError, ValueError):
-            return _failed_result(targets, _INSTALL_FAILED)
-        if manifest.get("skill_md_hash") != expected_hash:
-            return mismatch
-        skill_dir = root / skill_name
-        if not skill_dir.is_dir() or skill_pack_hash(skill_dir) != expected_hash:
-            return mismatch
-        try:
-            loaded = ingest_skill(skill_dir)
-        except SkillGateError as exc:
-            return _failed_result(targets, _friendly_reason(exc))
-        results: list[dict] = []
-        failed = False
-        for target in targets:
+            manifest_path = root / "manifest.json"
+            if not manifest_path.is_file():
+                return _failed_result(targets, _INSTALL_FAILED)
             try:
-                get_adapter(target).install(skill=loaded, source=skill_dir, remote_gated=True)
-                results.append({"target": target, "status": "installed"})
+                manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                return _failed_result(targets, _INSTALL_FAILED)
+            if manifest.get("skill_md_hash") != expected_hash:
+                return mismatch
+            skill_dir = root / skill_name
+            if not skill_dir.is_dir() or skill_pack_hash(skill_dir) != expected_hash:
+                return mismatch
+            try:
+                loaded = ingest_skill(skill_dir)
             except SkillGateError as exc:
-                failed = True
-                results.append(
-                    {"target": target, "status": "failed", "error": _friendly_reason(exc)}
-                )
-            except Exception as exc:  # noqa: BLE001 — surfaced as a friendly reason
-                failed = True
-                results.append(
-                    {"target": target, "status": "failed", "error": _friendly_reason(exc)}
-                )
-        return {"status": "installed" if not failed else "failed", "targets": results}
+                return _failed_result(targets, _friendly_reason(exc))
+            results: list[dict] = []
+            failed = False
+            for target in targets:
+                try:
+                    get_adapter(target).install(
+                        skill=loaded, source=skill_dir, remote_gated=True
+                    )
+                    results.append({"target": target, "status": "installed"})
+                except SkillGateError as exc:
+                    failed = True
+                    results.append(
+                        {"target": target, "status": "failed", "error": _friendly_reason(exc)}
+                    )
+                except Exception as exc:  # noqa: BLE001 — surfaced as a friendly reason
+                    failed = True
+                    results.append(
+                        {"target": target, "status": "failed", "error": _friendly_reason(exc)}
+                    )
+            return {"status": "installed" if not failed else "failed", "targets": results}
+        finally:
+            set_cli_allow_root(None)
 
 
 def run_helper(config: dict, *, once: bool = False, sleep_sec: int = 5) -> None:

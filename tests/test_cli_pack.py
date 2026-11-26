@@ -101,6 +101,8 @@ def test_import_md_user_pdf_name_exits_zero(tmp_path: Path, monkeypatch) -> None
 
 
 def test_import_local_skill_folder(tmp_path: Path, monkeypatch) -> None:
+    from skillgate_ai.allow_root import set_cli_allow_root
+
     src = tmp_path / "external" / "ledger"
     src.mkdir(parents=True)
     src.joinpath("SKILL.md").write_text(
@@ -109,8 +111,10 @@ def test_import_local_skill_folder(tmp_path: Path, monkeypatch) -> None:
     )
     workspace = tmp_path / "workspace"
     workspace.mkdir()
+    (workspace / "skills").mkdir(exist_ok=True)
     monkeypatch.setenv("SKILLGATE_ROOT", str(workspace))
     monkeypatch.chdir(workspace)
+    set_cli_allow_root(src.parent)
     imported = runner.invoke(app, ["import", str(src)])
     out = plain_text(imported.stdout + imported.stderr)
     assert imported.exit_code == 0, out

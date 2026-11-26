@@ -48,6 +48,7 @@ def cli_json(argv: list[str]) -> tuple[int, dict[str, Any]]:
 def make_workspace(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
     root = tmp_path / "ws"
     root.mkdir()
+    (root / "skills").mkdir(exist_ok=True)
     monkeypatch.setenv("SKILLGATE_ROOT", str(root))
     monkeypatch.setenv("SKILLGATE_CURSOR_SKILLS", str(tmp_path / "cursor-skills"))
     monkeypatch.setenv("SKILLGATE_CODEX_SKILLS", str(tmp_path / "codex-skills"))
